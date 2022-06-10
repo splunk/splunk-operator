@@ -15,6 +15,10 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
+    - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
+    - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
+    - [A BestEffort QoS Class example:](#a-besteffort-qos-class-example)
+    - [Pod Resources Management](#pod-resources-management)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -251,7 +255,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 ## MonitoringConsole Resource Spec Parameters
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:

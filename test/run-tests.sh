@@ -2,6 +2,7 @@
 
 scriptdir=$(dirname "$0")
 topdir=${scriptdir}/..
+export PROJECT_ROOT=$(pwd)
 
 source ${scriptdir}/env.sh
 
@@ -23,9 +24,9 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull Splunk Operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
-    docker pull ${SPLUNK_OPERATOR_IMAGE}
+    docker pull ${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
-     echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
+     echo "Unable to pull ${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}. Exiting..."
      exit 1
     fi
   fi
@@ -62,7 +63,7 @@ if [  "${CLUSTER_WIDE}" != "true" ]; then
   make kustomize
   bin/kustomize build config/crd | kubectl apply -f -
 else
-  echo "Installing Splunk Operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 

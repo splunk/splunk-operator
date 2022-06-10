@@ -25,6 +25,7 @@ import (
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -75,13 +76,13 @@ const (
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
 
 	// PVCString Template String for PVC
-	PVCString = "pvc-%s-splunk-%s-%s-%d"
+	PVCString = "mnt-splunk-pvc-%s-splunk-%s-%s-%d"
 
 	// MonitoringConsoleSts Monitoring Console Statefulset Template
 	MonitoringConsoleSts = "splunk-%s-monitoring-console"
 
 	// MonitoringConsolePod Monitoring Console Pod Template String
-	MonitoringConsolePod = "splunk-%s-monitoring-console-%d"
+	MonitoringConsolePod = "splunk-%s-monitoring-console-0"
 
 	// ClusterManagerPod ClusterMaster Pod Template String
 	ClusterManagerPod = "splunk-%s-" + splcommon.ClusterManager + "-0"
@@ -95,11 +96,26 @@ const (
 	// VersionedSecretName Versioned Secret object Template
 	VersionedSecretName = "splunk-%s-%s-secret-v%d"
 
+	// AppframeworkManualUpdateConfigMap Config map for App Framework manual update
+	AppframeworkManualUpdateConfigMap = "splunk-%s-manual-app-update"
+
+	// DefaultStorageForAppDownloads is used to specify the default storage
+	// for downloading apps on the operator pod
+	DefaultStorageForAppDownloads = "10Gi"
+
+	// DefaultStorageClassName is the storage class for PVC for downloading apps on operator
+	DefaultStorageClassName = "gp2"
+
+	// appDownlodPVCName is the name of PVC for downloading apps on operator
+	appDownlodPVCName = "tmp-app-download"
 	// ClusterMasterServiceName Cluster Manager Service Template String
 	ClusterMasterServiceName = splcommon.TestClusterManager + "-service"
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
+
+	// CRUpdateRetryCount if CR Update fails retry these many time
+	CRUpdateRetryCount = 10
 )
 
 var (
@@ -115,6 +131,9 @@ var (
 	SpecifiedTestTimeout       = defaultTestTimeout
 	installOperatorClusterWide = defaultOperatorInstallation
 )
+
+// OperatorFSGroup is the fsGroup value for Splunk Operator
+var OperatorFSGroup int64 = 1001
 
 //HTTPCodes Response codes for http request
 var HTTPCodes = map[string]string{
@@ -148,7 +167,11 @@ type TestEnv struct {
 }
 
 func init() {
-	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true))
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseFlagOptions(&opts))
 	l.WithName("testenv")
 	logf.SetLogger(l)
 
@@ -158,7 +181,7 @@ func init() {
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
-	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "false", "install operator clusterwide, if not install per test case")
+	flag.StringVar(&installOperatorClusterWide, "cluster-wide", "true", "install operator clusterwide, if not install per test case")
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
@@ -238,11 +261,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 			panic("Unable to start kube manager. Error: " + err.Error())
 		}
 	}()
-
-	/*if err := testenv.setup(); err != nil {
-		// teardown() should still be invoked
-		return nil, err
-	} */
 
 	return testenv, nil
 }

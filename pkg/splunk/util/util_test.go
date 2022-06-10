@@ -18,11 +18,14 @@ package util
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 func TestCreateResource(t *testing.T) {
@@ -124,6 +127,7 @@ func TestDeepCopyObject(t *testing.T) {
 }
 
 func TestPodExecCommand(t *testing.T) {
+	ctx := context.TODO()
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -159,12 +163,71 @@ func TestPodExecCommand(t *testing.T) {
 
 	// Create client and add object
 	c := spltest.NewMockClient()
-	_, _, _ = PodExecCommand(context.TODO(), c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader("ls -ltr"),
+	}
+
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
 
 	// Add object
 	c.AddObject(pod)
-	_, _, _ = PodExecCommand(context.TODO(), c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, true)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
 
 	// Hit some error legs
-	_, _, _ = PodExecCommand(context.TODO(), c, "splunk-stack1-0", "test", []string{"/bin/sh"}, "ls -ltr", false, false)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false)
+}
+
+func TestRunPodExecCommand(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	targetPodName := "splunk-cm-cluster-master-0"
+	podExecClient := GetPodExecClient(c, &cr, targetPodName)
+	dummyCmd := "dummyCmd"
+	streamOptions := &remotecommand.StreamOptions{
+		Stdin: strings.NewReader(dummyCmd),
+	}
+	stdOut, stdErr, _ := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	if stdOut != "" && stdErr != "" {
+		t.Errorf("expected stdOut and stdErr to be empty since it is a dummy podExec call")
+	}
+}
+
+func TestNewStreamOptionsObject(t *testing.T) {
+	command := "dummyCmd"
+
+	streamOptions := NewStreamOptionsObject(command)
+	var gotCmd string
+	streamOptionsCmd := streamOptions.Stdin.(*strings.Reader)
+	for i := 0; i < int(streamOptionsCmd.Size()); i++ {
+		cmd, _, _ := streamOptionsCmd.ReadRune()
+		gotCmd = gotCmd + string(cmd)
+	}
+
+	if gotCmd != command {
+		t.Errorf("got invalid command, expected: %s, got %s", command, gotCmd)
+	}
+}
+
+func TestGetSetTargetPodName(t *testing.T) {
+	ctx := context.TODO()
+	podName := "pod-0"
+
+	var podExecClient PodExecClient = PodExecClient{}
+
+	podExecClient.SetTargetPodName(ctx, podName)
+
+	gotPodName := podExecClient.GetTargetPodName()
+	if gotPodName != podName {
+		t.Errorf("invalid targetPodName, expected: %s, got: %s", podName, gotPodName)
+	}
 }

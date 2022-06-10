@@ -18,17 +18,18 @@ import (
 	"context"
 	"reflect"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // ApplyServiceAccount creates or updates a Kubernetes serviceAccount
 func ApplyServiceAccount(ctx context.Context, client splcommon.ControllerClient, serviceAccount *corev1.ServiceAccount) error {
-	scopedLog := log.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyServiceAccount").WithValues("serviceAccount", serviceAccount.GetName(),
 		"namespace", serviceAccount.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: serviceAccount.GetNamespace(), Name: serviceAccount.GetName()}
@@ -60,7 +61,8 @@ func GetServiceAccount(ctx context.Context, client splcommon.ControllerClient, n
 	var serviceAccount corev1.ServiceAccount
 	err := client.Get(ctx, namespacedName, &serviceAccount)
 	if err != nil {
-		scopedLog := log.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
+		reqLogger := log.FromContext(ctx)
+		scopedLog := reqLogger.WithName("GetServiceAccount").WithValues("serviceAccount", namespacedName.Name,
 			"namespace", namespacedName.Namespace, "error", err)
 		scopedLog.Info("ServiceAccount not found")
 		return nil, err

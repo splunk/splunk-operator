@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -69,13 +70,11 @@ type IndexerClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "IndexerCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the IndexerCluster
 	instance := &enterpriseApi.IndexerCluster{}
@@ -100,7 +99,19 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	return enterprise.ApplyIndexerCluster(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyIndexerCluster(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
+}
+
+// ApplyIndexerCluster adding to handle unit test case
+var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+	return enterprise.ApplyIndexerCluster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

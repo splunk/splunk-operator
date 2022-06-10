@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -69,12 +70,10 @@ type MonitoringConsoleReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "MonitoringConsole")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "MonitoringConsole")
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("monitoringconsole", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the MonitoringConsole
 	instance := &enterpriseApi.MonitoringConsole{}
@@ -99,7 +98,19 @@ func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return enterprise.ApplyMonitoringConsole(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyMonitoringConsole(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
+}
+
+// ApplyMonitoringConsole adding to handle unit test case
+var ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+	return enterprise.ApplyMonitoringConsole(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

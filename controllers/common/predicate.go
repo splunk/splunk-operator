@@ -145,8 +145,6 @@ func ResourceFailedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj := e.ObjectNew.DeepCopyObject().(*enterpriseApi.Standalone)
-			//oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
-			//return !cmp.Equal(newObj.Spec, oldObj.Spec)
 			return newObj.Status.Phase == "Error"
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {

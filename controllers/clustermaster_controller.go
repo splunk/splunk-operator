@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -75,7 +76,6 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the ClusterMaster
 	instance := &enterpriseApi.ClusterMaster{}
@@ -100,7 +100,19 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return enterprise.ApplyClusterManager(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyClusterManager(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
+}
+
+// ApplyClusterManager adding to handle unit test case
+var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
+	return enterprise.ApplyClusterManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

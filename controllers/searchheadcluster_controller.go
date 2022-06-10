@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
@@ -70,13 +71,11 @@ type SearchHeadClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "SearchHeadCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("searchheadcluster", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the SearchHeadCluster
 	instance := &enterpriseApi.SearchHeadCluster{}
@@ -101,7 +100,19 @@ func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return enterprise.ApplySearchHeadCluster(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplySearchHeadCluster(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
+}
+
+// ApplySearchHeadCluster adding to handle unit test case
+var ApplySearchHeadCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.SearchHeadCluster) (reconcile.Result, error) {
+	return enterprise.ApplySearchHeadCluster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

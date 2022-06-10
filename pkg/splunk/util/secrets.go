@@ -19,17 +19,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
@@ -235,7 +235,8 @@ func GetVersionedSecretVersion(secretName string, versionedSecretIdentifier stri
 
 // GetExistingLatestVersionedSecret retrieves latest EXISTING versionedSecretIdentifier based secret existing currently in the namespace
 func GetExistingLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient, namespace string, versionedSecretIdentifier string, list bool) (*corev1.Secret, int, map[int]corev1.Secret) {
-	scopedLog := log.WithName("GetExistingLatestVersionedSecret").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetExistingLatestVersionedSecret").WithValues(
 		"versionedSecretIdentifier", versionedSecretIdentifier,
 		"namespace", namespace)
 
@@ -293,13 +294,14 @@ func GetExistingLatestVersionedSecret(ctx context.Context, c splcommon.Controlle
 
 // GetLatestVersionedSecret is used to create/retrieve latest versionedSecretIdentifier based secret, cr is optional for owner references(pass nil if not required)
 func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, namespace string, versionedSecretIdentifier string) (*corev1.Secret, error) {
-	scopedLog := log.WithName("GetLatestVersionedSecret").WithValues(
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetLatestVersionedSecret").WithValues(
 		"versionedSecretIdentifier", versionedSecretIdentifier,
 		"namespace", namespace)
 
 	// If CR is passed log it as well
 	if cr != nil {
-		scopedLog = log.WithName("GetLatestVersionedSecret").WithValues(
+		scopedLog = reqLogger.WithName("GetLatestVersionedSecret").WithValues(
 			"versionedSecretIdentifier", versionedSecretIdentifier,
 			"cr", cr.GetName(),
 			"kind", cr.GetObjectKind(),
@@ -440,6 +442,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 
 	name := splcommon.GetNamespaceScopedSecretName(namespace)
 
+	log := log.FromContext(ctx)
 	scopedLog := log.WithName("ApplyNamespaceScopedSecretObject").WithValues(
 		"name", splcommon.GetNamespaceScopedSecretName(namespace),
 		"namespace", namespace)
@@ -516,6 +519,7 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 // GetSecretByName retrieves namespace scoped secret object for a given name
 func GetSecretByName(ctx context.Context, c splcommon.ControllerClient, namespace string, logHandle string, name string) (*corev1.Secret, error) {
 	var namespaceScopedSecret corev1.Secret
+	log := log.FromContext(ctx)
 	scopedLog := log.WithName("GetSecretByName").WithValues("logHandle: ", logHandle, "namespace: ", namespace)
 
 	// Check if a namespace scoped secret exists

@@ -42,9 +42,6 @@ const (
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
-	// identifier
-	appListingTemplateStr = "splunk-%s-%s-app-list"
-
 	// init container name
 	initContainerTemplate = "%s-init-%d-%s"
 
@@ -63,14 +60,26 @@ const (
 	// identifier to track the smartstore config rev. on Pod
 	smartStoreConfigRev = "SmartStoreConfigRev"
 
-	// ToDo: Used only for Phase-2, to be removed later
-	appListingRev = "appListingRev"
+	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
-	// Pod location for app related config
-	appConfLocationOnPod = "/mnt/app-listing/"
+	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
 
-	// command merger
-	commandMerger = " && "
+	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
+
+	shcBundlePushStatusCheckFile = "/operator-staging/appframework/.shcluster_bundle_status.txt"
+
+	applyIdxcBundleCmdStr = "/opt/splunk/bin/splunk apply cluster-bundle -auth admin:`cat /mnt/splunk-secrets/password` --skip-validation --answer-yes"
+
+	idxcShowClusterBundleStatusStr = "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:`cat /mnt/splunk-secrets/password`"
+
+	idxcBundleAlreadyPresentStr = "No new bundle will be pushed. The cluster manager and peers already have this bundle"
+
+	shcAppsLocationOnDeployer = "/opt/splunk/etc/shcluster/apps/"
+
+	idxcAppsLocationOnClusterManager = "/opt/splunk/etc/master-apps/"
+
+	// command to append FS permissions to +rw-rw-
+	cmdSetFilePermissionsToRW = "chmod +660 -R %s"
 
 	// command for init container on a standalone
 	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
@@ -96,14 +105,11 @@ const (
 	protoHTTPS = "https"
 	protoTCP   = "tcp"
 
-	// Volume name for shared volume between init and splunk containers
-	appVolumeMntName = "init-apps"
+	// Volume name for splunk containers to store apps temporarily
+	appVolumeMntName = "operator-staging"
 
-	// Mount location for the shared app package volume
-	appBktMnt = "/init-apps/"
-
-	// Average amount of time an app installation takes
-	avgAppInstallationTime = 5
+	// Mount location on splunk pod for the app package volume
+	appBktMnt = "/operator-staging/appframework/"
 
 	// Time delay involved in installating the Splunk Apps.
 	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
@@ -163,9 +169,9 @@ func GetSplunkSmartstoreConfigMapName(identifier string, crKind string) string {
 	return fmt.Sprintf(smartstoreTemplateStr, identifier, strings.ToLower(crKind))
 }
 
-// GetSplunkAppsConfigMapName uses a template to name a Kubernetes ConfigMap for a SplunkEnterprise resource.
-func GetSplunkAppsConfigMapName(identifier string, crKind string) string {
-	return fmt.Sprintf(appListingTemplateStr, identifier, strings.ToLower(crKind))
+// GetSplunkManualAppUpdateConfigMapName returns the manual app update configMap name for that namespace
+func GetSplunkManualAppUpdateConfigMapName(namespace string) string {
+	return fmt.Sprintf(manualAppUpdateCMStr, namespace)
 }
 
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.

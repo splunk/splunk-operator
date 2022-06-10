@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	//"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -448,6 +447,34 @@ func getStateKeyWithKey(key client.ObjectKey, obj client.Object) string {
 func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, resource interface{},
 	calls map[string][]MockFuncCall,
 	reconcile func(*MockClient, interface{}) error) {
+
+	// Create the CR. Having a CR instance helps to not to retry for the GET failures,
+	// that way, predictable number of CRUD function calls to satisfy the test cases.
+	switch resource.(type) {
+	case *enterpriseApi.Standalone:
+		cr := resource.(*enterpriseApi.Standalone)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.LicenseMaster:
+		cr := resource.(*enterpriseApi.LicenseMaster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.IndexerCluster:
+		cr := resource.(*enterpriseApi.IndexerCluster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.ClusterMaster:
+		cr := resource.(*enterpriseApi.ClusterMaster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.MonitoringConsole:
+		cr := resource.(*enterpriseApi.MonitoringConsole)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.SearchHeadCluster:
+		cr := resource.(*enterpriseApi.SearchHeadCluster)
+		c.Create(context.Background(), cr)
+	}
 
 	c.ResetCalls()
 	err := reconcile(c, resource)

@@ -27,6 +27,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -59,6 +60,12 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 
+	// If needed, Migrate the app framework status
+	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	if err != nil {
+		return result, err
+	}
+
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
@@ -88,13 +95,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
-	defer func() {
-		client.Status().Update(ctx, cr)
-		if err != nil {
-			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)
@@ -113,8 +115,18 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 				return result, err
 			}
 		}
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkStandalone)
+			if err != nil {
+				return result, err
+			}
+		}
 		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
@@ -141,30 +153,34 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// configMap with all the appSource entries. This is done so that the new pods
 	// that come up now will have the complete list of all the apps and then can
 	// download and install all the apps.
-	// TODO: Improve this logic so that we only recycle the new pod/replica
-	// and not all the existing pods.
+	// If, we are scaling down, just update the auxPhaseInfo list
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
 
 		statefulsetName := GetSplunkStatefulsetName(SplunkStandalone, cr.GetName())
 
-		isScalingUp, err := splctrl.IsStatefulSetScalingUp(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
+		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
 		if err != nil {
 			return result, err
-		} else if isScalingUp {
+		}
+		appStatusContext := cr.Status.AppContext
+		switch isStatefulSetScaling {
+		case enterpriseApi.StatefulSetScalingUp:
 			// if we are indeed scaling up, then mark the deploy status to Pending
 			// for all the app sources so that we add all the app sources in configMap.
 			cr.Status.AppContext.IsDeploymentInProgress = true
-			appStatusContext := cr.Status.AppContext
+
 			for appSrc := range appStatusContext.AppsSrcDeployStatus {
 				changeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				changePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
 
-			// Now apply the configMap will full app listing.
-			_, _, err = ApplyAppListingConfigMap(ctx, client, cr, &cr.Spec.AppFrameworkConfig, appStatusContext.AppsSrcDeployStatus, false)
-			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyAppListingConfigMap", fmt.Sprintf("apply app list config map failed %s", err.Error()))
-				return result, err
+		// if we are scaling down, just delete the state auxPhaseInfo entries
+		case enterpriseApi.StatefulSetScalingDown:
+			for appSrc := range appStatusContext.AppsSrcDeployStatus {
+				removeStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
 			}
+		default:
+			// nothing to be done
 		}
 	}
 
@@ -208,20 +224,10 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 				return result, err
 			}
 		}
-		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
-			if cr.Status.AppContext.IsDeploymentInProgress {
-				cr.Status.AppContext.IsDeploymentInProgress = false
-				return result, nil
-			}
-		}
-		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
-		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
-		} else {
-			result.Requeue = false
-		}
+
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		result = *finalResult
+
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -246,8 +252,8 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 
-	// Setup App framework init containers
-	setupAppInitContainers(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, nil
 }
@@ -273,4 +279,22 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 	}
 
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+}
+
+// helper function to get the list of Standalone types in the current namespace
+func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getStandaloneList")
+
+	objectList := enterpriseApi.StandaloneList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil {
+		scopedLog.Error(err, "Standalone types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+
+	return numOfObjects, nil
 }

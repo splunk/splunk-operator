@@ -18,9 +18,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"net/http"
-	"testing"
-
 	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -32,16 +29,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"testing"
+	//"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+//log := log.WithValues("controller")
 
 // MockControllerState manages state for testing the splunk.controller library
 type MockControllerState struct {
@@ -169,6 +172,7 @@ func (mgr MockManager) GetConfig() *rest.Config {
 
 // GetLogger returns this manager's logger.
 func (mgr MockManager) GetLogger() logr.Logger {
+	log := logf.Log.WithName("splunk.reconcile")
 	return log
 }
 

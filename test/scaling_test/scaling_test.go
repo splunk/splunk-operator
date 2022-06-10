@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -177,6 +178,8 @@ var _ = Describe("Scaling test", func() {
 			// Ensure Search Head Cluster go to Ready Phase
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			time.Sleep(60 * time.Second)
 
 			// Verify New SearchHead is added to Cluster Manager
 			searchHeadName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)

@@ -39,29 +39,26 @@ const (
 	// IdxcSecret represents indexer cluster pass4Symmkey secret token
 	IdxcSecret = "idxc_secret"
 
-	// PvcNamePrefix is a helper string representing prefix for persistent volume claim names
-	PvcNamePrefix = "pvc-%s"
+	// K8SVolumeTypePvc represents a persistent volume storage volume type
+	K8SVolumeTypePvc = "pvc"
 
-	// SplunkMountTypePvc represents a persistent volume storage volume type
-	SplunkMountTypePvc = "pvc"
+	// K8SVolumeTypeEph represents a ephemeral storage volume type
+	K8SVolumeTypeEph = "eph"
 
-	// SplunkMountTypeEph represents a ephemeral storage volume type
-	SplunkMountTypeEph = "eph"
+	// SplunkVolumeNamePrefix is a helper string for Splunk Volume names
+	SplunkVolumeNamePrefix = "mnt-splunk-%s-%s"
 
-	// SplunkMountNamePrefix is a helper string representing Splunk Volume mount names
-	SplunkMountNamePrefix = "mnt-splunk-%s-%s"
-
-	// SplunkMountDirecPrefix is a helper string representing Splunk Volume mount directory
-	SplunkMountDirecPrefix = "/opt/splunk/%s"
+	// SplunkVolumeMountPathPrefix is a helper string for Splunk Volume mount paths
+	SplunkVolumeMountPathPrefix = "/opt/splunk/%s"
 
 	// SplunkSmartStoreInitContMount represents mount for init container
 	SplunkSmartStoreInitContMount = "/opt/splk/etc"
 
-	// EtcVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
-	EtcVolumeStorage = "etc"
+	// SplunkEtcVolume indicates Splunk etc volume mounted on Pods
+	SplunkEtcVolume = "etc"
 
-	// VarVolumeStorage indicates /opt/splunk/etc volume mounted on Pods
-	VarVolumeStorage = "var"
+	// SplunkVarVolume indicates Splunk var volume mounted on Pods
+	SplunkVarVolume = "var"
 
 	// DefaultEtcVolumeStorageCapacity represents default storage capacity for etc volume
 	DefaultEtcVolumeStorageCapacity = "10Gi"
@@ -93,7 +90,14 @@ const (
 
 	// MaxAppsRepoPollInterval sets the polling interval to one day
 	MaxAppsRepoPollInterval int64 = 60 * 60 * 24
+
+	// DefaultMaxConcurrentAppDownloads sets the default value for maximum concurrent app downloads
+	DefaultMaxConcurrentAppDownloads uint64 = 5
 )
+
+// AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
+// sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
+var AppDownloadVolume string = "/opt/splunk/appframework/"
 
 // GetVersionedSecretName returns a versioned secret name
 func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {

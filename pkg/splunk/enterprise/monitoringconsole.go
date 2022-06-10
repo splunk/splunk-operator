@@ -58,31 +58,14 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
-	defer func() {
-		client.Status().Update(ctx, cr)
-		if err != nil {
-			eventPublisher.Warning(ctx, "Update", fmt.Sprintf("update custom resource failed %s", err.Error()))
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
-
-	// check if deletion has been requested
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
-		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = enterpriseApi.PhaseTerminating
-		} else {
-			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
-		}
-		return result, err
-	}
-
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
+
+	// If needed, Migrate the app framework status
+	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	if err != nil {
+		return result, err
+	}
 
 	// If the app framework is configured then do following things -
 	// 1. Initialize the S3Clients based on providers
@@ -96,11 +79,37 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		}
 	}
 
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		return result, err
+	}
+
+	// check if deletion has been requested
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
+			if err != nil {
+				return result, err
+			}
+		}
+
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
+			cr.Status.Phase = enterpriseApi.PhaseTerminating
+		} else {
+			result.Requeue = false
+		}
 		return result, err
 	}
 
@@ -135,28 +144,14 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
-			if cr.Status.AppContext.IsDeploymentInProgress {
-				cr.Status.AppContext.IsDeploymentInProgress = false
-				return result, nil
-			}
-		}
-
-		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
-		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
-		} else {
-			result.Requeue = false
-		}
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		result = *finalResult
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
-
 	return result, nil
 }
 
@@ -188,8 +183,8 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	}
 	ss.Spec.Template.ObjectMeta.Annotations[monitoringConsoleConfigRev] = monitoringConsoleConfigMap.ResourceVersion
 
-	// Setup App framework init containers
-	setupAppInitContainers(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
 }
 
@@ -248,6 +243,7 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 		Data: make(map[string]string),
 	}
 	if addNewURLs {
+
 		//else create a new configMap with new entries
 		for _, url := range newURLs {
 			current.Data[url.Name] = url.Value

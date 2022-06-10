@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -51,6 +52,12 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
+	// If needed, Migrate the app framework status
+	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	if err != nil {
+		return result, err
+	}
+
 	// If the app framework is configured then do following things -
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
@@ -65,9 +72,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
-	defer func() {
-		client.Status().Update(context.TODO(), cr)
-	}()
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
@@ -80,13 +87,24 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(ctx, cr, &cr.Spec.CommonSplunkSpec), false)
 			if err != nil {
 				return result, err
 			}
 		}
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type.
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkLicenseManager)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
@@ -111,7 +129,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseManagerURL(ctx, cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
 	}
@@ -132,32 +150,20 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseManagerURL(ctx, cr, &cr.Spec.CommonSplunkSpec), true)
 			if err != nil {
 				return result, err
 			}
 		}
-		if cr.Status.AppContext.AppsSrcDeployStatus != nil {
-			markAppsStatusToComplete(ctx, client, cr, &cr.Spec.AppFrameworkConfig, cr.Status.AppContext.AppsSrcDeployStatus)
-			// Schedule one more reconcile in next 5 seconds, just to cover any latest app framework config changes
-			if cr.Status.AppContext.IsDeploymentInProgress {
-				cr.Status.AppContext.IsDeploymentInProgress = false
-				return result, nil
-			}
-		}
-		// Requeue the reconcile after polling interval if we had set the lastAppInfoCheckTime.
-		if cr.Status.AppContext.LastAppInfoCheckTime != 0 {
-			result.RequeueAfter = GetNextRequeueTime(ctx, cr.Status.AppContext.AppsRepoStatusPollInterval, cr.Status.AppContext.LastAppInfoCheckTime)
-		} else {
-			result.Requeue = false
-		}
+
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		result = *finalResult
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
-
 	return result, nil
 }
 
@@ -168,8 +174,8 @@ func getLicenseManagerStatefulSet(ctx context.Context, client splcommon.Controll
 		return ss, err
 	}
 
-	// Setup App framework init containers
-	setupAppInitContainers(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
 	return ss, err
 }
@@ -185,4 +191,22 @@ func validateLicenseManagerSpec(ctx context.Context, c splcommon.ControllerClien
 	}
 
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+}
+
+// helper function to get the list of LicenseMaster types in the current namespace
+func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getLicenseMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.LicenseMasterList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	numOfObjects := len(objectList.Items)
+
+	if err != nil {
+		scopedLog.Error(err, "LicenseMaster types not found in namespace", "namsespace", cr.GetNamespace())
+		return numOfObjects, err
+	}
+
+	return numOfObjects, nil
 }

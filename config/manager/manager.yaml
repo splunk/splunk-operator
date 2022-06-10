@@ -31,7 +31,11 @@ spec:
     spec:
       securityContext:
         runAsUser: 1001
-        #runAsNonRoot: true
+        fsGroup: 1001
+        runAsNonRoot: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       containers:
       - command:
         - /manager
@@ -60,9 +64,22 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2000Mi
+          requests:
+            cpu: 1000m
+            memory: 2000Mi
+        volumeMounts:
+          - mountPath: /opt/splunk/appframework/
+            name: app-staging
       serviceAccountName: controller-manager
       volumes:
       - configMap:
           name: config
         name: splunk-operator-config
+      - name:  app-staging
+        persistentVolumeClaim:
+          claimName: app-download
       terminationGracePeriodSeconds: 10
