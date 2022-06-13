@@ -27,11 +27,17 @@ import (
 )
 
 const (
+	// max. reconcile requeue schedule time(Seconds)
 	maxRecDuration time.Duration = 1<<63 - 1
-)
 
-const (
+	// Current App framework version
 	currentAfwVersion = enterpriseApi.AfwPhase3
+
+	// Max. of parallel installs for a given Pod
+	maxParallelInstallsPerPod = 1
+
+	// Max. number of retries to update the CR Status
+	maxRetryCountForCRStatusUpdate = 10
 )
 
 // InstanceType is used to represent the type of Splunk instance (search head, indexer, etc).
@@ -61,11 +67,6 @@ const (
 
 	// TmpAppDownloadDir is the Operator directory for app framework, when there is no explicit volume specified
 	TmpAppDownloadDir string = "/tmp/appframework/"
-)
-
-const (
-	// Max. of parallel installs for a given Pod
-	maxParallelInstallsPerPod = 1
 )
 
 type commonResourceTracker struct {

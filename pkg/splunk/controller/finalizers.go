@@ -18,6 +18,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -53,7 +54,6 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 		scopedLog.Info("DeletionTimestamp is in the future",
 			"Now", currentTime,
 			"DeletionTimestamp", cr.GetObjectMeta().GetDeletionTimestamp())
-		//return false, nil
 	}
 
 	scopedLog.Info("Deletion requested")

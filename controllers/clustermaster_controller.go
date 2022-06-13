@@ -76,7 +76,6 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the ClusterMaster
 	instance := &enterpriseApi.ClusterMaster{}
@@ -101,7 +100,14 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	return ApplyClusterManager(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyClusterManager(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
 }
 
 // ApplyClusterManager adding to handle unit test case

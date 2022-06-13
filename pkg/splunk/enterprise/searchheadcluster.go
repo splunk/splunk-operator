@@ -83,7 +83,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	if cr.Status.ShcSecretChanged == nil {
 		cr.Status.ShcSecretChanged = []bool{}
-
 	}
 	if cr.Status.AdminSecretChanged == nil {
 		cr.Status.AdminSecretChanged = []bool{}
@@ -91,12 +90,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.AdminPasswordChangedSecrets == nil {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	}
-	defer func() {
-		err = client.Status().Update(ctx, cr)
-		if err != nil {
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)

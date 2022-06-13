@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	//"reflect"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
@@ -13,15 +12,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	//ctrl "sigs.k8s.io/controller-runtime"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	//"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("ClusterMaster Controller", func() {
@@ -86,14 +82,6 @@ var _ = Describe("ClusterMaster Controller", func() {
 		})
 
 		It("Cover Unused methods", func() {
-			// Create New Manager for controllers
-			//k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-			//	Scheme: scheme.Scheme,
-			//})
-			//Expect(err).ToNot(HaveOccurred())
-
-			//rr, err := New(k8sManager)
-			//callUnsedMethods(rr.(*ClusterMasterReconciler), namespace)
 			namespace := "ns-splunk-cm-4"
 			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
@@ -113,10 +101,10 @@ var _ = Describe("ClusterMaster Controller", func() {
 					Namespace: namespace,
 				},
 			}
-			// econcile for the first time err is resource not found
+			// reconcile for the first time err is resource not found
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
-			// create resource first adn then reconcile for the first time
+			// create resource first and then reconcile for the first time
 			ssSpec := testutils.NewClusterMaster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause

@@ -639,13 +639,13 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 //  setupInitContainer modifies the podTemplateSpec object
 func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string, isEtcVolEph bool) {
-	var volMntName string
+	var volName string
 
 	// Populate the volume mount name based on volume type(eph, pvc) and use /opt/splk/etc for init container
 	if isEtcVolEph {
-		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypeEph, splcommon.EtcVolumeStorage)
+		volName = getSplunkVolumeName(splcommon.K8SVolumeTypeEph, splcommon.SplunkEtcVolume)
 	} else {
-		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.SplunkMountTypePvc, splcommon.EtcVolumeStorage)
+		volName = getSplunkVolumeName(splcommon.K8SVolumeTypePvc, splcommon.SplunkEtcVolume)
 	}
 
 	containerSpec := corev1.Container{
@@ -655,7 +655,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 		Command: []string{"bash", "-c", commandOnContainer},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: volMntName, MountPath: splcommon.SplunkSmartStoreInitContMount},
+			{Name: volName, MountPath: splcommon.SplunkSmartStoreInitContMount},
 		},
 
 		Resources: corev1.ResourceRequirements{
@@ -1708,6 +1708,17 @@ func validateMonitoringConsoleRef(ctx context.Context, c splcommon.ControllerCli
 	return nil
 }
 
+// getSplunkVolumeName returns the name of Splunk volume based on
+// the type of k8s volume(pvc or ephemeral) & splunk volume type (etc or var)
+func getSplunkVolumeName(k8sVolumeType string, splunkVolumeType string) string {
+	return fmt.Sprintf(splcommon.SplunkVolumeNamePrefix, k8sVolumeType, splunkVolumeType)
+}
+
+// getSplunkVolumeMountPath returns the volume mount path based on splunk volume type(etc or var)
+func getSplunkVolumeMountPath(splunkVolumeType string) string {
+	return fmt.Sprintf(splcommon.SplunkVolumeMountPathPrefix, splunkVolumeType)
+}
+
 // setInstallStateForClusterScopedApps sets the install state for cluster scoped apps
 func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *enterpriseApi.AppDeploymentContext) {
 	reqLogger := log.FromContext(ctx)
@@ -1798,7 +1809,7 @@ func updateReconcileRequeueTime(ctx context.Context, result *reconcile.Result, r
 		return
 	}
 	if rqTime <= 0 {
-		scopedLog.Error(nil, "invalid requeue time: %d", rqTime)
+		scopedLog.Error(nil, "invalid requeue time", "time value", rqTime)
 		return
 	}
 
@@ -1936,4 +1947,122 @@ func migrateAfwFromPhase2ToPhase3(ctx context.Context, client splcommon.Controll
 // isAppFrameworkMigrationNeeded confirms if the app framework version migration is needed
 func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeploymentContext) bool {
 	return afwStatusContext != nil && afwStatusContext.Version < currentAfwVersion && len(afwStatusContext.AppsSrcDeployStatus) > 0
+}
+
+// updateCRStatus fetches the latest CR, and on top of that, updates latest status
+func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("original cr version", origCR.GetResourceVersion())
+
+	var tryCnt int
+	for tryCnt = 0; tryCnt < maxRetryCountForCRStatusUpdate; tryCnt++ {
+		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR)
+		if err != nil {
+			if origCR.GetDeletionTimestamp() == nil {
+				scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
+			}
+
+			continue
+		}
+
+		scopedLog.Info("Trying to update", "count", tryCnt)
+		curCRVersion := latestCR.GetResourceVersion()
+		err = client.Status().Update(ctx, latestCR)
+		if err == nil {
+			updatedCRVersion := latestCR.GetResourceVersion()
+			scopedLog.Info("Status update successful", "current CR version", curCRVersion, "updated CR version", updatedCRVersion)
+
+			// While the current reconcile is in progress, there may be new event(s) from the
+			// list of watchers satisfying the predicates. That triggeres a new reconcile right after
+			// exiting from the current reconcile, in which case, refers the cached version of the
+			// CR missing the updates we are doing here. From K8s resource point of view, this
+			// may not be an issue(i.e., expectation is always to be declarative), but the  application
+			// specific status may not be idempotent(example. trying to install an app which was already installed).
+			// So, always make sure that the cache is reflecting the latest CR, before the next event
+			// waiting in the Q triggers the next reconcile
+			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
+				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR)
+				if err == nil && updatedCRVersion == crAfterUpdate.GetResourceVersion() {
+					scopedLog.Info("Cahe is reflecting the latest CR", "updated CR version", updatedCRVersion)
+					// Latest CR is reflecting in the cache
+					break
+				}
+
+				time.Sleep(time.Duration(chkCnt) * 10 * time.Millisecond)
+			}
+
+			// Status update successful
+			break
+		}
+
+		time.Sleep(time.Duration(tryCnt) * 10 * time.Millisecond)
+	}
+
+	if origCR.GetDeletionTimestamp() == nil && tryCnt >= maxRetryCountForCRStatusUpdate {
+		scopedLog.Error(nil, "Status update failed", "Attempt count", tryCnt)
+	}
+}
+
+// fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
+func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject) (splcommon.MetaObject, error) {
+	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
+
+	var err error
+	switch origCR.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		latestStdlnCR := &enterpriseApi.Standalone{}
+		err = client.Get(ctx, namespacedName, latestStdlnCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
+		return latestStdlnCR, nil
+
+	case "LicenseMaster":
+		latestLmCR := &enterpriseApi.LicenseMaster{}
+		err = client.Get(ctx, namespacedName, latestLmCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
+		return latestLmCR, nil
+
+	case "SearchHeadCluster":
+		latestShcCR := &enterpriseApi.SearchHeadCluster{}
+		err = client.Get(ctx, namespacedName, latestShcCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
+		return latestShcCR, nil
+
+	case "IndexerCluster":
+		latestIdxcCR := &enterpriseApi.IndexerCluster{}
+		err = client.Get(ctx, namespacedName, latestIdxcCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
+		return latestIdxcCR, nil
+
+	case "ClusterMaster":
+		latestCmCR := &enterpriseApi.ClusterMaster{}
+		err = client.Get(ctx, namespacedName, latestCmCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
+		return latestCmCR, nil
+
+	case "MonitoringConsole":
+		latestMcCR := &enterpriseApi.MonitoringConsole{}
+		err = client.Get(ctx, namespacedName, latestMcCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
+		return latestMcCR, nil
+	}
+
+	return nil, fmt.Errorf("Invalid CR Kind")
 }
