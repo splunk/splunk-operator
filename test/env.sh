@@ -7,10 +7,15 @@
 : "${NUM_WORKERS:=3}"
 : "${NUM_NODES:=2}"
 : "${COMMIT_HASH:=}"
+# AWS specific variables
 : "${ECR_REGISTRY:=}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
-# Below env variables required to run license manager test cases
+# Azure specific variables
+: "${AZURE_RESOURCE_GROUP:=}"
+: "${AZURE_CONTAINER_REGISTRY:=}"
+: "${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER:=}"
+# Below env variables required to run license master test cases
 : "${ENTERPRISE_LICENSE_PATH:=}"
 : "${TEST_S3_BUCKET:=}"
 # Below env variables required to run remote indexes test cases
@@ -38,6 +43,14 @@ if [ -z "${PRIVATE_REGISTRY}" ]; then
           exit 1
         fi
         PRIVATE_REGISTRY="${ECR_REGISTRY}"
+        ;;
+      azure)
+        if [ -z "${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}" ]; then
+          echo "Please define AZURE_CONTAINER_REGISTRY_LOGIN_SERVER that specified where images are pushed and pulled from."
+          exit 1
+        fi
+        PRIVATE_REGISTRY="${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}"
+         echo "${PRIVATE_REGISTRY}"
         ;;
     esac
 fi
