@@ -2591,14 +2591,14 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for Cluster Manager")
 			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
 			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, shc.Name, shc.Kind)
 
 			// Ensure the Indexers of all sites go to Ready phase

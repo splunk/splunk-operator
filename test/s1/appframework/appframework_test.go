@@ -1863,7 +1863,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Wait for the pod to be ready
 			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
-			   * Prepare and deploy Standalone with app framework 
+			   * Prepare and deploy Standalone with app framework
 			   * Check isDeploymentInProgress is set for Monitoring Console CR
 			   * Wait for the pod to be ready
 			*/

@@ -487,6 +487,14 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "LicenseMaster":
+		cr := &enterpriseApi.LicenseMaster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
 	default:
 		message := fmt.Sprintf("Failed to fetch AppDeploymentInfo. Incorrect CR Kind %s", crKind)
 		err = errors.New(message)

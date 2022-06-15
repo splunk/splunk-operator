@@ -3028,7 +3028,7 @@ var _ = Describe("c3appfw test", func() {
 			cm, _, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR
+			// Verify IsDeploymentInProgress Flag is set to true for Cluster Manager CR
 			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag")
 			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind)
 

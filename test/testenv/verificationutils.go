@@ -1059,7 +1059,7 @@ func VerifyIsDeploymentInProgressFlagIsSet(ctx context.Context, deployment *Depl
 			testenvInstance.Log.Error(err, "Failed to get isDeploymentInProgress Flag")
 			return false
 		}
-		testenvInstance.Log.Info("IsDeploymentInProgress Flag is status found", "CR NAME", name, "CR Kind", crKind, "IsDeploymentInProgress", isDeploymentInProgress)
+		testenvInstance.Log.Info("IsDeploymentInProgress Flag status found", "CR NAME", name, "CR Kind", crKind, "IsDeploymentInProgress", isDeploymentInProgress)
 		return isDeploymentInProgress
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
