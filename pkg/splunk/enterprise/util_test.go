@@ -30,6 +30,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -44,9 +47,6 @@ import (
 func init() {
 	fmt.Printf("init is called here from test")
 	initGlobalResourceTracker()
-	/*cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
-		return nil
-	}*/
 }
 
 func TestApplySplunkConfig(t *testing.T) {
@@ -741,13 +741,9 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	// Test-10: Setting  all apps in AppSrc to complete should mark all the apps status as complete irrespective of their state
 	// 10.1 Check for state=Active and status=Complete
 	for appSrc, appSrcDeployStatus := range appDeployContext.AppsSrcDeployStatus {
-		// ToDo: Enable for Phase-3
-		//setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		setStateAndStatusForAppDeployInfoList(appSrcDeployStatus.AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 		appDeployContext.AppsSrcDeployStatus[appSrc] = appSrcDeployStatus
 
-		// ToDo: Enable for Phase-3
-		//expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusInProgress)
 		expectedMatchCount := getAppSrcDeployInfoCountByStateAndStatus(appSrc, appDeployContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
 		markAppsStatusToComplete(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appDeployContext.AppsSrcDeployStatus)
@@ -2247,4 +2243,282 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 
 	rqTime = time.Duration(time.Second * 5)
 	updateReconcileRequeueTime(ctx, result, rqTime, true)
+}
+
+func TestUpdateCRStatus(t *testing.T) {
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	ctx := context.TODO()
+
+	// create standalone custom resource
+	standalone := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Standalone",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.StandaloneStatus{
+			ReadyReplicas: 2,
+		},
+	}
+
+	// When the CR is not even existing, error handling will keep retrying to update the CR, but fails at the end.
+	updateCRStatus(ctx, c, standalone)
+
+	// Creating a standalone, and updating the CR will cover the happy path
+	// simulate create standalone instance before reconcilation
+	err := c.Create(ctx, standalone)
+	if err != nil {
+		t.Errorf("standalone CR creation failed.")
+	}
+
+	// call reconciliation
+	_, err = ApplyStandalone(ctx, c, standalone)
+	if err != nil {
+		t.Errorf("Apply standalone failed.")
+	}
+	standalone.Status.ReadyReplicas = 3
+	updateCRStatus(ctx, c, standalone)
+}
+
+func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	ctx := context.TODO()
+
+	// Standalone: should return a vaid CR
+	stdln := enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Standalone",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.StandaloneStatus{
+			ReadyReplicas: 2,
+		},
+	}
+
+	// When the CR is available, should be able to fetch it.
+	err := c.Create(ctx, &stdln)
+	if err != nil {
+		t.Errorf("standalone CR creation failed.")
+	}
+
+	receivedCR, err := fetchCurrentCRWithStatusUpdate(ctx, c, &stdln)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "Standalone" {
+		t.Errorf("Failed to fetch the CR")
+	}
+
+	// When the CR is not available, should return and Error
+	invalidCR := stdln
+	invalidCR.ObjectMeta.Name = "unknownCR"
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &invalidCR)
+	if err == nil {
+		t.Errorf("When CR is not available, should return an error")
+	} else if !strings.Contains(err.Error(), "\"unknownCR\" not found") {
+		t.Errorf("Unexpected error: %s", err.Error())
+	} else if receivedCR != nil {
+		t.Errorf("Didn't expect to fetch the CR with name: %s", receivedCR.GetName())
+	}
+
+	// LicenseMaster: Should return a valid CR
+	lmCR := enterpriseApi.LicenseMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "LicenseMaster",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.LicenseMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+
+	err = c.Create(ctx, &lmCR)
+	if err != nil {
+		t.Errorf("LicenseMaster CR creation failed. error: %v", err)
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &lmCR)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "LicenseMaster" {
+		t.Errorf("Failed to fetch the CR")
+	}
+
+	// MonitoringConsole: Should return a valid CR
+	mcCR := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MonitoringConsole",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.MonitoringConsoleStatus{},
+	}
+
+	err = c.Create(ctx, &mcCR)
+	if err != nil {
+		t.Errorf("MonitoringConsole CR creation failed.")
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &mcCR)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "MonitoringConsole" {
+		t.Errorf("Failed to fetch the CR")
+	}
+
+	// ClusterMaster: Should return a valid CR
+	cmCR := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ClusterMaster",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.ClusterMasterStatus{},
+	}
+
+	err = c.Create(ctx, &cmCR)
+	if err != nil {
+		t.Errorf("ClusterMaster CR creation failed.")
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &cmCR)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "ClusterMaster" {
+		t.Errorf("Failed to fetch the CR")
+	}
+
+	// IndexerCluster: Should return a valid CR
+	idxcCR := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "IndexerCluster",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			ReadyReplicas: 3,
+		},
+	}
+
+	err = c.Create(ctx, &idxcCR)
+	if err != nil {
+		t.Errorf("IndexerCluster CR creation failed.")
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &idxcCR)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IndexerCluster" {
+		t.Errorf("Failed to fetch the CR")
+	}
+
+	// SearchHeadCluster: Should return valid CR
+	shcCR := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "SearchHeadCluster",
+			APIVersion: "enterprise.splunk.com/v3",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.SearchHeadClusterStatus{
+			ReadyReplicas: 3,
+		},
+	}
+
+	err = c.Create(ctx, &shcCR)
+	if err != nil {
+		t.Errorf("SearchHeadCluster CR creation failed.")
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
+		t.Errorf("Failed to fetch the CR")
+	}
 }

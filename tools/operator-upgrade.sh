@@ -146,7 +146,7 @@ backup() {
         echo "" >> ${backup_file_name}
         echo "---" >> ${backup_file_name}
     fi
-    echo "backup if there are any role-biding defined for Splunk Operator"
+    echo "backup if there are any role-binding defined for Splunk Operator"
     kubectl get rolebinding splunk:operator:namespace-manager -n ${current_namespace}  -o yaml >> ${backup_file_name}
     if [ $? == 0 ] 
     then 

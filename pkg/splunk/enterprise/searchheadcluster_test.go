@@ -63,6 +63,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
 	}
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -82,6 +84,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -329,21 +333,6 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-var-splunk-stack1-1"},
 	}
-	//extraCalls := []spltest.MockFuncCall{
-	//	{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-	//	{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-	//	}
-
-	/*
-		[test/splunk-stack1
-		test/splunk-test-secret
-		test/splunk-stack1-search-head-0
-		test/splunk-stack1-search-head-1
-		test/splunk-stack1-search-head-1
-		test/splunk-stack1
-		test/mnt-splunk-pvc-etc-splunk-stack1-1
-		 test/mnt-splunk-pvc-var-splunk-stack1-1]
-	*/
 
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
@@ -357,8 +346,6 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	}
 
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
-	//wantCalls["Get"] = append(wantCalls["Get"], extraCalls...)
-	//wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc-splunk-stack1-1", Namespace: "test"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var-splunk-stack1-1", Namespace: "test"}},

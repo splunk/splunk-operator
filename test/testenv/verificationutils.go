@@ -1002,15 +1002,20 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 
 // VerifyNoPodReset verify that no pod reset during App install using phase3 framework
 func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podStartTimeMap map[string]time.Time, podToSkip []string) {
-	// Get current Age on all splunk pods and compare with previous
-	currentSplunkPodAge := GetPodsStartTime(ns)
-	for podName, currentpodAge := range currentSplunkPodAge {
-		// Only compare if the pod was present in previous pod iteration
-		if _, ok := podStartTimeMap[podName]; ok {
-			// Check if pod needs to be skipped
-			if !CheckStringInSlice(podToSkip, podName) {
-				podReset := currentpodAge.Equal(podStartTimeMap[podName])
-				gomega.Expect(podReset).To(gomega.Equal(true), "Pod reset was detected. Pod Name %s. Current Pod Start Time %d. Previous Pod Start Time %d", podName, currentpodAge, podStartTimeMap[podName])
+	if podStartTimeMap == nil {
+		testenvInstance.Log.Info("podStartTimeMap is empty. Skipping validation")
+	} else {
+		// Get current Age on all splunk pods and compare with previous
+		currentSplunkPodAge := GetPodsStartTime(ns)
+		for podName, currentpodAge := range currentSplunkPodAge {
+			// Only compare if the pod was present in previous pod iteration
+			testenvInstance.Log.Info("Checking Pod reset for Pod Name", "PodName", podName, "Current Pod Age", currentpodAge)
+			if _, ok := podStartTimeMap[podName]; ok {
+				// Check if pod needs to be skipped
+				if !CheckStringInSlice(podToSkip, podName) {
+					podReset := currentpodAge.Equal(podStartTimeMap[podName])
+					gomega.Expect(podReset).To(gomega.Equal(true), "Pod reset was detected. Pod Name %s. Current Pod Start Time %d. Previous Pod Start Time %d", podName, currentpodAge, podStartTimeMap[podName])
+				}
 			}
 		}
 	}
