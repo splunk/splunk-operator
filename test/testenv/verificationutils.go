@@ -1054,3 +1054,17 @@ func VerifyAppRepoState(ctx context.Context, deployment *Deployment, testenvInst
 		return int(appDeploymentInfo.RepoState)
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(repoValue))
 }
+
+// VerifyIsDeploymentInProgressFlagIsSet verify IsDeploymentInProgress flag is set to true
+func VerifyIsDeploymentInProgressFlagIsSet(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string) {
+	testenvInstance.Log.Info("Check IsDeploymentInProgress Flag is set", "CR NAME", name, "CR Kind", crKind)
+	gomega.Eventually(func() bool {
+		isDeploymentInProgress, err := GetIsDeploymentInProgressFlag(ctx, deployment, testenvInstance, name, crKind)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get isDeploymentInProgress Flag")
+			return false
+		}
+		testenvInstance.Log.Info("IsDeploymentInProgress Flag status found", "CR NAME", name, "CR Kind", crKind, "IsDeploymentInProgress", isDeploymentInProgress)
+		return isDeploymentInProgress
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}

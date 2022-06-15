@@ -449,3 +449,55 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 	}
 	return clusterManagerBundleHash
 }
+
+// GetIsDeploymentInProgressFlag returns IsDeploymentInProgress for given CR Name, CR Kind
+func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string) (bool, error) {
+	var isDeploymentInProgress bool
+	var err error
+	switch crKind {
+	case "Standalone":
+		cr := &enterpriseApi.Standalone{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "MonitoringConsole":
+		cr := &enterpriseApi.MonitoringConsole{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "SearchHeadCluster":
+		cr := &enterpriseApi.SearchHeadCluster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "ClusterMaster":
+		cr := &enterpriseApi.ClusterMaster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "LicenseMaster":
+		cr := &enterpriseApi.LicenseMaster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	default:
+		message := fmt.Sprintf("Failed to fetch AppDeploymentInfo. Incorrect CR Kind %s", crKind)
+		err = errors.New(message)
+	}
+	return isDeploymentInProgress, err
+}

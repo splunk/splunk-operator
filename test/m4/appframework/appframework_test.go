@@ -2548,4 +2548,71 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
+
+	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+		It("smoke, m4, appframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", func() {
+
+			/* Test Steps
+			   ################## SETUP ##################
+			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Prepare and deploy M4 CRD with app framework
+			   * Verify IsDeploymentInProgress is set
+			   * Wait for the pods to be ready
+			*/
+
+			//################## SETUP ##################
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+
+			// Upload V1 apps to S3 for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec for M4
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+
+			// Deploy M4 CRD
+			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
+			siteCount := 3
+			indexersPerSite := 1
+			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+
+			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
+
+			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for Cluster Manager")
+			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind)
+
+			// Ensure that the Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
+			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, shc.Name, shc.Kind)
+
+			// Ensure the Indexers of all sites go to Ready phase
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
+
+			// Ensure Indexer Cluster configured as Multisite
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+		})
+	})
+
 })
