@@ -338,8 +338,8 @@ func TestUpdateStatusInvalidResponse(t *testing.T) {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
@@ -394,8 +394,8 @@ func TestInvalidPeerStatusInScaleDown(t *testing.T) {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
@@ -456,8 +456,8 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
@@ -527,8 +527,8 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc", Namespace: "test"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{
@@ -661,8 +661,8 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		Body:   ``,
 	})
 	pvcCalls := []spltest.MockFuncCall{
-		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-var-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	decommisionFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
@@ -670,14 +670,14 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
 		{MetaName: "*v1.Pod-test-splunk-master1-cluster-master-0"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-mnt-splunk-pvc-var-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": decommisionFuncCalls, "Create": {funcCalls[1]}, "Delete": pvcCalls, "Update": {funcCalls[0]}}
 	//wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
 	pvcList := []*corev1.PersistentVolumeClaim{
-		{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-etc-splunk-stack1-1", Namespace: "test"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "mnt-splunk-pvc-var-splunk-stack1-1", Namespace: "test"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
 	}
 	method = "indexerClusterPodManager.Update(Decommission)"
 	pod.ObjectMeta.Name = "splunk-stack1-0"
