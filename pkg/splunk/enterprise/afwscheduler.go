@@ -1417,19 +1417,18 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 
 	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	if err == nil && strings.Contains(stdOut, "cluster_status=None") {
+		scopedLog.Info("IndexerCluster Bundle push complete")
+		return true
+	}
+
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
 		return false
 	}
 
-	if !strings.Contains(stdOut, "cluster_status=None") {
-		scopedLog.Info("IndexerCluster Bundle push is still in progress")
-		return false
-	}
-
-	// bundle push is complete
-	scopedLog.Info("IndexerCluster Bundle push complete")
-	return true
+	scopedLog.Info("IndexerCluster Bundle push is still in progress")
+	return false
 }
 
 // triggerBundlePush triggers the bundle push for indexer cluster
