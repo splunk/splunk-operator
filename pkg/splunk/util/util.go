@@ -198,10 +198,7 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 
 	err = exec.Stream(*streamOptions)
 
-	if err != nil {
-		return "", "", err
-	}
-	return stdout.String(), stderr.String(), nil
+	return stdout.String(), stderr.String(), err
 }
 
 // PodExecClientImpl is an interface which is used to implement
@@ -236,7 +233,14 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 
 // RunPodExecCommand runs the specific pod exec command
 func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
-	return PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
+	reqLogger := log.FromContext(ctx)
+	stdOut, stdErr, err := PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
+	// ingore Server certificate hanlding for now, TODO handle certificate in longer run
+	if stdErr != "" && strings.Contains(stdErr, "WARNING: Server Certificate Hostname Validation is disabled") {
+		reqLogger.Info("WARNING: ingoring certificate handling warning")
+		return stdOut, "", err
+	}
+	return stdOut, stdErr, err
 }
 
 // SetTargetPodName sets the targetPodName field for podExecClient
