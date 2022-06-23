@@ -64,7 +64,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   monitoringConsoleRef:
-    name: example_mc
+    name: example-mc
 EOF
 ```
 The Splunk Operator is responsible for configuring and maintaing the connection between the cluster manager and the index cluster peers, but it does not manage Splunk Apps. The cluster manager manages the Splunk Apps and Add-ons distributed to all peers in the indexer cluster. See [Installing Splunk Apps](#installing-splunk-apps) for more information.
@@ -78,7 +78,7 @@ cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
-  name: example_mc
+  name: example-mc
   namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
@@ -103,7 +103,7 @@ spec:
   clusterMasterRef:
     name: cm
   monitoringConsoleRef:
-    name: example_mc
+    name: example-mc
 EOF
 ```
 This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
@@ -118,7 +118,7 @@ splunk-cm-cluster-master-0                  1/1     Running   0          29s
 splunk-example-indexer-0                    1/1     Running   0          29s
 splunk-example-indexer-1                    1/1     Running   0          29s
 splunk-example-indexer-2                    1/1     Running   0          29s
-splunk-example_mc-monitoring-console-0      1/1     Running   0          40s
+splunk-example-mc-monitoring-console-0      1/1     Running   0          40s
 splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
 
@@ -140,7 +140,7 @@ spec:
     name: cm
   replicas: 3
   monitoringConsoleRef:
-    name: example_mc
+    name: example-mc
 EOF
 ```
 
@@ -151,7 +151,7 @@ splunk-cm-cluster-master-0                    1/1     Running   0          14m
 splunk-example-indexer-0                      1/1     Running   0          14m
 splunk-example-indexer-1                      1/1     Running   0          70s
 splunk-example-indexer-2                      1/1     Running   0          70s
-splunk-example_mc-monitoring-console-0        1/1     Running   0          80s
+splunk-example-mc-monitoring-console-0        1/1     Running   0          80s
 splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
 
@@ -219,7 +219,7 @@ spec:
   clusterMasterRef:
     name: cm
   monitoringConsoleRef:
-    name: example_mc
+    name: example-mc
 EOF
 ```
 
@@ -232,7 +232,7 @@ splunk-cm-cluster-master-0                    1/1     Running   0          14m
 splunk-example-indexer-0                      1/1     Running   0          14m
 splunk-example-indexer-1                      1/1     Running   0          70s
 splunk-example-indexer-2                      1/1     Running   0          70s
-splunk-example_mc-monitoring-console-0        1/1     Running   0          80s
+splunk-example-mc-monitoring-console-0        1/1     Running   0          80s
 splunk-single-standalone-0                    1/1     Running   0          90s
 splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
@@ -271,7 +271,7 @@ spec:
   storageClassName: local
   varStorage: "128Gi"
   monitoringConsoleRef:
-    name: example_mc
+    name: example-mc
 EOF
 ```
 
@@ -284,14 +284,14 @@ cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
-  name: example_mc
+  name: example-mc
   namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
 EOF
 ```
 
-There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cm-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a cluster manager and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example_mc}]'``` for a search head cluster.
+There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  To associate a new MC pod with an existing CR that does not define the `monitoringConsoleRef`, you can patch those CR's and add it.  For example: ```kubectl patch cm-idxc cm --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example-mc}]'``` for a cluster manager and ```kubectl patch shc test --type=json -p '[{"op":"add", "path":"/spec/monitoringConsoleRef/name", "value":example-mc}]'``` for a search head cluster.
 
 
 ### Search Head Clusters
@@ -314,7 +314,7 @@ spec:
   clusterMasterRef:
     name: cm
   monitoringConsoleRef:
-    name: example_mc
+    name: example-mc
 EOF
 ```
 
@@ -325,7 +325,7 @@ cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v3
 kind: MonitoringConsole
 metadata:
-  name: example_mc
+  name: example-mc
   namespace: splunk-operator
   finalizers:
   - enterprise.splunk.com/delete-pvc
@@ -347,7 +347,7 @@ splunk-example-search-head-1                 0/1     Running   0          29s
 splunk-example-search-head-2                 0/1     Running   0          29s
 splunk-operator-7c5599546c-pmbc2             1/1     Running   0          12m
 splunk-single-standalone-0                   1/1     Running   0          11m
-splunk-example_mc-monitoring-console-0       1/1     Running   0          80s
+splunk-example-mc-monitoring-console-0       1/1     Running   0          80s
 ```
 
 Similar to indexer clusters, you can scale a search head cluster by patching the `replicas` parameter.
@@ -363,7 +363,7 @@ $ kubectl get svc
 NAME                                                        TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                                          AGE
 splunk-cm-cluster-master-service                            ClusterIP   10.100.98.17     <none>        8000/TCP,8089/TCP                                55m
 splunk-cm-indexer-service                                   ClusterIP   10.100.119.27    <none>        8000/TCP,8089/TCP                                55m
-splunk-example_mc-monitoring-console-service                ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
+splunk-example-mc-monitoring-console-service                ClusterIP   10.100.7.28      <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              54m
 splunk-example-deployer-service                             ClusterIP   10.100.43.240    <none>        8000/TCP,8089/TCP                                118s
 splunk-example-indexer-headless                             ClusterIP   None             <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
 splunk-example-indexer-service                              ClusterIP   10.100.192.73    <none>        8000/TCP,8088/TCP,8089/TCP,9997/TCP              55m
@@ -396,7 +396,7 @@ To remove the resources created from this example, run:
 kubectl delete -n splunk-opertaor standalone single
 kubectl delete -n splunk-opertaor shc example
 kubectl delete -n splunk-opertaor idc example
-kubectl delete -n splunk-opertaor mc example_mc
+kubectl delete -n splunk-opertaor mc example-mc
 kubectl delete -n splunk-opertaor clustermaster cm
 ```
 
