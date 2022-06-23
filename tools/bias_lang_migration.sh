@@ -13,21 +13,6 @@
 # ==> Does not delete/remove Statefulsets
 
 #############################################
-# Configurable Global Variables
-#############################################
-
-export FOLDER=./CR_migrations
-export ORIGINAL_FOLDER=${FOLDER}/original
-export UPDATED_FOLDER=${FOLDER}/updated
-export BCK_FOLDER=${FOLDER}/backup
-export TMP_FOLDER=/tmp
-
-export POD_TIMEOUT=600    # 10 minutes
-export RSYNC_TIMEOUT=3600 # 1 hour
-
-export CRDs=("LicenseMaster" "ClusterMaster" "IndexerCluster" "SearchHeadCluster" "Standalone" "MonitoringConsole")
-
-#############################################
 # Helper Functions to setup the environment
 #############################################
 
@@ -52,23 +37,23 @@ usage() {
 
 backup_configs() {
 	echo "Backing up current configs"
-	for n in $(kubectl get -o=name pvc,configmap,serviceaccount,secret,ingress,service,deployment,statefulset,hpa,job,cronjob); do
-		kubectl get -o=yaml $n >${BCK_FOLDER}/$n.yaml
+	for n in $(kubectl -n ${NS} get -o=name pvc,configmap,serviceaccount,secret,ingress,service,deployment,statefulset,hpa,job,cronjob); do
+		kubectl -n ${NS} get -o=yaml $n >${BCK_FOLDER}/$n.yaml
 	done
 }
 
 # Label the Node so the Manager can use nodeAffinity
 label_Node() {
 	MSTR_NODE=$1
-	kubectl label nodes ${MSTR_NODE} biaslangmasternode=yes >/dev/null 2>&1 # Long label(biaslangmasternode) to avoid conflicts with possibly existing labels
+	kubectl -n ${NS} label nodes ${MSTR_NODE} biaslangmasternode=yes --overwrite >/dev/null 2>&1 # Long label(biaslangmasternode) to avoid conflicts with possibly existing labels
 	if [[ "$?" -ne 0 ]]; then
 		err "Failed to label node ${MSTR_NODE}"
 	fi
 }
 
 unlabel_Nodes() {
-	for node in $(kubectl get nodes -o json | jq ".items[].metadata.name" -r); do
-		kubectl label node $node biaslangmasternode-
+	for node in $(kubectl -n ${NS} get nodes -o json | jq ".items[].metadata.name" -r); do
+		kubectl -n ${NS} label node $node biaslangmasternode-
 	done
 }
 
@@ -104,7 +89,7 @@ is_pod_ready() {
 
 	echo "Waiting for Pod=${pod} to become available - timeout=${POD_TIMEOUT}"
 
-	while [[ $(kubectl get pod ${pod} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
+	while [[ $(kubectl -n ${NS} get pod ${pod} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
 		sleep 1
 		let timeout--
 	done
@@ -116,7 +101,7 @@ is_pod_ready() {
 
 # Verify if CR created is valid with dry-run
 dry_run() {
-	kubectl apply -f $1 --dry-run=server >/dev/null 2>&1
+	kubectl -n ${NS} apply -f $1 --dry-run=server >/dev/null 2>&1
 	if [[ "$?" -ne 0 ]]; then
 		err "Dry run failed for ${updated_name} - Please check the file for incorrectness"
 	fi
@@ -125,7 +110,7 @@ dry_run() {
 apply_manager_CR() {
 	FILE=$1
 
-	kubectl apply -f ${FILE}
+	kubectl -n ${NS} apply -f ${FILE}
 
 	name=$(cat ${FILE} | jq '.metadata.name' -r)
 	type=$(cat ${FILE} | jq '.kind' -r)
@@ -150,7 +135,7 @@ apply_manager_CR() {
 apply_manager_jobs() {
 	FILE=$1
 
-	kubectl apply -f ${FILE}
+	kubectl -n ${NS} apply -f ${FILE}
 
 	name=$(cat ${FILE} | jq '.metadata.name' -r)
 
@@ -159,10 +144,10 @@ apply_manager_jobs() {
 		timeout=$RSYNC_TIMEOUT # Local copy reset on each copy
 
 		echo "Will apply file=${job} name=${job_name}"
-		kubectl apply -f ${job}
+		kubectl -n ${NS} apply -f ${job}
 
 		#	Wait for copy to finish
-		while [[ $(kubectl get jobs ${job_name} -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
+		while [[ $(kubectl -n ${NS} get jobs ${job_name} -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
 			sleep 1
 			let timeout--
 		done
@@ -172,7 +157,7 @@ apply_manager_jobs() {
 		fi
 
 		# Remove completed job after
-		kubectl delete job ${job_name}
+		kubectl -n ${NS} delete job ${job_name}
 
 	done
 }
@@ -200,14 +185,14 @@ rolling_restart_my_pods() {
 	esac
 
 	RESTARTED_PODS=0
-	PODS=$(kubectl get pods | grep ${NAME} | grep ${target} | awk '{print $1}')
+	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${target} | awk '{print $1}')
 	N_PODS=$(echo $PODS | wc -w)
 
 	for pod in ${PODS}; do
 		let RESTARTED_PODS++
 
 		echo "Restarting pod ${pod}"
-		kubectl delete pod $pod
+		kubectl -n ${NS} delete pod $pod
 		sleep 10
 
 		# We hold execution for first and last pod to ensure they were successfully restarted
@@ -221,8 +206,8 @@ rolling_restart_my_pods() {
 
 add_node_affinity() {
 	FILE=$1
-	cp ${FILE} ${TMP_FOLDER}/temp.node.info
-	cat ${TMP_FOLDER}/temp.node.info | jq '.spec += {
+	cp ${FILE} ${TMP_FOLDER}/temp.node.info.${NS}
+	cat ${TMP_FOLDER}/temp.node.info.${NS} | jq '.spec += {
           "affinity": {
               "nodeAffinity": {
                     "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -261,7 +246,7 @@ reset_manager_CR() {
 		;;
 	esac
 
-	kubectl delete pod "splunk-${name}-${target}-0"
+	kubectl -n ${NS} delete pod "splunk-${name}-${target}-0"
 	is_pod_ready "splunk-${name}-${target}-0"
 }
 
@@ -360,9 +345,9 @@ setMaintenanceMode() {
 	pod=$1
 	enable=$2
 
-	secret=$(kubectl get secret splunk-default-secret -o jsonpath='{.data.password}' | base64 --decode)
+	secret=$(kubectl -n default get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
 	command="/opt/splunk/bin/splunk ${enable} maintenance-mode --answer-yes -auth admin:${secret}"
-	kubectl exec -it ${pod} -- /bin/bash -c "${command}"
+	kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
 
 	if [[ "$?" -ne 0 ]] && [[ "${enable}" != "disable" ]]; then
 		err "Failed to set maintenance mode for ${pod}"
@@ -375,18 +360,18 @@ get_current_deployment() {
 
 	# Retrieve all CRs currently deployed
 	for CR in "${CRDs[@]}"; do
-		ALL_CR_NAMES=$(kubectl get ${CR} -o json | jq ".items[].metadata.name" -r)
+		ALL_CR_NAMES=$(kubectl -n ${NS} get ${CR} -o json | jq ".items[].metadata.name" -r)
 		for CR_NAME in $ALL_CR_NAMES; do
 
 			original_name="${ORIGINAL_FOLDER}/${CR}.original.${CR_NAME}.json"
 			updated_name="${UPDATED_FOLDER}/${CR}.updated.${CR_NAME}.json"
-			tmp_name="${TMP_FOLDER}/${CR}.tmp.${CR_NAME}.json"
+			tmp_name="${TMP_FOLDER}/${CR}.tmp.${NS}.${CR_NAME}.json"
 			lm_cm_ex_name="${TMP_FOLDER}/${CR}.lm_cm_exception.${CR_NAME}.json"
 
 			# Retrieve current CR and save in original folder
 			if [[ ! -z ${CR_NAME} ]]; then
 				echo "Found CR=${CR} name=${CR_NAME}"
-				kubectl get ${CR} ${CR_NAME} -o json | jq "
+				kubectl -n ${NS} get ${CR} ${CR_NAME} -o json | jq "
                     with_entries(
                         select([.key] |
                           inside([\"metadata\", \"spec\", \"apiVersion\", \"kind\"])
@@ -427,8 +412,6 @@ get_current_deployment() {
 
 			elif [[ "${CR}" == "ClusterMaster" ]]; then
 				export HAS_CM=true
-				node=$(kubectl get pod splunk-${CR_NAME}-cluster-master-0 -o json | jq '.spec.nodeName' -r)
-				label_Node ${node}
 
 				# Exception where CM has a LM reference
 				if [[ -f "${lm_cm_ex_name}" ]]; then
@@ -466,7 +449,7 @@ apply_new_CRs() {
 			if [[ -f ${file} ]]; then
 				echo ${file}
 				CR_NAME="$(cat ${file} | jq '.metadata.name' -r)"
-				node=$(kubectl get pod splunk-${CR_NAME}-license-master-0 -o json | jq '.spec.nodeName' -r)
+				node=$(kubectl -n ${NS} get pod splunk-${CR_NAME}-license-master-0 -o json | jq '.spec.nodeName' -r)
 				label_Node ${node}
 				apply_manager_CR ${file}
 				apply_manager_jobs ${file}
@@ -482,11 +465,10 @@ apply_new_CRs() {
 		for file in ${UPDATED_FOLDER}/*ClusterMaster.updated*; do
 			if [[ -f ${file} ]]; then
 				CR_NAME="$(cat ${file} | jq '.metadata.name' -r)"
-				node=$(kubectl get pod splunk-${CR_NAME}-cluster-master-0 -o json | jq '.spec.nodeName' -r)
+				node=$(kubectl -n ${NS} get pod splunk-${CR_NAME}-cluster-master-0 -o json | jq '.spec.nodeName' -r)
 				label_Node ${node}
-				setMaintenanceMode "splunk-${CR_NAME}-cluster-master-0" "enable"
-				disable_maintenance_mode_arr=("${arr[@]}" "splunk-${CR_NAME}-cluster-manager-0")
-				echo " each ${disable_maintenance_mode_arr}"
+				setMaintenanceMode "splunk-${CR_NAME}-cluster-master-0" "enable" ;
+				to_disable_maint_mode=("${arr[@]}" "splunk-${CR_NAME}-cluster-manager-0")
 				apply_manager_CR ${file}
 				apply_manager_jobs ${file}
 				reset_manager_CR ${file}
@@ -502,7 +484,7 @@ apply_new_CRs() {
 				[[ "$(echo "${file}" | grep -c "LicenseMaster.updated")" == "0" ]] &&
 				[[ "$(echo "${file}" | grep -c "rsync.pvc")" == "0" ]]; then
 				echo "Restarting Peers - This can take a while"
-				kubectl apply -f ${file}
+				kubectl -n ${NS} apply -f ${file}
 				name=$(cat ${file} | jq '.metadata.name' -r)
 				type=$(cat ${file} | jq '.kind' -r)
 				rolling_restart_my_pods ${name} ${type}
@@ -511,11 +493,28 @@ apply_new_CRs() {
 	done
 
 	# Disable maintenance mode in all CMs migrated
-	for CM in "${disable_maintenance_mode_arr[@]}"; do
+	for CM in "${to_disable_maint_mode[@]}"; do
 		echo "Going to Disable ${CM}"
 		setMaintenanceMode "${CM}" "disable"
 	done
 
+}
+
+to_delete_CRs() {
+  if [[ ${HAS_LM} ]]; then
+  		for file in ${ORIGINAL_FOLDER}/*LicenseMaster.updated*; do
+  			if [[ -f ${file} ]]; then
+  				cp ${file} ${TO_REMOVE_CRs}/
+  			fi
+  		done
+  	fi
+  	if [[ ${HAS_CM} ]]; then
+  		for file in ${ORIGINAL_FOLDER}/*ClusterMaster.updated*; do
+  			if [[ -f ${file} ]]; then
+  				  cp ${file} ${TO_REMOVE_CRs}/
+  			fi
+  		done
+  	fi
 }
 
 #############################################
@@ -543,20 +542,35 @@ if [[ -z "$2" ]]; then
 	usage
 	err "Please enter the namespace of the deployment to be migrated."
 else
-	kubectl config set-context --current --namespace=$2 >/dev/null 2>&1
+  export NS="$2"
+	kubectl -n ${NS} config set-context --current --namespace=${NS} >/dev/null 2>&1
 fi
 
 # User warning for optional backup of PVs
 echo -e "\n\n************************** Important Notice **************************\n"
 echo -e "1 - This script should be used during Maintenance hours because it requires pod restarts."
 echo -e "2 - Interrupting the execution of this script can leave your deployment at a bad state."
-echo -e "3 - Large deployments should review timeout variables at the top of the script."
-echo -e "\n Do you wish to proceed with the migration for option=$1 NS=$2?"
+echo -e "3 - Large deployments should review timeout variables for POD restarts and Rsync."
+echo -e "\n Do you wish to proceed with the migration for option=$1 NS=${NS}?"
 echo -e "\n Press Enter to continue or Crtl+C to cancel"
-read
+#read
+
+#############################################
+# Configurable Global Variables
+#############################################
+
+export FOLDER=./${NS}.CR_migrations
+export ORIGINAL_FOLDER=${FOLDER}/original
+export UPDATED_FOLDER=${FOLDER}/updated
+export TO_REMOVE_CRs=${FOLDER}/to_remove_CRs
+export BCK_FOLDER=${FOLDER}/backup
+export TMP_FOLDER=/tmp
+export POD_TIMEOUT=600    # 10 minutes
+export RSYNC_TIMEOUT=3600 # 1 hour
+export CRDs=("LicenseMaster" "ClusterMaster" "IndexerCluster" "SearchHeadCluster" "Standalone" "MonitoringConsole")
 
 # Start logging file
-echo -e "\n*** Starting Execution ***\n\n$(date "+%F-%H:%M:%S")- Current namespace=$2"
+echo -e "\n*** Starting Execution ***\n\n$(date "+%F-%H:%M:%S")- Current namespace=${NS}"
 
 # cleans biasLang labels from previous runs
 unlabel_Nodes >/dev/null 2>&1
@@ -574,6 +588,8 @@ fi
 # clean up labels after execution
 unlabel_Nodes >/dev/null 2>&1
 
-echo -e "\nOriginal files saved in ${ORIGINAL_FOLDER}"
-echo -e "Generated files saved in ${UPDATED_FOLDER}"
+# Provide to customers which CRs can be removed.
+to_delete_CRs
+
+echo -e "\nMigration Completed. Once you validate your environment you can remove ClusterMasters and LicenseMasters stored in ${TO_REMOVE_CRs}"
 echo -e "\n*** Migration script finished execution ***\n"
