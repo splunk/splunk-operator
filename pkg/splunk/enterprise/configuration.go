@@ -439,8 +439,8 @@ func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec
 	return nil
 }
 
-// addEphermalVolumes adds ephermal volumes to statefulSet
-func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) error {
+// addEphemeralVolumes adds ephermeral volumes to statefulSet
+func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) error {
 	// add ephemeral volumes to the splunk pod
 	emptyVolumeSource := corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -464,8 +464,8 @@ func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) erro
 func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
-		// add Ephermal volumes
-		_ = addEphermalVolumes(statefulSet, splcommon.EtcVolumeStorage)
+		// add ephermeral volumes
+		_ = addEphemeralVolumes(statefulSet, splcommon.EtcVolumeStorage)
 	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.EtcVolumeStorage)
@@ -476,8 +476,8 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 
 	// configure storage for mount path /opt/splunk/var
 	if spec.VarVolumeStorageConfig.EphemeralStorage {
-		// add Ephermal volumes
-		_ = addEphermalVolumes(statefulSet, splcommon.VarVolumeStorage)
+		// add ephermeral volumes
+		_ = addEphemeralVolumes(statefulSet, splcommon.VarVolumeStorage)
 	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.VarVolumeStorage)
