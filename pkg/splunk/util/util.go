@@ -238,7 +238,7 @@ func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, strea
 	// ingore Server certificate hanlding for now, TODO handle certificate in longer run
 	if stdErr != "" && strings.Contains(stdErr, "WARNING: Server Certificate Hostname Validation is disabled") {
 		reqLogger.Info("WARNING: ingoring certificate handling warning")
-		return stdOut, "", err
+		return stdOut, "", nil
 	}
 	return stdOut, stdErr, err
 }
