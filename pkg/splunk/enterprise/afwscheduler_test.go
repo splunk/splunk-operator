@@ -2183,7 +2183,8 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		// this is for applying the cluster bundle
 		{
 			StdOut: "",
-			StdErr: "OK\n",
+			//StdErr: "OK\n",
+			StdErr: "",
 		},
 		// this is for checking the status of cluster bundle
 		{
@@ -2237,7 +2238,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
 	mockPodExecReturnContexts[1].StdErr = ""
 	err = playbookContext.runPlaybook(ctx)
-	if err == nil {
+	if err != nil {
 		t.Errorf("runPlaybook() should have returned error since we did not get desired output")
 	}
 
