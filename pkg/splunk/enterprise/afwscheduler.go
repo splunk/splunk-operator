@@ -1417,7 +1417,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 
 	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if err == nil && strings.Contains(stdOut, "cluster_status=None") {
+	if err == nil && strings.Contains(stdOut, "cluster_status=None")  && !strings.Contains(stdOut, "last_bundle_validation_status=failure") {
 		scopedLog.Info("IndexerCluster Bundle push complete")
 		return true
 	}
