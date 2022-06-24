@@ -94,7 +94,7 @@ func (d *Deployment) Teardown() error {
 			d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from Pod %s", podName))
 		} else {
 			logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
-			d.testenv.Log.Info("Writing %s Pod logs to file %s ", podName, logFileName)
+			d.testenv.Log.Info(fmt.Sprintf("Writing %s Pod logs to file %s ", podName, logFileName))
 			logFile, err := os.Create(logFileName)
 			if err != nil {
 				d.testenv.Log.Error(err, fmt.Sprintf("Failed to create log file %s", logFileName))
