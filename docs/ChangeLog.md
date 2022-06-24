@@ -201,7 +201,7 @@
 
 * Introduction of Ginkgo based test framework for CI/CD pipeline. Smoke Test cases added to validate the fundamental use cases related to Splunk custom resources. For more details, refer to [README.md](README.md)
 
-* Feature to enable Ephemeral storage support for Splunk volumes
+* Feature to enable ephemeral storage support for Splunk volumes
 
 * Add provision to enable custom ports on Splunk containers
 
