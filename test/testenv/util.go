@@ -909,3 +909,16 @@ func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podNa
 	}
 	return nil
 }
+
+// DumpGetSplunkVersion prints the splunk version installed on pods
+func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment) {
+	splunkPods := DumpGetPods(ns)
+	cmd := "/opt/splunk/bin/splunk -version"
+	for _, podName := range splunkPods {
+		stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
+		if err != nil {
+			logf.Log.Error(err, "Failed to get splunkd version on the pod", "Pod Name", podName)
+		}
+		logf.Log.Info("Splunk Version Found", "Pod Name", podName, "Version", string(stdout))
+	}
+}
