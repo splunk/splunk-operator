@@ -2,15 +2,19 @@
 #description  :This script migrates existing CRs deployed to non-Bias-Language replacements.
 #version      :1.0
 
-# Execution Flow
-# 1) Retrieve current deployments and saves configs in the "original" folder.
-# 2) Convert the configs to use new CRs and creates jobs to Rsync LM and CM. Saves them in the "updated" folder.
-# 3) Apply all the new configs in the correct order to migrate the deployment.
-
-# Important Notes
-# ==> Requires pod restarts so it should be used during Maintenance window.
-# ==> Does not touch PVCs directly, should not cause any data loss.
-# ==> Does not delete/remove Statefulsets
+#
+# Execution Modes
+#
+# Generate:  ./bias_lang_migration.sh generate <namespace>
+# We only generate the config files for the migration, but do not apply them
+# The driver code for generate is get_current_deployment() in which we retrieve the current CRs and convert them to non-bias Language counterparts
+#
+# Migrate:   ./bias_lang_migration.sh migrate <namespace>
+# We generate the config files and apply them to the cluster in order
+# The driver for migrate is apply_new_CRs() which loops over the updated folder and applies the CRs in the correct order
+#
+# Requirements
+# This script uses JQ and requires new Managers to be deployed in the same node as the original Master CR
 
 #############################################
 # Helper Functions to setup the environment
@@ -38,6 +42,7 @@ usage() {
 backup_configs() {
 	echo "Backing up current configs"
 	for n in $(kubectl -n ${NS} get -o=name pvc,configmap,serviceaccount,secret,ingress,service,deployment,statefulset,hpa,job,cronjob); do
+		mkdir -p ${BCK_FOLDER}/$(echo $n | cut -d "/" -f 1)
 		kubectl -n ${NS} get -o=yaml $n >${BCK_FOLDER}/$n.yaml
 	done
 }
@@ -99,6 +104,27 @@ is_pod_ready() {
 	fi
 }
 
+# Performs a rolling restart
+# We only block execution to validate the last Pod
+rolling_restart_my_pods() {
+	NAME=$1
+	TARGET=$2
+
+	RESTARTED_PODS=0
+	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${TARGET} | awk '{print $1}')
+	N_PODS=$(echo $PODS | wc -w)
+
+	for pod in ${PODS}; do
+		kubectl -n ${NS} delete pod $pod
+		sleep 10
+		let RESTARTED_PODS++
+		if [[ "$RESTARTED_PODS" -ge "$N_PODS" ]]; then
+			is_pod_ready ${pod}
+		fi
+
+	done
+}
+
 # Verify if CR created is valid with dry-run
 dry_run() {
 	kubectl -n ${NS} apply -f $1 --dry-run=server >/dev/null 2>&1
@@ -146,7 +172,7 @@ apply_manager_jobs() {
 		echo "Will apply file=${job} name=${job_name}"
 		kubectl -n ${NS} apply -f ${job}
 
-		#	Wait for copy to finish
+		#	Wait for the copy to finish before proceeding
 		while [[ $(kubectl -n ${NS} get jobs ${job_name} -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
 			sleep 1
 			let timeout--
@@ -162,52 +188,28 @@ apply_manager_jobs() {
 	done
 }
 
-# Performs a rolling restart
-# This is needed for Peer Pods to sync up with updated STS configs
-# We only block execution to validate the first and last Pods
-rolling_restart_my_pods() {
+add_peer_to_manager() {
 	NAME=$1
 	TYPE=$2
+	MANAGER=$3
 
-	case $TYPE in
-	IndexerCluster)
-		target="indexer"
-		;;
-	SearchHeadCluster)
-		target="search-head"
-		;;
-	Standalone)
-		target="standalone"
-		;;
-	*)
-		echo -n "invalid restart request for CR type ${type}"
-		;;
-	esac
-
-	RESTARTED_PODS=0
-	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${target} | awk '{print $1}')
-	N_PODS=$(echo $PODS | wc -w)
+	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep indexer | awk '{print $1}')
+	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
+	command="/opt/splunk/bin/splunk edit cluster-config -mode slave -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
 
 	for pod in ${PODS}; do
-		let RESTARTED_PODS++
-
-		echo "Restarting pod ${pod}"
-		kubectl -n ${NS} delete pod $pod
-		sleep 10
-
-		# We hold execution for first and last pod to ensure they were successfully restarted
-		if [[ "$RESTARTED_PODS" -eq "1" ]]; then
-			is_pod_ready ${pod}
-		elif [[ "$RESTARTED_PODS" -ge "$N_PODS" ]]; then
-			is_pod_ready ${pod}
+		echo "Adding pod ${pod} to ${MANAGER}"
+		kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
+		if [[ "$?" -ne 0 ]]; then
+			echo "Failed to add peer to new Manager"
 		fi
 	done
 }
 
 add_node_affinity() {
 	FILE=$1
-	cp ${FILE} ${TMP_FOLDER}/temp.node.info.${NS}
-	cat ${TMP_FOLDER}/temp.node.info.${NS} | jq '.spec += {
+	cp ${FILE} ${TMP_FOLDER}/temp.node.info.${NS}.${TT}
+	cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec += {
           "affinity": {
               "nodeAffinity": {
                     "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -322,17 +324,14 @@ create_job() {
 
 }
 
-# Copies PVCs for /etc and /var mounts
-# SRC  = Master CR
-# DEST = Manager CR
 migrate_pvc() {
 	NAME=$1
 
-	SRC=$2
+	SRC=$2 # SRC = Master CR
 	SRC_PVC_ETC="pvc-etc-splunk-${NAME}-${SRC}-0"
 	SRC_PVC_VAR="pvc-var-splunk-${NAME}-${SRC}-0"
 
-	DEST=$3
+	DEST=$3 # DEST = Manager CR
 	DEST_PVC_ETC="pvc-etc-splunk-${NAME}-${DEST}-0"
 	DEST_PVC_VAR="pvc-var-splunk-${NAME}-${DEST}-0"
 
@@ -340,12 +339,12 @@ migrate_pvc() {
 	create_job ${SRC_PVC_VAR} ${DEST_PVC_VAR} var ${NAME}
 }
 
-# For Indexer Cluster is recommended to enable Maintenance due to CM migration
+# For Indexer Cluster is recommended to enable Maintenance during CM migration
 setMaintenanceMode() {
 	pod=$1
 	enable=$2
 
-	secret=$(kubectl -n default get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
+	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
 	command="/opt/splunk/bin/splunk ${enable} maintenance-mode --answer-yes -auth admin:${secret}"
 	kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
 
@@ -354,8 +353,31 @@ setMaintenanceMode() {
 	fi
 }
 
-get_current_deployment() {
+to_delete_CRs() {
+	# Only create this folder if script reach the end of execution
+	mkdir -p ${TO_REMOVE_CRs}
+	if [[ ${HAS_LM} ]]; then
+		for file in ${ORIGINAL_FOLDER}/*LicenseMaster.original*; do
+			if [[ -f ${file} ]]; then
+				cp ${file} ${TO_REMOVE_CRs}/
+			fi
+		done
+	fi
+	if [[ ${HAS_CM} ]]; then
+		for file in ${ORIGINAL_FOLDER}/*ClusterMaster.original*; do
+			if [[ -f ${file} ]]; then
+				cp ${file} ${TO_REMOVE_CRs}/
+			fi
+		done
+	fi
+}
 
+#############################################
+# Driver Functions
+#############################################
+
+# Driver for Generate Mode
+get_current_deployment() {
 	echo -e "\nRetrieving current deployed Splunk Instances: \n"
 
 	# Retrieve all CRs currently deployed
@@ -363,10 +385,10 @@ get_current_deployment() {
 		ALL_CR_NAMES=$(kubectl -n ${NS} get ${CR} -o json | jq ".items[].metadata.name" -r)
 		for CR_NAME in $ALL_CR_NAMES; do
 
-			original_name="${ORIGINAL_FOLDER}/${CR}.original.${CR_NAME}.json"
-			updated_name="${UPDATED_FOLDER}/${CR}.updated.${CR_NAME}.json"
-			tmp_name="${TMP_FOLDER}/${CR}.tmp.${NS}.${CR_NAME}.json"
-			lm_cm_ex_name="${TMP_FOLDER}/${CR}.lm_cm_exception.${CR_NAME}.json"
+			original_name="${ORIGINAL_FOLDER}/${CR}.original.${CR_NAME}.json" # original -> As currently deployed
+			updated_name="${UPDATED_FOLDER}/${CR}.updated.${CR_NAME}.json"    # updated  -> Already converted to new CRDs
+			tmp_name="${TMP_FOLDER}/${CR}.tmp.${NS}.${CR_NAME}.${TT}.json"
+			lm_cm_ex_name="${TMP_FOLDER}/${CR}.lm_cm_exception.${CR_NAME}.${TT}.json"
 
 			# Retrieve current CR and save in original folder
 			if [[ ! -z ${CR_NAME} ]]; then
@@ -386,9 +408,8 @@ get_current_deployment() {
 				continue
 			fi
 
-			# Converts Refs if exists
-			if [[ "$(grep -c licenseMasterRef ${original_name})" -ne "0" ]] &&
-				[[ "$(grep -c clusterMasterRef ${original_name})" -ne "0" ]]; then
+			# Handles Refs conversion
+			if [[ "$(grep -c licenseMasterRef ${original_name})" -ne "0" ]] && [[ "$(grep -c clusterMasterRef ${original_name})" -ne "0" ]]; then
 				convert_CR_Spec ${original_name} ${tmp_name} "license"
 				convert_CR_Spec ${tmp_name} ${updated_name} "cluster"
 			elif [[ "$(grep -c licenseMasterRef ${original_name})" -ne "0" ]]; then
@@ -401,47 +422,39 @@ get_current_deployment() {
 				convert_CR_Spec ${original_name} ${updated_name} "cluster"
 			fi
 
-			# Converts Kind to Manager and add labels to the Node
-			# The new Manager needs to be in the same Node for RSYNC
+			# Handles Kind conversion
 			if [[ "${CR}" == "LicenseMaster" ]]; then
 				export HAS_LM=true
-
 				convert_CR_Kind ${original_name} ${updated_name} "LicenseManager"
 				migrate_pvc ${CR_NAME} "license-master" "license-manager"
 				add_node_affinity ${updated_name}
-
 			elif [[ "${CR}" == "ClusterMaster" ]]; then
 				export HAS_CM=true
-
-				# Exception where CM has a LM reference
-				if [[ -f "${lm_cm_ex_name}" ]]; then
+				if [[ -f "${lm_cm_ex_name}" ]]; then # Exception where CM has a LM reference
 					convert_CR_Kind ${lm_cm_ex_name} ${updated_name} "ClusterManager"
 				else
 					convert_CR_Kind ${original_name} ${updated_name} "ClusterManager"
 				fi
-
 				migrate_pvc ${CR_NAME} "cluster-master" "cluster-manager"
 				add_node_affinity ${updated_name}
 			fi
 
-			# Validate the CR is valid
+			# Validate the updated CR is valid
 			dry_run ${updated_name}
 
 		done
 	done
 
+	# Warning for incorrect namespace
 	if [[ $(ls ${ORIGINAL_FOLDER} | wc -l) -eq 0 ]]; then
 		echo "WARNING - No CRs found, check if the namespace used is correct"
 	fi
 
 }
 
+# Driver for Migration Mode
 apply_new_CRs() {
 	echo -e "\nApplying new CRs generated:\n"
-	# Apply new Updated CRs
-
-	HAS_LM=true
-	HAS_CM=true
 
 	# Get LM first
 	if [[ ${HAS_LM} ]]; then
@@ -453,7 +466,7 @@ apply_new_CRs() {
 				label_Node ${node}
 				apply_manager_CR ${file}
 				apply_manager_jobs ${file}
-				#				                reset_my_CR ${file}
+				reset_manager_CR ${file}      # Bring configs copied from original into memory
 				unlabel_Nodes >/dev/null 2>&1 # Needed when LM and CM are in different nodes
 				echo "Finished LM migration using file ${file}"
 			fi
@@ -467,11 +480,11 @@ apply_new_CRs() {
 				CR_NAME="$(cat ${file} | jq '.metadata.name' -r)"
 				node=$(kubectl -n ${NS} get pod splunk-${CR_NAME}-cluster-master-0 -o json | jq '.spec.nodeName' -r)
 				label_Node ${node}
-				setMaintenanceMode "splunk-${CR_NAME}-cluster-master-0" "enable" ;
+				setMaintenanceMode "splunk-${CR_NAME}-cluster-master-0" "enable"
 				to_disable_maint_mode=("${arr[@]}" "splunk-${CR_NAME}-cluster-manager-0")
 				apply_manager_CR ${file}
 				apply_manager_jobs ${file}
-				reset_manager_CR ${file}
+				reset_manager_CR ${file} # Bring configs copied from original CM into memory
 				echo "Finished CM migration using file ${file}"
 			fi
 		done
@@ -487,7 +500,19 @@ apply_new_CRs() {
 				kubectl -n ${NS} apply -f ${file}
 				name=$(cat ${file} | jq '.metadata.name' -r)
 				type=$(cat ${file} | jq '.kind' -r)
-				rolling_restart_my_pods ${name} ${type}
+				case $type in
+				IndexerCluster)
+					target="indexer"
+					echo "Found IndexerCluster"
+					manager=$(cat ${file} | jq '.spec.clusterManagerRef.name' -r)
+					add_peer_to_manager ${name} ${target} ${manager}
+					;;
+				SearchHeadCluster)
+					target="search-head"
+					echo "Found SearchHeadCluster"
+					rolling_restart_my_pods ${name} ${target}
+					;;
+				esac
 			fi
 		fi
 	done
@@ -500,23 +525,6 @@ apply_new_CRs() {
 
 }
 
-to_delete_CRs() {
-  if [[ ${HAS_LM} ]]; then
-  		for file in ${ORIGINAL_FOLDER}/*LicenseMaster.updated*; do
-  			if [[ -f ${file} ]]; then
-  				cp ${file} ${TO_REMOVE_CRs}/
-  			fi
-  		done
-  	fi
-  	if [[ ${HAS_CM} ]]; then
-  		for file in ${ORIGINAL_FOLDER}/*ClusterMaster.updated*; do
-  			if [[ -f ${file} ]]; then
-  				  cp ${file} ${TO_REMOVE_CRs}/
-  			fi
-  		done
-  	fi
-}
-
 #############################################
 #  Begin Script Execution
 #############################################
@@ -524,7 +532,7 @@ to_delete_CRs() {
 # Script requires jq to be installed
 prereqs
 if [[ "$?" -ne 0 ]]; then
-	err "This script requires jq to be installed in the currenct machine. Visit https://stedolan.github.io/jq/download for details."
+	err "This script requires jq to be installed in the current machine. Visit https://stedolan.github.io/jq/download for details."
 fi
 
 # Validate arguments for CR and Namespace
@@ -542,7 +550,7 @@ if [[ -z "$2" ]]; then
 	usage
 	err "Please enter the namespace of the deployment to be migrated."
 else
-  export NS="$2"
+	export NS="$2"
 	kubectl -n ${NS} config set-context --current --namespace=${NS} >/dev/null 2>&1
 fi
 
@@ -551,9 +559,9 @@ echo -e "\n\n************************** Important Notice ***********************
 echo -e "1 - This script should be used during Maintenance hours because it requires pod restarts."
 echo -e "2 - Interrupting the execution of this script can leave your deployment at a bad state."
 echo -e "3 - Large deployments should review timeout variables for POD restarts and Rsync."
-echo -e "\n Do you wish to proceed with the migration for option=$1 NS=${NS}?"
+echo -e "\n Do you wish to proceed with the migration for mode=$1 NS=${NS}?"
 echo -e "\n Press Enter to continue or Crtl+C to cancel"
-#read
+read
 
 #############################################
 # Configurable Global Variables
@@ -567,6 +575,7 @@ export BCK_FOLDER=${FOLDER}/backup
 export TMP_FOLDER=/tmp
 export POD_TIMEOUT=600    # 10 minutes
 export RSYNC_TIMEOUT=3600 # 1 hour
+export TT=$(date +'%Y.%m.%d.%H%M%S')
 export CRDs=("LicenseMaster" "ClusterMaster" "IndexerCluster" "SearchHeadCluster" "Standalone" "MonitoringConsole")
 
 # Start logging file
@@ -581,15 +590,15 @@ create_folders
 # Retrieve all current deployment
 get_current_deployment
 
+# Apply generated CRs on Migrate mode
 if [[ "$1" == "migrate" ]]; then
+	backup_configs
 	apply_new_CRs
+	to_delete_CRs
 fi
 
 # clean up labels after execution
 unlabel_Nodes >/dev/null 2>&1
-
-# Provide to customers which CRs can be removed.
-to_delete_CRs
 
 echo -e "\nMigration Completed. Once you validate your environment you can remove ClusterMasters and LicenseMasters stored in ${TO_REMOVE_CRs}"
 echo -e "\n*** Migration script finished execution ***\n"
