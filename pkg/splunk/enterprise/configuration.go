@@ -478,7 +478,7 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 	if spec.VarVolumeStorageConfig.EphemeralStorage {
 		// add ephemeral volumes
 		_ = addEphemeralVolumes(statefulSet, splcommon.VarVolumeStorage)
-  } else {
+	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.VarVolumeStorage)
 		if err != nil {
