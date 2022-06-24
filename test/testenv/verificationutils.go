@@ -79,6 +79,7 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, mcName, monitoringConsole)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "monitoring-console")
 		return monitoringConsole.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -100,6 +101,7 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), standalone)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "standalone")
 		return standalone.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -141,6 +143,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -172,6 +175,7 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, instanceName, idc)
 		testenvInstance.Log.Info("Check for Consistency indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-idxc-indexer-")
 		return idc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -197,6 +201,7 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
 		testenvInstance.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "cluster-manager")
 		return cm.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -226,6 +231,7 @@ func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance 
 		gomega.Consistently(func() enterpriseApi.Phase {
 			_ = deployment.GetInstance(ctx, instanceName, idc)
 			testenvInstance.Log.Info("Check for Consistency indexer site instance phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
+			DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-idxc-indexer-")
 			return idc.Status.Phase
 		}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 	}
