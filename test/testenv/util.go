@@ -641,7 +641,7 @@ func DumpGetPvcs(ns string) []string {
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		logf.Log.Info(line)
-		if strings.HasPrefix(line, "mnt-splunk-pvc-") {
+		if strings.HasPrefix(line, "pvc-") {
 			splunkPvcs = append(splunkPvcs, strings.Fields(line)[0])
 		}
 	}
