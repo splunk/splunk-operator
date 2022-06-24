@@ -237,10 +237,10 @@ func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, strea
 	stdOut, stdErr, err := PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
 	// ingore Server certificate hanlding for now, TODO handle certificate in longer run
 	if stdErr != "" && strings.Contains(stdErr, "WARNING: Server Certificate Hostname Validation is disabled") {
-		reqLogger.Info("WARNING: ingoring certificate handling warning")
+		reqLogger.Info("WARNING: ignoring certificate handling warning")
 		return stdOut, "", nil
-	} else if err  != nil && strings.Contains(err.Error(), "WARNING: Server Certificate Hostname Validation is disabled") {
-		reqLogger.Info("WARNING: ingoring certificate handling warning")
+	} else if err != nil && strings.Contains(err.Error(), "WARNING: Server Certificate Hostname Validation is disabled") {
+		reqLogger.Info("WARNING: ignoring certificate handling warning")
 		return stdOut, "", nil
 	}
 	return stdOut, stdErr, err
