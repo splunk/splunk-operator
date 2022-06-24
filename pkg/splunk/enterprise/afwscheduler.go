@@ -1442,7 +1442,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 	// In the next reconcile we will mark it as bundle push complete
 	if strings.Contains(stdErr, idxcBundleAlreadyPresentStr) {
 		scopedLog.Info("bundle already present on peers")
-	} else if err != nil || stdErr != "OK\n" {
+	} else if err != nil {
 		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
 		return err
 	}
