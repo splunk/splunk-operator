@@ -6,7 +6,7 @@ package common
 const (
 
 	//PeerAppsLoc
-	PeerAppsLoc = "etc/slave-apps"
+	PeerAppsLoc = "etc/peer-apps"
 
 	//ManagerAppsLoc
 	ManagerAppsLoc = "etc/master-apps"
