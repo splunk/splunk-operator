@@ -75,7 +75,6 @@ Note: All logs are appropriately named with proper prefixes. The folder `k8s_dat
 ```
 kubectl get pods
 NAME                                  READY   STATUS    RESTARTS   AGE
-splunk-default-monitoring-console-0   1/1     Running   0          17m
 splunk-example-license-master-0       1/1     Running   0          18m
 splunk-operator-cb8d66765-tl6z2       1/1     Running   0          6h6m
 splunk-test-cluster-master-0          1/1     Running   0          19m

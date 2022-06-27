@@ -638,7 +638,15 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 }
 
 //  setupInitContainer modifies the podTemplateSpec object
-func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string) {
+func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string, isEtcVolEph bool) {
+	var volMntName string
+
+	// Populate the volume mount name based on volume type(eph, pvc) and use /opt/splk/etc for init container
+	if isEtcVolEph {
+		volMntName = fmt.Sprintf(splcommon.SplunkMountNamePrefix, splcommon.EtcVolumeStorage)
+	} else {
+		volMntName = fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage)
+	}
 	containerSpec := corev1.Container{
 		Image:           Image,
 		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
@@ -646,7 +654,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 		Command: []string{"bash", "-c", commandOnContainer},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: "pvc-etc", MountPath: "/opt/splk/etc"},
+			{Name: volMntName, MountPath: "/opt/splk/etc"},
 		},
 
 		Resources: corev1.ResourceRequirements{
