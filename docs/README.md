@@ -158,7 +158,6 @@ Within a few minutes, you'll see new pods running in your namespace:
 $ kubectl get pods
 NAME                                   READY   STATUS    RESTARTS   AGE
 splunk-operator-7c5599546c-wt4xl        1/1    Running   0          11h
-splunk-default-monitoring-console-0     1/1    Running   0          30s
 splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 
