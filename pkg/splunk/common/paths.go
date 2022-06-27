@@ -9,7 +9,7 @@ const (
 	PeerAppsLoc = "etc/peer-apps"
 
 	//ManagerAppsLoc
-	ManagerAppsLoc = "etc/master-apps"
+	ManagerAppsLoc = "etc/manager-apps"
 
 	//SHCluster
 	SHCluster = "etc/shcluster"
@@ -22,13 +22,13 @@ const (
 const (
 
 	//ManagerAppsOperatorLocal
-	OperatorClusterManagerAppsLocal = "/opt/splk/etc/master-apps/splunk-operator/local"
+	OperatorClusterManagerAppsLocal = "/opt/splk/etc/manager-apps/splunk-operator/local"
 
 	//OperatorClusterManagerAppsLocalIndexesConf
-	OperatorClusterManagerAppsLocalIndexesConf = "/opt/splk/etc/master-apps/splunk-operator/local/indexes.conf"
+	OperatorClusterManagerAppsLocalIndexesConf = "/opt/splk/etc/manager-apps/splunk-operator/local/indexes.conf"
 
 	//OperatorClusterManagerAppsLocalServerConf
-	OperatorClusterManagerAppsLocalServerConf = "/opt/splk/etc/master-apps/splunk-operator/local/server.conf"
+	OperatorClusterManagerAppsLocalServerConf = "/opt/splk/etc/manager-apps/splunk-operator/local/server.conf"
 
 	//OperatorMountLocalIndexesConf
 	OperatorMountLocalIndexesConf = "/mnt/splunk-operator/local/indexes.conf"
