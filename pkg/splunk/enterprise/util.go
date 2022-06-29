@@ -1971,7 +1971,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
 				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR)
 				if err == nil && updatedCRVersion == crAfterUpdate.GetResourceVersion() {
-					scopedLog.Info("Cahe is reflecting the latest CR", "updated CR version", updatedCRVersion)
+					scopedLog.Info("Cache is reflecting the latest CR", "updated CR version", updatedCRVersion)
 					// Latest CR is reflecting in the cache
 					break
 				}
