@@ -2184,7 +2184,6 @@ func TestIDXCRunPlaybook(t *testing.T) {
 		{
 			StdOut: "",
 			StdErr: "OK\n",
-			Err : fmt.Errorf("command failed with error code 22"),
 		},
 		// this is for checking the status of cluster bundle
 		{
