@@ -76,7 +76,7 @@ const (
 
 	shcAppsLocationOnDeployer = "/opt/splunk/etc/shcluster/apps/"
 
-	idxcAppsLocationOnClusterManager = "/opt/splunk/etc/master-apps/"
+	idxcAppsLocationOnClusterManager = "/opt/splunk/etc/manager-apps/"
 
 	// command to append FS permissions to +rw-rw-
 	cmdSetFilePermissionsToRW = "chmod +660 -R %s"

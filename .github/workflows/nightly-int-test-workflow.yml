@@ -3,6 +3,44 @@ on:
   schedule:
     - cron: "0 06 * * *"
 jobs:
+  build-operator-image:
+    runs-on: ubuntu-latest
+    env:
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: setup-docker
+      uses: docker-practice/actions-setup-docker@v1
+    - name: Install Operator SDK
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    - name: Make Splunk Operator Image
+      run: |
+        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+    - name: Push Splunk Operator Image to ECR
+      run: |
+        echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
+        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
     strategy:
       fail-fast: false
@@ -20,10 +58,11 @@ jobs:
             licensemanager,
           ]
     runs-on: ubuntu-latest
+    needs: build-operator-image
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: splunk/splunk:edge
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
@@ -51,8 +90,6 @@ jobs:
           fi
       - name: Checkcout code
         uses: actions/checkout@v2
-        with:
-          ref: develop
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -75,8 +112,8 @@ jobs:
       - name: Install Go Lint
         run: |
           go version
-          go get golang.org/x/lint/golint
-      - name: Install Ginkgo
+          go get -u golang.org/x/lint/golint
+      - name: Install Ginkgo 
         run: |
           go get github.com/onsi/ginkgo/ginkgo
           go get github.com/onsi/gomega/...
@@ -87,16 +124,12 @@ jobs:
           eksctl version
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@v1
-      - name: Install Operator SDK
-        run: |
-          sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-          sudo chmod +x /usr/local/bin/operator-sdk
       - name: Configure Docker Hub credentials
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
-      - name: Pull Splunk Enterprise Edge Image
+      - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -107,18 +140,17 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-      - name: Make Splunk Operator Image
-        run: |
-          docker pull registry.access.redhat.com/ubi8/ubi-minimal:latest
-          make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-      - name: Push Splunk Operator Image to ECR
-        run: |
-          echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-          make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+      - name: Pull Splunk Operator Image Locally
+        run: |
+          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Change Operator Image Tag to latest
+        run: |
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
       - name: Create EKS cluster
         run: |
           make cluster-up
@@ -130,7 +162,7 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
         run: |
-          export SPLUNK_OPERATOR_IMAGE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
