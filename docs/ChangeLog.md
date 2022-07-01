@@ -16,7 +16,7 @@
 
 * CSPL-1529: Fix a bug where ClusterMaster was not watching for changes in configMap
 
-* CSPL-1604: Update config map for SHC and CM separately to avoid race condition
+* CSPL-1604: Update configmap for SHC and CM separately to avoid race condition
 
 * CSPL-1670: Add region as a configurable parameter in volume spec
 
