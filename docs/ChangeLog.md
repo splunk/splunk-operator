@@ -4,7 +4,7 @@
 
 * This is the 2.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
-* Changes to App Framework
+* CSPL-935: Operator App Management Framework Phase 3
 
 * Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
 
@@ -12,8 +12,23 @@
 
 * Documentation Updates
 
+* CSPL-1201: Added validation checks for invalid storage type and provider
 
+* CSPL-1529: Fix a bug where ClusterMaster was not watching for changes in configMap
 
+* CSPL-1604: Update config map for SHC and CM separately to avoid race condition
+
+* CSPL-1670: Add region as a configurable parameter in volume spec
+
+* CSPL-1729: Detect and update the init container image
+
+* CSPL-1749: ImagePullSecrets config docs along with other common splunk spec parameters
+
+* CSPL-1768: Adding an annotation to define a default container
+
+* CSPL-1769: Change the naming of volumeMounts to adopt setup of init container
+  
+* CSPL-1727: Manifest files to differentiate namespace scoped and cluster scoped
   
 ## 1.1.0 (2022-04-12)
 
