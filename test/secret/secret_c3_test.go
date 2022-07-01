@@ -21,7 +21,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -115,7 +116,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
+			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)

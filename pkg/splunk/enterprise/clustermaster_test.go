@@ -65,6 +65,8 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -79,6 +81,8 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerStatefulSet},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -109,7 +113,7 @@ func TestApplyClusterMaster(t *testing.T) {
 		},
 	}
 	revised := current.DeepCopy()
-	revised.Spec.Image = "splunk/test"
+	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApi.ClusterMaster))
 		return err
@@ -144,7 +148,7 @@ func TestGetClusterMasterStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterMasterSpec(ctx, &cr); err != nil {
+			if err := validateClusterMasterSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
 			}
 			return getClusterMasterStatefulSet(ctx, c, &cr)
@@ -209,6 +213,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-master-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -229,6 +235,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
+		{MetaName: "*v3.ClusterMaster-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -241,7 +249,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[12]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterMaster{
@@ -308,7 +316,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 
 	revised := current.DeepCopy()
-	revised.Spec.Image = "splunk/test"
+	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterMaster(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
 		return err
@@ -1140,7 +1148,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1207,7 +1215,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	clustermaster.Status.Phase = splcommon.PhaseReady
+	clustermaster.Status.Phase = enterpriseApi.PhaseReady
 	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",

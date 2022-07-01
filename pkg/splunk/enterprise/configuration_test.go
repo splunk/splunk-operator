@@ -122,7 +122,7 @@ func TestGetService(t *testing.T) {
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ServiceTemplate: corev1.Service{
 						Spec: corev1.ServiceSpec{
 							Ports: []corev1.ServicePort{{Name: "user-defined", Port: 32000, TargetPort: intstr.FromInt(6443)}},
@@ -273,6 +273,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	ctx := context.TODO()
+	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -299,7 +300,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterManagerSpec(ctx, &cr)
+	err := validateClusterManagerSpec(ctx, c, &cr)
 
 	if err != nil {
 		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)

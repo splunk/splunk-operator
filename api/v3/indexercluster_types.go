@@ -17,7 +17,6 @@ limitations under the License.
 package v3
 
 import (
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,7 +25,6 @@ import (
 // +kubebuilder:validation:Optional
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
@@ -68,15 +66,15 @@ type IndexerClusterMemberStatus struct {
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster
 type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
-	Phase splcommon.Phase `json:"phase"`
+	Phase Phase `json:"phase"`
 
 	// current phase of the cluster master
 	// +optional
-	ClusterMasterPhase splcommon.Phase `json:"clusterMasterPhase,omitempty"`
+	ClusterMasterPhase Phase `json:"clusterMasterPhase,omitempty"`
 
 	// current phase of the cluster manager
 	// +optional
-	ClusterManagerPhase splcommon.Phase `json:"clusterManagerPhase,omitempty"`
+	ClusterManagerPhase Phase `json:"clusterManagerPhase,omitempty"`
 
 	// desired number of indexer peers
 	Replicas int32 `json:"replicas"`

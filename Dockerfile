@@ -30,6 +30,7 @@ ENV OPERATOR=/manager \
 
 #RUN yum -y install shadow-utils
 RUN useradd -ms /bin/bash nonroot -u 1001
+RUN yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical
 
 LABEL name="splunk" \
       maintainer="support@splunk.com" \

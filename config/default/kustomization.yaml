@@ -111,3 +111,25 @@ vars:
 #    - op: replace
 #      path: /metadata/name
 #      value: splunk:operator:namespace-manager
+
+# currently patch is set to change deployment environment variables
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/1/env
+      value: 
+      - name: WATCH_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+        value: docker.io/splunk/splunk:edge
+      - name: OPERATOR_NAME
+        value: splunk-operator
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name

@@ -33,7 +33,7 @@ var actionFailureCounters = prometheus.NewCounterVec(prometheus.CounterOpts{
 
 var apiTotalTimeMetricEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "splunk_operator_module_duration_in_milliseconds",
-	Help: "the time it takes to complete each call in standlaone (in milliseconds)",
+	Help: "The time it takes to complete each call in standalone (in milliseconds)",
 }, []string{labelNamespace, labelName, labelKind, labelModuleName, labelMethodName})
 
 func getPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {

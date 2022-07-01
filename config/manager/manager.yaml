@@ -26,12 +26,16 @@ spec:
         control-plane: controller-manager
         name: splunk-operator
       annotations:
+        kubectl.kubernetes.io/default-logs-container: manager
         kubectl.kubernetes.io/default-container: manager
     spec:
       securityContext:
         runAsUser: 1001
         fsGroup: 1001
-        #runAsNonRoot: true
+        runAsNonRoot: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       containers:
       - command:
         - /manager
@@ -46,21 +50,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: WATCH_NAMESPACE
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: WATCH_NAMESPACE
-        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        - name: OPERATOR_NAME
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: OPERATOR_NAME
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
@@ -92,5 +81,5 @@ spec:
         name: splunk-operator-config
       - name:  app-staging
         persistentVolumeClaim:
-          claimName: tmp-app-download
+          claimName: app-download
       terminationGracePeriodSeconds: 10

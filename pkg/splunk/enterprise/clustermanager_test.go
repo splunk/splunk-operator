@@ -65,6 +65,8 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -79,6 +81,8 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -144,7 +148,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(ctx, &cr); err != nil {
+			if err := validateClusterManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
 			}
 			return getClusterManagerStatefulSet(ctx, c, &cr)
@@ -209,6 +213,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -229,6 +235,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
+		{MetaName: "*v3.ClusterManager-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -241,7 +249,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[12]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{
@@ -606,6 +614,9 @@ func TestApplyCLusterManagerDeletion(t *testing.T) {
 				},
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 				Mock: true,
 			},
 		},
@@ -1137,10 +1148,13 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},
@@ -1201,7 +1215,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	clustermanager.Status.Phase = splcommon.PhaseReady
+	clustermanager.Status.Phase = enterpriseApi.PhaseReady
 	clustermanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
@@ -1297,6 +1311,45 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
+	}
+
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, clustermanager, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
 	}
 
 	// call reconciliation

@@ -53,6 +53,8 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
+		{MetaName: "*v3.LicenseManager-test-stack1"},
+		{MetaName: "*v3.LicenseManager-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -66,9 +68,8 @@ func TestApplyLicenseManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	updateFuncCalls := append(funcCalls, spltest.MockFuncCall{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"})
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls = append(updateFuncCalls[:2], updateFuncCalls[3:]...)
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[8], funcCalls[9], funcCalls[10]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
@@ -79,6 +80,7 @@ func TestApplyLicenseManager(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
@@ -115,7 +117,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseManagerSpec(ctx, &cr); err != nil {
+			if err := validateLicenseManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
 			}
 			return getLicenseManagerStatefulSet(ctx, c, &cr)
@@ -807,7 +809,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -853,7 +855,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		Namespace: clustermanager.Namespace,
 	}
 
-	clustermanager.Status.Phase = splcommon.PhaseReady
+	clustermanager.Status.Phase = enterpriseApi.PhaseReady
 	clustermanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
@@ -973,7 +975,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1041,7 +1043,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	licensemanager.Status.Phase = splcommon.PhaseReady
+	licensemanager.Status.Phase = enterpriseApi.PhaseReady
 	licensemanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",

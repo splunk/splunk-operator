@@ -184,4 +184,3 @@ jobs:
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
     - name: Push Splunk Operator Image to Docker Hub 
       run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
-

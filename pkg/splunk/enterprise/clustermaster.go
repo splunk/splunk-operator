@@ -52,13 +52,13 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// validate and updates defaults for CR
-	err := validateClusterMasterSpec(ctx, cr)
+	err := validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = splcommon.PhaseError
+	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), splcommon.ClusterManager)
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
@@ -83,12 +83,8 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		return result, err
 	}
 
-	defer func() {
-		err = client.Status().Update(ctx, cr)
-		if err != nil {
-			scopedLog.Error(err, "Status update failed")
-		}
-	}()
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
@@ -139,7 +135,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
-			cr.Status.Phase = splcommon.PhaseTerminating
+			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
 		}
@@ -182,7 +178,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	cr.Status.Phase = phase
 
 	// no need to requeue if everything is ready
-	if cr.Status.Phase == splcommon.PhaseReady {
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -232,7 +228,7 @@ func (mgr *clusterMasterPodManager) getClusterMasterClient(cr *enterpriseApi.Clu
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
-func validateClusterMasterSpec(ctx context.Context, cr *enterpriseApi.ClusterMaster) error {
+func validateClusterMasterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
 		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
@@ -248,7 +244,7 @@ func validateClusterMasterSpec(ctx context.Context, cr *enterpriseApi.ClusterMas
 		}
 	}
 
-	return validateCommonSplunkSpec(&cr.Spec.CommonSplunkSpec)
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
@@ -262,7 +258,7 @@ func getClusterMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterMaster)
 
 	if smartStoreConfigMap != nil {
-		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore)
+		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
@@ -352,7 +348,7 @@ func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr 
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr, defaultSecretObjName)
+	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
 	if err != nil {
 		eventPublisher.Warning(ctx, "PushMasterAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
 		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)

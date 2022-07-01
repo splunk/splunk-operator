@@ -17,13 +17,13 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -90,7 +90,7 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -107,7 +107,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// wait for custom resource resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -188,7 +188,7 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -233,7 +233,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Configure Resources on second standalone CSPL-555
 			standaloneTwoSpec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -262,7 +262,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Vrify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -290,7 +290,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -339,7 +339,7 @@ var _ = Describe("Monitoring Console test", func() {
 			mcName := deployment.GetName()
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -387,7 +387,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to scale Standalone")
 
 			// Ensure standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingUp)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -396,7 +396,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to Updating Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseUpdating)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -497,7 +497,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to scale Search Head Cluster")
 
 			// Ensure Search Head cluster scales up and go to ScalingUp phase
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp)
 
 			// Scale indexers
 			scaledIndexerReplicas := defaultIndexerReplicas + 1
@@ -515,7 +515,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
 
 			// Ensure Indxer cluster scales up and go to ScalingUp phase
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseScalingUp, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp, idxcName)
 
 			// get revision number of the resource
 			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -523,7 +523,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Deploy Standalone Pod
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -549,7 +549,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Wait for MC to go to PENDING Phase
-			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhasePending)
+			//testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhasePending)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -677,7 +677,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, cm, resourceVersion)
 
 			// Ensure Cluster Manager Goes to Updating Phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
+			//testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
@@ -885,7 +885,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, cm, resourceVersion)
 
 			// Ensure Cluster Manager Goes to Updating Phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
+			//testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)

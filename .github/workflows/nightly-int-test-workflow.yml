@@ -7,7 +7,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [appframeworks1, appframeworkc3, appframeworkm4, secret, smartstore, monitoringconsole, scaling, crcrud, licensemanager]
+        test:
+          [
+            appframeworks1,
+            appframeworkc3,
+            appframeworkm4,
+            secret,
+            smartstore,
+            monitoringconsole,
+            scaling,
+            crcrud,
+            licensemanager,
+          ]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -27,13 +38,14 @@ jobs:
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      CLUSTER_WIDE: "true"
     steps:
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
-          if [ ${{ matrix.test }} == *"appframework"* ]; then 
+          if grep -q "appframework" <<< "${{ matrix.test }}"; then
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
           fi
@@ -63,7 +75,7 @@ jobs:
       - name: Install Go Lint
         run: |
           go version
-          go install golang.org/x/lint/golint
+          go get golang.org/x/lint/golint
       - name: Install Ginkgo
         run: |
           go get github.com/onsi/ginkgo/ginkgo
@@ -110,6 +122,12 @@ jobs:
       - name: Create EKS cluster
         run: |
           make cluster-up
+      - name: install metric server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      - name: install k8s dashboard
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
         run: |
           export SPLUNK_OPERATOR_IMAGE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
@@ -120,6 +138,7 @@ jobs:
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs if Failure in Smoke Test
+        if: ${{ always() }}
         uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"

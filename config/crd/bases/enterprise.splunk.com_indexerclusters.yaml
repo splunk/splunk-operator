@@ -1118,6 +1118,19 @@ spec:
                 - Always
                 - IfNotPresent
                 type: string
+              imagePullSecrets:
+                description: Sets imagePullSecrets if image is being pulled from a
+                  private registry. See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+                items:
+                  description: LocalObjectReference contains enough information to
+                    let you locate the referenced object inside the same namespace.
+                  properties:
+                    name:
+                      description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        TODO: Add other useful fields. apiVersion, kind, uid?'
+                      type: string
+                  type: object
+                type: array
               licenseManagerRef:
                 description: LicenseManagerRef refers to a Splunk Enterprise license
                   manager managed by the operator within Kubernetes
