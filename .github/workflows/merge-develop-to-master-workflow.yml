@@ -38,12 +38,9 @@ jobs:
   
   rc-release:
     runs-on: ubuntu-latest
+    needs: pull-request
     if: github.ref == 'refs/heads/develop'
     steps:
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-
     - name: Checkout code
       uses: actions/checkout@v2
       with:
@@ -52,6 +49,10 @@ jobs:
     - name: Deep Fetch 
       run: |
         git fetch --prune --unshallow
+
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
 
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
