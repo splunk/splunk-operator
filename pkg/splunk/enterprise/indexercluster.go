@@ -208,6 +208,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 		time.Sleep(1 * time.Second)
+		// since we are creating new statefulset, setting resourceVersion to ""
+		statefulSet.ResourceVersion = ""
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
