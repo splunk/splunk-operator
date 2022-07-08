@@ -27,8 +27,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
@@ -151,33 +151,33 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	
-		// FIXME POC
-		var phase enterpriseApi.Phase
-		versionUpgrade := false
-		// get all the pods in the namespace
-		statefulsetPods := &corev1.PodList{}
-		opts := &rclient.ListOptions{
-			Namespace: cr.Namespace,
-		}
-		err = client.List(ctx, statefulsetPods, opts)
-		if err != nil {
-			return result , err
-		}
+	// FIXME POC
+	var phase enterpriseApi.Phase
+	versionUpgrade := false
+	// get all the pods in the namespace
+	statefulsetPods := &corev1.PodList{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+	}
 
-		// filter the pods which are owned by statefulset
-		for _, v := range statefulsetPods.Items {
-			for _, owner := range v.GetOwnerReferences() {
-				if owner.UID == statefulSet.UID {
-					// get the pod image name
-					if v.Spec.Containers[0].Image != cr.Spec.Image {
-						versionUpgrade  = true
-						break
-					}
+	err = client.List(ctx, statefulsetPods, opts...)
+	if err != nil {
+		return result, nil
+	}
+
+	// filter the pods which are owned by statefulset
+	for _, v := range statefulsetPods.Items {
+		for _, owner := range v.GetOwnerReferences() {
+			if owner.UID == statefulSet.UID {
+				// get the pod image name
+				if v.Spec.Containers[0].Image != cr.Spec.Image {
+					versionUpgrade = true
+					break
 				}
 			}
 		}
-	
+	}
+
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
@@ -185,14 +185,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 	} else {
-
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mitmatch for indexer clustre and indexer container, delete statefulset failed %s", err.Error()))
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
 			return result, err
 		}
-		time.Sleep(1*time.Second)
+		time.Sleep(1 * time.Second)
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
