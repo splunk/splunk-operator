@@ -183,6 +183,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			if owner.UID == statefulSet.UID {
 				// get the pod image name
 				if v.Spec.Containers[0].Image != cr.Spec.Image {
+					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
 				}
@@ -190,6 +191,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 	}
 
+	// check if version upgrade is set
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 		if err != nil {
@@ -197,6 +199,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 	} else {
+		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mitmatch for indexer clustre and indexer container, delete statefulset failed %s", err.Error()))
