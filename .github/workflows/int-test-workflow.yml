@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - cspl-1880
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
