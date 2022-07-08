@@ -151,7 +151,19 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	// FIXME POC
+	// Note:
+	// this it temporary fix for CSPL-1880. enterprise splunk 9.0.0 fails when we migrate from 
+	// splunk 9.0.0 app bundle transfer uses encryption while transferring data. if any of the 
+	// splunk instances not enable or supporeting then cluster master fails to transfer this leads 
+	// to splunkd restart at the peer level. for more information refer 
+	// https://splunk.atlassian.net/browse/SPL-223386?jql=text%20~%20%22The%20downloaded%20bundle%20checksum%20doesn%27t%20match%20the%20activeBundleChecksum%22
+	// On Operator side we have set statefulset update strategy to OnDelete, so pod needed to be 
+	// deleted by opeartor, before deleting the pod, operator controller code tries to decommision the splunk
+	// instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue so we fail and 
+	// return this goes on a loop and we always try the same pod instance, and rest of the replicas are still 
+	// in older version
+	// As a temporary fix for 9.0.0 , we delete the splunk statefulset for indexer if the image version do not
+	// match with pod image version
 	var phase enterpriseApi.Phase
 	versionUpgrade := false
 	// get all the pods in the namespace
