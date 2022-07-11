@@ -152,18 +152,18 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// Note:
-	// this it temporary fix for CSPL-1880. enterprise splunk 9.0.0 fails when we migrate from 8.2.6.
-	// splunk 9.0.0 app bundle transfer uses encryption while transferring data. if any of the 
-	// splunk instances were not enable support this option, then cluster master fails to transfer, this leads 
-	// to splunkd restart at the peer level. for more information refer 
-	// https://splunk.atlassian.net/browse/SPL-223386?jql=text%20~%20%22The%20downloaded%20bundle%20checksum%20doesn%27t%20match%20the%20activeBundleChecksum%22
-	// On Operator side we have set statefulset update strategy to OnDelete, so pods need to be 
-	// deleted by operator manually.  Before deleting the pod, operator controller code tries to decommission 
-	// the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller 
-	// fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas 
-	// are still in older version
-	// As a temporary fix for 9.0.0 , if the image version do not  match with pod image version we delete the 
-	// splunk statefulset for indexer 
+	// This is a temporary fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
+    // Splunk 9.0.0 bundle push uses encryption while transferring data. If any of the 
+    // splunk instances were not able to support this option, then cluster master fails to transfer, this leads 
+    // to splunkd restart at the peer level. For more information refer 
+    // https://splunk.atlassian.net/browse/SPL-223386?jql=text%20~%20%22The%20downloaded%20bundle%20checksum%20doesn%27t%20match%20the%20activeBundleChecksum%22
+    // On Operator side we have set statefulset update strategy to OnDelete, so pods need to be 
+    // deleted by operator manually.  Before deleting the pod, operator controller code tries to decommission 
+    // the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller 
+    // fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas 
+    // are still in older version
+    // As a temporary fix for 9.0.0 , if the image version do not  match with pod image version we delete the 
+    // splunk statefulset for indexer
 
 	var phase enterpriseApi.Phase
 	versionUpgrade := false
