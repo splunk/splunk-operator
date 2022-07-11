@@ -63,8 +63,7 @@ current_folder/
 
 
 #### After the generation is completed
-The `updated` folder has all of the files needed for the migration. The next step is to apply each one of them following the oder below. This order ensures the correct order of Statefulset updates. 
-If any of these CRs are not deployed in your environment, you can skip to the next item.
+The `updated` folder has all of the files needed for the migration. The next step is to apply each one of these files following the order below. This order ensures Statefulset are updated correctly. If any of these CRs are not deployed in your environment, you can skip to the next item.
 
 **Order for migration:**
 
