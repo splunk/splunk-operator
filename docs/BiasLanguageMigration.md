@@ -81,7 +81,8 @@ If any of these CRs are not deployed in your environment, you can skip to the ne
 11) Apply SearchHeadCluster CR
 12) Apply Standalone CR
 
-Once you validate your environment, you can remove the older CM and LM CRs saved in the folder `to_remove_CRs`
+Once you validate your environment, you can delete the CM and LM CRs using the files in the folder `to_remove_CRs`. 
+Example: `kubectl delete -f ./to_remove_CRs/<filename>`
 
 For more details on how to apply labels check: [K8s docs](https://kubernetes.io/docs/tasks/configure-pod-container/assign-pods-nodes/)
 
@@ -96,10 +97,9 @@ Example:
 ```
 
 This will start a migration where we clone deployed ClusterMaster/LicenseMaster into a new independent ClusterManager/LicenseManager. Then we use a Rsync job to copy the data from Master to Manager.
-Next the script update the Statefulsets for all CRs that references the CM/LM originally deployed. 
+Next script updates originally deployed Statefulsets for all CRs that references the CM/LM. 
 
-Once the migration is completed the operator will restart Indexer and Search peer pods to update environment variables. While the Indexer and Search services should be available, it will take some time until RF/SF are reestablished. We recommend you do not apply any other changes until the deployment is stable.   
-Only after the entire environment is stable and validated, we recommend you to remove the original CRs in the folder `to_remove_CRs`
+Once the migration is completed the operator will restart Indexer pods to update environment variables. While the Indexer and Search services should be available, it will take some time until RF/SF are reestablished. We recommend you do not apply any other changes until the Operator completes the restart of all Indexers and RF/SF are met. Once the entire environment is stable and validated, we recommend you to delete the CRs using the files created in the `to_remove_CRs` folder.
 
 **Important:** Do not interrupt the script execution once it starts because it might leave your deployment at a bad state if some operations are not fully completed.
 
