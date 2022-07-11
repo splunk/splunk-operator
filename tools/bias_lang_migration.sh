@@ -87,6 +87,18 @@ convert_CR_Kind() {
 	eval cat ${FILE_IN} | jq ".kind=\"${NEW_TYPE}\"" >${FILE_OUT}
 }
 
+# Convert multisite ref to manager service
+convert_multisite() {
+  FILE_IN=$1
+
+  if [[ "$(uname| grep -c Darwin)" -ge 1 ]]; then
+    sed -i '' 's/cluster-master-service/cluster-manager-service/1' ${FILE_IN}
+  else
+    sed -i 's/cluster-master-service/cluster-manager-service/1' ${FILE_IN}
+  fi
+
+}
+
 # Block execution until POD is Ready or timeout
 is_pod_ready() {
 	pod=$1
@@ -192,10 +204,18 @@ add_peer_to_manager() {
 	NAME=$1
 	TYPE=$2
 	MANAGER=$3
+	SITE=$4
 
 	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep indexer | awk '{print $1}')
 	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
-	command="/opt/splunk/bin/splunk edit cluster-config -mode slave -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
+
+	if [[ ${MULTISITE} ]]; then
+	  echo "Multisite with site=${SITE}"
+	  command="/opt/splunk/bin/splunk edit cluster-config -mode slave -site ${SITE} -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
+	else
+	  echo "Not Multisite without site=${SITE}"
+		command="/opt/splunk/bin/splunk edit cluster-config -mode slave -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
+  fi
 
 	for pod in ${PODS}; do
 		echo "Adding pod ${pod} to ${MANAGER}"
@@ -209,23 +229,36 @@ add_peer_to_manager() {
 add_node_affinity() {
 	FILE=$1
 	cp ${FILE} ${TMP_FOLDER}/temp.node.info.${NS}.${TT}
-	cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec += {
-          "affinity": {
-              "nodeAffinity": {
-                    "requiredDuringSchedulingIgnoredDuringExecution": {
-                          "nodeSelectorTerms": [
-                    {
-                "matchExpressions": [
-                  {
-                    "key": "biaslangmasternode",
-                    "operator": "In",
-                    "values": [
-                        "yes"
+	if [[ ${MULTISITE} ]]; then
+	  echo "Creating for multisite"
+    	cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions +=
+    	        [{
+                        "key": "biaslangmasternode",
+                        "operator": "In",
+                        "values": [
+                            "yes"
+                        ]
+                }]' >${FILE}
+	else
+	  echo "Not Multisite"
+      cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec += {
+              "affinity": {
+                  "nodeAffinity": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": {
+                              "nodeSelectorTerms": [
+                        {
+                    "matchExpressions": [
+                      {
+                        "key": "biaslangmasternode",
+                        "operator": "In",
+                        "values": [
+                            "yes"
+                        ]
+                      }
                     ]
                   }
-                ]
-              }
-          ]}}}}' >${FILE}
+              ]}}}}' >${FILE}
+  fi
 }
 
 reset_manager_CR() {
@@ -408,6 +441,11 @@ get_current_deployment() {
 				continue
 			fi
 
+			#Handles Multisite
+      if [[ "$(grep -c multisite_master ${original_name})" -ne "0" ]]; then
+          export MULTISITE=true
+      fi
+
 			# Handles Refs conversion
 			if [[ "$(grep -c licenseMasterRef ${original_name})" -ne "0" ]] && [[ "$(grep -c clusterMasterRef ${original_name})" -ne "0" ]]; then
 				convert_CR_Spec ${original_name} ${tmp_name} "license"
@@ -421,6 +459,13 @@ get_current_deployment() {
 			elif [[ "$(grep -c clusterMasterRef ${original_name})" -ne "0" ]]; then
 				convert_CR_Spec ${original_name} ${updated_name} "cluster"
 			fi
+
+      # Handles Multisite Refs
+      if [[ ${MULTISITE} ]]; then
+        if [[ "${CR}" != "LicenseMaster" ]] && [[ "${CR}" != "ClusterMaster" ]]; then
+			    convert_multisite ${updated_name}
+        fi
+      fi
 
 			# Handles Kind conversion
 			if [[ "${CR}" == "LicenseMaster" ]]; then
@@ -505,7 +550,8 @@ apply_new_CRs() {
 					target="indexer"
 					echo "Found IndexerCluster"
 					manager=$(cat ${file} | jq '.spec.clusterManagerRef.name' -r)
-					add_peer_to_manager ${name} ${target} ${manager}
+					site=$(cat ${file}    | jq '.spec.defaults' -r | grep site | awk -F "site:" '{print $2}')
+					add_peer_to_manager ${name} ${target} ${manager} ${site}
 					;;
 				SearchHeadCluster)
 					target="search-head"
