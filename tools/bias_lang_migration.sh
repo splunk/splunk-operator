@@ -50,7 +50,7 @@ backup_configs() {
 # Label the Node so the Manager can use nodeAffinity
 label_Node() {
 	MSTR_NODE=$1
-	kubectl -n ${NS} label nodes ${MSTR_NODE} biaslangmasternode=yes --overwrite >/dev/null 2>&1 # Long label(biaslangmasternode) to avoid conflicts with possibly existing labels
+	kubectl -n ${NS} label nodes ${MSTR_NODE} biasLangMasterNode=yes --overwrite >/dev/null 2>&1 # Long label(biasLangMasterNode) to avoid conflicts with possibly existing labels
 	if [[ "$?" -ne 0 ]]; then
 		err "Failed to label node ${MSTR_NODE}"
 	fi
@@ -58,7 +58,7 @@ label_Node() {
 
 unlabel_Nodes() {
 	for node in $(kubectl -n ${NS} get nodes -o json | jq ".items[].metadata.name" -r); do
-		kubectl -n ${NS} label node $node biaslangmasternode-
+		kubectl -n ${NS} label node $node biasLangMasterNode-
 	done
 }
 
@@ -233,7 +233,7 @@ add_node_affinity() {
 	  echo "Creating for multisite"
     	cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions +=
     	        [{
-                        "key": "biaslangmasternode",
+                        "key": "biasLangMasterNode",
                         "operator": "In",
                         "values": [
                             "yes"
@@ -249,7 +249,7 @@ add_node_affinity() {
                         {
                     "matchExpressions": [
                       {
-                        "key": "biaslangmasternode",
+                        "key": "biasLangMasterNode",
                         "operator": "In",
                         "values": [
                             "yes"
