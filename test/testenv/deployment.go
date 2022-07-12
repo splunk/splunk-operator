@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -146,16 +145,6 @@ func (d *Deployment) Teardown() error {
 		}
 	}
 	d.testenv.Log.Info("deployment deleted.\n", "name", d.name)
-
-	d.testenv.Log.Info("Attempting Cleanup via shell script")
-	scriptPath := filepath.Join(os.Getenv("PROJECT_ROOT"), "tools/cleanup.sh")
-	output, err = exec.Command("/bin/sh", scriptPath, d.testenv.name).Output()
-	if err != nil {
-		cmd := fmt.Sprintf("/bin/sh %s %s", scriptPath, d.testenv.name)
-		d.testenv.Log.Error(err, fmt.Sprintf("Failed to execute command %s", cmd))
-	}
-	d.testenv.Log.Info(fmt.Sprintf("Cleanup via shell scripts result:: \n%s", output))
-
 	return cleanupErr
 }
 
