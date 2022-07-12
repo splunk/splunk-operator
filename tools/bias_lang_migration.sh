@@ -89,14 +89,13 @@ convert_CR_Kind() {
 
 # Convert multisite ref to manager service
 convert_multisite() {
-  FILE_IN=$1
+	FILE_IN=$1
 
-  if [[ "$(uname| grep -c Darwin)" -ge 1 ]]; then
-    sed -i '' 's/cluster-master-service/cluster-manager-service/1' ${FILE_IN}
-  else
-    sed -i 's/cluster-master-service/cluster-manager-service/1' ${FILE_IN}
-  fi
-
+	if [[ "$(uname | grep -c Darwin)" -ge 1 ]]; then
+		sed -i '' 's/cluster-master-service/cluster-manager-service/1' ${FILE_IN}
+	else
+		sed -i 's/cluster-master-service/cluster-manager-service/1' ${FILE_IN}
+	fi
 }
 
 # Block execution until POD is Ready or timeout
@@ -104,11 +103,11 @@ is_pod_ready() {
 	pod=$1
 	timeout=$POD_TIMEOUT # Reset local copy for each restart
 
-	echo "Waiting for Pod=${pod} to become available - timeout=${POD_TIMEOUT}"
+	echo "Waiting for Pod=${pod} to become available - timeout=${POD_TIMEOUT} secs"
 
 	while [[ $(kubectl -n ${NS} get pod ${pod} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
 		sleep 1
-		let timeout--
+		((timeout--))
 	done
 
 	if [[ "${timeout}" -eq 0 ]]; then
@@ -181,13 +180,12 @@ apply_manager_jobs() {
 		job_name=$(cat ${job} | jq '.metadata.name' -r)
 		timeout=$RSYNC_TIMEOUT # Local copy reset on each copy
 
-		echo "Will apply file=${job} name=${job_name}"
 		kubectl -n ${NS} apply -f ${job}
 
 		#	Wait for the copy to finish before proceeding
 		while [[ $(kubectl -n ${NS} get jobs ${job_name} -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
 			sleep 1
-			let timeout--
+			((timeout--))
 		done
 
 		if [[ "${timeout}" -eq 0 ]]; then
@@ -195,8 +193,25 @@ apply_manager_jobs() {
 		fi
 
 		# Remove completed job after
+		echo "Completed job name=${job_name}"
 		kubectl -n ${NS} delete job ${job_name}
 
+	done
+}
+
+# spec.defaults are used by Ansible and are opaque to the Operator
+# Updating the STS is not enough, so we need to update .conf files manually
+update_defaults_to_manager() {
+	NAME=$1
+	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep "search-head" | awk '{print $1}')
+	command="find /opt/splunk/etc/system/local/ -type f -exec sed -i \"s/cluster-master-service/cluster-manager-service/g\" {} +"
+
+	for pod in ${PODS}; do
+		echo "Executing command ${command} on pod=${pod}"
+		kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
+		if [[ "$?" -ne 0 ]]; then
+			echo "Failed to execute command ${command} on pod=${pod}"
+		fi
 	done
 }
 
@@ -210,12 +225,12 @@ add_peer_to_manager() {
 	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
 
 	if [[ ${MULTISITE} ]]; then
-	  echo "Multisite with site=${SITE}"
-	  command="/opt/splunk/bin/splunk edit cluster-config -mode slave -site ${SITE} -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
+		echo "Multisite with site=${SITE}"
+		command="/opt/splunk/bin/splunk edit cluster-config -mode slave -site ${SITE} -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
 	else
-	  echo "Not Multisite without site=${SITE}"
+		echo "Not Multisite without site=${SITE}"
 		command="/opt/splunk/bin/splunk edit cluster-config -mode slave -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
-  fi
+	fi
 
 	for pod in ${PODS}; do
 		echo "Adding pod ${pod} to ${MANAGER}"
@@ -230,8 +245,7 @@ add_node_affinity() {
 	FILE=$1
 	cp ${FILE} ${TMP_FOLDER}/temp.node.info.${NS}.${TT}
 	if [[ ${MULTISITE} ]]; then
-	  echo "Creating for multisite"
-    	cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions +=
+		cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions +=
     	        [{
                         "key": "biasLangMasterNode",
                         "operator": "In",
@@ -240,8 +254,7 @@ add_node_affinity() {
                         ]
                 }]' >${FILE}
 	else
-	  echo "Not Multisite"
-      cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec += {
+		cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec += {
               "affinity": {
                   "nodeAffinity": {
                         "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -258,7 +271,7 @@ add_node_affinity() {
                     ]
                   }
               ]}}}}' >${FILE}
-  fi
+	fi
 }
 
 reset_manager_CR() {
@@ -441,11 +454,6 @@ get_current_deployment() {
 				continue
 			fi
 
-			#Handles Multisite
-      if [[ "$(grep -c multisite_master ${original_name})" -ne "0" ]]; then
-          export MULTISITE=true
-      fi
-
 			# Handles Refs conversion
 			if [[ "$(grep -c licenseMasterRef ${original_name})" -ne "0" ]] && [[ "$(grep -c clusterMasterRef ${original_name})" -ne "0" ]]; then
 				convert_CR_Spec ${original_name} ${tmp_name} "license"
@@ -460,12 +468,13 @@ get_current_deployment() {
 				convert_CR_Spec ${original_name} ${updated_name} "cluster"
 			fi
 
-      # Handles Multisite Refs
-      if [[ ${MULTISITE} ]]; then
-        if [[ "${CR}" != "LicenseMaster" ]] && [[ "${CR}" != "ClusterMaster" ]]; then
-			    convert_multisite ${updated_name}
-        fi
-      fi
+			# Handles Multisite References
+			if [[ "$(grep -c multisite_master ${original_name})" -ne "0" ]]; then
+				export MULTISITE=true
+				if [[ "${CR}" != "LicenseMaster" ]] && [[ "${CR}" != "ClusterMaster" ]]; then
+					convert_multisite ${updated_name}
+				fi
+			fi
 
 			# Handles Kind conversion
 			if [[ "${CR}" == "LicenseMaster" ]]; then
@@ -501,7 +510,7 @@ get_current_deployment() {
 apply_new_CRs() {
 	echo -e "\nApplying new CRs generated:\n"
 
-	# Get LM first
+	# Update LM first
 	if [[ ${HAS_LM} ]]; then
 		for file in ${UPDATED_FOLDER}/*LicenseMaster.updated*; do
 			if [[ -f ${file} ]]; then
@@ -518,7 +527,7 @@ apply_new_CRs() {
 		done
 	fi
 
-	# Get CM second
+	# Update CM second
 	if [[ ${HAS_CM} ]]; then
 		for file in ${UPDATED_FOLDER}/*ClusterMaster.updated*; do
 			if [[ -f ${file} ]]; then
@@ -535,37 +544,45 @@ apply_new_CRs() {
 		done
 	fi
 
-	# Update Peers
+	# Update SHs third
+	for file in ${UPDATED_FOLDER}/*; do
+		if [[ -f ${file} ]]; then
+			if [[ "$(echo "${file}" | grep -c "SearchHeadCluster.updated")" != "0" ]]; then
+				name=$(cat ${file} | jq '.metadata.name' -r)
+				target="search-head"
+				# Exception for spec.defaults used by ansible
+				if [[ "$(cat ${file} | jq '.spec.defaults')" != "" ]]; then
+					update_defaults_to_manager ${name}
+				fi
+				kubectl -n ${NS} apply -f ${file}
+				rolling_restart_my_pods ${name} ${target}
+				echo "Finished SHC migration using file ${file}"
+			fi
+		fi
+	done
+
+	# Update all others
 	for file in ${UPDATED_FOLDER}/*; do
 		if [[ -f ${file} ]]; then
 			if [[ "$(echo "${file}" | grep -c "ClusterMaster.updated")" == "0" ]] &&
 				[[ "$(echo "${file}" | grep -c "LicenseMaster.updated")" == "0" ]] &&
+				[[ "$(echo "${file}" | grep -c "SearchHeadCluster.updated")" == "0" ]] &&
 				[[ "$(echo "${file}" | grep -c "rsync.pvc")" == "0" ]]; then
-				echo "Restarting Peers - This can take a while"
+				echo "Configuring Peers - This can take a while"
 				kubectl -n ${NS} apply -f ${file}
-				name=$(cat ${file} | jq '.metadata.name' -r)
-				type=$(cat ${file} | jq '.kind' -r)
-				case $type in
-				IndexerCluster)
-					target="indexer"
-					echo "Found IndexerCluster"
+				if [[ "$(cat ${file} | jq '.kind' -r)" == "IndexerCluster" ]]; then
+					name=$(cat ${file} | jq '.metadata.name' -r)
 					manager=$(cat ${file} | jq '.spec.clusterManagerRef.name' -r)
-					site=$(cat ${file}    | jq '.spec.defaults' -r | grep site | awk -F "site:" '{print $2}')
-					add_peer_to_manager ${name} ${target} ${manager} ${site}
-					;;
-				SearchHeadCluster)
-					target="search-head"
-					echo "Found SearchHeadCluster"
-					rolling_restart_my_pods ${name} ${target}
-					;;
-				esac
+					site=$(cat ${file} | jq '.spec.defaults' -r | grep site | awk -F "site:" '{print $2}')
+					add_peer_to_manager ${name} "indexer" ${manager} ${site}
+				fi
 			fi
 		fi
 	done
 
 	# Disable maintenance mode in all CMs migrated
 	for CM in "${to_disable_maint_mode[@]}"; do
-		echo "Going to Disable ${CM}"
+		echo "Going to Disable maintenance mode for {CM}"
 		setMaintenanceMode "${CM}" "disable"
 	done
 
@@ -623,9 +640,10 @@ export POD_TIMEOUT=600    # 10 minutes
 export RSYNC_TIMEOUT=3600 # 1 hour
 export TT=$(date +'%Y.%m.%d.%H%M%S')
 export CRDs=("LicenseMaster" "ClusterMaster" "IndexerCluster" "SearchHeadCluster" "Standalone" "MonitoringConsole")
+export MULTISITE=false
 
 # Start logging file
-echo -e "\n*** Starting Execution ***\n\n$(date "+%F-%H:%M:%S")- Current namespace=${NS}"
+echo -e "\n*** Starting Execution ***\n\n$(date "+%F-%H:%M:%S") - Current namespace=${NS}"
 
 # cleans biasLang labels from previous runs
 unlabel_Nodes >/dev/null 2>&1
@@ -638,7 +656,7 @@ get_current_deployment
 
 # Apply generated CRs on Migrate mode
 if [[ "$1" == "migrate" ]]; then
-	backup_configs
+	#	backup_configs
 	apply_new_CRs
 	to_delete_CRs
 fi
@@ -646,5 +664,5 @@ fi
 # clean up labels after execution
 unlabel_Nodes >/dev/null 2>&1
 
-echo -e "\nMigration Completed. Once you validate your environment you can remove ClusterMasters and LicenseMasters stored in ${TO_REMOVE_CRs}"
+echo -e "\nExecution Completed. Once you validate your environment you can remove ClusterMasters and LicenseMasters stored in ${TO_REMOVE_CRs}"
 echo -e "\n*** Migration script finished execution ***\n"
