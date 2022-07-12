@@ -153,6 +153,7 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
+      DEPLOYMENT_TYPE: "helm"
     steps:
       - name: Set Test Cluster Name
         run: |

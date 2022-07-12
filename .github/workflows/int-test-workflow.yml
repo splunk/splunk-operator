@@ -13,7 +13,6 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-      DEPLOYMENT_TYPE: helm
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -83,6 +82,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
+      DEPLOYMENT_TYPE: "helm"
     steps:
       - name: Set Test Cluster Name
         run: |
