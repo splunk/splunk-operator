@@ -34,6 +34,7 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "splunk-operator.labels" -}}
+control-plane: controller-manager
 helm.sh/chart: {{ include "splunk-operator.chart" . }}
 {{ include "splunk-operator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
@@ -46,6 +47,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Selector labels
 */}}
 {{- define "splunk-operator.selectorLabels" -}}
+control-plane: controller-manager
 app.kubernetes.io/name: {{ include "splunk-operator.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

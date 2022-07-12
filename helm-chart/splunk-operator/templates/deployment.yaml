@@ -22,12 +22,12 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "splunk-operator.serviceAccountName" . }}
+      serviceAccountName: {{ include "splunk-operator.serviceAccountName" . }}-controller-manager
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: kube-rbac-proxy
-          image: "{{ .Values.kubeRbacProxy.image.repository }}:{{ .Values.kubeRbacProxy.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.kubeRbacProxy.image.repository}}:{{ .Values.kubeRbacProxy.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.kubeRbacProxy.image.pullPolicy }}
           args:
           - "--secure-listen-address=0.0.0.0:8443"
@@ -40,7 +40,7 @@ spec:
         - name: manager
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository}}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
@@ -60,7 +60,7 @@ spec:
           - name: OPERATOR_NAME
             value: "{{ include "splunk-operator.fullname" . }}"      
           - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-            value: "{{ .Values.splunkimage.repository }}:{{ .Values.splunkimage.tag }}"         
+            value: "{{ .Values.splunkimage.repository}}"        
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
