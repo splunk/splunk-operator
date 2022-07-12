@@ -57,7 +57,7 @@ readonly PROGRAM_NAME=$(basename "$0")
 
 help() {
   echo ""
-  echo "USAGE: ${PROGRAM_NAME} --help [ --current_namespace=<namespacename> ] [ --manifest_file=<fulepath with filename of Splunk Operator 1.1.0 manfiests file>] "
+  echo "USAGE: ${PROGRAM_NAME} --help [ --current_namespace=<namespacename> ] [ --manifest_file=<fulepath with filename of Splunk Operator 2.0.0 manfiests file>] "
   echo ""
   echo "OPTIONS:"
   echo ""
@@ -65,7 +65,7 @@ help() {
        "                          script will delete existing serviceaccount, deployment, role and " \
        "                          rolebinding and install the operator in splunk-operator namespace"
   echo ""
-  echo "   --manifest_file Splunk Operator 1.1.0 manifest file path, this can be url link or full path of the file"
+  echo "   --manifest_file Splunk Operator 2.0.0 manifest file path, this can be url link or full path of the file"
   echo ""
   echo ""
   echo "   --help  Show this help message."
@@ -200,7 +200,7 @@ delete_operator() {
 
 deploy_operator() {
     echo "--------------------------------------------------------------"
-    echo "installing Splunk Operator 1.1.0....." 
+    echo "installing Splunk Operator 2.0.0....." 
     kubectl apply -f ${manifest_file}
     echo "--------------------------------------------------------------"
   echo "wait for operator pod to be ready..."
@@ -212,7 +212,7 @@ deploy_operator() {
     echo "Operator installation not ready..."
     exit 1
   fi
-  echo "deployment of new Splunk Operator 1.1.0 complete"
+  echo "deployment of new Splunk Operator 2.0.0 complete"
 }
 
 parse_options "$@"
