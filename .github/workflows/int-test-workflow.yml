@@ -13,6 +13,7 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      DEPLOYMENT_TYPE: helm
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
