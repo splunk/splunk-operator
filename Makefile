@@ -346,3 +346,6 @@ clean: stop_clair_scanner
 	@docker rmi  $(IMG) || true
 	@rm -f clair-scanner
 	@rm -rf clair-scanner-logs
+
+cleanup: 
+	@./tools/cleanup.sh

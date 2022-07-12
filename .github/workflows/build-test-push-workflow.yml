@@ -247,6 +247,11 @@ jobs:
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
+      - name: Cleanup Test Case artifacts
+        if: ${{ always() }}
+        run: |
+          make cleanup
+          make clean
       - name: Cleanup up EKS cluster
         if: ${{ always() }}
         run: |
