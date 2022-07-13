@@ -216,9 +216,10 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			err := addTelApp(ctx, client, numberOfDeployerReplicas, cr)
 			if err != nil {
 				return result, err
-			} else {
-				cr.Status.TelAppInstalled = true
 			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
 		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {

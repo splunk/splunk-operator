@@ -234,9 +234,10 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			err := addTelApp(ctx, client, cr.Spec.Replicas, cr)
 			if err != nil {
 				return result, err
-			} else {
-				cr.Status.TelAppInstalled = true
 			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
 		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.

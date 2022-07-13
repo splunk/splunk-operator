@@ -198,9 +198,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			err := addTelApp(ctx, client, numberOfClusterMasterReplicas, cr)
 			if err != nil {
 				return result, err
-			} else {
-				cr.Status.TelAppInstalled = true
 			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
 		}
 
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.

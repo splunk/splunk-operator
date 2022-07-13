@@ -162,7 +162,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			if err != nil {
 				return result, err
 			}
-		} else {
+
+			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
 		}
 
