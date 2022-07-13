@@ -105,7 +105,7 @@ Other make targets include (more info below):
 * `make docker-build`: generates `splunk-operator` container image  example `make docker-build IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make docker-push`: push docker image to given repository example `make docker-push IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make clean`: removes the binary build output and `splunk-operator` container image example `make docker-push IMG=docker.io/splunk/splunk-operator:<tag name>`
-* `make run`: runs the splunk operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
+* `make run`: runs the Splunk Operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project
 * `make lint`: runs the `golint` utility on all `*.go` source files in this project
 * `make bundle-build`: generates `splunk-operator-bundle` bundle container image for OLM example `make bundle-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name>  IMG=docker.io/splunk/splunk-operator:<tag name>`
@@ -114,7 +114,7 @@ Other make targets include (more info below):
 * `make catalog-push`: push catalog docker image to given repository example`make catalog-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name> IMG=docker.io/splunk/splunk-operator:<tag name>`
 
 ## Deploying the Splunk Operator
-`make deploy` command will deploy all the necessary resources to run splunk operator like RBAC policies, services, config maps, deployment. Operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist, it will create the namespace. By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.
+`make deploy` command will deploy all the necessary resources to run Splunk Operator like RBAC policies, services, configmaps, deployment. Operator will be installed in `splunk-operator` namespace. If `splunk-operator` namespace does not exist, it will create the namespace. By default `make deploy` will install operator clusterwide. Operator will watch all the namespaces for any splunk enterprise custom resources.
 
 ```shell
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name>

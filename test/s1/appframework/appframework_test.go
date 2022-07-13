@@ -23,10 +23,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	testenv "github.com/splunk/splunk-operator/test/testenv"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -120,7 +119,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -153,7 +152,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -289,7 +288,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -311,7 +310,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -458,7 +457,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -486,7 +485,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -534,10 +533,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure Standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingUp)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseReady)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -558,10 +557,10 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
 			// Ensure Standalone is scaling down
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingDown)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingDown)
 
 			// Wait for Standalone to be in READY status
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseReady)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
@@ -625,7 +624,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -665,7 +664,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Failed to scale up Standalone")
 
 			// Ensure Standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), splcommon.PhaseScalingUp)
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -737,7 +736,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -821,7 +820,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -901,7 +900,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -929,7 +928,7 @@ var _ = Describe("s1appfw test", func() {
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1078,7 +1077,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1092,7 +1091,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1161,7 +1160,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
@@ -1198,7 +1197,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1274,7 +1273,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1342,7 +1341,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1416,7 +1415,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1534,7 +1533,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1654,7 +1653,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1754,7 +1753,7 @@ var _ = Describe("s1appfw test", func() {
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: splcommon.Spec{
+					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
@@ -1778,6 +1777,177 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
+
+			/* Test Steps
+				################## SETUP ####################
+				* Upload big-size app to S3 for Standalone
+				* Create app source for Standalone
+				* Prepare and deploy Standalone
+				* When app download is complete, delete apps from app directory
+				############## VERIFICATIONS ################
+				* Verify App installation is in progress on Standalone
+				* Upload more apps from S3 during bigger app install
+				* Wait for polling interval to pass
+			    * Verify all apps are installed on Standalone
+			*/
+
+			// ################## SETUP FOR STANDALONE ####################
+			// Download big size apps from S3
+			appVersion := "V1"
+			appList := testenv.BigSingleApp
+			appFileList := testenv.GetAppFileList(appList)
+			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			Expect(err).To(Succeed(), "Unable to download big app")
+
+			// Upload big-size app to S3 for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Verify App Download is completed on Standalone
+			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgPodCopyComplete, enterpriseApi.AppPkgPodCopyPending)
+
+			//Delete apps from app-directory when app download is complete
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			podDownloadPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testenvInstance.GetName(), standalone.Kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName, testenv.AppInfo[appList[0]]["filename"])
+			err = testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
+			Expect(err).To(Succeed(), "Unable to delete file on pod")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			// ############ VERIFICATION ###########
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console with app framework
+			   * Check isDeploymentInProgress is set for Monitoring Console CR
+			   * Wait for the pod to be ready
+			   * Upload V1 apps to S3 for Standalone
+			   * Create app source for Standalone
+			   * Prepare and deploy Standalone with app framework
+			   * Check isDeploymentInProgress is set for Monitoring Console CR
+			   * Wait for the pod to be ready
+			*/
+
+			// ################## SETUP FOR MONITORING CONSOLE ####################
+
+			// Upload V1 apps to S3 for Monitoring Console
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework spec for Monitoring Console
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpecMC,
+			}
+
+			// Deploy Monitoring Console
+			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+
+			// Verify IsDeploymentInProgress Flag is set to true for Monitroing Console CR
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgressFlag")
+			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, mcName, mc.Kind)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// ################## SETUP FOR STANDALONE ####################
+			// Upload V1 apps to S3 for Standalone
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Maximum apps to be downloaded in parallel
+			maxConcurrentAppDownloads := 5
+
+			// Create App framework spec for Standalone
+			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+				AppFrameworkConfig: appFrameworkSpec,
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Verify IsDeploymentInProgress Flag is set to true for Standalone CR
+			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Verify Monitoring Console is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
 		})
 	})
 })

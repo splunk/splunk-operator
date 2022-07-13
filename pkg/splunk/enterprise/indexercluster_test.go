@@ -59,7 +59,8 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
 		{MetaName: "*v3.ClusterManager-test-manager1"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.IndexerCluster-test-stack1"},
+		{MetaName: "*v3.IndexerCluster-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -71,7 +72,8 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
 		{MetaName: "*v3.ClusterManager-test-manager1"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.IndexerCluster-test-stack1"},
+		{MetaName: "*v3.IndexerCluster-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -82,10 +84,15 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		client.InNamespace("test"),
 		client.MatchingLabels(labels),
 	}
+	listOpts1 := []client.ListOption{
+		client.InNamespace("test"),
+	}
 	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[4], funcCalls[5], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0]}}
+		{ListOpts: listOpts},
+		{ListOpts: listOpts1},
+	}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[4], funcCalls[5], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[1]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0], listmockCall[1]}}
 
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -105,7 +112,7 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 			},
 		},
 	}
-	current.Status.ClusterManagerPhase = splcommon.PhaseReady
+	current.Status.ClusterManagerPhase = enterpriseApi.PhaseReady
 	current.Status.IndexerSecretChanged = append(current.Status.IndexerSecretChanged, true)
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
@@ -147,7 +154,7 @@ func TestGetClusterManagerClient(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ClusterManagerPhase: splcommon.PhaseReady,
+			ClusterManagerPhase: enterpriseApi.PhaseReady,
 		},
 	}
 	secrets := &corev1.Secret{
@@ -197,7 +204,7 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ClusterManagerPhase: splcommon.PhaseReady,
+			ClusterManagerPhase: enterpriseApi.PhaseReady,
 		},
 	}
 	cr.Status.IndexerSecretChanged = append(cr.Status.IndexerSecretChanged, true)
@@ -227,7 +234,7 @@ func getIndexerClusterPodManager(method string, mockHandlers []spltest.MockHTTPH
 
 // indexerClusterpodManagerVerifyRFPeersTester is used to verify replicas against RF using a indexerClusterPodManager
 func indexerClusterPodManagerVerifyRFPeersTester(t *testing.T, method string, mgr *indexerClusterPodManager,
-	desiredReplicas int32, wantPhase splcommon.Phase, wantCalls map[string][]spltest.MockFuncCall, wantError error) {
+	desiredReplicas int32, wantPhase enterpriseApi.Phase, wantCalls map[string][]spltest.MockFuncCall, wantError error) {
 
 	ctx := context.TODO()
 
@@ -250,7 +257,7 @@ func indexerClusterPodManagerVerifyRFPeersTester(t *testing.T, method string, mg
 }
 
 func indexerClusterPodManagerReplicasTester(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler,
-	replicas int32, desiredReplicas int32, wantPhase splcommon.Phase,
+	replicas int32, desiredReplicas int32, wantPhase enterpriseApi.Phase,
 	wantCalls map[string][]spltest.MockFuncCall, wantError error) {
 
 	mockSplunkClient := &spltest.MockHTTPClient{}
@@ -282,19 +289,19 @@ func TestVerifyRFPeers(t *testing.T) {
 
 	method := "indexerClusterPodManager.verifyRFPeers(All pods ready)"
 	// test for singlesite i.e. with replication_factor=3(on ClusterManager) and replicas=3(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 3 /*replicas*/, 3 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 3 /*replicas*/, 3 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 
 	// test for singlesite i.e. with replication_factor=3(on ClusterManager) and replicas=1(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 3 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 3 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 
 	// Now test for multi-site too
 	mockHandlers[0].Body = `{"links":{"_reload":"/services/cluster/config/_reload","_acl":"/services/cluster/config/_acl"},"origin":"https://localhost:8089/services/cluster/config","updated":"2020-10-28T21:37:07+00:00","generator":{"build":"152fb4b2bb96","version":"8.0.6"},"entry":[{"name":"config","id":"https://localhost:8089/services/cluster/config/config","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/config/config","list":"/services/cluster/config/config","_reload":"/services/cluster/config/config/_reload","edit":"/services/cluster/config/config","disable":"/services/cluster/config/config/disable"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"access_logging_for_heartbeats":false,"auto_rebalance_primaries":true,"buckets_to_summarize":"primaries","cluster_label":"idxc_label","cxn_timeout":60,"decommission_force_finish_idle_time":0,"decommission_force_timeout":180,"disabled":false,"eai:acl":null,"forwarderdata_rcv_port":0,"forwarderdata_use_ssl":false,"frozen_notifications_per_batch":10,"guid":"F643BA71-0D3C-4D63-A0BC-A1604AC928E3","heartbeat_period":18446744073709552000,"heartbeat_timeout":60,"master_uri":"https://127.0.0.1:8089","max_auto_service_interval":30,"max_fixup_time_ms":5000,"max_peer_build_load":2,"max_peer_rep_load":5,"max_peer_sum_rep_load":5,"max_peers_to_download_bundle":5,"max_primary_backups_per_service":10,"mode":"master","multisite":"true","notify_buckets_period":10,"notify_scan_min_period":10,"notify_scan_period":10,"percent_peers_to_restart":10,"ping_flag":true,"quiet_period":60,"rcv_timeout":60,"rebalance_primaries_execution_limit_ms":0,"rebalance_threshold":0.9,"register_forwarder_address":"","register_replication_address":"","register_search_address":"","remote_storage_upload_timeout":60,"rep_cxn_timeout":60,"rep_max_rcv_timeout":180,"rep_max_send_timeout":180,"rep_rcv_timeout":60,"rep_send_timeout":60,"replication_factor":3,"replication_port":null,"replication_use_ssl":false,"report_remote_storage_bucket_upload_to_targets":false,"reporting_delay_period":30,"restart_inactivity_timeout":600,"restart_timeout":60,"rolling_restart":"restart","search_factor":3,"search_files_retry_timeout":600,"secret":"********","send_timeout":60,"service_interval":0,"site":"site1","site_by_site":true,"site_replication_factor":"{ origin:2, total:2 }","site_search_factor":"{ origin:2, total:2 }","summary_replication":"false","use_batch_discard":"true","use_batch_mask_changes":"true","use_batch_remote_rep_changes":"false"}}],"paging":{"total":1,"perPage":10000000,"offset":0},"messages":[]}`
 
 	//test for multisite i.e. with site_replication_factor=origin:2,total:2(on ClusterManager) and replicas=2(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 2 /*replicas*/, 2 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 2 /*replicas*/, 2 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 
 	//test for multisite i.e. with site_replication_factor=origin:2,total:2(on ClusterManager) and replicas=1(on IndexerCluster)
-	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 2 /*desired replicas*/, splcommon.PhaseReady, wantCalls, nil)
+	indexerClusterPodManagerReplicasTester(t, method, mockHandlers, 1 /*replicas*/, 2 /*desired replicas*/, enterpriseApi.PhaseReady, wantCalls, nil)
 }
 
 func checkResponseFromUpdateStatus(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler, replicas int32, statefulSet *appsv1.StatefulSet, retry bool) error {
@@ -503,7 +510,7 @@ func TestInvalidPeerInFinishRecycle(t *testing.T) {
 }
 
 func indexerClusterPodManagerUpdateTester(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler,
-	desiredReplicas int32, wantPhase splcommon.Phase, statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32, wantPhase enterpriseApi.Phase, statefulSet *appsv1.StatefulSet,
 	wantCalls map[string][]spltest.MockFuncCall, wantError error, initObjects ...client.Object) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
@@ -588,7 +595,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		},
 	}
 	method := "indexerClusterPodManager.Update(All pods ready)"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => decommission
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
@@ -609,7 +616,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
 	}
 	wantDecomPodCalls := map[string][]spltest.MockFuncCall{"Get": decommisonFuncCalls, "Create": {funcCalls[1]}}
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantDecomPodCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantDecomPodCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for decommission to complete
 	reassigningFuncCalls := []spltest.MockFuncCall{
@@ -623,19 +630,19 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"Up"`, `"status":"ReassigningPrimaries"`, 1)
 	method = "indexerClusterPodManager.Update(ReassigningPrimaries)"
 	wantReasCalls := map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}}
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantReasCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantReasCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for decommission to complete
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"ReassigningPrimaries"`, `"status":"Decommissioning"`, 1)
 	method = "indexerClusterPodManager.Update(Decommissioning)"
 	wantDecomCalls := map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}}
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantDecomCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantDecomCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": reassigningFuncCalls, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	mockHandlers[1].Body = strings.Replace(mockHandlers[1].Body, `"status":"Decommissioning"`, `"status":"Down"`, 1)
 	method = "indexerClusterPodManager.Update(Delete Pod)"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => pod not found
 	pod.ObjectMeta.Name = "splunk-stack1-2"
@@ -645,7 +652,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	statefulSet.Status.UpdatedReplicas = 2
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4]}, "Create": {funcCalls[1]}}
 	method = "indexerClusterPodManager.Update(Pod Not Found)"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => decommission pod
 	mockHandlers[1].Body = `{"entry":[{"name":"aa45bf46-7f46-47af-a760-590d5c606d10","content":{"status":"Up","label":"splunk-stack1-indexer-0"}},{"name":"D39B1729-E2C5-4273-B9B2-534DA7C2F866","content":{"status":"GracefulShutdown","label":"splunk-stack1-indexer-1"}}]}`
@@ -677,7 +684,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	}
 	method = "indexerClusterPodManager.Update(Decommission)"
 	pod.ObjectMeta.Name = "splunk-stack1-0"
-	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
+	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
 }
 
 func TestSetClusterMaintenanceMode(t *testing.T) {
@@ -1082,7 +1089,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	c := spltest.NewMockClient()
 	c.AddObject(&cm)
 
-	cm.Status.Phase = splcommon.PhaseReady
+	cm.Status.Phase = enterpriseApi.PhaseReady
 	// Empty ClusterManagerRef should return an error
 	cr.Spec.ClusterManagerRef.Name = ""
 	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
@@ -1095,7 +1102,7 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
-	cm.Status.Phase = splcommon.PhaseError
+	cm.Status.Phase = enterpriseApi.PhaseError
 	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
 	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
@@ -1121,7 +1128,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	cr.Spec.ClusterManagerRef.Name = "manager1"
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateIndexerClusterSpec(ctx, &cr); err != nil {
+			if err := validateIndexerClusterSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateIndexerClusterSpec() returned error: %v", err)
 			}
 			return getIndexerStatefulSet(ctx, c, &cr)
@@ -1164,7 +1171,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-indexer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-manager1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-manager1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-indexer-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"},{"name":"user-defined","containerPort":32000,"protocol":"UDP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_indexer"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-manager1-cluster-manager-service"},{"name":"TEST_ENV_VAR","value":"test_value"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-indexer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-manager1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-manager1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-indexer-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0,"replicas":0}}`)
 
 	cr.Spec.ClusterManagerRef.Namespace = "other"
-	if err := validateIndexerClusterSpec(ctx, &cr); err == nil {
+	if err := validateIndexerClusterSpec(ctx, c, &cr); err == nil {
 		t.Errorf("validateIndexerClusterSpec() error expected on multisite IndexerCluster referencing a cluster manager located in a different namespace")
 	}
 }
@@ -1331,7 +1338,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1380,7 +1387,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		Namespace: clustermanager.Namespace,
 	}
 
-	clustermanager.Status.Phase = splcommon.PhaseReady
+	clustermanager.Status.Phase = enterpriseApi.PhaseReady
 	clustermanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
@@ -1500,7 +1507,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes:           []corev1.Volume{},
@@ -1565,7 +1572,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	indexercluster.Status.Phase = splcommon.PhaseReady
+	indexercluster.Status.Phase = enterpriseApi.PhaseReady
 	indexercluster.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",

@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	//splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -110,7 +110,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify Indexer Cluster is updating
 			idxcName := deployment.GetName() + "-idxc"
-			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating, idxcName)
+			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating, idxcName)
 
 			// Verify Indexers go to ready state
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -141,7 +141,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
 
 			// Verify Search Head Cluster is updating
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, splcommon.PhaseUpdating)
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)

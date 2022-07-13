@@ -27,7 +27,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestAsOwner(t *testing.T) {
@@ -691,97 +690,6 @@ func TestAppendPodAffinity(t *testing.T) {
 			},
 		},
 	})
-}
-
-func TestValidateSpec(t *testing.T) {
-	spec := Spec{}
-	defaultResources := corev1.ResourceRequirements{
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("0.1"),
-			corev1.ResourceMemory: resource.MustParse("512Mi"),
-		},
-		Limits: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("4"),
-			corev1.ResourceMemory: resource.MustParse("8Gi"),
-		},
-	}
-
-	test := func(pullPolicy, scheduler string) {
-		err := ValidateSpec(&spec, defaultResources)
-		if err != nil {
-			t.Errorf("ValidateSpec() returned %v; want nil", err)
-		}
-		if spec.ImagePullPolicy != pullPolicy {
-			t.Errorf("ValidateSpec() ImagePullPolicy = %s; want %s", spec.ImagePullPolicy, pullPolicy)
-		}
-		if spec.SchedulerName != scheduler {
-			t.Errorf("ValidateSpec() SchedulerName = %s; want %s", spec.SchedulerName, scheduler)
-		}
-		if !reflect.DeepEqual(spec.Resources, defaultResources) {
-			t.Errorf("ValidateSpec() Resources = %v; want %v", spec.Resources, defaultResources)
-		}
-	}
-
-	test("IfNotPresent", "default-scheduler")
-
-	spec.ImagePullPolicy = "Always"
-	spec.SchedulerName = "blah"
-	test("Always", "blah")
-
-	spec.ImagePullPolicy = "IfNotPresent"
-	test("IfNotPresent", "blah")
-
-	spec.ImagePullPolicy = "Invalid"
-	err := ValidateSpec(&spec, defaultResources)
-	if err == nil {
-		t.Error("ValidateSpec() returned nil; want ERROR")
-	}
-}
-
-func TestSetServiceTemplateDefaults(t *testing.T) {
-	cr := TestResource{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: Spec{
-			ServiceTemplate: corev1.Service{
-				Spec: corev1.ServiceSpec{
-					Ports: []corev1.ServicePort{
-						{
-							Name: "http",
-							Port: 80,
-						},
-						{
-							Name: "https",
-							Port: 443,
-							TargetPort: intstr.IntOrString{
-								Type:   intstr.Int,
-								IntVal: 8443,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	setServiceTemplateDefaults(&cr.Spec)
-	for _, p := range cr.Spec.ServiceTemplate.Spec.Ports {
-		switch p.Name {
-		case "http":
-			if p.TargetPort.IntValue() != int(p.Port) {
-				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want %d, Got %d", p.Port, p.TargetPort.IntVal)
-			}
-			if p.Protocol != corev1.ProtocolTCP {
-				t.Errorf("setServiceTemplateDefaults() did not set protocol correctly. Want %s, Got %s", corev1.ProtocolTCP, p.Protocol)
-			}
-		case "https":
-			if p.TargetPort.IntValue() != 8443 {
-				t.Errorf("setServiceTemplateDefaults() did not set target port correctly. Want 8443, Got %d", p.TargetPort.IntVal)
-			}
-		}
-	}
 }
 
 func TestCompareTolerations(t *testing.T) {

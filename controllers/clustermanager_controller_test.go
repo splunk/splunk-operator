@@ -4,30 +4,23 @@ import (
 	"context"
 	"fmt"
 
-	//"reflect"
 	"time"
 
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	//ctrl "sigs.k8s.io/controller-runtime"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	//"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("ClusterManager Controller", func() {
-
-	var (
-		namespace = "ns-splunk-cm"
-	)
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
@@ -37,51 +30,163 @@ var _ = Describe("ClusterManager Controller", func() {
 
 	})
 
-	Context("ClusterManager Management", func() {
+	Context("ClusterManager Management failed", func() {
 
-		It("Create ClusterManager custom resource should succeeded", func() {
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterManager) (reconcile.Result, error) {
+		It("Get ClusterManager custom resource should failed", func() {
+			namespace := "ns-splunk-cm-1"
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
-
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
-			CreateClusterManager("test", nsSpecs.Name, splcommon.PhaseReady)
+			// check when resource not found
+			_, err := GetClusterManager("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("clustermanagers.enterprise.splunk.com \"test\" not found"))
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
+	})
+
+	Context("ClusterManager Management with annotations", func() {
+
+		It("Create ClusterManager custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-cm-2"
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			annotations[enterpriseApi.ClusterManagerPausedAnnotation] = ""
+			CreateClusterManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetClusterManager("test", nsSpecs.Name)
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			ssSpec.Status.Phase = "Ready"
+			UpdateClusterManager(ssSpec, enterpriseApi.PhaseReady)
 			DeleteClusterManager("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-		It("Cover Unused methods", func() {
-			// Create New Manager for controllers
-			//k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-			//	Scheme: scheme.Scheme,
-			//})
-			//Expect(err).ToNot(HaveOccurred())
+	})
+	Context("ClusterManager Management", func() {
+		It("Create ClusterManager custom resource should succeeded", func() {
+			namespace := "ns-splunk-cm-3"
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			CreateClusterManager("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteClusterManager("test", nsSpecs.Name)
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
 
-			//rr, err := New(k8sManager)
-			//callUnsedMethods(rr.(*ClusterManagerReconciler), namespace)
+		It("Cover Unused methods", func() {
+			namespace := "ns-splunk-cm-4"
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			ctx := context.TODO()
+			builder := fake.NewClientBuilder()
+			c := builder.Build()
+			instance := ClusterManagerReconciler{
+				Client: c,
+				Scheme: scheme.Scheme,
+			}
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test",
+					Namespace: namespace,
+				},
+			}
+			// reconcile for the first time err is resource not found
+			_, err := instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
+			// create resource first and then reconcile for the first time
+			ssSpec := testutils.NewClusterManager("test", namespace, "image")
+			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
+			// reconcile with updated annotations for pause
+			annotations := make(map[string]string)
+			annotations[enterpriseApi.ClusterManagerPausedAnnotation] = ""
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
+			// reconcile after removing annotations for pause
+			annotations = map[string]string{}
+			ssSpec.Annotations = annotations
+			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			// reconcile after adding delete timestamp
+			Expect(err).ToNot(HaveOccurred())
+			ssSpec.DeletionTimestamp = &metav1.Time{}
+			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 	})
 })
 
-func CreateClusterManager(name string, namespace string, status splcommon.Phase) *enterprisev3.ClusterManager {
+func GetClusterManager(name string, namespace string) (*enterpriseApi.ClusterManager, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterprisev3.ClusterManager{
+	By("Expecting ClusterManager custom resource to be created successfully")
+	ss := &enterpriseApi.ClusterManager{}
+	err := k8sClient.Get(context.Background(), key, ss)
+	if err != nil {
+		return nil, err
+	}
+	return ss, err
+}
+
+func CreateClusterManager(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.ClusterManager {
+	key := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+	ssSpec := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:        name,
+			Namespace:   namespace,
+			Annotations: annotations,
 		},
-		Spec: enterprisev3.ClusterManagerSpec{},
+		Spec: enterpriseApi.ClusterManagerSpec{},
 	}
 	ssSpec = testutils.NewClusterManager(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	By("Expecting ClusterManager custom resource to be created successfully")
-	ss := &enterprisev3.ClusterManager{}
+	ss := &enterpriseApi.ClusterManager{}
+	Eventually(func() bool {
+		_ = k8sClient.Get(context.Background(), key, ss)
+		if status != "" {
+			fmt.Printf("status is set to %v", status)
+			ss.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), ss)).Should(Succeed())
+			time.Sleep(2 * time.Second)
+		}
+		return true
+	}, timeout, interval).Should(BeTrue())
+
+	return ss
+}
+
+func UpdateClusterManager(instance *enterpriseApi.ClusterManager, status enterpriseApi.Phase) *enterpriseApi.ClusterManager {
+	key := types.NamespacedName{
+		Name:      instance.Name,
+		Namespace: instance.Namespace,
+	}
+
+	ssSpec := testutils.NewClusterManager(instance.Name, instance.Namespace, "image")
+	ssSpec.ResourceVersion = instance.ResourceVersion
+	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
+	time.Sleep(2 * time.Second)
+
+	By("Expecting ClusterManager custom resource to be created successfully")
+	ss := &enterpriseApi.ClusterManager{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -104,7 +209,7 @@ func DeleteClusterManager(name string, namespace string) {
 
 	By("Expecting ClusterManager Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterprisev3.ClusterManager{}
+		ssys := &enterpriseApi.ClusterManager{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

@@ -20,24 +20,24 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
-	//"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	//"sigs.k8s.io/controller-runtime/pkg/controller"
+
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	//"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/pkg/config"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -58,7 +58,11 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.UseFlagOptions(&opts)))
 
 	By("bootstrapping test environment")
 
@@ -67,26 +71,29 @@ var _ = BeforeSuite(func() {
 		ErrorIfCRDPathMissing: true,
 	}
 
-	cfg, err := testEnv.Start()
+	var err error
+
+	// cfg is defined in this file globally.
+	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterprisev3.AddToScheme(clientgoscheme.Scheme)
+	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
@@ -139,11 +146,6 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	/*
-		k8sManager, err = mainFunction(clientgoscheme.Scheme)
-		Expect(err).ToNot(HaveOccurred())
-		time.Sleep(time.Second * 1)
-	*/
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		fmt.Printf("error %v", err.Error())
@@ -161,7 +163,6 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	testEnv.Stop()
-	//Expect(err).NotTo(HaveOccurred())
 })
 
 func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
@@ -170,10 +171,13 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 	var probeAddr string
 
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	//utilruntime.Must(enterprisev3.AddToScheme(scheme))
 
 	// Logging setup
-	ctrl.SetLogger(zap.New())
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
 	options := ctrl.Options{

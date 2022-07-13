@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -76,10 +76,9 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("clustermanager", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the ClusterManager
-	instance := &enterprisev3.ClusterManager{}
+	instance := &enterpriseApi.ClusterManager{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -96,23 +95,30 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.ClusterManagerPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.ClusterManagerPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return ApplyClusterManager(ctx, r.Client, instance)
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyClusterManager(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
 }
 
 // ApplyClusterManager adding to handle unit test case
-var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterprisev3.ClusterManager) (reconcile.Result, error) {
+var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
 	return enterprise.ApplyClusterManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.ClusterManager{}).
+		For(&enterpriseApi.ClusterManager{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -126,25 +132,25 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.ClusterManager{},
+				OwnerType:    &enterpriseApi.ClusterManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.ClusterManager{},
+				OwnerType:    &enterpriseApi.ClusterManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.ClusterManager{},
+				OwnerType:    &enterpriseApi.ClusterManager{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.ClusterManager{},
+				OwnerType:    &enterpriseApi.ClusterManager{},
 			}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: enterprisev3.TotalWorker,
+			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
 }

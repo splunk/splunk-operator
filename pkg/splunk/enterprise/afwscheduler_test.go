@@ -2308,7 +2308,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 		}
 	}
 
-	cr.Status.Phase = splcommon.PhaseReady
+	cr.Status.Phase = enterpriseApi.PhaseReady
 	var appSrcDeployInfo enterpriseApi.AppSrcDeployInfo
 	appSrcDeployInfo.AppDeploymentInfoList = appDeployInfoList
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo

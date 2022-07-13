@@ -25,6 +25,7 @@ import (
 	"github.com/onsi/ginkgo"
 	ginkgoconfig "github.com/onsi/ginkgo/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -115,6 +116,9 @@ const (
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
+
+	// CRUpdateRetryCount if CR Update fails retry these many time
+	CRUpdateRetryCount = 10
 )
 
 var (
@@ -166,7 +170,11 @@ type TestEnv struct {
 }
 
 func init() {
-	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true))
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	l := zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseFlagOptions(&opts))
 	l.WithName("testenv")
 	logf.SetLogger(l)
 
@@ -256,11 +264,6 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 			panic("Unable to start kube manager. Error: " + err.Error())
 		}
 	}()
-
-	/*if err := testenv.setup(); err != nil {
-		// teardown() should still be invoked
-		return nil, err
-	} */
 
 	return testenv, nil
 }

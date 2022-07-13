@@ -607,6 +607,7 @@ spec:
             metadata:
               annotations:
                 kubectl.kubernetes.io/default-container: manager
+                kubectl.kubernetes.io/default-logs-container: manager
               labels:
                 control-plane: controller-manager
                 name: splunk-operator
@@ -636,24 +637,18 @@ spec:
                 command:
                 - /manager
                 env:
-                - name: POD_NAME
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.name
                 - name: WATCH_NAMESPACE
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  valueFrom:
-                    configMapKeyRef:
-                      key: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                      name: splunk-operator-config
+                  value: docker.io/splunk/splunk:edge
                 - name: OPERATOR_NAME
+                  value: splunk-operator
+                - name: POD_NAME
                   valueFrom:
-                    configMapKeyRef:
-                      key: OPERATOR_NAME
-                      name: splunk-operator-config
+                    fieldRef:
+                      fieldPath: metadata.name
                 image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
@@ -683,6 +678,7 @@ spec:
                   name: app-staging
               securityContext:
                 fsGroup: 1001
+                runAsNonRoot: true
                 runAsUser: 1001
               serviceAccountName: splunk-operator-controller-manager
               terminationGracePeriodSeconds: 10
@@ -692,7 +688,7 @@ spec:
                 name: splunk-operator-config
               - name: app-staging
                 persistentVolumeClaim:
-                  claimName: splunk-operator-tmp-app-download
+                  claimName: splunk-operator-app-download
       permissions:
       - rules:
         - apiGroups:

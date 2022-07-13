@@ -29,15 +29,15 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 const (
@@ -46,7 +46,11 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true)).WithName("util"))
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseFlagOptions(&opts)).WithName("util"))
 
 }
 
@@ -79,7 +83,7 @@ func newStandalone(name, ns string) *enterpriseApi.Standalone {
 
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				Volumes: []corev1.Volume{},
@@ -135,7 +139,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 				},
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 			},
@@ -172,7 +176,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.Lice
 				},
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 			},
@@ -218,7 +222,7 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
@@ -253,7 +257,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 		Spec: enterpriseApi.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
@@ -286,7 +290,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 			SmartStore: smartstorespec,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
@@ -318,7 +322,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
@@ -357,7 +361,7 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
@@ -562,7 +566,7 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
@@ -628,7 +632,7 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) 
 
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
@@ -720,7 +724,13 @@ func DumpGetTopPods(ns string) []string {
 }
 
 // GetOperatorPodName returns name of operator pod in the namespace
-func GetOperatorPodName(ns string) string {
+func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
+	var ns string
+	if testcaseEnvInst.clusterWideOperator != "true" {
+		ns = testcaseEnvInst.GetName()
+	} else {
+		ns = "splunk-operator"
+	}
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods string
 	if err != nil {
@@ -1014,7 +1024,7 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 	} else {
 		ns = "splunk-operator"
 	}
-	podName = GetOperatorPodName(ns)
+	podName = GetOperatorPodName(testcaseEnvInst)
 
 	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
 	if err != nil {
@@ -1022,4 +1032,32 @@ func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
 		return err
 	}
 	return nil
+}
+
+// DeleteFilesOnOperatorPod Delete files on Operator Pod
+func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, filenames []string) error {
+	for _, filepath := range filenames {
+		cmd := fmt.Sprintf("rm -f %s", filepath)
+		_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
+		if err != nil {
+			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "location", filepath, "command", cmd)
+			return err
+		}
+	}
+	return nil
+}
+
+// DumpGetSplunkVersion prints the splunk version installed on pods
+func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment, filterString string) {
+	splunkPods := DumpGetPods(ns)
+	cmd := "/opt/splunk/bin/splunk -version"
+	for _, podName := range splunkPods {
+		if strings.Contains(podName, filterString) {
+			stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
+			if err != nil {
+				logf.Log.Error(err, "Failed to get splunkd version on the pod", "Pod Name", podName)
+			}
+			logf.Log.Info("Splunk Version Found", "Pod Name", podName, "Version", string(stdout))
+		}
+	}
 }

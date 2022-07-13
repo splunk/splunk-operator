@@ -63,6 +63,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
 	}
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -82,6 +84,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+		{MetaName: "*v3.SearchHeadCluster-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -132,7 +136,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 }
 
 func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers []spltest.MockHTTPHandler,
-	desiredReplicas int32, wantPhase splcommon.Phase, statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32, wantPhase enterpriseApi.Phase, statefulSet *appsv1.StatefulSet,
 	wantCalls map[string][]spltest.MockFuncCall, wantError error, initObjects ...client.Object) {
 
 	// test for updating
@@ -232,7 +236,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 
 	// test API failure
 	method := "searchHeadClusterPodManager.Update(API failure)"
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhasePending, statefulSet, wantCalls, nil, statefulSet)
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhasePending, statefulSet, wantCalls, nil, statefulSet)
 
 	// test 1 ready pod
 	mockHandlers = []spltest.MockHTTPHandler{
@@ -268,7 +272,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	}
 	method = "searchHeadClusterPodManager.Update(All pods ready)"
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => transition to detention
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
@@ -281,7 +285,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for searches to drain
 	mockHandlers = []spltest.MockHTTPHandler{mockHandlers[0], mockHandlers[1]}
@@ -289,13 +293,13 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":0`, `"active_historical_search_count":1`, 1)
 	method = "searchHeadClusterPodManager.Update(Draining Searches)"
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}}
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":1`, `"active_historical_search_count":0`, 1)
 	method = "searchHeadClusterPodManager.Update(Delete Pod)"
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod update finished => release from detention
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
@@ -308,7 +312,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	})
 	method = "searchHeadClusterPodManager.Update(Release Quarantine)"
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => remove member
 	mockHandlers[2] = spltest.MockHTTPHandler{
@@ -329,21 +333,6 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
-	//extraCalls := []spltest.MockFuncCall{
-	//	{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-	//	{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-	//	}
-
-	/*
-		[test/splunk-stack1
-		test/splunk-test-secret
-		test/splunk-stack1-search-head-0
-		test/splunk-stack1-search-head-1
-		test/splunk-stack1-search-head-1
-		test/splunk-stack1
-		test/pvc-etc-splunk-stack1-1
-		 test/pvc-var-splunk-stack1-1]
-	*/
 
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
@@ -357,8 +346,6 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	}
 
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
-	//wantCalls["Get"] = append(wantCalls["Get"], extraCalls...)
-	//wantCalls["Get"] = append(wantCalls["Get"], pvcCalls...)
 	pvcList := []*corev1.PersistentVolumeClaim{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc-splunk-stack1-1", Namespace: "test"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
@@ -369,7 +356,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Status.UpdatedReplicas = 2
 	method = "searchHeadClusterPodManager.Update(Remove Member)"
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, splcommon.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
 
 }
 
@@ -633,7 +620,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(ctx, &cr); err != nil {
+			if err := validateSearchHeadClusterSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getSearchHeadStatefulSet(ctx, c, &cr)
@@ -700,7 +687,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateSearchHeadClusterSpec(ctx, &cr); err != nil {
+			if err := validateSearchHeadClusterSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
 			}
 			return getDeployerStatefulSet(ctx, c, &cr)
@@ -724,6 +711,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
+
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-deployer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-deployer-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_deployer"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/sbin/checkstate.sh"]},"initialDelaySeconds":300,"timeoutSeconds":30,"periodSeconds":30},"readinessProbe":{"exec":{"command":["/bin/grep","started","/opt/container_artifact/splunk-container.state"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-deployer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-deployer-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"availableReplicas":0, "replicas":0}}`)
 }
 
@@ -1460,7 +1448,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1533,7 +1521,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	// simulate Ready state
-	searchheadcluster.Status.Phase = splcommon.PhaseReady
+	searchheadcluster.Status.Phase = enterpriseApi.PhaseReady
 	searchheadcluster.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
 		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",

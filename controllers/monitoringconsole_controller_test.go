@@ -4,25 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	//"reflect"
 	"time"
 
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	//ctrl "sigs.k8s.io/controller-runtime"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	//"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("MonitoringConsole Controller", func() {
@@ -39,7 +34,7 @@ var _ = Describe("MonitoringConsole Controller", func() {
 
 		It("Get MonitoringConsole custom resource should failed", func() {
 			namespace := "ns-splunk-mc-1"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterprisev3.MonitoringConsole) (reconcile.Result, error) {
+			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -52,39 +47,39 @@ var _ = Describe("MonitoringConsole Controller", func() {
 
 		It("Create MonitoringConsole custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-mc-2"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterprisev3.MonitoringConsole) (reconcile.Result, error) {
+			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterprisev3.MonitoringConsolePausedAnnotation] = ""
-			CreateMonitoringConsole("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			annotations[enterpriseApi.MonitoringConsolePausedAnnotation] = ""
+			CreateMonitoringConsole("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
 			ssSpec, _ := GetMonitoringConsole("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			UpdateMonitoringConsole(ssSpec, splcommon.PhaseReady)
+			UpdateMonitoringConsole(ssSpec, enterpriseApi.PhaseReady)
 			DeleteMonitoringConsole("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Create MonitoringConsole custom resource should succeeded", func() {
 			namespace := "ns-splunk-mc-3"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterprisev3.MonitoringConsole) (reconcile.Result, error) {
+			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			CreateMonitoringConsole("test", nsSpecs.Name, annotations, splcommon.PhaseReady)
+			CreateMonitoringConsole("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
 			DeleteMonitoringConsole("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-mc-4"
-			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterprisev3.MonitoringConsole) (reconcile.Result, error) {
+			ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -102,15 +97,15 @@ var _ = Describe("MonitoringConsole Controller", func() {
 					Namespace: namespace,
 				},
 			}
-			// econcile for the first time err is resource not found
+			// reconcile for the first time err is resource not found
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
-			// create resource first adn then reconcile for the first time
+			// create resource first and then reconcile for the first time
 			ssSpec := testutils.NewMonitoringConsole("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterprisev3.MonitoringConsolePausedAnnotation] = ""
+			annotations[enterpriseApi.MonitoringConsolePausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
@@ -130,13 +125,13 @@ var _ = Describe("MonitoringConsole Controller", func() {
 	})
 })
 
-func GetMonitoringConsole(name string, namespace string) (*enterprisev3.MonitoringConsole, error) {
+func GetMonitoringConsole(name string, namespace string) (*enterpriseApi.MonitoringConsole, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 	By("Expecting MonitoringConsole custom resource to be created successfully")
-	ss := &enterprisev3.MonitoringConsole{}
+	ss := &enterpriseApi.MonitoringConsole{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -144,25 +139,25 @@ func GetMonitoringConsole(name string, namespace string) (*enterprisev3.Monitori
 	return ss, err
 }
 
-func CreateMonitoringConsole(name string, namespace string, annotations map[string]string, status splcommon.Phase) *enterprisev3.MonitoringConsole {
+func CreateMonitoringConsole(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.MonitoringConsole {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterprisev3.MonitoringConsole{
+	ssSpec := &enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
 			Annotations: annotations,
 		},
-		Spec: enterprisev3.MonitoringConsoleSpec{},
+		Spec: enterpriseApi.MonitoringConsoleSpec{},
 	}
 	ssSpec = testutils.NewMonitoringConsole(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
 	By("Expecting MonitoringConsole custom resource to be created successfully")
-	ss := &enterprisev3.MonitoringConsole{}
+	ss := &enterpriseApi.MonitoringConsole{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -177,7 +172,7 @@ func CreateMonitoringConsole(name string, namespace string, annotations map[stri
 	return ss
 }
 
-func UpdateMonitoringConsole(instance *enterprisev3.MonitoringConsole, status splcommon.Phase) *enterprisev3.MonitoringConsole {
+func UpdateMonitoringConsole(instance *enterpriseApi.MonitoringConsole, status enterpriseApi.Phase) *enterpriseApi.MonitoringConsole {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
@@ -189,7 +184,7 @@ func UpdateMonitoringConsole(instance *enterprisev3.MonitoringConsole, status sp
 	time.Sleep(2 * time.Second)
 
 	By("Expecting MonitoringConsole custom resource to be created successfully")
-	ss := &enterprisev3.MonitoringConsole{}
+	ss := &enterpriseApi.MonitoringConsole{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -212,7 +207,7 @@ func DeleteMonitoringConsole(name string, namespace string) {
 
 	By("Expecting MonitoringConsole Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterprisev3.MonitoringConsole{}
+		ssys := &enterpriseApi.MonitoringConsole{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

@@ -456,6 +456,42 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 	calls map[string][]MockFuncCall,
 	reconcile func(*MockClient, interface{}) error) {
 
+	// Create the CR. Having a CR instance helps to not to retry for the GET failures,
+	// that way, predictable number of CRUD function calls to satisfy the test cases.
+	switch resource.(type) {
+	case *enterpriseApi.Standalone:
+		cr := resource.(*enterpriseApi.Standalone)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.LicenseMaster:
+		cr := resource.(*enterpriseApi.LicenseMaster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.LicenseManager:
+		cr := resource.(*enterpriseApi.LicenseManager)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.IndexerCluster:
+		cr := resource.(*enterpriseApi.IndexerCluster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.ClusterMaster:
+		cr := resource.(*enterpriseApi.ClusterMaster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.ClusterManager:
+		cr := resource.(*enterpriseApi.ClusterManager)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.MonitoringConsole:
+		cr := resource.(*enterpriseApi.MonitoringConsole)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.SearchHeadCluster:
+		cr := resource.(*enterpriseApi.SearchHeadCluster)
+		c.Create(context.Background(), cr)
+	}
+
 	c.ResetCalls()
 	err := reconcile(c, resource)
 	if err != nil {
@@ -526,7 +562,7 @@ func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
 
 // PodManagerUpdateTester is used to a single reconcile update using a StatefulSetPodManager
 func PodManagerUpdateTester(t *testing.T, method string, mgr splcommon.StatefulSetPodManager,
-	desiredReplicas int32, wantPhase splcommon.Phase, statefulSet *appsv1.StatefulSet,
+	desiredReplicas int32, wantPhase enterpriseApi.Phase, statefulSet *appsv1.StatefulSet,
 	wantCalls map[string][]MockFuncCall, wantError error, initObjects ...client.Object) {
 
 	// initialize client
@@ -593,28 +629,28 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		},
 	}
 
-	PodManagerUpdateTester(t, method, mgr, 1, splcommon.PhasePending, current, createCalls, nil)
+	PodManagerUpdateTester(t, method, mgr, 1, enterpriseApi.PhasePending, current, createCalls, nil)
 
 	// test update
 	revised := current.DeepCopy()
 	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
 	updateCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updateCalls, nil, current)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, updateCalls, nil, current)
 
 	// test scale up (zero ready so far; wait for ready)
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
 	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhasePending, revised, scaleUpCalls, nil, current)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
 
 	// test scale up (1 ready scaling to 2; wait for ready)
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 1/2 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
 
 	// test scale up (1 ready scaling to 2)
 	replicas = 1
@@ -622,7 +658,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	current.Status.ReadyReplicas = 1
 	updateCalls = map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
-	PodManagerUpdateTester(t, methodPlus, mgr, 2, splcommon.PhaseScalingUp, revised, updateCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
 	// test scale down (2 ready, 1 desired)
 	replicas = 1
@@ -630,7 +666,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	current.Status.ReadyReplicas = 2
 	delete(scaleUpCalls, "Update")
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
 
 	// test scale down (2 ready scaling down to 1)
 	pvcCalls := []MockFuncCall{
@@ -650,7 +686,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 2
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Update Replicas 2=>1")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseScalingDown, revised, scaleDownCalls, nil, current, pod, pvcList[0], pvcList[1])
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleDownCalls, nil, current, pod, pvcList[0], pvcList[1])
 
 	// test pod not found
 	replicas = 1
@@ -665,7 +701,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		Resource: "test",
 	}
 	newNotFoundError := k8serrors.NewNotFound(groupResource, "test")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseError, revised, getPodCalls, newNotFoundError, current)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseError, revised, getPodCalls, newNotFoundError, current)
 
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
@@ -681,7 +717,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	delCalls := []MockFuncCall{{MetaName: "*v1.Pod-test-splunk-stack1-0"}}
 	updatePodCalls := map[string][]MockFuncCall{"Get": podCalls, "Delete": delCalls}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Recycle pod")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, updatePodCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, updatePodCalls, nil, current, pod)
 
 	// test all pods ready
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
@@ -689,11 +725,11 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 
 	getPodCalls["List"] = []MockFuncCall{listmockCall[0]}
 
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseReady, revised, getPodCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseReady, revised, getPodCalls, nil, current, pod)
 
 	// test pod not ready
 	pod.Status.Phase = corev1.PodPending
 	delete(getPodCalls, "List")
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, splcommon.PhaseUpdating, revised, getPodCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, getPodCalls, nil, current, pod)
 }
