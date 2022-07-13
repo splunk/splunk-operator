@@ -228,6 +228,16 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
+		// Add a splunk operator telemetry app
+		scopedLog.Info("arjunnew  here", "cr.Status.TelAppInstalled", cr.Status.TelAppInstalled)
+		if !cr.Status.TelAppInstalled && !cr.Spec.Mock {
+			err := addTelApp(ctx, client, cr.Spec.Replicas, cr)
+			if err != nil {
+				return result, err
+			} else {
+				cr.Status.TelAppInstalled = true
+			}
+		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.

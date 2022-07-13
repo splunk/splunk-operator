@@ -813,6 +813,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
+				Mock:    true,
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},
@@ -983,6 +984,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 					Name: "mcName",
 				},
 				ClusterMasterRef: clusterObjRef,
+				Mock:             true,
 			},
 		},
 	}

@@ -116,6 +116,9 @@ type SearchHeadClusterStatus struct {
 
 	// App Framework Context
 	AppContext AppDeploymentContext `json:"appContext"`
+
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster

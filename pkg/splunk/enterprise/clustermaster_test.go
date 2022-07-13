@@ -1088,7 +1088,7 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
 }
 
-func TestClusterMasterWitReadyState(t *testing.T) {
+func TestClusterMasterWithReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	err := os.MkdirAll(newpath, os.ModePerm)
@@ -1155,6 +1155,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
+				Mock: true,
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},

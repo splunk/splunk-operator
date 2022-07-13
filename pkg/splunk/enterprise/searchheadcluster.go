@@ -211,6 +211,15 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 
+		// Add a splunk operator telemetry app
+		if !cr.Status.TelAppInstalled && !cr.Spec.Mock {
+			err := addTelApp(ctx, client, numberOfDeployerReplicas, cr)
+			if err != nil {
+				return result, err
+			} else {
+				cr.Status.TelAppInstalled = true
+			}
+		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {
 			result = *finalResult

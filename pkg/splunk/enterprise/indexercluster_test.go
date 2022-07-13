@@ -1201,7 +1201,7 @@ func TestGetIndexerClusterList(t *testing.T) {
 	}
 }
 
-func TestIndexerClusterWitReadyState(t *testing.T) {
+func TestIndexerClusterWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
 	type Entry1 struct {
@@ -1345,6 +1345,7 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
+				Mock: true,
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},

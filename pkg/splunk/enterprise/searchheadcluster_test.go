@@ -1452,7 +1452,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
-				//ClusterMasterRef: clusterObjRef,
+				Mock:    true,
 			},
 			Replicas: 3,
 		},

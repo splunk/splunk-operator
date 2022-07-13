@@ -193,6 +193,16 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
+		// Add a splunk operator telemetry app
+		if !cr.Status.TelAppInstalled && !cr.Spec.Mock {
+			err := addTelApp(ctx, client, numberOfClusterMasterReplicas, cr)
+			if err != nil {
+				return result, err
+			} else {
+				cr.Status.TelAppInstalled = true
+			}
+		}
+
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(ctx, client, cr)

@@ -1083,7 +1083,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	}
 }
 
-func TestStandaloneWitReadyState(t *testing.T) {
+func TestStandaloneWithReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	err := os.MkdirAll(newpath, os.ModePerm)
@@ -1150,6 +1150,7 @@ func TestStandaloneWitReadyState(t *testing.T) {
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
+				Mock: true,
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 			Replicas:           1,
