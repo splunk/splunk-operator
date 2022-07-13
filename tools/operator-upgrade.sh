@@ -15,21 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Upgrading the Splunk Operator to Version 2.0.0 is a new installation rather than an 
-# upgrade from the current operator. The older Splunk Operator must be cleaned up before 
+# Upgrading the Splunk Operator from version prior to 1.1.0 is a new installation.  
+# The older Splunk Operator must be cleaned up before 
 # installing the new version. This script helps you to do the cleanup. The script expects 
-# the current namespace where the operator is installed and the path to the 2.0.0 
-# manifest file. The script performs the following steps
+# the current namespace where the operator is installed and the path to the latest
+# manifest file. The script performs following steps
 # * Backup of all the operator resources within the namespace like
 #   - service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
 # * Deletes all the old Splunk Operator resources and deployment
-# * Installs the operator 2.0.0 in Splunk-operator namespace. 
+# * Installs latest Splunk Operator in Splunk-operator namespace. 
 # 
-# By default Splunk Operator 2.0.0 will be installed to watch cluster-wide
-# Steps for upgrade from 1.0.5 to 2.0.0
+# By default Splunk Operator will be installed to watch cluster-wide
+# Steps for upgrading prior to 1.1.0 to latest
 # Set KUBECONFIG environment variable and run operator-upgrade.sh script with the following mandatory arguments
 # current_namespace: current namespace where operator is installed
-# manifest_file: path where 2.0.0 Splunk Operator manifest file exist
+# manifest_file: path where latest Splunk Operator manifest file exist
 #
 # example 
 # >operator-upgrade.sh --current_namespace=splunk-operator manifest_file=splunk-operator-install.yaml
@@ -57,7 +57,7 @@ readonly PROGRAM_NAME=$(basename "$0")
 
 help() {
   echo ""
-  echo "USAGE: ${PROGRAM_NAME} --help [ --current_namespace=<namespacename> ] [ --manifest_file=<fulepath with filename of Splunk Operator 2.0.0 manfiests file>] "
+  echo "USAGE: ${PROGRAM_NAME} --help [ --current_namespace=<namespacename> ] [ --manifest_file=<path to latest Splunk Operator manfiests file or URL>] "
   echo ""
   echo "OPTIONS:"
   echo ""
@@ -65,7 +65,7 @@ help() {
        "                          script will delete existing serviceaccount, deployment, role and " \
        "                          rolebinding and install the operator in splunk-operator namespace"
   echo ""
-  echo "   --manifest_file Splunk Operator 2.0.0 manifest file path, this can be url link or full path of the file"
+  echo "   --manifest_file Splunk Operator manifest file path, this can be url link or full path of the file"
   echo ""
   echo ""
   echo "   --help  Show this help message."
@@ -200,7 +200,7 @@ delete_operator() {
 
 deploy_operator() {
     echo "--------------------------------------------------------------"
-    echo "installing Splunk Operator 2.0.0....." 
+    echo "installing Splunk Operator ....." 
     kubectl apply -f ${manifest_file}
     echo "--------------------------------------------------------------"
   echo "wait for operator pod to be ready..."
@@ -212,7 +212,7 @@ deploy_operator() {
     echo "Operator installation not ready..."
     exit 1
   fi
-  echo "deployment of new Splunk Operator 2.0.0 complete"
+  echo "deployment of new Splunk Operator complete"
 }
 
 parse_options "$@"
