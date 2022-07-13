@@ -59,7 +59,6 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
 		{MetaName: "*v3.ClusterManager-test-manager1"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v3.IndexerCluster-test-stack1"},
 		{MetaName: "*v3.IndexerCluster-test-stack1"},
 	}
@@ -73,7 +72,6 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
 		{MetaName: "*v3.ClusterManager-test-manager1"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v3.IndexerCluster-test-stack1"},
 		{MetaName: "*v3.IndexerCluster-test-stack1"},
 	}
