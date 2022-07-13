@@ -15,11 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Upgrading the Splunk Operator from version prior to 1.1.0 is a new installation.  
-# The older Splunk Operator must be cleaned up before 
-# installing the new version. This script helps you to do the cleanup. The script expects 
-# the current namespace where the operator is installed and the path to the latest
-# manifest file. The script performs following steps
+# Upgrading the Splunk Operator from 1.0.5 or older version to latest is a 
+# new installation rather than an upgrade from the current operator. 
+# The older Splunk Operator must be cleaned up before installing the new version. 
+# Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) 
+# helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path 
+# to the latest operator deployment manifest file. The script performs the following steps
 # * Backup of all the operator resources within the namespace like
 #   - service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
 # * Deletes all the old Splunk Operator resources and deployment
