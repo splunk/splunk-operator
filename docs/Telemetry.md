@@ -1,0 +1,7 @@
+# Splunk Operator Telemetry
+
+A telemetry solution to collect data from the Splunk Enterprise instances deployed using the Splunk Operator for Kubernetes(SOK) is implemented. The operator installs an app called `splunk_operator_for_k8s_tel` into [primary Splunk Instances](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata#Which_instance_runs_the_searches_and_sends_data_to_Splunk). The newly installed app's data will be exported as a part of [Splunk Enterprise telemetry solution](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata) to the telemetry prod servers. The exported telemetry data will help understand number and kind of Splunk deployments using SOK.
+
+<img src="pictures/Telemetry.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
+
+As per Splunk [Documentation](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata#Which_instance_runs_the_searches_and_sends_data_to_Splunk) for your deployment to send data to Splunk, the primary instance responsible for the searches must be connected to the internet with no firewall rules or proxy server configurations that prevent outbound traffic to https://quickdraw.splunk.com/telemetry/destination or https://*.api.splkmobile.com. If necessary, add these URLs for outbound traffic to your firewall allow list.
