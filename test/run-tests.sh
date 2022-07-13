@@ -2,7 +2,6 @@
 
 scriptdir=$(dirname "$0")
 topdir=${scriptdir}/..
-export PROJECT_ROOT=$(pwd)
 
 source ${scriptdir}/env.sh
 

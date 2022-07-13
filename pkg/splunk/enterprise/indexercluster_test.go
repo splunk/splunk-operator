@@ -86,10 +86,15 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		client.InNamespace("test"),
 		client.MatchingLabels(labels),
 	}
+	listOpts1 := []client.ListOption{
+		client.InNamespace("test"),
+	}
 	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[4], funcCalls[5], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0]}}
+		{ListOpts: listOpts},
+		{ListOpts: listOpts1},
+	}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[4], funcCalls[5], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[1]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0], listmockCall[1]}}
 
 	current := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{

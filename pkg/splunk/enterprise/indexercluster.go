@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -333,10 +334,70 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+	// Note:
+	// This is a temporary fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
+	// Splunk 9.0.0 bundle push uses encryption while transferring data. If any of the
+	// splunk instances were not able to support this option, then cluster master fails to transfer, this leads
+	// to splunkd restart at the peer level. For more information refer
+	// https://splunk.atlassian.net/browse/SPL-223386?jql=text%20~%20%22The%20downloaded%20bundle%20checksum%20doesn%27t%20match%20the%20activeBundleChecksum%22
+	// On Operator side we have set statefulset update strategy to OnDelete, so pods need to be
+	// deleted by operator manually.  Before deleting the pod, operator controller code tries to decommission
+	// the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller
+	// fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas
+	// are still in older version
+	// As a temporary fix for 9.0.0 , if the image version do not  match with pod image version we delete the
+	// splunk statefulset for indexer
+
+	var phase enterpriseApi.Phase
+	versionUpgrade := false
+	// get all the pods in the namespace
+	statefulsetPods := &corev1.PodList{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+	}
+
+	err = client.List(ctx, statefulsetPods, opts...)
 	if err != nil {
-		eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
-		return result, err
+		return result, nil
+	}
+
+	// filter the pods which are owned by statefulset
+	for _, v := range statefulsetPods.Items {
+		for _, owner := range v.GetOwnerReferences() {
+			if owner.UID == statefulSet.UID {
+				// get the pod image name
+				if v.Spec.Containers[0].Image != cr.Spec.Image {
+					// image do not match that means its image upgrade
+					versionUpgrade = true
+					break
+				}
+			}
+		}
+	}
+
+	// check if version upgrade is set
+	if !versionUpgrade {
+		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
+			return result, err
+		}
+	} else {
+		// Delete the statefulset and recreate new one
+		err = client.Delete(ctx, statefulSet)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mitmatch for indexer clustre and indexer container, delete statefulset failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
+			return result, err
+		}
+		time.Sleep(1 * time.Second)
+		// since we are creating new statefulset, setting resourceVersion to ""
+		statefulSet.ResourceVersion = ""
+		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("update statefulset failed %s", err.Error()))
+			return result, err
+		}
 	}
 	cr.Status.Phase = phase
 

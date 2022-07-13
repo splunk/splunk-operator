@@ -1425,19 +1425,18 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 
 	streamOptions := splutil.NewStreamOptionsObject(idxcShowClusterBundleStatusStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	if err == nil && strings.Contains(stdOut, "cluster_status=None") && !strings.Contains(stdOut, "last_bundle_validation_status=failure") {
+		scopedLog.Info("IndexerCluster Bundle push complete")
+		return true
+	}
+
 	if err != nil || stdErr != "" {
 		scopedLog.Error(err, "show cluster-bundle-status failed", "stdout", stdOut, "stderr", stdErr)
 		return false
 	}
 
-	if !strings.Contains(stdOut, "cluster_status=None") {
-		scopedLog.Info("IndexerCluster Bundle push is still in progress")
-		return false
-	}
-
-	// bundle push is complete
-	scopedLog.Info("IndexerCluster Bundle push complete")
-	return true
+	scopedLog.Info("IndexerCluster Bundle push is still in progress")
+	return false
 }
 
 // triggerBundlePush triggers the bundle push for indexer cluster
@@ -1451,7 +1450,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 	// In the next reconcile we will mark it as bundle push complete
 	if strings.Contains(stdErr, idxcBundleAlreadyPresentStr) {
 		scopedLog.Info("bundle already present on peers")
-	} else if err != nil || stdErr != "OK\n" {
+	} else if err != nil || !strings.Contains(stdErr, "OK\n") {
 		err = fmt.Errorf("error while applying cluster bundle. stdout: %s, stderr: %s, err: %v", stdOut, stdErr, err)
 		return err
 	}
