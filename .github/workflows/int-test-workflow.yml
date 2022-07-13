@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - master
-      - CSPL-1309-Cluster-Manager-CRD
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
