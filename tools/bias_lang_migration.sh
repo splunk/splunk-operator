@@ -104,6 +104,7 @@ is_pod_ready() {
 	timeout=$POD_TIMEOUT # Reset local copy for each restart
 
 	echo "Waiting for Pod=${pod} to become available - timeout=${POD_TIMEOUT} secs"
+	sleep 5
 
 	while [[ $(kubectl -n ${NS} get pod ${pod} -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]] && [[ "${timeout}" -gt 0 ]]; do
 		sleep 1
@@ -224,11 +225,11 @@ add_peer_to_manager() {
 	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep indexer | awk '{print $1}')
 	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
 
-	if [[ ${MULTISITE} ]]; then
-		echo "Multisite with site=${SITE}"
+	if [[ "${MULTISITE}" == "true"  ]]; then
+		echo "Multisite configured site_name=${SITE}"
 		command="/opt/splunk/bin/splunk edit cluster-config -mode slave -site ${SITE} -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
 	else
-		echo "Not Multisite without site=${SITE}"
+		echo "Single site configuration"
 		command="/opt/splunk/bin/splunk edit cluster-config -mode slave -master_uri https://splunk-${MANAGER}-cluster-manager-service:8089 -replication_port 9887 -secret \$(cat /mnt/splunk-secrets/idxc_secret) -auth admin:${secret}"
 	fi
 
@@ -244,7 +245,7 @@ add_peer_to_manager() {
 add_node_affinity() {
 	FILE=$1
 	cp ${FILE} ${TMP_FOLDER}/temp.node.info.${NS}.${TT}
-	if [[ ${MULTISITE} ]]; then
+	if [[ "${MULTISITE}" == "true"  ]]; then
 		cat ${TMP_FOLDER}/temp.node.info.${NS}.${TT} | jq '.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions +=
     	        [{
                         "key": "biasLangMasterNode",
@@ -656,7 +657,7 @@ get_current_deployment
 
 # Apply generated CRs on Migrate mode
 if [[ "$1" == "migrate" ]]; then
-	#	backup_configs
+	backup_configs
 	apply_new_CRs
 	to_delete_CRs
 fi

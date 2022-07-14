@@ -511,8 +511,24 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "ClusterManager":
+		cr := &enterpriseApi.ClusterManager{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
 	case "LicenseMaster":
 		cr := &enterpriseApi.LicenseMaster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "LicenseManager":
+		cr := &enterpriseApi.LicenseManager{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
