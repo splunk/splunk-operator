@@ -89,7 +89,7 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }
 
-// runCustomCommandOnSplunkPods creates the required directory for the pod/s
+// runCustomCommandOnSplunkPods  runs the specified custom command on the pod/s
 func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, command string, podExecClient splutil.PodExecClientImpl) error {
 	var err error
 	var stdOut string
@@ -131,7 +131,7 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 	// Handle non SHC scenarios(Standalone, CM, LM)
 	if cr.GetObjectKind().GroupVersionKind().Kind != "SearchHeadCluster" {
 		command := fmt.Sprintf(createTelAppNonShcString, telAppConfString)
-		scopedLog.Info("arjunnew Creating the telemetry app on Splunk pods")
+
 		// create the app on Splunk pod/s
 		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
 		if err != nil {
@@ -139,7 +139,6 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 			return err
 		}
 
-		scopedLog.Info("arjunnew reload app config on splunk instances")
 		// App reload
 		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, telAppReloadString, podExecClient)
 		if err != nil {
@@ -149,7 +148,7 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 	} else {
 		// SHC scenario
 		command := fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer)
-		scopedLog.Info("arjunnew Creating the telemetry app on Splunk Deployer")
+
 		// create the app on Splunk pod/s
 		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
 		if err != nil {
@@ -158,7 +157,6 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 		}
 
 		command = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
-		scopedLog.Info("arjunnew Deployer bundle push")
 
 		// Bundle push from deployer
 		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)

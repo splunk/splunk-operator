@@ -229,7 +229,6 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		result = *finalResult
 
 		// Add a splunk operator telemetry app
-		scopedLog.Info("arjunnew  here", "cr.Status.TelAppInstalled", cr.Status.TelAppInstalled)
 		if !cr.Status.TelAppInstalled && !cr.Spec.Mock {
 			err := addTelApp(ctx, client, cr.Spec.Replicas, cr)
 			if err != nil {
