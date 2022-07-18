@@ -37,6 +37,7 @@ var _ = Describe("s1appfw test", func() {
 	var uploadedApps []string
 	var appSourceName string
 	var appSourceVolumeName string
+	var filePresentOnOperator bool
 
 	ctx := context.TODO()
 
@@ -65,6 +66,13 @@ var _ = Describe("s1appfw test", func() {
 		}
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+		}
+
+		if filePresentOnOperator {
+			//Delete files from app-directory
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
+			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
 		}
 	})
 
@@ -1717,7 +1725,8 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload 15 apps of 100MB size each to S3
+			   * Create a file on operator to utilize over 1G of space
+			   * Upload file to s3 for standalone
 			   * Create app source for Standalone with parallelDownload=15
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############### VERIFICATION ################
@@ -1731,16 +1740,17 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download 15 apps around 100MB each (Total 1.4GB) to have total volume above Operator PV default size (1GB)
-			appVersion := "V1"
-			appList := testenv.PVTestApps
-			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
-			Expect(err).To(Succeed(), "Unable to download app files")
+			// Create a large file on Operator pod
+			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
+			err := testenv.CreateDummyFileOnOperator(ctx, deployment, opPod, testenv.AppDownloadVolume, "1G", "test_file.img")
+			Expect(err).To(Succeed(), "Unable to create file on operator")
+			filePresentOnOperator = true
 
 			// Upload apps to S3
-			testcaseEnvInst.Log.Info("Upload 15 apps around 100MB each (Total 1.4GB) to be above Operator PV default size (1GB)")
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirPVTestApps)
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1774,7 +1784,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
