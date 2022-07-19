@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package licensemanager
+package licensemaster
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Licensemaster test", func() {
+var _ = Describe("licensemaster test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -32,7 +32,7 @@ var _ = Describe("Licensemaster test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -53,7 +53,7 @@ var _ = Describe("Licensemaster test", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("licensemaster, integration, m4: Splunk Operator can configure license master with indexers and search head in M4 SVA", func() {
+		It("lmaster, integration, m4: Splunk Operator can configure license manager with indexers and search head in M4 SVA", func() {
 
 			// Download License File
 			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
@@ -67,7 +67,7 @@ var _ = Describe("Licensemaster test", func() {
 			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
+			// Ensure that the cluster-master goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase

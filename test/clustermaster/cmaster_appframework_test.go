@@ -128,7 +128,7 @@ var _ = Describe("cmaster M4 test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to S3
-			   * Create app source with local scope for M4 SVA (Cluster Master and Deployer)
+			   * Create app source with local scope for M4 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy M4 CRD with app framework and wait for pods to be ready
 			   ########## INITIAL VERIFICATION #############
 			   * Verify Apps Downloaded in App Deployment Info
@@ -136,7 +136,7 @@ var _ = Describe("cmaster M4 test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify apps are installed locally on Cluster Master and Deployer
+			   * Verify apps are installed locally on Cluster Manager and Deployer
 			   ############### UPGRADE APPS ################
 			   * Upgrade apps in app sources
 			   * Wait for pods to be ready
@@ -146,7 +146,7 @@ var _ = Describe("cmaster M4 test", func() {
 			   * Verify App Package is deleted from Operator Pod
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
-			   * Verify apps are copied, installed and upgraded on Cluster Master and Deployer
+			   * Verify apps are copied, installed and upgraded on Cluster Manager and Deployer
 			*/
 
 			//################## SETUP ####################
@@ -170,7 +170,7 @@ var _ = Describe("cmaster M4 test", func() {
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
 
-			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Master and Deployer
+			// Deploy Multisite Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			siteCount := 3
 			indexersPerSite := 1
 			shReplicas := 3
@@ -180,7 +180,7 @@ var _ = Describe("cmaster M4 test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
-			// Ensure that the Cluster Master goes to Ready phase
+			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the Indexers of all sites go to Ready phase
@@ -229,7 +229,7 @@ var _ = Describe("cmaster M4 test", func() {
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
 
-			// Ensure that the Cluster Master goes to Ready phase
+			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the Indexers of all sites go to Ready phase

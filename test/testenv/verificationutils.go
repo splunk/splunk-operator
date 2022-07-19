@@ -660,6 +660,23 @@ func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, test
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
 
+// VerifyClusterMasterPhase verify phase of cluster manager
+func VerifyClusterMasterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase) {
+	cm := &enterpriseApi.ClusterMaster{}
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for cluster-manager Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		// Test ClusterManager Phase to see if its ready
+		return cm.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+}
+
 // VerifySecretsOnPods Check whether the secret object info is mounted on given pods
 // Set match to true or false to indicate desired +ve or -ve match
 func VerifySecretsOnPods(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, verificationPods []string, data map[string][]byte, match bool) {

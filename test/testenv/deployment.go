@@ -609,10 +609,19 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, name)
-		if err != nil {
-			return err
+		// Enable LM to be tested
+		if strings.Contains(name, "master") {
+			// Deploy the license master
+			_, err := d.DeployLicenseMaster(ctx, name)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Deploy the license manager
+			_, err := d.DeployLicenseManager(ctx, name)
+			if err != nil {
+				return err
+			}
 		}
 
 		LicenseManager = name
@@ -925,6 +934,17 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(ctx context.Context, name
 	return deployed.(*enterpriseApi.LicenseManager), err
 }
 
+// DeployLicenseMasterWithGivenSpec deploys the license manager with given SPEC
+func (d *Deployment) DeployLicenseMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.LicenseMasterSpec) (*enterpriseApi.LicenseMaster, error) {
+	d.testenv.Log.Info("Deploying license-master", "name", name)
+	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(ctx, name, lm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApi.LicenseMaster), err
+}
+
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
 func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApi.ClusterManager, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
@@ -958,6 +978,82 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
 	cm, err := d.DeployClusterManagerWithGivenSpec(ctx, name, cmSpec)
+	if err != nil {
+		return cm, idxc, sh, err
+	}
+
+	// Deploy the indexer cluster
+	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	if err != nil {
+		return cm, idxc, sh, err
+	}
+
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterManagerRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+		},
+		Replicas:           3,
+		AppFrameworkConfig: appFrameworkSpecShc,
+	}
+
+	pdata, _ := json.Marshal(shSpec)
+	d.testenv.Log.Info("Search head Spec", "cr", pdata)
+
+	if shc {
+		sh, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+
+	return cm, idxc, sh, nil
+}
+
+// DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
+func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApi.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseManager(ctx, name)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+
+	// Deploy the cluster manager
+	cmSpec := enterpriseApi.ClusterMasterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+		},
+		AppFrameworkConfig: appFrameworkSpecIdxc,
+	}
+	cm, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
 		return cm, idxc, sh, err
 	}

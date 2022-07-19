@@ -909,6 +909,24 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 	return &new
 }
 
+// newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
+func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
+	new := enterpriseApi.LicenseMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: spec,
+	}
+
+	return &new
+}
+
 // GetOperatorDirsOrFilesInPath returns subdirectory under given path on the given POD
 func GetOperatorDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
 	var cmd string

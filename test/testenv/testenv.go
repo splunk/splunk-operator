@@ -70,7 +70,10 @@ const (
 	StandalonePod = "splunk-%s-standalone-%d"
 
 	// LicenseManagerPod Template String for standalone pod
-	LicenseManagerPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
+	LicenseManagerPod = "splunk-%s-license-manager-%d"
+
+	// LicenseMasterPod Template String for standalone pod
+	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"
@@ -113,6 +116,8 @@ const (
 	appDownlodPVCName = "tmp-app-download"
 	// ClusterManagerServiceName Cluster Manager Service Template String
 	ClusterManagerServiceName = "splunk-%s-cluster-manager-service"
+	// ClusterMasterServiceName Cluster Master Service Template String
+	ClusterMasterServiceName = "splunk-%s-cluster-master-service"
 
 	// DeployerServiceName Cluster Manager Service Template String
 	DeployerServiceName = "splunk-%s-shc-deployer-service"
