@@ -2,7 +2,10 @@ package testenv
 
 import (
 	"errors"
+	"io/ioutil"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -224,5 +227,73 @@ func UploadFilesToS3(testS3Bucket string, s3TestDir string, applist []string, do
 		logf.Log.Info("File upload to test S3", "File name", fileName)
 		uploadedFiles = append(uploadedFiles, fileName)
 	}
+	return uploadedFiles, nil
+}
+
+// DisableAppsToS3 untar apps, modify their conf file to disable them, re-tar and upload the disabled version to S3
+func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string) ([]string, error) {
+
+	// Create a folder named 'untarred_apps' to store untarred apps folders
+	untarredAppsMainFolder := downloadDir + "/untarred_apps"
+	cmd := exec.Command("mkdir", untarredAppsMainFolder)
+	cmd.Run()
+
+	// Create a folder named 'disabled_apps' to stored disabled apps tgz files
+	disabledAppsFolder := downloadDir + "/disabled_apps"
+	cmd = exec.Command("mkdir", disabledAppsFolder)
+	cmd.Run()
+
+	for _, key := range appFileList {
+		// Create a specific folder for each app in 'untarred_apps'
+		tarfile := downloadDir + "/" + key
+		lastInd := strings.LastIndex(key, ".")
+		untarredCurrentAppFolder := untarredAppsMainFolder + "/" + key[:lastInd]
+		cmd := exec.Command("mkdir", untarredCurrentAppFolder)
+		cmd.Run()
+
+		// Untar the app
+		cmd = exec.Command("tar", "-xf", tarfile, "-C", untarredCurrentAppFolder)
+		cmd.Run()
+
+		// Disable the app
+		// - Get the name of the untarred app folder (as it could be different from the tgz file)
+		wildcardpath := untarredCurrentAppFolder + "/*/./"
+		bytepath, _ := exec.Command("/bin/sh", "-c", "cd "+wildcardpath+"; pwd").Output()
+		untarredAppRootFolder := string(bytepath)
+		untarredAppRootFolder = untarredAppRootFolder[:len(untarredAppRootFolder)-1] //removing \n at the end of folder path
+
+		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
+		appConfFile := untarredAppRootFolder + "/default/app.conf"
+		input, err := ioutil.ReadFile(appConfFile)
+		if err != nil {
+			log.Fatalln(err)
+			return nil, err
+		}
+		lines := strings.Split(string(input), "\n")
+		for i, line := range lines {
+			if strings.Contains(line, "[install]") {
+				lines[i] = "[install]\nstate = disabled"
+			}
+			if strings.Contains(line, "state = enabled") {
+				lines = append(lines[:i], lines[i+1:]...)
+			}
+		}
+		output := strings.Join(lines, "\n")
+		err = ioutil.WriteFile(appConfFile, []byte(output), 0644)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		// Tar disabled app folder
+		lastInd = strings.LastIndex(untarredAppRootFolder, "/")
+		appFolderName := untarredAppRootFolder[lastInd+1:]
+		tarDestination := disabledAppsFolder + "/" + key
+		cmd = exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName)
+		cmd.Run()
+	}
+
+	// Upload disabled apps to S3
+	uploadedFiles, _ := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
+
 	return uploadedFiles, nil
 }
