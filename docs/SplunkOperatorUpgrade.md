@@ -20,7 +20,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 
 # Splunk Operator Upgrade
 
-## Steps for upgrade from 1.1.0 to 2.0.0
+## Steps to upgrade from version greater than 1.0.5 to 2.0.0
 
 1. Download the latest Splunk Operator installation yaml file.
 ​
