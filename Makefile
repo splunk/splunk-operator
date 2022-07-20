@@ -318,7 +318,7 @@ generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s 
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 
-generate-artifacts: generate-artifacts-cluster generate-artifacts-namespace
+generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster
 	echo "artifacts generation complete"
 
 #############################
