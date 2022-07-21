@@ -148,10 +148,10 @@ description = When telemetry is enabled, this app is used to help Splunk underst
 version = 1.0.0
 `
 	// Command to create telemetry app on non SHC scenarios
-	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/splunk_operator_for_k8s_tel/default/; echo -e \"%s\" > /opt/splunk/etc/apps/splunk_operator_for_k8s_tel/default/app.conf"
+	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/app.conf"
 
 	// Command to create telemetry app on SHC scenarios
-	createTelAppShcString = "mkdir -p %s/splunk_operator_for_k8s_tel/default/; echo -e \"%s\" > %s/splunk_operator_for_k8s_tel/default/app.conf"
+	createTelAppShcString = "mkdir -p %s/app_tel_for_sok8s_%s/default/; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/default/app.conf"
 
 	// Command to reload app configuration
 	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"

@@ -116,6 +116,21 @@ func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, 
 	return err
 }
 
+func getTelAppNameExtension(crKind string) (error, string) {
+	switch crKind {
+	case "Standalone":
+		return nil, "stdaln"
+	case "LicenseMaster":
+		return nil, "lm"
+	case "SearchHeadCluster":
+		return nil, "shc"
+	case "ClusterMaster":
+		return nil, "cm"
+	default:
+		return errors.New("Invalid CR kind for telemetry app"), ""
+	}
+}
+
 // addTelApp adds a telemetry app
 func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas int32, cr splcommon.MetaObject) error {
 	var err error
@@ -127,10 +142,17 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 
 	// Create pod exec client
 	podExecClient := splutil.GetPodExecClient(client, cr, "")
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	// Get Tel App Name Extension
+	err, appNameExt := getTelAppNameExtension(crKind)
+	if err != nil {
+		return err
+	}
 
 	// Handle non SHC scenarios(Standalone, CM, LM)
-	if cr.GetObjectKind().GroupVersionKind().Kind != "SearchHeadCluster" {
-		command := fmt.Sprintf(createTelAppNonShcString, telAppConfString)
+	if crKind != "SearchHeadCluster" {
+		command := fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
 
 		// create the app on Splunk pod/s
 		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
@@ -147,7 +169,7 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 		}
 	} else {
 		// SHC scenario
-		command := fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer)
+		command := fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
 
 		// create the app on Splunk pod/s
 		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)

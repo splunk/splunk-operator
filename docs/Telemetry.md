@@ -1,6 +1,6 @@
 # Splunk Operator Telemetry
 
-A telemetry solution to collect data from the Splunk Enterprise instances deployed using the Splunk Operator for Kubernetes(SOK) is implemented. The operator installs an app called `splunk_operator_for_k8s_tel` into [primary Splunk Instances](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata#Which_instance_runs_the_searches_and_sends_data_to_Splunk). The newly installed app's data will be exported as a part of [Splunk Enterprise telemetry solution](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata) to the telemetry prod servers. The exported telemetry data will help understand number and kind of Splunk deployments using SOK.
+A telemetry solution to collect data from the Splunk Enterprise instances deployed using the Splunk Operator for Kubernetes(SOK) is implemented. The operator installs an app called `app_tel_for_sok8s_<kind_of_deployment>` into [primary Splunk Instances](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata#Which_instance_runs_the_searches_and_sends_data_to_Splunk). The newly installed app's data will be exported as a part of [Splunk Enterprise telemetry solution](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Shareperformancedata) to the telemetry prod servers. The exported telemetry data will help understand number and kind of Splunk deployments using SOK.
 
 <img src="pictures/Telemetry.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
 

@@ -157,7 +157,8 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		// Add a splunk operator telemetry app
-		if !cr.Status.TelAppInstalled && !cr.Spec.Mock {
+		if (cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled) && !cr.Spec.Mock {
+
 			err := addTelApp(ctx, client, numberOfLicenseMasterReplicas, cr)
 			if err != nil {
 				return result, err
