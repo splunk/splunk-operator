@@ -1021,7 +1021,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 	return cm, idxc, sh, nil
 }
 
-// DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
+// DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
 func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
 	cm := &enterpriseApi.ClusterMaster{}
