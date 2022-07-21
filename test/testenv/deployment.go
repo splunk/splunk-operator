@@ -1070,7 +1070,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			ClusterManagerRef: corev1.ObjectReference{
+			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1333,6 +1333,76 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 		},
 	}
 	_, err := d.DeployClusterManagerWithGivenSpec(ctx, name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy the indexer cluster
+	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	if err != nil {
+		return err
+	}
+
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterManagerRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+		Replicas: 3,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// DeploySingleSiteClusterMasterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
+func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx context.Context, name string, indexerReplicas int, shc bool, monitoringConsoleName string) error {
+
+	licenseManager := ""
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		licenseManager = name
+	}
+
+	// Deploy the cluster manager
+	cmSpec := enterpriseApi.ClusterMasterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+	}
+	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
 		return err
 	}

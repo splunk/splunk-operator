@@ -50,7 +50,7 @@ var _ = Describe("m4appfw test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -168,7 +168,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
@@ -374,7 +374,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
@@ -551,7 +551,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			indexersPerSite := 1
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
@@ -746,7 +746,7 @@ var _ = Describe("m4appfw test", func() {
 			indexersPerSite := 1
 			shReplicas := 3
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
@@ -915,7 +915,7 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster")
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multi Site Indexer Cluster with App framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -1137,7 +1137,7 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -1368,7 +1368,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -1579,7 +1579,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify App installation is in progress on Cluster Manager
@@ -1713,7 +1713,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, mcName, "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify App installation is in progress
@@ -1812,7 +1812,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify App installation is in progress on Cluster Manager
@@ -1904,7 +1904,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify App Download is in progress on Cluster Manager
@@ -1995,7 +1995,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -2307,7 +2307,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify App Download is in progress on Cluster Manager
@@ -2426,7 +2426,7 @@ var _ = Describe("m4appfw test", func() {
 			shReplicas := 3
 			indexersPerSite := 1
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -2503,7 +2503,7 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			shReplicas := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify App Download is completed on Cluster Manager
@@ -2586,7 +2586,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
 			siteCount := 3
 			indexersPerSite := 1
-			cm, _, shc, err := deployment.DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
+			cm, _, shc, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
