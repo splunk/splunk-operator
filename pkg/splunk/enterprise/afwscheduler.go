@@ -116,18 +116,18 @@ func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, 
 	return err
 }
 
-func getTelAppNameExtension(crKind string) (error, string) {
+func getTelAppNameExtension(crKind string) (string, error) {
 	switch crKind {
 	case "Standalone":
-		return nil, "stdaln"
+		return "stdaln", nil
 	case "LicenseMaster":
-		return nil, "lm"
+		return "lm", nil
 	case "SearchHeadCluster":
-		return nil, "shc"
+		return "shc", nil
 	case "ClusterMaster":
-		return nil, "cm"
+		return "cm", nil
 	default:
-		return errors.New("Invalid CR kind for telemetry app"), ""
+		return "", errors.New("Invalid CR kind for telemetry app")
 	}
 }
 
@@ -145,7 +145,7 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	// Get Tel App Name Extension
-	err, appNameExt := getTelAppNameExtension(crKind)
+	appNameExt, err := getTelAppNameExtension(crKind)
 	if err != nil {
 		return err
 	}
