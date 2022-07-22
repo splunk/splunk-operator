@@ -209,7 +209,7 @@ update_defaults_to_manager() {
 
 	for pod in ${PODS}; do
 		echo "Executing command ${command} on pod=${pod}"
-		kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
+		kubectl -n ${NS} exec -i ${pod} -- /bin/bash -c "${command}"
 		if [[ "$?" -ne 0 ]]; then
 			echo "Failed to execute command ${command} on pod=${pod}"
 		fi
@@ -235,7 +235,7 @@ add_peer_to_manager() {
 
 	for pod in ${PODS}; do
 		echo "Adding pod ${pod} to ${MANAGER}"
-		kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
+		kubectl -n ${NS} exec -i ${pod} -- /bin/bash -c "${command}"
 		if [[ "$?" -ne 0 ]]; then
 			echo "Failed to add peer to new Manager"
 		fi
@@ -393,7 +393,7 @@ setMaintenanceMode() {
 
 	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
 	command="/opt/splunk/bin/splunk ${enable} maintenance-mode --answer-yes -auth admin:${secret}"
-	kubectl -n ${NS} exec -it ${pod} -- /bin/bash -c "${command}"
+	kubectl -n ${NS} exec -i ${pod} -- /bin/bash -c "${command}"
 
 	if [[ "$?" -ne 0 ]] && [[ "${enable}" != "disable" ]]; then
 		err "Failed to set maintenance mode for ${pod}"
@@ -605,7 +605,7 @@ if [[ -z "$1" ]]; then
 	err "Please choose a migration option."
 fi
 
-if [[ "$1" != "migrate" ]] && [[ "$1" != "generate" ]]; then
+if [[ "$1" != "migrate" ]] && [[ "$1" != "generate" ]] && [[ "$1" != "test" ]]; then
 	usage
 	err "$1 is an invalid migration option."
 fi
@@ -618,14 +618,18 @@ else
 	kubectl -n ${NS} config set-context --current --namespace=${NS} >/dev/null 2>&1
 fi
 
-# User warning for optional backup of PVs
-echo -e "\n\n************************** Important Notice **************************\n"
-echo -e "1 - This script should be used during Maintenance hours because it requires pod restarts."
-echo -e "2 - Interrupting the execution of this script can leave your deployment at a bad state."
-echo -e "3 - Large deployments should review timeout variables for POD restarts and Rsync."
-echo -e "\n Do you wish to proceed with the migration for mode=$1 NS=${NS}?"
-echo -e "\n Press Enter to continue or Crtl+C to cancel"
-read
+if [[ "$1" != "test" ]]; then
+  # User warning for optional backup of PVs
+  echo -e "\n\n************************** Important Notice **************************\n"
+  echo -e "1 - This script should be used during Maintenance hours because it requires pod restarts."
+  echo -e "2 - Interrupting the execution of this script can leave your deployment at a bad state."
+  echo -e "3 - Large deployments should review timeout variables for POD restarts and Rsync."
+  echo -e "\n Do you wish to proceed with the migration for mode=$1 NS=${NS}?"
+  echo -e "\n Press Enter to continue or Crtl+C to cancel"
+  read
+else
+  echo "Executing script in test mode - NS=${NS}"
+fi
 
 #############################################
 # Configurable Global Variables
@@ -660,6 +664,11 @@ if [[ "$1" == "migrate" ]]; then
 	backup_configs
 	apply_new_CRs
 	to_delete_CRs
+fi
+
+# Automated tests with Kuttl
+if [[ "$1" == "test" ]]; then
+	apply_new_CRs
 fi
 
 # clean up labels after execution

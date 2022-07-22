@@ -1,0 +1,29 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: LicenseManager
+metadata:
+  name: lc-test
+status:
+  phase: Ready
+
+---
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  name: st-test
+status:
+  phase: Ready
+spec:
+  licenseManagerRef:
+    name: lc-test
+
+---
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  name: mc-test
+status:
+  phase: Ready
+spec:
+  licenseManagerRef:
+    name: lc-test

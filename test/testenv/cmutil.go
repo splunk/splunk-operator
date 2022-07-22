@@ -134,7 +134,7 @@ func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, e
 	}
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	if strings.Contains(endpoint, "master") {
+	if strings.Contains(deployment.name, "master") {
 		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
 	}
 	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)

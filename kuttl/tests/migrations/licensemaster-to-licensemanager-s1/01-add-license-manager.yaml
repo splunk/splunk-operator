@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v3
+kind: LicenseMaster
+metadata:
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+  name: lc-test
+spec:
+  volumes:
+    - name: licenses
+      configMap:
+        name: license-confmap
+  licenseUrl: /mnt/licenses/enterprise.lic

@@ -1,0 +1,20 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: test-idxc-site1
+status:
+  phase: Ready
+spec:
+  clusterManagerRef:
+    name: test
+---
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: test-idxc-site2
+status:
+  phase: Ready
+spec:
+  clusterManagerRef:
+    name: test
