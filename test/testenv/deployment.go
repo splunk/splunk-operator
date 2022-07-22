@@ -658,6 +658,68 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 	return nil
 }
 
+// DeployMultisiteClusterMasterWithSearchHead deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
+
+	var LicenseMaster string
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Enable LM to be tested
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return err
+		}
+		LicenseMaster = name
+	}
+
+	// Deploy the cluster-manager
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployClusterMaster(ctx, name, LicenseMaster, defaults, mcRef)
+	if err != nil {
+		return err
+	}
+
+	ClusterMasterReady(ctx, d, d.testenv)
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: %s
+`, name, "cluster-master", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseMaster, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+		//IndexersReady(ctx, d, d.testenv, site)
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: site0
+`, name, "cluster-master")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseMaster, siteDefaults, mcRef)
+	if err != nil {
+		return err
+	}
+	//SearchHeadClusterReady(ctx, d, d.testenv)
+
+	return nil
+}
+
 // DeployMultisiteClusterWithSearchHead deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
 func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
 
@@ -1374,7 +1436,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 // DeploySingleSiteClusterMasterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
 func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx context.Context, name string, indexerReplicas int, shc bool, monitoringConsoleName string) error {
 
-	licenseManager := ""
+	licenseMaster := ""
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -1384,7 +1446,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 			return err
 		}
 
-		licenseManager = name
+		licenseMaster = name
 	}
 
 	// Deploy the cluster manager
@@ -1394,8 +1456,8 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			LicenseManagerRef: corev1.ObjectReference{
-				Name: licenseManager,
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
@@ -1408,7 +1470,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
 	if err != nil {
 		return err
 	}
@@ -1419,11 +1481,11 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			ClusterManagerRef: corev1.ObjectReference{
+			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
-			LicenseManagerRef: corev1.ObjectReference{
-				Name: licenseManager,
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,

@@ -64,11 +64,11 @@ var _ = Describe("Licensemaster test", func() {
 
 			siteCount := 3
 			mcRef := deployment.GetName()
-			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
+			err = deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)

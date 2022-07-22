@@ -436,7 +436,7 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
 			VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
 			if clusterManagerBundleHash == "" {
-				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment)
+				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment, appSource.CrKind)
 			}
 		}
 		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {

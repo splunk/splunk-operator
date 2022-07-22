@@ -307,6 +307,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
 func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
 
+	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
 
 	new := enterpriseApi.IndexerCluster{
@@ -333,6 +334,9 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerName,
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: licenseMasterName,
 				},
 				Defaults: ansibleConfig,
 			},

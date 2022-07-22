@@ -134,7 +134,7 @@ func GetIndexersOrSearchHeadsOnCM(ctx context.Context, deployment *Deployment, e
 	}
 	//code to execute
 	podName := fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-manager")
-	if strings.Contains(endpoint, "master") {
+	if strings.Contains(deployment.name, "master") {
 		podName = fmt.Sprintf("splunk-%s-%s-0", deployment.GetName(), "cluster-master")
 	}
 	stdin := fmt.Sprintf("curl -ks -u admin:$(cat /mnt/splunk-secrets/password) %s", url)
@@ -289,8 +289,14 @@ func CMBundlePushstatus(ctx context.Context, deployment *Deployment, previousBun
 }
 
 // GetClusterManagerBundleHash Get the Active bundle hash on ClusterManager
-func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment) string {
-	podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+func GetClusterManagerBundleHash(ctx context.Context, deployment *Deployment, crKind string) string {
+	var podName string
+	if crKind == "ClusterMaster" {
+		podName = fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+	} else if crKind == "ClusterManager" {
+		podName = fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+	}
+
 	restResponse := ClusterManagerInfoResponse(ctx, deployment, podName)
 
 	bundleHash := restResponse.Entry[0].Content.ActiveBundle.Checksum

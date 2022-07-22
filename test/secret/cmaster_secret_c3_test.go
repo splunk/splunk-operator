@@ -76,7 +76,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
@@ -119,7 +119,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenv.VerifyClusterMasterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)

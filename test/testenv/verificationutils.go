@@ -272,7 +272,12 @@ func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, 
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 	}
 	gomega.Eventually(func() map[string][]string {
-		podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+		var podName string
+		if strings.Contains(deployment.name, "master") {
+			podName = fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+		} else {
+			podName = fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+		}
 		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/sites?output_mode=json"
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -349,27 +354,27 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 
 // LicenseMasterReady verify LM is in ready status and does not flip flop
 func LicenseMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	LicenseManager := &enterpriseApi.LicenseMaster{}
+	LicenseMaster := &enterpriseApi.LicenseMaster{}
 
 	testenvInstance.Log.Info("Verifying License Master becomes READY")
 	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
 		testenvInstance.Log.Info("Waiting for License Master instance status to be ready",
-			"instance", LicenseManager.ObjectMeta.Name, "Phase", LicenseManager.Status.Phase)
+			"instance", LicenseMaster.ObjectMeta.Name, "Phase", LicenseMaster.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()
 
-		return LicenseManager.Status.Phase
+		return LicenseMaster.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
-		return LicenseManager.Status.Phase
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
+		return LicenseMaster.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
