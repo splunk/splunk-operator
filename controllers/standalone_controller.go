@@ -24,9 +24,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pkg/errors"
-	enterprisev3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -74,16 +75,14 @@ type StandaloneReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
 	reconcileCounters.With(getPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("standalone", req.NamespacedName)
-	reqLogger.Info("start")
 
 	// Fetch the Standalone
-	instance := &enterprisev3.Standalone{}
+	instance := &enterpriseApi.Standalone{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -100,19 +99,30 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterprisev3.StandalonePausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.StandalonePausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
-	return enterprise.ApplyStandalone(ctx, r.Client, instance)
-	//return ctrl.Result{}, nil
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	result, err := ApplyStandalone(ctx, r.Client, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
+
+	return result, err
+}
+
+// ApplyStandalone adding to handle unit test case
+var ApplyStandalone = func(ctx context.Context, client client.Client, instance *enterpriseApi.Standalone) (reconcile.Result, error) {
+	return enterprise.ApplyStandalone(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev3.Standalone{}).
+		For(&enterpriseApi.Standalone{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -126,25 +136,25 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.Standalone{},
+				OwnerType:    &enterpriseApi.Standalone{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.Standalone{},
+				OwnerType:    &enterpriseApi.Standalone{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.Standalone{},
+				OwnerType:    &enterpriseApi.Standalone{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterprisev3.Standalone{},
+				OwnerType:    &enterpriseApi.Standalone{},
 			}).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: enterprisev3.TotalWorker,
+			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
 }

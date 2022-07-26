@@ -25,10 +25,17 @@ spec:
       labels:
         control-plane: controller-manager
         name: splunk-operator
+      annotations:
+        kubectl.kubernetes.io/default-logs-container: manager
+        kubectl.kubernetes.io/default-container: manager
     spec:
       securityContext:
         runAsUser: 1001
-        #runAsNonRoot: true
+        fsGroup: 1001
+        runAsNonRoot: true
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       containers:
       - command:
         - /manager
@@ -43,21 +50,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: WATCH_NAMESPACE
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: WATCH_NAMESPACE
-        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        - name: OPERATOR_NAME
-          valueFrom:
-            configMapKeyRef:
-              name: splunk-operator-config
-              key: OPERATOR_NAME
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
@@ -72,22 +64,22 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        #resources:
-        #  limits:
-        #    cpu: 1000m
-        #    memory: 1000Mi
-        #  requests:
-        #    cpu: 1000m
-        #    memory: 1000Mi
-        #volumeMounts:
-        #  - mountPath: /opt/splunk/appframework/
-        #    name: app-staging
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2000Mi
+          requests:
+            cpu: 1000m
+            memory: 2000Mi
+        volumeMounts:
+          - mountPath: /opt/splunk/appframework/
+            name: app-staging
       serviceAccountName: controller-manager
       volumes:
       - configMap:
           name: config
         name: splunk-operator-config
-      #  - name:  app-staging
-      #    persistentVolumeClaim:
-      #      claimName: tmp-app-download
+      - name:  app-staging
+        persistentVolumeClaim:
+          claimName: app-download
       terminationGracePeriodSeconds: 10

@@ -17,8 +17,6 @@ package v3
 
 import (
 	corev1 "k8s.io/api/core/v1"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 const (
@@ -34,7 +32,6 @@ const (
 // +kubebuilder:validation:Optional
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 // Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
@@ -76,9 +73,61 @@ const (
 	DeployStatusError
 )
 
+// Spec defines a subset of the desired state of parameters that are common across all CRD types
+type Spec struct {
+	// Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variables)
+	Image string `json:"image"`
+
+	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
+	// +kubebuilder:validation:Enum=Always;IfNotPresent
+	ImagePullPolicy string `json:"imagePullPolicy"`
+
+	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
+	SchedulerName string `json:"schedulerName"`
+
+	// Kubernetes Affinity rules that control how pods are assigned to particular nodes.
+	Affinity corev1.Affinity `json:"affinity"`
+
+	// Pod's tolerations for Kubernetes node's taint
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// resource requirements for the pod containers
+	Resources corev1.ResourceRequirements `json:"resources"`
+
+	// ServiceTemplate is a template used to create Kubernetes services
+	ServiceTemplate corev1.Service `json:"serviceTemplate"`
+}
+
+// Phase is used to represent the current phase of a custom resource
+// +kubebuilder:validation:Enum=Pending;Ready;Updating;ScalingUp;ScalingDown;Terminating;Error
+type Phase string
+
+const (
+	// PhasePending means a custom resource has just been created and is not yet ready
+	PhasePending Phase = "Pending"
+
+	// PhaseReady means a custom resource is ready and up to date
+	PhaseReady Phase = "Ready"
+
+	// PhaseUpdating means a custom resource is in the process of updating to a new desired state (spec)
+	PhaseUpdating Phase = "Updating"
+
+	// PhaseScalingUp means a customer resource is in the process of scaling up
+	PhaseScalingUp Phase = "ScalingUp"
+
+	// PhaseScalingDown means a customer resource is in the process of scaling down
+	PhaseScalingDown Phase = "ScalingDown"
+
+	// PhaseTerminating means a customer resource is in the process of being removed
+	PhaseTerminating Phase = "Terminating"
+
+	// PhaseError means an error occured with custom resource management
+	PhaseError Phase = "Error"
+)
+
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
-	splcommon.Spec `json:",inline"`
+	Spec `json:",inline"`
 
 	// Storage configuration for /opt/splunk/etc volume
 	EtcVolumeStorageConfig StorageClassSpec `json:"etcVolumeStorageConfig"`
@@ -127,11 +176,17 @@ type CommonSplunkSpec struct {
 
 	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
 	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
 	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds"`
 
 	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
 	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
 	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
+
+	// Sets imagePullSecrets if image is being pulled from a private registry.
+	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
@@ -143,6 +198,8 @@ type StorageClassSpec struct {
 	StorageCapacity string `json:"storageCapacity"`
 
 	// If true, ephemeral (emptyDir) storage will be used
+	// default false
+	// +optional
 	EphemeralStorage bool `json:"ephemeralStorage"`
 }
 
@@ -205,6 +262,9 @@ type VolumeSpec struct {
 
 	// App Package Remote Store provider. Supported values: aws, minio
 	Provider string `json:"provider"`
+
+	// Region of the remote storage volume where apps reside
+	Region string `json:"region"`
 }
 
 // VolumeAndTypeSpec used to add any custom varaibles for volume implementation
@@ -250,9 +310,11 @@ type IndexAndCacheManagerCommonSpec struct {
 // AppSourceDefaultSpec defines config common for defaults and App Sources
 type AppSourceDefaultSpec struct {
 	// Remote Storage Volume name
+	// +optional
 	VolName string `json:"volumeName,omitempty"`
 
 	// Scope of the App deployment: cluster, clusterWithPreConfig, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
+	// +optional
 	Scope string `json:"scope,omitempty"`
 }
 
@@ -276,16 +338,32 @@ type AppFrameworkSpec struct {
 	// The default value for this config is 1 hour(3600 sec),
 	// minimum value is 1 minute(60sec) and maximum value is 1 day(86400 sec).
 	// We assign the value based on following conditions -
-	//    1. If no value or 0 is specified then it will be defaulted to 1 hour.
+	//    1. If no value or 0 is specified then it means periodic polling is disabled.
 	//    2. If anything less than min is specified then we set it to 1 min.
 	//    3. If anything more than the max value is specified then we set it to 1 day.
 	AppsRepoPollInterval int64 `json:"appsRepoPollIntervalSeconds,omitempty"`
+
+	// App installation period within a reconcile. Apps will be installed during this period before the next reconcile is attempted.
+	// Note: Do not change this setting unless instructed to do so by Splunk Support
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum:=30
+	// +kubebuilder:default:=90
+	SchedulerYieldInterval uint64 `json:"appInstallPeriodSeconds,omitempty"`
+
+	// Maximum number of retries to install Apps
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:default:=2
+	PhaseMaxRetries uint32 `json:"installMaxRetries,omitempty"`
 
 	// List of remote storage volumes
 	VolList []VolumeSpec `json:"volumes,omitempty"`
 
 	// List of App sources on remote storage
 	AppSources []AppSourceSpec `json:"appSources,omitempty"`
+
+	// Maximum number of apps that can be downloaded at same time
+	MaxConcurrentAppDownloads uint64 `json:"maxConcurrentAppDownloads,omitempty"`
 }
 
 // AppDeploymentInfo represents a single App deployment information
@@ -293,15 +371,58 @@ type AppDeploymentInfo struct {
 	AppName          string              `json:"appName"`
 	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
 	ObjectHash       string              `json:"objectHash"`
+	IsUpdate         bool                `json:"isUpdate"`
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+
+	// App phase info to track download, copy and install
+	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
+
+	// Used to track the copy and install status for each replica member.
+	// Each Pod's phase info is mapped to its ordinal value.
+	// Ignored, once the DeployStatus is marked as Complete
+	AuxPhaseInfo []PhaseInfo `json:"auxPhaseInfo,omitempty"`
 }
 
 // AppSrcDeployInfo represents deployment info for list of Apps
 type AppSrcDeployInfo struct {
 	AppDeploymentInfoList []AppDeploymentInfo `json:"appDeploymentInfo,omitempty"`
 }
+
+//BundlePushStageType represents the bundle push status
+type BundlePushStageType int
+
+const (
+	// BundlePushUninitialized indicates bundle push never happend
+	BundlePushUninitialized BundlePushStageType = iota
+	// BundlePushPending waiting for all the apps to be copied to the Pod
+	BundlePushPending
+	// BundlePushInProgress indicates bundle push in progress
+	BundlePushInProgress
+	// BundlePushComplete bundle push completed
+	BundlePushComplete
+)
+
+// BundlePushTracker used to track the bundle push status
+type BundlePushTracker struct {
+	// Represents the current stage. Internal to the App framework
+	BundlePushStage BundlePushStageType `json:"bundlePushStage,omitempty"`
+
+	// defines the number of retries completed so far
+	RetryCount int32 `json:"retryCount,omitempty"`
+}
+
+const (
+	// AfwPhase2 represents Phase-2 app framework
+	AfwPhase2 uint16 = iota
+
+	// AfwPhase3 represents Phase-3 app framework
+	AfwPhase3
+
+	// LatestAfwVersion represents latest App framework version
+	LatestAfwVersion = AfwPhase3
+)
 
 // AppDeploymentContext for storing the Apps deployment information
 type AppDeploymentContext struct {
@@ -324,4 +445,86 @@ type AppDeploymentContext struct {
 	// This is introduced here so that we dont do spec validation in every reconcile just
 	// because the spec and status are different.
 	AppsRepoStatusPollInterval int64 `json:"appsRepoStatusPollIntervalSeconds,omitempty"`
+
+	// Represents the Status field for maximum number of apps that can be downloaded at same time
+	AppsStatusMaxConcurrentAppDownloads uint64 `json:"appsStatusMaxConcurrentAppDownloads,omitempty"`
+
+	// Internal to the App framework. Used in case of CM(IDXC) and deployer(SHC)
+	BundlePushStatus BundlePushTracker `json:"bundlePushStatus,omitempty"`
 }
+
+// AppPhaseStatusType defines the Phase status
+type AppPhaseStatusType uint32
+
+// AppPhaseType defines the App Phase
+type AppPhaseType string
+
+const (
+	// PhaseDownload identifies download phase
+	PhaseDownload AppPhaseType = "download"
+
+	// PhasePodCopy identifies pod copy phase
+	PhasePodCopy = "podCopy"
+
+	// PhaseInstall identifies install phase for local scoped apps
+	PhaseInstall = "install"
+)
+
+// PhaseInfo defines the status to track the App framework installation phase
+type PhaseInfo struct {
+	// Phase type
+	Phase AppPhaseType `json:"phase,omitempty"`
+	// Status of the phase
+	Status AppPhaseStatusType `json:"status,omitempty"`
+	// represents number of failures
+	FailCount uint32 `json:"failCount,omitempty"`
+}
+
+const (
+	// AppPkgDownloadPending indicates pending
+	AppPkgDownloadPending AppPhaseStatusType = 101
+	// AppPkgDownloadInProgress indicates in progress
+	AppPkgDownloadInProgress = 102
+	// AppPkgDownloadComplete indicates complete
+	AppPkgDownloadComplete = 103
+	// AppPkgDownloadError indicates error after retries
+	AppPkgDownloadError = 199
+)
+
+const (
+	// AppPkgPodCopyPending indicates pending
+	AppPkgPodCopyPending AppPhaseStatusType = 201
+	// AppPkgPodCopyInProgress indicates in progress
+	AppPkgPodCopyInProgress = 202
+	// AppPkgPodCopyComplete indicates complete
+	AppPkgPodCopyComplete = 203
+	// AppPkgMissingFromOperator indicates the downloaded app package is missing
+	AppPkgMissingFromOperator = 298
+	// AppPkgPodCopyError indicates error after retries
+	AppPkgPodCopyError = 299
+)
+
+const (
+	// AppPkgInstallPending indicates pending
+	AppPkgInstallPending AppPhaseStatusType = 301
+	// AppPkgInstallInProgress  indicates in progress
+	AppPkgInstallInProgress = 302
+	// AppPkgInstallComplete indicates complete
+	AppPkgInstallComplete = 303
+	// AppPkgMissingOnPodError indicates app pkg is not available on Pod for install
+	AppPkgMissingOnPodError = 398
+	// AppPkgInstallError indicates error after retries
+	AppPkgInstallError = 399
+)
+
+// StatefulSetScalingType determines if the statefulset is scaling up/down
+type StatefulSetScalingType uint32
+
+const (
+	// StatefulSetNotScaling indicates sts is not scaling
+	StatefulSetNotScaling StatefulSetScalingType = iota
+	// StatefulSetScalingUp indicates sts is scaling up
+	StatefulSetScalingUp
+	// StatefulSetScalingDown indicates sts is scaling down
+	StatefulSetScalingDown
+)

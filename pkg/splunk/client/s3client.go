@@ -17,8 +17,9 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // GetS3ClientWrapper is a wrapper around init function pointers
@@ -54,7 +55,7 @@ type GetInitFunc func(context.Context, string, string, string) interface{}
 
 //GetS3Client gets the required S3Client based on the provider
 type GetS3Client func(context.Context, string /* bucket */, string, /* AWS access key ID */
-	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Endpoint */, GetInitFunc) (S3Client, error)
+	string /* AWS secret access key */, string /* Prefix */, string /* StartAfter */, string /* Region */, string /* Endpoint */, GetInitFunc) (S3Client, error)
 
 // S3Clients is a map of provider name to init functions
 var S3Clients = make(map[string]GetS3ClientWrapper)
@@ -64,6 +65,7 @@ type S3Client interface {
 	GetAppsList(context.Context) (S3Response, error)
 	GetInitContainerImage(context.Context) string
 	GetInitContainerCmd(context.Context, string /* endpoint */, string /* bucket */, string /* path */, string /* app src name */, string /* app mnt */) []string
+	DownloadApp(context.Context, string, string, string) (bool, error)
 }
 
 // SplunkS3Client is a simple object used to connect to S3
@@ -87,12 +89,14 @@ type RemoteObject struct {
 
 //RegisterS3Client registers the respective Client
 func RegisterS3Client(ctx context.Context, provider string) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("RegisterS3Client")
 	switch provider {
 	case "aws":
-		RegisterAWSS3Client(ctx)
+		RegisterAWSS3Client()
 	case "minio":
-		RegisterMinioClient(ctx)
+		RegisterMinioClient()
 	default:
-		fmt.Println("ERROR: Invalid provider specified: ", provider)
+		scopedLog.Error(nil, "invalid provider specified", "provider", provider)
 	}
 }

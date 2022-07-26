@@ -107,7 +107,7 @@ spec:
 ```
 
 
-The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster manager at `/opt/splunk/etc/master-apps/`. 
+The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster manager at `/opt/splunk/etc/manager-apps/`. 
 Once the SmartStore configuration is populated to Cluster Manager's `splunk-operator` app, Operator issues a bundle push command to Cluster Manager, so that the SmartStore configuration is distributed to all the peers in that indexer cluster
 
 Note: Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)

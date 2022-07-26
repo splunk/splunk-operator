@@ -18,7 +18,9 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	"sort"
+	"os"
+	"reflect"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,8 +37,6 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-//var log = logf.Log.WithName("splunk.enterprise.configValidation")
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -113,7 +113,7 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 		service.Spec.ClusterIP = corev1.ClusterIPNone
 		service.Spec.Type = corev1.ServiceTypeClusterIP
 	} else {
-		service = spec.Spec.ServiceTemplate.DeepCopy()
+		service = spec.ServiceTemplate.DeepCopy()
 	}
 	service.TypeMeta = metav1.TypeMeta{
 		Kind:       "Service",
@@ -192,10 +192,101 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 	}
 }
 
+// ValidateImagePullPolicy checks validity of the ImagePullPolicy spec parameter, and returns error if it is invalid.
+func ValidateImagePullPolicy(imagePullPolicy *string) error {
+	// ImagePullPolicy
+	if *imagePullPolicy == "" {
+		*imagePullPolicy = os.Getenv("IMAGE_PULL_POLICY")
+	}
+	switch *imagePullPolicy {
+	case "":
+		*imagePullPolicy = "IfNotPresent"
+		break
+	case "Always":
+		break
+	case "IfNotPresent":
+		break
+	default:
+		return fmt.Errorf("ImagePullPolicy must be one of \"Always\" or \"IfNotPresent\"; value=\"%s\"", *imagePullPolicy)
+	}
+	return nil
+}
+
+// ValidateResources checks resource requests and limits and sets defaults if not provided
+func ValidateResources(resources *corev1.ResourceRequirements, defaults corev1.ResourceRequirements) {
+	// check for nil maps
+	if resources.Requests == nil {
+		resources.Requests = make(corev1.ResourceList)
+	}
+	if resources.Limits == nil {
+		resources.Limits = make(corev1.ResourceList)
+	}
+
+	// if not given, use default cpu requests
+	_, ok := resources.Requests[corev1.ResourceCPU]
+	if !ok {
+		resources.Requests[corev1.ResourceCPU] = defaults.Requests[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory requests
+	_, ok = resources.Requests[corev1.ResourceMemory]
+	if !ok {
+		resources.Requests[corev1.ResourceMemory] = defaults.Requests[corev1.ResourceMemory]
+	}
+
+	// if not given, use default cpu limits
+	_, ok = resources.Limits[corev1.ResourceCPU]
+	if !ok {
+		resources.Limits[corev1.ResourceCPU] = defaults.Limits[corev1.ResourceCPU]
+	}
+
+	// if not given, use default memory limits
+	_, ok = resources.Limits[corev1.ResourceMemory]
+	if !ok {
+		resources.Limits[corev1.ResourceMemory] = defaults.Limits[corev1.ResourceMemory]
+	}
+}
+
+// ValidateSpec checks validity and makes default updates to a Spec, and returns error if something is wrong.
+func ValidateSpec(spec *enterpriseApi.Spec, defaultResources corev1.ResourceRequirements) error {
+	// make sure SchedulerName is not empty
+	if spec.SchedulerName == "" {
+		spec.SchedulerName = "default-scheduler"
+	}
+
+	// set default values for service template
+	setServiceTemplateDefaults(spec)
+
+	// if not provided, set default resource requests and limits
+	ValidateResources(&spec.Resources, defaultResources)
+
+	return ValidateImagePullPolicy(&spec.ImagePullPolicy)
+}
+
+// setServiceTemplateDefaults sets default values for service templates
+func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range spec.ServiceTemplate.Spec.Ports {
+			var p *corev1.ServicePort = &spec.ServiceTemplate.Spec.Ports[idx]
+			if p.Protocol == "" {
+				p.Protocol = corev1.ProtocolTCP
+			}
+
+			if p.TargetPort.IntValue() == 0 {
+				p.TargetPort.IntVal = p.Port
+			}
+		}
+	}
+
+	if spec.ServiceTemplate.Spec.Type == "" {
+		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+}
+
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
-func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
+func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, cr splcommon.MetaObject) error {
 	// if not specified via spec or env, image defaults to splunk/splunk
-	spec.Spec.Image = GetSplunkImage(spec.Spec.Image)
+	spec.Image = GetSplunkImage(spec.Image)
 
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -209,16 +300,45 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec) error {
 	}
 
 	if spec.LivenessInitialDelaySeconds < 0 {
-		return fmt.Errorf("Negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
+		return fmt.Errorf("negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
 	}
 
 	if spec.ReadinessInitialDelaySeconds < 0 {
-		return fmt.Errorf("Negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
+		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
+	}
+
+	// if not provided, set default values for imagePullSecrets
+	err := ValidateImagePullSecrets(ctx, c, cr, spec)
+	if err != nil {
+		return err
 	}
 
 	setVolumeDefaults(spec)
 
-	return splcommon.ValidateSpec(&spec.Spec, defaultResources)
+	return ValidateSpec(&spec.Spec, defaultResources)
+}
+
+// ValidateImagePullSecrets sets default values for imagePullSecrets if not provided
+func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ValidateImagePullSecrets").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// If no imagePullSecrets are configured
+	var nilImagePullSecrets []corev1.LocalObjectReference
+	if len(spec.ImagePullSecrets) == 0 {
+		spec.ImagePullSecrets = nilImagePullSecrets
+		return nil
+	}
+
+	// If configured, validated if the secret/s exist
+	for _, secret := range spec.ImagePullSecrets {
+		_, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secret.Name)
+		if err != nil {
+			scopedLog.Error(err, "Couldn't get secret in the imagePullSecrets config", "Secret", secret.Name)
+		}
+	}
+
+	return nil
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
@@ -319,8 +439,8 @@ func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec
 	return nil
 }
 
-// addEphermalVolumes adds ephermal volumes to statefulSet
-func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) error {
+// addEphemeralVolumes adds ephemeral volumes to statefulSet
+func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) error {
 	// add ephemeral volumes to the splunk pod
 	emptyVolumeSource := corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -344,8 +464,8 @@ func addEphermalVolumes(statefulSet *appsv1.StatefulSet, volumeType string) erro
 func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
-		// add Ephermal volumes
-		_ = addEphermalVolumes(statefulSet, splcommon.EtcVolumeStorage)
+		// add ephemeral volumes
+		_ = addEphemeralVolumes(statefulSet, splcommon.EtcVolumeStorage)
 	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.EtcVolumeStorage)
@@ -356,8 +476,8 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 
 	// configure storage for mount path /opt/splunk/var
 	if spec.VarVolumeStorageConfig.EphemeralStorage {
-		// add Ephermal volumes
-		_ = addEphermalVolumes(statefulSet, splcommon.VarVolumeStorage)
+		// add ephemeral volumes
+		_ = addEphemeralVolumes(statefulSet, splcommon.VarVolumeStorage)
 	} else {
 		// add PVC volumes
 		err := addPVCVolumes(cr, spec, statefulSet, labels, splcommon.VarVolumeStorage)
@@ -424,9 +544,10 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				Affinity:      affinity,
-				Tolerations:   spec.Tolerations,
-				SchedulerName: spec.SchedulerName,
+				Affinity:         affinity,
+				Tolerations:      spec.Tolerations,
+				SchedulerName:    spec.SchedulerName,
+				ImagePullSecrets: spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,
@@ -471,19 +592,6 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
 	return statefulSet, nil
-}
-
-// getAppListingConfigMap returns the App listing configMap, if it exists and applicable for that instanceType
-func getAppListingConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
-	var configMap *corev1.ConfigMap
-
-	if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
-		appsConfigMapName := GetSplunkAppsConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: appsConfigMapName}
-		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
-	}
-
-	return configMap
 }
 
 // getSmartstoreConfigMap returns the smartstore configMap, if it exists and applicable for that instanceType
@@ -592,19 +700,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	appListingConfigMap := getAppListingConfigMap(ctx, client, cr, instanceType)
-	if appListingConfigMap != nil {
-		appVolumeSource := getVolumeSourceMountFromConfigMapData(appListingConfigMap, &configMapVolDefaultMode)
-		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-app-listing", appConfLocationOnPod, appVolumeSource)
-
-		// ToDo: for Phase-2, to install the new apps, always reset the pod.(need to change the behavior for phase-3)
-		// Once the apps are installed, and on a reconcile entry triggered by polling interval expiry, if there is no new
-		// App changes on remote store, then the config map data is erased. In such case, no need to reset the Pod
-		if len(appListingConfigMap.Data) > 0 {
-			podTemplateSpec.ObjectMeta.Annotations[appListingRev] = appListingConfigMap.ResourceVersion
-		}
-	}
-
 	// update security context
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
@@ -616,21 +711,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	var additionalDelayForAppInstallation int32
-	var appListingFiles []string
-
-	if appListingConfigMap != nil {
-		for key := range appListingConfigMap.Data {
-			if key != appsUpdateToken {
-				appListingFiles = append(appListingFiles, key)
-			}
-		}
-		// Always sort the slice, so that map entries are ordered, to avoid pod resets
-		sort.Strings(appListingFiles)
-
-		if instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
-			additionalDelayForAppInstallation = int32(maxSplunkAppsInstallationDelaySecs)
-		}
-	}
 
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec, additionalDelayForAppInstallation)
 	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec, 0)
@@ -646,12 +726,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 	if spec.Defaults != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
-	}
-
-	if appListingConfigMap != nil {
-		for _, fileName := range appListingFiles {
-			splunkDefaults = fmt.Sprintf("%s%s,%s", appConfLocationOnPod, fileName, splunkDefaults)
-		}
 	}
 
 	// prepare container env variables
@@ -805,7 +879,7 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 // getProbe returns the Probe for given values.
 func getProbe(command []string, delay, timeout, period int32) *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
 				Command: command,
 			},
@@ -848,7 +922,7 @@ func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
 func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType, smartstore *enterpriseApi.SmartStoreSpec, ResourceRev map[string]string, retError *error) bool {
 	// No need to proceed if the smartstore is not configured
-	if isSmartstoreConfigured(smartstore) == false {
+	if !isSmartstoreConfigured(smartstore) {
 		return false
 	}
 
@@ -858,7 +932,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 	volList := smartstore.VolList
 	for _, volume := range volList {
 		if volume.SecretRef != "" {
-			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr, volume.SecretRef)
+			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
 				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
@@ -885,10 +959,162 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 	return false
 }
 
-// initAppFrameWorkContext used to initialize the app frame work context
-func initAppFrameWorkContext(ctx context.Context, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) {
+// ApplyManualAppUpdateConfigMap applies the manual app update config map
+func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, crKindMap map[string]string) (*corev1.ConfigMap, error) {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	var configMap *corev1.ConfigMap
+	var err error
+	var newConfigMap bool
+	configMap, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		configMap = splctrl.PrepareConfigMap(configMapName, cr.GetNamespace(), crKindMap)
+		newConfigMap = true
+	}
+
+	configMap.Data = crKindMap
+
+	// set this CR as owner reference for the configMap
+	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+
+	if newConfigMap {
+		scopedLog.Info("Creating manual app update configMap")
+		err = splutil.CreateResource(ctx, client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
+			return configMap, err
+		}
+	} else {
+		scopedLog.Info("Updating manual app update configMap")
+		err = splutil.UpdateResource(ctx, client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Unable to update the configMap", "name", configMapName)
+			return configMap, err
+		}
+	}
+	return configMap, nil
+}
+
+// getManualUpdateStatus extracts the status field from the configMap data
+func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		return ""
+	}
+
+	statusRegex := ".*status: (?P<status>.*).*"
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+
+	return extractFieldFromConfigMapData(statusRegex, data)
+}
+
+// getManualUpdateRefCount extracts the refCount field from the configMap data
+func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) int {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getManualUpdateRefCount").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	var refCount int
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		return refCount
+	}
+
+	refCountRegex := ".*refCount: (?P<refCount>.*).*"
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+
+	refCount, _ = strconv.Atoi(extractFieldFromConfigMapData(refCountRegex, data))
+	return refCount
+}
+
+// createOrUpdateAppUpdateConfigMap creates or updates the manual app update configMap
+func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("createOrUpdateAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	var crKindMap map[string]string
+	var configMapData, status string
+	var configMap *corev1.ConfigMap
+	var err error
+	var numOfObjects int
+
+	kind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	mux := getResourceMutex(configMapName)
+	mux.Lock()
+	defer mux.Unlock()
+	configMap, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err == nil {
+		// If this CR is already an owner reference, then do nothing.
+		// This can happen if we have already set this CR as ownerRef in the first time,
+		// and we reach here again during the next reconcile.
+		currentOwnerRef := configMap.GetOwnerReferences()
+		for i := 0; i < len(currentOwnerRef); i++ {
+			if reflect.DeepEqual(currentOwnerRef[i], splcommon.AsOwner(cr, false)) {
+				return configMap, nil
+			}
+		}
+
+		scopedLog.Info("Existing configMap data", "data", configMap.Data)
+		crKindMap = configMap.Data
+
+		// get the number of instance types of this kind
+		numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
+	}
+
+	// prepare the configMap data OR
+	// initialize the configMap data for this CR type,
+	// if it did not exist before
+	if crKindMap == nil {
+		crKindMap = make(map[string]string)
+	}
+	if _, ok := crKindMap[kind]; !ok {
+		status = "off"
+	} else {
+		status = getManualUpdateStatus(ctx, client, cr, configMapName)
+	}
+
+	configMapData = fmt.Sprintf(`status: %s
+refCount: %d`, status, numOfObjects+1)
+	crKindMap[kind] = configMapData
+
+	// Create/update the configMap to store the values of manual trigger per CR kind.
+	configMap, err = ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
+	if err != nil {
+		scopedLog.Error(err, "Create/update configMap for app update failed")
+		return configMap, err
+	}
+
+	return configMap, nil
+}
+
+// initAppFrameWorkContext used to initialize the appframework context
+func initAppFrameWorkContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	if appStatusContext.AppsSrcDeployStatus == nil {
 		appStatusContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+		//Note:- Set version only at the time of allocating AppsSrcDeployStatus. This is important, so that we don't
+		// interfere with the upgrade scenarios. So, if the AppsSrcDeployStatus is already allocated
+		// and the version is not `CurrentAfwVersion`, means it is migration scenario, and the migration logic should
+		// handle upgrading to the latest version.
+		appStatusContext.Version = enterpriseApi.LatestAfwVersion
+
+		_, err := createOrUpdateAppUpdateConfigMap(ctx, client, cr)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
@@ -896,10 +1122,11 @@ func initAppFrameWorkContext(ctx context.Context, appFrameworkConf *enterpriseAp
 			splclient.RegisterS3Client(ctx, vol.Provider)
 		}
 	}
+	return nil
 }
 
 // getAppSrcScope returns the scope of a given appSource
-func getAppSrcScope(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) string {
+func getAppSrcScope(ctx context.Context, appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) string {
 	for _, appSrc := range appFrameworkConf.AppSources {
 		if appSrc.Name == appSrcName {
 			if appSrc.Scope != "" {
@@ -913,6 +1140,20 @@ func getAppSrcScope(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName
 	return appFrameworkConf.Defaults.Scope
 }
 
+// getAppSrcSpec returns AppSourceSpec from the app source name
+func getAppSrcSpec(appSources []enterpriseApi.AppSourceSpec, appSrcName string) (*enterpriseApi.AppSourceSpec, error) {
+	var err error
+
+	for _, appSrc := range appSources {
+		if appSrc.Name == appSrcName {
+			return &appSrc, err
+		}
+	}
+
+	err = fmt.Errorf("unable to find app source spec for app source: %s", appSrcName)
+	return nil, err
+}
+
 // CheckIfAppSrcExistsInConfig returns if the given appSource is available in the configuration or not
 func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpec, appSrcName string) bool {
 	for _, appSrc := range appFrameworkConf.AppSources {
@@ -923,32 +1164,44 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpe
 	return false
 }
 
+// isAppSourceScopeValid checks for valid app source
+func isAppSourceScopeValid(scope string) bool {
+	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopeClusterWithPreConfig
+}
+
 // validateSplunkAppSources validates the App source config in App Framework spec
 func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localScope bool) error {
 
-	duplicateAppSourceStorageChecker := make(map[string]bool)
+	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
+	if !localScope {
+		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
+		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
+	}
+
 	duplicateAppSourceNameChecker := make(map[string]bool)
+
 	var vol string
 
 	// Make sure that all the App Sources are provided with the mandatory config values.
 	for i, appSrc := range appFramework.AppSources {
 		if appSrc.Name == "" {
-			return fmt.Errorf("App Source name is missing for AppSource at: %d", i)
+			return fmt.Errorf("app Source name is missing for AppSource at: %d", i)
 		}
 
 		if _, ok := duplicateAppSourceNameChecker[appSrc.Name]; ok {
-			return fmt.Errorf("Multiple app sources with the name %s is not allowed", appSrc.Name)
+			return fmt.Errorf("multiple app sources with the name %s is not allowed", appSrc.Name)
 		}
 		duplicateAppSourceNameChecker[appSrc.Name] = true
 
 		if appSrc.Location == "" {
-			return fmt.Errorf("App Source location is missing for AppSource: %s", appSrc.Name)
+			return fmt.Errorf("app Source location is missing for AppSource: %s", appSrc.Name)
 		}
 
 		if appSrc.VolName != "" {
 			_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appSrc.VolName)
 			if err != nil {
-				return fmt.Errorf("Invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
+				return fmt.Errorf("invalid Volume Name for App Source: %s. %s", appSrc.Name, err)
 			}
 			vol = appSrc.VolName
 		} else {
@@ -958,37 +1211,43 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 			vol = appFramework.Defaults.VolName
 		}
 
+		var scope string
 		if appSrc.Scope != "" {
 			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal {
-				return fmt.Errorf("Invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
+				return fmt.Errorf("invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
 			}
 
-			if !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopeCluster || appSrc.Scope == enterpriseApi.ScopeClusterWithPreConfig) {
-				return fmt.Errorf("Scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
+			if !isAppSourceScopeValid(appSrc.Scope) {
+				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
 			}
-		} else if appFramework.Defaults.Scope == "" {
-			return fmt.Errorf("App Source scope is missing for: %s", appSrc.Name)
+
+			scope = appSrc.Scope
+		} else {
+			if appFramework.Defaults.Scope == "" {
+				return fmt.Errorf("app Source scope is missing for: %s", appSrc.Name)
+			}
+
+			scope = appFramework.Defaults.Scope
 		}
 
-		if _, ok := duplicateAppSourceStorageChecker[vol+appSrc.Location]; ok {
-			return fmt.Errorf("Duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
+		if _, ok := duplicateAppSourceStorageChecker[scope][vol+appSrc.Location]; ok {
+			return fmt.Errorf("duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
 		}
-		duplicateAppSourceStorageChecker[vol+appSrc.Location] = true
-
+		duplicateAppSourceStorageChecker[scope][vol+appSrc.Location] = true
 	}
 
 	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal {
-		return fmt.Errorf("Invalid scope for defaults config. Only local scope is supported for this kind of CR")
+		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
-	if appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopeCluster && appFramework.Defaults.Scope != enterpriseApi.ScopeClusterWithPreConfig {
-		return fmt.Errorf("Scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
+	if appFramework.Defaults.Scope != "" && !isAppSourceScopeValid(appFramework.Defaults.Scope) {
+		return fmt.Errorf("scope for defaults should be either local Or cluster, but configured as: %s", appFramework.Defaults.Scope)
 	}
 
 	if appFramework.Defaults.VolName != "" {
 		_, err := splclient.CheckIfVolumeExists(appFramework.VolList, appFramework.Defaults.VolName)
 		if err != nil {
-			return fmt.Errorf("Invalid Volume Name for Defaults. Error: %s", err)
+			return fmt.Errorf("invalid Volume Name for Defaults. Error: %s", err)
 		}
 	}
 
@@ -1015,16 +1274,31 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 
 	// Set the value in status field to be same as that in spec.
 	appContext.AppsRepoStatusPollInterval = appFramework.AppsRepoPollInterval
+	appContext.AppsStatusMaxConcurrentAppDownloads = appFramework.MaxConcurrentAppDownloads
 
-	if appContext.AppsRepoStatusPollInterval == 0 {
-		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured", "Setting it to the default value(seconds)", splcommon.DefaultAppsRepoPollInterval)
-		appContext.AppsRepoStatusPollInterval = splcommon.DefaultAppsRepoPollInterval
+	if appContext.AppsRepoStatusPollInterval <= 0 {
+		scopedLog.Error(err, "appsRepoPollIntervalSeconds is not configured. Disabling polling of apps repo changes, defaulting to manual updates")
+		appContext.AppsRepoStatusPollInterval = 0
 	} else if appFramework.AppsRepoPollInterval < splcommon.MinAppsRepoPollInterval {
 		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too small", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default min. value(seconds)", splcommon.MinAppsRepoPollInterval)
 		appContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval
 	} else if appFramework.AppsRepoPollInterval > splcommon.MaxAppsRepoPollInterval {
 		scopedLog.Error(err, "configured appsRepoPollIntervalSeconds is too large", "configured value", appFramework.AppsRepoPollInterval, "Setting it to the default max. value(seconds)", splcommon.MaxAppsRepoPollInterval, "seconds", nil)
 		appContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval
+	}
+
+	if appContext.AppsStatusMaxConcurrentAppDownloads <= 0 {
+		scopedLog.Info("Invalid value of maxConcurrentAppDownloads", "configured value", appContext.AppsStatusMaxConcurrentAppDownloads, "Setting it to default value", splcommon.DefaultMaxConcurrentAppDownloads)
+		appContext.AppsStatusMaxConcurrentAppDownloads = splcommon.DefaultMaxConcurrentAppDownloads
+	}
+
+	appDownloadVolume := splcommon.AppDownloadVolume
+	_, err = os.Stat(appDownloadVolume)
+
+	// check whether the temporary volume to download apps is mounted or not on the operator pod
+	if _, err := os.Stat(appDownloadVolume); os.IsNotExist(err) {
+		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", appDownloadVolume)
+		return err
 	}
 
 	err = validateRemoteVolumeSpec(ctx, appFramework.VolList, true)
@@ -1051,18 +1325,18 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 	// Make sure that all the Volumes are provided with the mandatory config values.
 	for i, volume := range volList {
 		if _, ok := duplicateChecker[volume.Name]; ok {
-			return fmt.Errorf("Duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
+			return fmt.Errorf("duplicate volume name detected: %s. Remove the duplicate entry and reapply the configuration", volume.Name)
 		}
 		duplicateChecker[volume.Name] = true
 		// Make sure that the smartstore volume info is correct
 		if volume.Name == "" {
-			return fmt.Errorf("Volume name is missing for volume at : %d", i)
+			return fmt.Errorf("volume name is missing for volume at : %d", i)
 		}
 		if volume.Endpoint == "" {
-			return fmt.Errorf("Volume Endpoint URI is missing")
+			return fmt.Errorf("volume Endpoint URI is missing")
 		}
 		if volume.Path == "" {
-			return fmt.Errorf("Volume Path is missing")
+			return fmt.Errorf("volume Path is missing")
 		}
 		// Make the secretRef optional if theyre using IAM roles
 		if volume.SecretRef == "" {
@@ -1073,11 +1347,11 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 		// For now, Smartstore supports only S3, which is by default.
 		if isAppFramework {
 			if !isValidStorageType(volume.Type) {
-				return fmt.Errorf("Remote volume type is invalid. Only storageType=s3 is supported")
+				return fmt.Errorf("remote volume type is invalid. Only storageType=s3 is supported")
 			}
 
 			if !isValidProvider(volume.Provider) {
-				return fmt.Errorf("S3 Provider is invalid")
+				return fmt.Errorf("s3 Provider is invalid")
 			}
 		}
 	}
@@ -1102,11 +1376,11 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 	// Make sure that all the indexes are provided with the mandatory config values.
 	for i, index := range smartstore.IndexList {
 		if index.Name == "" {
-			return fmt.Errorf("Index name is missing for index at: %d", i)
+			return fmt.Errorf("index name is missing for index at: %d", i)
 		}
 
 		if _, ok := duplicateChecker[index.Name]; ok {
-			return fmt.Errorf("Duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
+			return fmt.Errorf("duplicate index name detected: %s.Remove the duplicate entry and reapply the configuration", index.Name)
 		}
 		duplicateChecker[index.Name] = true
 		if index.VolName == "" && smartstore.Defaults.VolName == "" {
@@ -1116,7 +1390,7 @@ func validateSplunkIndexesSpec(smartstore *enterpriseApi.SmartStoreSpec) error {
 		if index.VolName != "" {
 			_, err := splclient.CheckIfVolumeExists(smartstore.VolList, index.VolName)
 			if err != nil {
-				return fmt.Errorf("Invalid configuration for index: %s. %s", index.Name, err)
+				return fmt.Errorf("invalid configuration for index: %s. %s", index.Name, err)
 			}
 		}
 	}
@@ -1136,7 +1410,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 	numVolumes := len(smartstore.VolList)
 	numIndexes := len(smartstore.IndexList)
 	if numIndexes > 0 && numVolumes == 0 {
-		return fmt.Errorf("Volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
+		return fmt.Errorf("volume configuration is missing. Num. of indexes = %d. Num. of Volumes = %d", numIndexes, numVolumes)
 	}
 
 	err = validateRemoteVolumeSpec(ctx, smartstore.VolList, false)
@@ -1149,7 +1423,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 	if defaults.VolName != "" {
 		_, err = splclient.CheckIfVolumeExists(smartstore.VolList, defaults.VolName)
 		if err != nil {
-			return fmt.Errorf("Invalid configuration for defaults volume. %s", err)
+			return fmt.Errorf("invalid configuration for defaults volume. %s", err)
 		}
 	}
 

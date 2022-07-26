@@ -18,15 +18,15 @@ package controller
 import (
 	"context"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // SplunkController is used to represent common interfaces of Splunk controllers
@@ -98,7 +98,8 @@ type splunkReconciler struct {
 func (r splunkReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	instance := r.splctrl.GetInstance()
 	gvk := instance.GroupVersionKind()
-	scopedLog := log.WithName("Reconcile").WithValues("Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("Reconcile").WithValues("Group", gvk.Group, "Version", gvk.Version, "Kind", gvk.Kind, "Namespace", request.Namespace, "Name", request.Name)
 	scopedLog.Info("Reconciling custom resource")
 
 	// Fetch the custom resource instance

@@ -1,0 +1,51 @@
+name: Ingestion
+description: File any requests related to ingestion under this template
+title: "Ingestion: "
+labels:
+  - ingestion
+assignees:
+  - vebken-splunk
+  - mgaldino-splunk
+  - vivekr-splunk
+
+body:
+  - type: dropdown
+    id: typeOfRequest
+    attributes:
+        label: Please select the type of request
+        options:
+        - Bug
+        - Enhancement
+        - Feature Request
+    validations:
+        required: true
+  - type: textarea
+    id: tellUsMore
+    attributes:
+      label: Tell us more
+      value: |
+        **Describe the request**
+        - A clear and concise description of the request.
+
+        **Expected behavior**
+        - A clear and concise description of what you expected to happen.
+
+        **Splunk setup on K8S**
+        - Details of the Splunk setup on the K8s cluster.
+
+        **Reproduction/Testing steps**
+        - Steps to reproduce the bug. For an enhancement or feature request, please provide steps to test.
+
+        **K8s environment**
+        - Useful information about the K8S environment being used. Eg. version of K8s, kind of K8s cluster etc..
+
+        **Proposed changes(optional)**
+        - Proposed change, if any.
+
+        **K8s collector data(optional)**
+        - Please provide data collected from the [K8s collectors](https://github.com/splunk/splunk-operator/blob/develop/docs/K8SCollectors.md), if any.
+        
+        **Additional context(optional)**
+        - Add any other context about the problem here.
+    validations:
+        required: true

@@ -29,8 +29,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	wait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -91,7 +93,7 @@ func (d *Deployment) Teardown() error {
 			d.testenv.Log.Error(err, fmt.Sprintf("Failed to get logs from Pod %s", podName))
 		} else {
 			logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
-			d.testenv.Log.Info("Writing %s Pod logs to file %s ", podName, logFileName)
+			d.testenv.Log.Info(fmt.Sprintf("Writing %s Pod logs to file %s ", podName, logFileName))
 			logFile, err := os.Create(logFileName)
 			if err != nil {
 				d.testenv.Log.Error(err, fmt.Sprintf("Failed to create log file %s", logFileName))
@@ -108,19 +110,17 @@ func (d *Deployment) Teardown() error {
 
 	var err error
 	var output []byte
-	var podName string
+	podName := GetOperatorPodName(d.testenv)
 	if d.testenv.clusterWideOperator != "true" {
-		podName = GetOperatorPodName(d.testenv.GetName())
 		output, err = exec.Command("kubectl", "logs", "-n", d.testenv.GetName(), podName).Output()
 	} else {
-		podName = GetOperatorPodName("splunk-operator")
 		output, err = exec.Command("kubectl", "logs", "-n", "splunk-operator", podName, "manager").Output()
 	}
 	if err != nil {
 		d.testenv.Log.Error(err, fmt.Sprintf("Failed to get operator logs from Pod %s", podName))
 	} else {
 		logFileName := fmt.Sprintf(podLogFile, d.GetName(), podName)
-		d.testenv.Log.Info("Writing %s Operator Pod logs to file %s ", podName, logFileName)
+		d.testenv.Log.Info(fmt.Sprintf("Writing %s Operator Pod logs to file %s ", podName, logFileName))
 		logFile, err := os.Create(logFileName)
 		if err != nil {
 			d.testenv.Log.Error(err, fmt.Sprintf("Failed to create operator log file %s", logFileName))
@@ -144,7 +144,6 @@ func (d *Deployment) Teardown() error {
 			d.testenv.Log.Error(cleanupErr, "Deployment cleanupFunc returns an error. Attempt to continue.\n")
 		}
 	}
-
 	d.testenv.Log.Info("deployment deleted.\n", "name", d.name)
 	return cleanupErr
 }
@@ -194,7 +193,6 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	if err != nil {
 		return nil, err
 	}
-	VerifyMonitoringConsoleReady(ctx, d, name, mc, d.testenv)
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
@@ -231,6 +229,78 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 		Stderr:  true,
 		TTY:     tty,
 	}
+	if stdin == "" {
+		option.Stdin = false
+	}
+	execReq.VersionedParams(
+		option,
+		scheme.ParameterCodec,
+	)
+	exec, err := remotecommand.NewSPDYExecutor(restConfig, http.MethodPost, execReq.URL())
+	if err != nil {
+		return "", "", err
+	}
+	stdinReader := strings.NewReader(stdin)
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	err = exec.Stream(remotecommand.StreamOptions{
+		Stdin:  stdinReader,
+		Stdout: stdout,
+		Stderr: stderr,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return stdout.String(), stderr.String(), nil
+}
+
+// OperatorPodExecCommand execute a shell command in the specified pod
+func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
+	pod := &corev1.Pod{}
+	d.GetInstance(ctx, podName, pod)
+	gvk, _ := apiutil.GVKForObject(pod, scheme.Scheme)
+	restConfig, err := config.GetConfig()
+	if err != nil {
+		return "", "", err
+	}
+	//FIXME
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	if err != nil {
+		return "", "", err
+	}
+
+	var execReq *rest.Request
+	var option *corev1.PodExecOptions
+	var opNamespace string
+
+	if d.testenv.clusterWideOperator != "true" {
+		opNamespace = d.testenv.GetName()
+		execReq = restClient.Post().Resource("pods").Name(podName).Namespace(opNamespace).SubResource("exec")
+		option = &corev1.PodExecOptions{
+			Command: cmd,
+			Stdin:   true,
+			Stdout:  true,
+			Stderr:  true,
+			TTY:     tty,
+		}
+	} else {
+		opNamespace = "splunk-operator"
+		execReq = restClient.Post().
+			Resource("pods").
+			Name(podName).
+			Namespace(opNamespace).
+			Param("container", "manager").
+			SubResource("exec")
+		option = &corev1.PodExecOptions{
+			Container: "manager",
+			Command:   cmd,
+			Stdin:     true,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       tty,
+		}
+	}
+
 	if stdin == "" {
 		option.Stdin = false
 	}
@@ -318,8 +388,6 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 	if err != nil {
 		return nil, err
 	}
-	// Verify standalone goes to ready state
-	//SingleSiteIndexersReady(ctx, d, d.testenv)
 
 	return deployed.(*enterpriseApi.IndexerCluster), err
 }
@@ -392,9 +460,101 @@ func (d *Deployment) deployCR(ctx context.Context, name string, cr client.Object
 }
 
 // UpdateCR method to update existing CR spec
+// this function retries CR update for CRUpdateRetryCount (10) times. if it fails it will throw error
+// it waits for a second everytime it fails.
 func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 
-	err := d.testenv.GetKubeClient().Update(ctx, cr)
+	var err error
+	for i := 0; i < CRUpdateRetryCount; i++ {
+		namespacedName := types.NamespacedName{Name: cr.GetName(), Namespace: cr.GetNamespace()}
+		var cobject client.Object
+		kind := cr.GetObjectKind()
+		switch kind.GroupVersionKind().Kind {
+		case "ConfigMap":
+			current := &corev1.ConfigMap{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*corev1.ConfigMap)
+			current.Data = ucr.Data
+			cobject = current
+		case "Secret":
+			current := &corev1.Secret{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*corev1.Secret)
+			current.Data = ucr.Data
+			cobject = current
+		case "Standalone":
+			current := &enterpriseApi.Standalone{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.Standalone)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "LicenseMaster":
+			current := &enterpriseApi.LicenseMaster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.LicenseMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "IndexerCluster":
+			current := &enterpriseApi.IndexerCluster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.IndexerCluster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "ClusterMaster":
+			current := &enterpriseApi.ClusterMaster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.ClusterMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "MonitoringConsole":
+			current := &enterpriseApi.MonitoringConsole{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.MonitoringConsole)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "SearchHeadCluster":
+			current := &enterpriseApi.SearchHeadCluster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.SearchHeadCluster)
+			current.Spec = ucr.Spec
+			cobject = current
+		default:
+			return fmt.Errorf("unknown custom resource")
+		}
+		cobject.SetFinalizers(cr.GetFinalizers())
+		cobject.SetAnnotations(cr.GetAnnotations())
+		cobject.SetLabels(cr.GetLabels())
+		err = d.testenv.GetKubeClient().Update(ctx, cobject)
+		if err != nil {
+			time.Sleep(10 * time.Microsecond)
+		} else {
+			return nil
+		}
+	}
 	return err
 }
 
@@ -599,7 +759,7 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(ctx context.Context
 
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "IfNotPresent",
 			},
 			Volumes: []corev1.Volume{},
@@ -678,8 +838,6 @@ func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name 
 	if err != nil {
 		return nil, err
 	}
-	// Verify standalone goes to ready state
-	ClusterManagerReady(ctx, d, d.testenv)
 	return deployed.(*enterpriseApi.ClusterMaster), err
 }
 
@@ -703,21 +861,25 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(ctx context.Context, name
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) error {
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApi.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseManager(ctx, name)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
 	// Deploy the cluster manager
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -730,24 +892,20 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		},
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
-
-	pdata, _ := json.Marshal(cmSpec)
-	d.testenv.Log.Info("cluster master spec", "cr", pdata)
-
-	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
+	cm, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
-		return err
+		return cm, idxc, sh, err
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
 	if err != nil {
-		return err
+		return cm, idxc, sh, err
 	}
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -765,28 +923,32 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 
-	pdata, _ = json.Marshal(shSpec)
+	pdata, _ := json.Marshal(shSpec)
 	d.testenv.Log.Info("Search head Spec", "cr", pdata)
 
 	if shc {
-		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		sh, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
-	return nil
+	return cm, idxc, sh, nil
 }
 
 // DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) error {
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApi.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseManager(ctx, licenseMaster)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
@@ -807,7 +969,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -822,9 +984,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
 
-	_, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
+	cm, err := d.DeployClusterMasterWithGivenSpec(ctx, name, cmSpec)
 	if err != nil {
-		return err
+		return cm, idxc, sh, err
 	}
 
 	// Deploy indexer sites
@@ -834,9 +996,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, splcommon.ClusterManager, siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
 
@@ -847,7 +1009,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -868,12 +1030,12 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
-		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		sh, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
 		if err != nil {
-			return err
+			return cm, idxc, sh, err
 		}
 	}
-	return nil
+	return cm, idxc, sh, nil
 }
 
 // DeploySingleSiteClusterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
@@ -895,7 +1057,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 	// Deploy the cluster manager
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -920,7 +1082,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -979,7 +1141,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
@@ -1018,7 +1180,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: splcommon.Spec{
+			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},

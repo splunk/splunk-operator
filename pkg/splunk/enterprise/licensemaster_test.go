@@ -17,16 +17,27 @@ package enterprise
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -40,9 +51,10 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerSecret},
-		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerConfigMapAppList},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
+		{MetaName: "*v3.LicenseMaster-test-stack1"},
+		{MetaName: "*v3.LicenseMaster-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -56,9 +68,8 @@ func TestApplyLicenseManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	updateFuncCalls := append(funcCalls, spltest.MockFuncCall{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet})
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls = append(updateFuncCalls[:2], updateFuncCalls[3:]...)
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[8], funcCalls[9], funcCalls[10]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -69,6 +80,7 @@ func TestApplyLicenseManager(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
@@ -105,7 +117,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateLicenseManagerSpec(ctx, &cr); err != nil {
+			if err := validateLicenseManagerSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateLicenseManagerSpec() returned error: %v", err)
 			}
 			return getLicenseManagerStatefulSet(ctx, c, &cr)
@@ -152,6 +164,9 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
 		Spec: enterpriseApi.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
@@ -194,7 +209,16 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = ApplyLicenseManager(context.Background(), client, &cr)
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
+	_, err = ApplyLicenseManager(ctx, client, &cr)
+
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should be successful")
 	}
@@ -283,7 +307,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -294,7 +318,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -305,7 +329,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -325,7 +349,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
 
-		vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
+		vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -356,8 +380,8 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		var mockResponse spltest.MockAWSS3Client
-		mockResponse, err = splclient.ConvertS3Response(s3Response)
+		var mockResponse spltest.MockS3Client
+		mockResponse, err = splclient.ConvertS3Response(ctx, s3Response)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -367,7 +391,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
 		}
 
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = mockResponse
+		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
 	}
 
 	if allSuccess == false {
@@ -427,7 +451,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockAWSS3Object{
+			Objects: []*spltest.MockS3Object{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -446,7 +470,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	var vol enterpriseApi.VolumeSpec
 
 	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splclient.GetAppSrcVolume(appSource, &appFrameworkRef)
+	vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
@@ -531,5 +555,637 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	}
 	if len(s3Resp.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
+	}
+}
+
+func TestApplyLicenseMasterDeletion(t *testing.T) {
+	ctx := context.TODO()
+	lm := enterpriseApi.LicenseMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
+		Spec: enterpriseApi.LicenseMasterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval: 0,
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
+				Mock: true,
+			},
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Create S3 secret
+	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
+
+	c.AddObject(&s3Secret)
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// test deletion
+	currentTime := metav1.NewTime(time.Now())
+	lm.ObjectMeta.DeletionTimestamp = &currentTime
+	lm.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
+
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	c.ListObj = &pvclist
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+
+	_, err = ApplyLicenseManager(ctx, c, &lm)
+	if err != nil {
+		t.Errorf("ApplyLicenseMaster should not have returned error here.")
+	}
+}
+
+func TestGetLicenseMasterList(t *testing.T) {
+	ctx := context.TODO()
+	lm := enterpriseApi.LicenseMaster{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	var numOfObjects int
+	// Invalid scenario since we haven't added license master to the list yet
+	_, err := getLicenseMasterList(ctx, client, &lm, listOpts)
+	if err == nil {
+		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
+	}
+
+	lmList := &enterpriseApi.LicenseMasterList{}
+	lmList.Items = append(lmList.Items, lm)
+
+	client.ListObj = lmList
+
+	numOfObjects, err = getLicenseMasterList(ctx, client, &lm, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of LicenseMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
+	}
+}
+
+func TestLicenseMasterWithReadyState(t *testing.T) {
+
+	mclient := &spltest.MockHTTPClient{}
+	type Entry1 struct {
+		Content splclient.ClusterMasterInfo `json:"content"`
+	}
+
+	apiResponse1 := struct {
+		Entry []Entry1 `json:"entry"`
+	}{
+		Entry: []Entry1{
+			{
+				Content: splclient.ClusterMasterInfo{
+					Initialized:     true,
+					IndexingReady:   true,
+					ServiceReady:    true,
+					MaintenanceMode: true,
+				},
+			},
+			{
+				Content: splclient.ClusterMasterInfo{
+					Initialized:     true,
+					IndexingReady:   true,
+					ServiceReady:    true,
+					MaintenanceMode: true,
+				},
+			},
+		},
+	}
+
+	type Entry struct {
+		Name    string                          `json:"name"`
+		Content splclient.ClusterMasterPeerInfo `json:"content"`
+	}
+
+	apiResponse2 := struct {
+		Entry []Entry `json:"entry"`
+	}{
+		Entry: []Entry{
+			{
+				Name: "testing",
+				Content: splclient.ClusterMasterPeerInfo{
+					ID:             "testing",
+					Status:         "Up",
+					ActiveBundleID: "testing",
+					BucketCount:    2,
+					Searchable:     true,
+					Label:          "splunk-test-indexer-0",
+				},
+			},
+		},
+	}
+
+	response1, err := json.Marshal(apiResponse1)
+	response2, err := json.Marshal(apiResponse2)
+	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/info?count=0&output_mode=json", nil)
+	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-master-service.default.svc.cluster.local:8089/services/cluster/master/peers?count=0&output_mode=json", nil)
+	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
+	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
+
+	// mock the verify RF peer funciton
+	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
+		return nil
+	}
+
+	// create directory for app framework
+	newpath := filepath.Join("/tmp", "appframework")
+	err = os.MkdirAll(newpath, os.ModePerm)
+
+	// adding getapplist to fix test case
+	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+		s3Response := splclient.S3Response{}
+		return s3Response, nil
+	}
+
+	builder := fake.NewClientBuilder()
+	c := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	ctx := context.TODO()
+
+	// Create App framework volume
+	volumeSpec := []enterpriseApi.VolumeSpec{
+		{
+			Name:      "testing",
+			Endpoint:  "/someendpoint",
+			Path:      "s3-test",
+			SecretRef: "secretRef",
+			Provider:  "aws",
+			Type:      "s3",
+			Region:    "west",
+		},
+	}
+
+	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
+	appSourceDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
+		VolName: "testing",
+		Scope:   "local",
+	}
+
+	// appSourceSpec: App source name, location and volume name and scope from appSourceDefaultSpec
+	appSourceSpec := []enterpriseApi.AppSourceSpec{
+		{
+			Name:                 "appSourceName",
+			Location:             "appSourceLocation",
+			AppSourceDefaultSpec: appSourceDefaultSpec,
+		},
+	}
+
+	// appFrameworkSpec: AppSource settings, Poll Interval, volumes, appSources on volumes
+	appFrameworkSpec := enterpriseApi.AppFrameworkSpec{
+		Defaults:             appSourceDefaultSpec,
+		AppsRepoPollInterval: int64(60),
+		VolList:              volumeSpec,
+		AppSources:           appSourceSpec,
+	}
+
+	// create clustermaster custom resource
+	clustermaster := &enterpriseApi.ClusterMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+			AppFrameworkConfig: appFrameworkSpec,
+		},
+	}
+
+	creplicas := int32(1)
+	cstatefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-cluster-master",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "splunk-test-cluster-master-headless",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &creplicas,
+		},
+	}
+
+	// simulate create clustermaster instance before reconcilation
+	c.Create(ctx, clustermaster)
+
+	// simulate Ready state
+	namespacedName := types.NamespacedName{
+		Name:      clustermaster.Name,
+		Namespace: clustermaster.Namespace,
+	}
+
+	clustermaster.Status.Phase = enterpriseApi.PhaseReady
+	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+	}
+	clustermaster.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-cluster-master",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "cluster-master",
+		"app.kubernetes.io/name":       "cluster-master",
+		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
+	}
+	err = c.Status().Update(ctx, clustermaster)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, clustermaster)
+	if err != nil {
+		t.Errorf("Unexpected get cluster master %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	// create pod
+	stpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-cluster-master-0",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	// simulate create stateful set
+	c.Create(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = c.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	stNamespacedName := types.NamespacedName{
+		Name:      "splunk-test-cluster-master",
+		Namespace: "default",
+	}
+	err = c.Get(ctx, stNamespacedName, cstatefulset)
+	if err != nil {
+		t.Errorf("Unexpected get cluster manager %v", err)
+		debug.PrintStack()
+	}
+	// update statefulset
+	cstatefulset.Status.ReadyReplicas = 1
+	cstatefulset.Status.Replicas = 1
+	err = c.Status().Update(ctx, cstatefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, clustermaster)
+	if err != nil {
+		t.Errorf("Unexpected get cluster manager %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyClusterManager(ctx, c, clustermaster)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	clusterObjRef := corev1.ObjectReference{
+		Kind:      clustermaster.Kind,
+		Name:      clustermaster.Name,
+		Namespace: clustermaster.Namespace,
+		UID:       clustermaster.UID,
+	}
+
+	// create licensemanager custom resource
+	licensemanager := enterpriseApi.LicenseMaster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.LicenseMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "mcName",
+				},
+				ClusterMasterRef: clusterObjRef,
+			},
+		},
+	}
+
+	replicas := int32(1)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-license-master",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "splunk-test-license-master-headless",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-license-manager-headless",
+			Namespace: "default",
+		},
+	}
+
+	// simulate service
+	c.Create(ctx, service)
+
+	// simulate create stateful set
+	c.Create(ctx, statefulset)
+
+	// simulate create clustermaster instance before reconcilation
+	c.Create(ctx, &licensemanager)
+
+	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
+		debug.PrintStack()
+	}
+
+	namespacedName = types.NamespacedName{
+		Name:      licensemanager.Name,
+		Namespace: licensemanager.Namespace,
+	}
+
+	// simulate Ready state
+	licensemanager.Status.Phase = enterpriseApi.PhaseReady
+	licensemanager.Spec.ServiceTemplate.Annotations = map[string]string{
+		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+	}
+	licensemanager.Spec.ServiceTemplate.Labels = map[string]string{
+		"app.kubernetes.io/instance":   "splunk-test-license-master",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "license-master",
+		"app.kubernetes.io/name":       "license-master",
+		"app.kubernetes.io/part-of":    "splunk-test-license-master",
+	}
+	err = c.Status().Update(ctx, &licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, &licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected get license manager %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	// create pod
+	stpod = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-license-master-0",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	// simulate create stateful set
+	c.Create(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = c.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	// get latest stateful set
+	stNamespacedName = types.NamespacedName{
+		Name:      "splunk-test-license-master",
+		Namespace: "default",
+	}
+	err = c.Get(ctx, stNamespacedName, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected get license master %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	statefulset.Status.ReadyReplicas = 1
+	statefulset.Status.Replicas = 1
+	err = c.Status().Update(ctx, statefulset)
+	if err != nil {
+		t.Errorf("Unexpected update statefulset  %v", err)
+		debug.PrintStack()
+	}
+
+	err = c.Get(ctx, namespacedName, &licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected get license manager %v", err)
+		debug.PrintStack()
+	}
+
+	//create namespace MC statefulset
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+	namespacedName = types.NamespacedName{Namespace: "default", Name: "splunk-default-monitoring-console"}
+
+	// Create MC statefulset
+	err = splutil.CreateResource(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Failed to create owner reference  %s", current.GetName())
+	}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &licensemanager, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
+	}
+
+	err = c.Get(ctx, namespacedName, &current)
+	if err != nil {
+		t.Errorf("Couldn't get the statefulset resource %s", current.GetName())
+	}
+
+	configmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-default-monitoring-console",
+			Namespace: "default",
+		},
+	}
+
+	// Create configmap
+	err = splutil.CreateResource(ctx, c, &configmap)
+	if err != nil {
+		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// call reconciliation
+	_, err = ApplyLicenseManager(ctx, c, &licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for license master with app framework  %v", err)
+		debug.PrintStack()
 	}
 }

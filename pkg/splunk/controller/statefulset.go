@@ -20,24 +20,25 @@ import (
 	"fmt"
 	"reflect"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
 
 // Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
-func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (splcommon.Phase, error) {
+func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	phase, err := ApplyStatefulSet(ctx, client, statefulSet)
-	if err == nil && phase == splcommon.PhaseReady {
+	if err == nil && phase == enterpriseApi.PhaseReady {
 		phase, err = UpdateStatefulSetPods(ctx, client, statefulSet, mgr, desiredReplicas)
 	}
 	return phase, err
@@ -59,7 +60,7 @@ func (mgr *DefaultStatefulSetPodManager) FinishRecycle(ctx context.Context, n in
 }
 
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
-func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet) (splcommon.Phase, error) {
+func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet) (enterpriseApi.Phase, error) {
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current appsv1.StatefulSet
 
@@ -73,17 +74,17 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 		// a pod recycle unnecessarily. To avoid the same, sort the slices during the
 		// statefulSet creation.
 		// Note: During the update scenario below, MergePodUpdates takes care of sorting.
-		SortStatefulSetSlices(&revised.Spec.Template.Spec, revised.GetObjectMeta().GetName())
+		SortStatefulSetSlices(ctx, &revised.Spec.Template.Spec, revised.GetObjectMeta().GetName())
 
 		// no StatefulSet exists -> just create a new one
 		err = splutil.CreateResource(ctx, c, revised)
-		return splcommon.PhasePending, err
+		return enterpriseApi.PhasePending, err
 	}
 
 	// found an existing StatefulSet
 
 	// check for changes in Pod template
-	hasUpdates := MergePodUpdates(&current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
 	*revised = current // caller expects that object passed represents latest state
 
 	// only update if there are material differences, as determined by comparison function
@@ -94,20 +95,21 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 		err = splutil.UpdateResource(ctx, c, revised)
 		if err != nil {
-			return splcommon.PhaseUpdating, err
+			return enterpriseApi.PhaseUpdating, err
 		}
 		// always pass the latest resource back to caller
 		err = c.Get(ctx, namespacedName, revised)
-		return splcommon.PhaseUpdating, err
+		return enterpriseApi.PhaseUpdating, err
 	}
 
 	// scaling and pod updates are handled by UpdateStatefulSetPods
-	return splcommon.PhaseReady, nil
+	return enterpriseApi.PhaseReady, nil
 }
 
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets
-func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, mgr splcommon.StatefulSetPodManager, desiredReplicas int32) (splcommon.Phase, error) {
-	scopedLog := log.WithName("UpdateStatefulSetPods").WithValues(
+func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, mgr splcommon.StatefulSetPodManager, desiredReplicas int32) (enterpriseApi.Phase, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("UpdateStatefulSetPods").WithValues(
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
@@ -117,12 +119,12 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	if readyReplicas < replicas {
 		scopedLog.Info("Waiting for pods to become ready")
 		if readyReplicas > 0 {
-			return splcommon.PhaseScalingUp, nil
+			return enterpriseApi.PhaseScalingUp, nil
 		}
-		return splcommon.PhasePending, nil
+		return enterpriseApi.PhasePending, nil
 	} else if readyReplicas > replicas {
 		scopedLog.Info("Waiting for scale down to complete")
-		return splcommon.PhaseScalingDown, nil
+		return enterpriseApi.PhaseScalingDown, nil
 	}
 
 	// readyReplicas == replicas
@@ -132,7 +134,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		// scale up StatefulSet to match desiredReplicas
 		scopedLog.Info("Scaling replicas up", "replicas", desiredReplicas)
 		*statefulSet.Spec.Replicas = desiredReplicas
-		return splcommon.PhaseScalingUp, splutil.UpdateResource(ctx, c, statefulSet)
+		return enterpriseApi.PhaseScalingUp, splutil.UpdateResource(ctx, c, statefulSet)
 	}
 
 	// check for scaling down
@@ -143,11 +145,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		ready, err := mgr.PrepareScaleDown(ctx, n)
 		if err != nil {
 			scopedLog.Error(err, "Unable to decommission Pod", "podName", podName)
-			return splcommon.PhaseError, err
+			return enterpriseApi.PhaseError, err
 		}
 		if !ready {
 			// wait until pod quarantine has completed before deleting it
-			return splcommon.PhaseScalingDown, nil
+			return enterpriseApi.PhaseScalingDown, nil
 		}
 
 		// scale down statefulset to terminate pod
@@ -156,7 +158,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		err = splutil.UpdateResource(ctx, c, statefulSet)
 		if err != nil {
 			scopedLog.Error(err, "Scale down update failed for StatefulSet")
-			return splcommon.PhaseError, err
+			return enterpriseApi.PhaseError, err
 		}
 
 		// delete PVCs used by the pod so that a future scale up will have clean state
@@ -169,17 +171,17 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			err := c.Get(ctx, namespacedName, &pvc)
 			if err != nil {
 				scopedLog.Error(err, "Unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name)
-				return splcommon.PhaseError, err
+				return enterpriseApi.PhaseError, err
 			}
-			log.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
+			scopedLog.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
 			err = c.Delete(ctx, &pvc)
 			if err != nil {
 				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
-				return splcommon.PhaseError, err
+				return enterpriseApi.PhaseError, err
 			}
 		}
 
-		return splcommon.PhaseScalingDown, nil
+		return enterpriseApi.PhaseScalingDown, nil
 	}
 
 	// ready and no StatefulSet scaling is required
@@ -194,11 +196,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		err := c.Get(ctx, namespacedName, &pod)
 		if err != nil {
 			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
-			return splcommon.PhaseError, err
+			return enterpriseApi.PhaseError, err
 		}
 		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || pod.Status.ContainerStatuses[0].Ready != true {
 			scopedLog.Error(err, "Waiting for Pod to become ready", "podName", podName)
-			return splcommon.PhaseUpdating, err
+			return enterpriseApi.PhaseUpdating, err
 		}
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
@@ -207,11 +209,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			ready, err := mgr.PrepareRecycle(ctx, n)
 			if err != nil {
 				scopedLog.Error(err, "Unable to prepare Pod for recycling", "podName", podName)
-				return splcommon.PhaseError, err
+				return enterpriseApi.PhaseError, err
 			}
 			if !ready {
 				// wait until pod quarantine has completed before deleting it
-				return splcommon.PhaseUpdating, nil
+				return enterpriseApi.PhaseUpdating, nil
 			}
 
 			// deleting pod will cause StatefulSet controller to create a new one with latest template
@@ -222,34 +224,34 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			err = c.Delete(context.Background(), &pod, preconditions)
 			if err != nil {
 				scopedLog.Error(err, "Unable to delete Pod", "podName", podName)
-				return splcommon.PhaseError, err
+				return enterpriseApi.PhaseError, err
 			}
 
 			// only delete one at a time
-			return splcommon.PhaseUpdating, nil
+			return enterpriseApi.PhaseUpdating, nil
 		}
 
 		// check if pod was previously prepared for recycling; if so, complete
 		complete, err := mgr.FinishRecycle(ctx, n)
 		if err != nil {
 			scopedLog.Error(err, "Unable to complete recycling of pod", "podName", podName)
-			return splcommon.PhaseError, err
+			return enterpriseApi.PhaseError, err
 		}
 		if !complete {
 			// return and wait until next reconcile to let things settle down
-			return splcommon.PhaseUpdating, nil
+			return enterpriseApi.PhaseUpdating, nil
 		}
 	}
 
 	// Remove unwanted owner references
 	err := splutil.RemoveUnwantedSecrets(ctx, c, statefulSet.GetName(), statefulSet.GetNamespace())
 	if err != nil {
-		return splcommon.PhaseReady, err
+		return enterpriseApi.PhaseReady, err
 	}
 
 	// all is good!
 	scopedLog.Info("All pods are ready")
-	return splcommon.PhaseReady, nil
+	return enterpriseApi.PhaseReady, nil
 }
 
 // SetStatefulSetOwnerRef sets owner references for statefulset
@@ -329,16 +331,23 @@ func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerRefer
 	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID())
 }
 
-// IsStatefulSetScalingUp checks if we are currently scaling up
-func IsStatefulSetScalingUp(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (bool, error) {
-	scopedLog := log.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+// IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down
+func IsStatefulSetScalingUpOrDown(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, name string, desiredReplicas int32) (enterpriseApi.StatefulSetScalingType, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isScalingUp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: name}
 	current, err := GetStatefulSetByName(ctx, client, namespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get current stateful set", "name", namespacedName)
-		return false, err
+		return enterpriseApi.StatefulSetNotScaling, err
 	}
 
-	return *current.Spec.Replicas < desiredReplicas, nil
+	if *current.Spec.Replicas < desiredReplicas {
+		return enterpriseApi.StatefulSetScalingUp, nil
+	} else if *current.Spec.Replicas > desiredReplicas {
+		return enterpriseApi.StatefulSetScalingDown, nil
+	}
+
+	return enterpriseApi.StatefulSetNotScaling, nil
 }

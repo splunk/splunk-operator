@@ -18,7 +18,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 
 SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for deploying distributed Splunk Enterprise environments using containers.
 
-COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. This unique product will be enhanced, maintained and supported by the community, led by Splunkers with deep subject matter expertise. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
+COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
 
 If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](CONTRIBUTING.md) page.
 
@@ -59,8 +59,8 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (1.1.0 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (8.2.6 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.0.0 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.0 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -106,10 +106,17 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
  
 ## Installing the Splunk Operator
 
-A Kubernetes cluster administrator can install and start the Splunk Operator by running:
+A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-namespace.yaml
 ```
+
+A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
+```
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-cluster.yaml
+```
+
+The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
 
@@ -133,7 +140,7 @@ The `Standalone` custom resource is used to create a single instance deployment 
 
 
 ```yaml
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply -n splunk-operator -f -
 apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
@@ -151,7 +158,6 @@ Within a few minutes, you'll see new pods running in your namespace:
 $ kubectl get pods
 NAME                                   READY   STATUS    RESTARTS   AGE
 splunk-operator-7c5599546c-wt4xl        1/1    Running   0          11h
-splunk-default-monitoring-console-0     1/1    Running   0          30s
 splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 

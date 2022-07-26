@@ -30,7 +30,6 @@ jobs:
     if:
       contains('
         refs/heads/develop
-        refs/heads/sdk-release-changes
         ', github.ref)
     steps:
     - name: Checkout code
@@ -43,19 +42,10 @@ jobs:
     - name: Create ChangeLog since last release
       run: |
         git log $(git describe --tags --abbrev=0)..HEAD --oneline >> docs/ChangeLog-NEW.md
-    
-    - name: Set Release Identifier
-      run: |
-        echo "SHORT_SHA=${GITHUB_SHA::12}" >> $GITHUB_ENV
-        echo $SHORT_SHA
+
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-
-    - name: Install yq
-      run: |
-        wget https://github.com/mikefarah/yq/releases/download/3.2.1/yq_linux_amd64 -O /usr/bin/yq
-        chmod +x /usr/bin/yq
     
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
@@ -73,22 +63,11 @@ jobs:
     
     - name: Install golint
       run: |
-        go version
         go get -u golang.org/x/lint/golint
     
     - name: Install goveralls
       run: |
-        go version
         go get github.com/mattn/goveralls@latest
-
-    - name: Install Operator SDK
-      run: |
-        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
-        export OS=$(uname | awk '{print tolower($0)}')
-        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
-        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH} 
-        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -117,6 +96,24 @@ jobs:
         exclude: "ChangeLog.md"
         include: "**.md"
 
+    - name: Update Splunk Operator upgrade string in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.old_operator_version }}"
+        replace: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: "**.md"
+
+    - name: Update Splunk Operator Release URL in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "https://github.com/splunk/splunk-operator/releases/download/${{ github.event.inputs.old_operator_version }}/splunk-operator-install.yaml"
+        replace: "https://github.com/splunk/splunk-operator/releases/download/${{ github.event.inputs.new_operator_version }}/splunk-operator-install.yaml"
+        exclude: "ChangeLog.md"
+        include: "**.md"
+
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
@@ -133,25 +130,6 @@ jobs:
         replace: "${{ github.event.inputs.new_enterprise_version }} or later"
         exclude: "ChangeLog.md"
         include: "**.md"
-
-    - name: Run Make Package
-      run: |
-        make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
-  
-    - name: Tag and Push release RC Image
-      run: |
-        make docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC 
-
-    - name: Revert Manifest file release version 
-      run: |
-        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
-
-    - name: Upload Release Artifacts
-      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
-      with:
-        name: "release-artifacts-${{ github.event.inputs.release_version }}"
-        path: "release-**"
 
     - name: Reset go.mod and go.sum before creating Pull Request
       run: |

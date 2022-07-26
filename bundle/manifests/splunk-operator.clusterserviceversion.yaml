@@ -56,7 +56,7 @@ metadata:
     capabilities: Basic Install
     marketplace.openshift.io/remote-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/pricing?utm_source=openshift_console
     marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
-    operators.operatorframework.io/builder: operator-sdk-v1.15.0
+    operators.operatorframework.io/builder: operator-sdk-v1.18.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
   name: splunk-operator.v1.1.0
   namespace: placeholder

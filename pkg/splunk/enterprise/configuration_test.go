@@ -19,7 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"os"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -47,9 +52,10 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	if string(got) != want {
-		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	}
+	//if string(got) != want {
+	//	t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
+	//}
+	require.JSONEq(t, string(got), want)
 }
 
 func TestGetSplunkService(t *testing.T) {
@@ -116,7 +122,7 @@ func TestGetService(t *testing.T) {
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ServiceTemplate: corev1.Service{
 						Spec: corev1.ServiceSpec{
 							Ports: []corev1.ServicePort{{Name: "user-defined", Port: 32000, TargetPort: intstr.FromInt(6443)}},
@@ -267,6 +273,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	ctx := context.TODO()
+	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -293,7 +300,7 @@ func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 		},
 	}
 
-	err := validateClusterManagerSpec(ctx, &cr)
+	err := validateClusterManagerSpec(ctx, c, &cr)
 
 	if err != nil {
 		t.Errorf("Smartstore configuration should not fail on ClusterManager CR: %v", err)
@@ -606,6 +613,18 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
 
+	currentDownloadVolume := splcommon.AppDownloadVolume
+	splcommon.AppDownloadVolume = fmt.Sprintf("/tmp/appdownload-%d", rand.Intn(1000))
+	defer func() {
+		// remove the AppDownloadVolume if exist just to make sure
+		// previous test case have not created directory
+		err = os.RemoveAll(splcommon.AppDownloadVolume)
+		if err != nil {
+			t.Errorf("unable to delete directory %s", splcommon.AppDownloadVolume)
+		}
+		splcommon.AppDownloadVolume = currentDownloadVolume
+	}()
+
 	// Valid app framework config
 	AppFramework := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
@@ -638,6 +657,19 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err == nil {
+		t.Errorf("App Framework configuration should have returned error as we have not mounted app download volume: %v", err)
+	}
+
+	// to pass the validation stage, add the directory to download apps
+	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	if err != nil {
+		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
+	}
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+
 	if err != nil {
 		t.Errorf("Valid App Framework configuration should not cause error: %v", err)
 	}
@@ -653,7 +685,8 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].Name = ""
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "app Source name is missing for AppSource at:") {
+
 		t.Errorf("Should not accept an app source with missing name ")
 	}
 
@@ -661,7 +694,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.AppSources[0].Name = "adminApps"
 	AppFramework.AppSources[0].Location = ""
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "app Source location is missing for AppSource") {
 		t.Errorf("An App Source with missing location should cause an error, when there is no default location configured")
 	}
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
@@ -676,6 +709,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		t.Errorf("Should accept an App Source with missing scope, when default scope is configured. But, got the error: %v", err)
 	}
 	AppFramework.AppSources[0].Location = "adminAppsRepo"
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
 
 	// Empty App Repo config should not cause an error
 	err = ValidateAppFrameworkSpec(ctx, nil, &appFrameworkContext, false)
@@ -708,39 +742,50 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	}
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFrameworkWithoutVolumeSpec, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for App Source") {
 		t.Errorf("App Repo config without volume details should return error")
 	}
 
 	// Defaults with invalid volume reference should return error
+	tmpVolume := AppFramework.Defaults.VolName
 	AppFramework.Defaults.VolName = "UnknownVolume"
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for Defaults") {
 		t.Errorf("Volume referred in the defaults should be a valid volume")
 	}
+	AppFramework.Defaults.VolName = tmpVolume
 
-	//Duplicate App Sources should return an error
-	tmpVolume := AppFramework.AppSources[1].VolName
+	//Duplicate App Source locations should return an error
+	tmpVolume = AppFramework.AppSources[1].VolName
 	tmpLocation := AppFramework.AppSources[1].Location
 
 	AppFramework.AppSources[1].VolName = AppFramework.AppSources[0].VolName
 	AppFramework.AppSources[1].Location = AppFramework.AppSources[0].Location
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "duplicate App Source configured") {
 		t.Errorf("Duplicate app sources should return an error")
+	}
+
+	// Duplicate App Source locations across different scopes should not return an error
+	tmpScope := AppFramework.AppSources[1].Scope
+	AppFramework.AppSources[1].Scope = enterpriseApi.ScopeCluster
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("App Sources with different app scopes can have duplicate paths, but failed with error: %v", err)
 	}
 
 	AppFramework.AppSources[1].VolName = tmpVolume
 	AppFramework.AppSources[1].Location = tmpLocation
+	AppFramework.AppSources[1].Scope = tmpScope
 
 	// Duplicate app sources names should cause an error
 	tmpAppSourceName := AppFramework.AppSources[1].Name
 	AppFramework.AppSources[1].Name = AppFramework.AppSources[0].Name
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "multiple app sources with the name adminApps is not allowed") {
 		t.Errorf("Failed to detect duplicate app source names")
 	}
 	AppFramework.AppSources[1].Name = tmpAppSourceName
@@ -751,7 +796,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = ""
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "volumeName is missing for App Source") {
 		t.Errorf("If no default volume, App Source with missing volume info should return an error")
 	}
 
@@ -759,14 +804,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
-		t.Errorf("If default volume, App Source with missing volume should not return an error, but got erros %v", err)
+		t.Errorf("If default volume, App Source with missing volume should not return an error, but got error %v", err)
 	}
 
 	// Volume referenced from an index must be a valid volume
 	AppFramework.AppSources[0].VolName = "UnknownVolume"
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for App Source") {
 		t.Errorf("Index with an invalid volume name should return error")
 	}
 	AppFramework.AppSources[0].VolName = "msos_s2s3_vol"
@@ -774,14 +819,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// if the CR supports only local apps, and if the app source scope is not local, should return error
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeCluster
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid scope for App Source") {
 		t.Errorf("When called with App scope local, any app sources with the cluster scope should return an error")
 	}
 
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.Contains(err.Error(), "should be either local or cluster or clusterWithPreConfig") {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
 
@@ -791,7 +836,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
 
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid scope for defaults config. Only local scope is supported for this kind of CR") {
 		t.Errorf("When called with App scope local, defaults with the cluster scope should return an error")
 	}
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
@@ -799,7 +844,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Default scope should be either "local" OR "cluster"
 	AppFramework.Defaults.Scope = "unknown"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "scope for defaults should be either local") {
 		t.Errorf("Unsupported default scope should be cause error, but failed to detect")
 	}
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeCluster
@@ -808,7 +853,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.Defaults.Scope = ""
 	AppFramework.AppSources[0].Scope = ""
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "app Source scope is missing for") {
 		t.Errorf("Missing scope should be detected, but failed")
 	}
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeLocal
@@ -831,51 +876,50 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		t.Errorf("defaultAppsRepoPollInterval should be within the range [%d - %d]", splcommon.MinAppsRepoPollInterval, splcommon.MaxAppsRepoPollInterval)
 	}
 
-	appFrameworkContext.AppsRepoStatusPollInterval = 0
+	AppFramework.AppsRepoPollInterval = 0
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.DefaultAppsRepoPollInterval {
-		t.Errorf("Spec validation failed to set the Repo poll interval to the default value: %d", splcommon.DefaultAppsRepoPollInterval)
 	}
 
 	// Check for minAppsRepoPollInterval
-	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MinAppsRepoPollInterval - 1
+	AppFramework.AppsRepoPollInterval = splcommon.MinAppsRepoPollInterval - 1
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval < splcommon.MinAppsRepoPollInterval {
-		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval")
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.MinAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to minAppsRepoPollInterval. AppsRepoStatusPollInterval=%d, expected=%d", appFrameworkContext.AppsRepoStatusPollInterval, splcommon.MinAppsRepoPollInterval)
 	}
 
 	// Check for maxAppsRepoPollInterval
-	appFrameworkContext.AppsRepoStatusPollInterval = splcommon.MaxAppsRepoPollInterval + 1
+	AppFramework.AppsRepoPollInterval = splcommon.MaxAppsRepoPollInterval + 1
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
 	if err != nil {
 		t.Errorf("Got error on valid App Framework configuration. Error: %v", err)
-	} else if appFrameworkContext.AppsRepoStatusPollInterval > splcommon.MaxAppsRepoPollInterval {
-		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval")
+	} else if appFrameworkContext.AppsRepoStatusPollInterval != splcommon.MaxAppsRepoPollInterval {
+		t.Errorf("Spec validation is not able to set the the AppsRepoPollInterval to maxAppsRepoPollInterval. AppsRepoStatusPollInterval=%d, expected=%d", appFrameworkContext.AppsRepoStatusPollInterval, splcommon.MaxAppsRepoPollInterval)
 	}
 
 	// Invalid volume name in defaults should return an error
 	AppFramework.Defaults.VolName = "unknownVolume"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid Volume Name for Defaults") {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
 
 	// Invalid remote volume type should return error.
 	AppFramework.VolList[0].Type = "s4"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
 	}
 
 	AppFramework.VolList[0].Provider = "invalid-provider"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil {
+	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
+
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
@@ -1066,7 +1110,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
+	_ = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
 
 	_, ok := ResourceRev["splunk-test-secret"]
 	if !ok {
@@ -1078,7 +1122,7 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 	secret.SetResourceVersion(resourceVersion)
 
 	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
-	resourceVersionUpdated, ok := ResourceRev["splunk-test-secret"]
+	resourceVersionUpdated := ResourceRev["splunk-test-secret"]
 	if !keysChanged || resourceVersion != resourceVersionUpdated {
 		t.Errorf("Failed detect the secret object change. Key changed: %t, Expected resource version: %s, Updated resource version %s", keysChanged, resourceVersion, resourceVersionUpdated)
 	}
@@ -1148,7 +1192,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Test defaults - PVCs for etc & var with 10Gi and 100Gi storage capacity
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1161,7 +1205,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1173,7 +1217,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			EphemeralStorage: true,
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define ephemeral for etc & PVCs for var
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1185,7 +1229,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1198,7 +1242,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
 
 	// Define invalid EtcVolumeStorageConfig
 	spec = &enterpriseApi.CommonSplunkSpec{
@@ -1323,4 +1367,78 @@ func TestGetProbe(t *testing.T) {
 	}
 
 	test(command, 100, 10, 10, `{"exec":{"command":["grep","ready","file.txt"]},"initialDelaySeconds":100,"timeoutSeconds":10,"periodSeconds":10}`)
+}
+
+func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				VolList: []enterpriseApi.VolumeSpec{
+					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "authenticationApps",
+						Location: "authenticationAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+				},
+			},
+		},
+	}
+
+	client := spltest.NewMockClient()
+
+	// now create another standalone type
+	revised := cr
+	revised.ObjectMeta.Name = "standalone2"
+
+	// Create the configMap
+	configMap, err := createOrUpdateAppUpdateConfigMap(ctx, client, &cr)
+	if err != nil {
+		t.Errorf("manual app update configMap should have been created successfully")
+	}
+
+	configMapName := configMap.Name
+	// check the status and refCount
+	refCount := getManualUpdateRefCount(ctx, client, &cr, configMapName)
+	status := getManualUpdateStatus(ctx, client, &cr, configMapName)
+	if refCount != 1 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=1, Got=%d", status, refCount)
+	}
+
+	// update the configMap
+	_, err = createOrUpdateAppUpdateConfigMap(ctx, client, &revised)
+	if err != nil {
+		t.Errorf("manual app update configMap should have been created successfully")
+	}
+
+	// check the status and refCount
+	refCount = getManualUpdateRefCount(ctx, client, &revised, configMapName)
+	status = getManualUpdateStatus(ctx, client, &revised, configMapName)
+	if refCount != 2 || status != "off" {
+		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
+	}
 }

@@ -17,6 +17,7 @@ package testenv
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -28,15 +29,15 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 const (
@@ -45,7 +46,11 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true)).WithName("util"))
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+	}
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseFlagOptions(&opts)).WithName("util"))
 
 }
 
@@ -78,7 +83,7 @@ func newStandalone(name, ns string) *enterpriseApi.Standalone {
 
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				Volumes: []corev1.Volume{},
@@ -134,7 +139,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 				},
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 			},
@@ -159,7 +164,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 		Spec: enterpriseApi.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
@@ -189,7 +194,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 			SmartStore: smartstorespec,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
@@ -218,7 +223,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				ClusterMasterRef: corev1.ObjectReference{
@@ -247,7 +252,7 @@ func newSearchHeadCluster(name, ns, clusterMasterRef, licenseManagerName string,
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				ClusterMasterRef: corev1.ObjectReference{
@@ -341,6 +346,31 @@ func newLicenseConfigMap(name, ns, localLicenseFilePath string) (*corev1.ConfigM
 	return &cm, nil
 }
 
+func newPVC(name, ns, storage, storageClassName string) (*corev1.PersistentVolumeClaim, error) {
+
+	storageCapacity, err := splcommon.ParseResourceQuantity(storage, DefaultStorageForAppDownloads)
+	if err != nil {
+		return nil, err
+	}
+
+	pvc := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: storageCapacity,
+				},
+			},
+			StorageClassName: &storageClassName,
+		},
+	}
+	return &pvc, nil
+}
+
 func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag string) *appsv1.Deployment {
 	var replicas int32 = 1
 
@@ -364,6 +394,9 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 					},
 				},
 				Spec: corev1.PodSpec{
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: &OperatorFSGroup,
+					},
 					ServiceAccountName: account,
 					Containers: []corev1.Container{
 						{
@@ -418,7 +451,7 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
@@ -481,7 +514,7 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseMasterRef string) *
 
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: splcommon.Spec{
+				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseMasterRef: corev1.ObjectReference{
@@ -570,7 +603,13 @@ func DumpGetTopPods(ns string) []string {
 }
 
 // GetOperatorPodName returns name of operator pod in the namespace
-func GetOperatorPodName(ns string) string {
+func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
+	var ns string
+	if testcaseEnvInst.clusterWideOperator != "true" {
+		ns = testcaseEnvInst.GetName()
+	} else {
+		ns = "splunk-operator"
+	}
 	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
 	var splunkPods string
 	if err != nil {
@@ -661,6 +700,18 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 	return stdout, nil
 }
 
+// ExecuteCommandOnOperatorPod execute command on given pod and return result
+func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
+	command := []string{"/bin/sh"}
+	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false)
+	if err != nil {
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		return "", err
+	}
+	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
+	return stdout, nil
+}
+
 // GetConfigMap Gets the config map for a given k8 config map name
 func GetConfigMap(ctx context.Context, deployment *Deployment, ns string, configMapName string) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{}
@@ -721,6 +772,26 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 	return &new
 }
 
+// GetOperatorDirsOrFilesInPath returns subdirectory under given path on the given POD
+func GetOperatorDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
+	var cmd string
+	if dirOnly {
+		cmd = fmt.Sprintf("cd %s; ls -d */", path)
+	} else {
+		cmd = fmt.Sprintf("cd %s; ls ", path)
+	}
+	stdout, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
+	if err != nil {
+		return nil, err
+	}
+	dirList := strings.Fields(stdout)
+	// Directory are returned with trailing /. The below loop removes the trailing /
+	for i, dirName := range dirList {
+		dirList[i] = strings.TrimSuffix(dirName, "/")
+	}
+	return strings.Fields(stdout), err
+}
+
 // GetDirsOrFilesInPath returns subdirectory under given path on the given POD
 func GetDirsOrFilesInPath(ctx context.Context, deployment *Deployment, podName string, path string, dirOnly bool) ([]string, error) {
 	var cmd string
@@ -753,8 +824,9 @@ func CompareStringSlices(stringOne []string, stringTwo []string) bool {
 
 // CheckStringInSlice check if string is present in a slice
 func CheckStringInSlice(stringSlice []string, compString string) bool {
+	logf.Log.Info("Checking for string in slice", "String", compString, "String Slice", stringSlice)
 	for _, item := range stringSlice {
-		if item == compString {
+		if strings.Contains(item, compString) {
 			return true
 		}
 	}
@@ -776,4 +848,79 @@ func GeneratePodNameSlice(formatString string, key string, count int, multisite 
 		}
 	}
 	return podNames
+}
+
+// GetPodsStartTime prints and returns list of pods in namespace and their respective start time
+func GetPodsStartTime(ns string) map[string]time.Time {
+	splunkPodsStartTime := make(map[string]time.Time)
+	splunkPods := DumpGetPods(ns)
+
+	for _, podName := range splunkPods {
+		output, _ := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		restResponse := PodDetailsStruct{}
+		err := json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse splunk pods")
+		}
+		podStartTime, _ := time.Parse("2006-01-02T15:04:05Z", restResponse.Status.StartTime)
+		splunkPodsStartTime[podName] = podStartTime
+	}
+	return splunkPodsStartTime
+}
+
+// DeletePod Delete pod in the namespace
+func DeletePod(ns string, podName string) error {
+	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
+		return err
+	}
+	return nil
+}
+
+// DeleteOperatorPod Delete Operator Pod in the namespace
+func DeleteOperatorPod(testcaseEnvInst *TestCaseEnv) error {
+	var podName string
+	var ns string
+	if testcaseEnvInst.clusterWideOperator != "true" {
+		ns = testcaseEnvInst.GetName()
+	} else {
+		ns = "splunk-operator"
+	}
+	podName = GetOperatorPodName(testcaseEnvInst)
+
+	_, err := exec.Command("kubectl", "delete", "pod", "-n", ns, podName).Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete operator pod ", "PodName", podName, "Namespace", ns)
+		return err
+	}
+	return nil
+}
+
+// DeleteFilesOnOperatorPod Delete files on Operator Pod
+func DeleteFilesOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, filenames []string) error {
+	for _, filepath := range filenames {
+		cmd := fmt.Sprintf("rm -f %s", filepath)
+		_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
+		if err != nil {
+			logf.Log.Error(err, "Failed to delete file on pod ", "PodName", podName, "location", filepath, "command", cmd)
+			return err
+		}
+	}
+	return nil
+}
+
+// DumpGetSplunkVersion prints the splunk version installed on pods
+func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment, filterString string) {
+	splunkPods := DumpGetPods(ns)
+	cmd := "/opt/splunk/bin/splunk -version"
+	for _, podName := range splunkPods {
+		if strings.Contains(podName, filterString) {
+			stdout, err := ExecuteCommandOnPod(ctx, deployment, podName, cmd)
+			if err != nil {
+				logf.Log.Error(err, "Failed to get splunkd version on the pod", "Pod Name", podName)
+			}
+			logf.Log.Info("Splunk Version Found", "Pod Name", podName, "Version", string(stdout))
+		}
+	}
 }

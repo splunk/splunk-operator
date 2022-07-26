@@ -110,19 +110,50 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 			}
 			if component == "monitoring-console" {
-				mockCalls["Create"] = []spltest.MockFuncCall{}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				}
 				mockCalls["Get"] = []spltest.MockFuncCall{
-					//{MetaName: "*v3.MonitoringConsole-test-stack1"},
-					//{MetaName: "*v1.Secret-test-splunk-test-secret"},
-					//{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				}
 				mockCalls["Update"] = []spltest.MockFuncCall{
-					//{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())},
 				}
 				mockCalls["Delete"] = []spltest.MockFuncCall{
 					{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"},
 				}
+			}
+
+			switch cr.GetObjectKind().GroupVersionKind().Kind {
+			case "Standalone":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v3.Standalone-test-stack1"},
+					{MetaName: "*v3.Standalone-test-stack1"},
+				}...)
+
+			case "LicenseMaster":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v3.LicenseMaster-test-stack1"},
+					{MetaName: "*v3.LicenseMaster-test-stack1"},
+				}...)
+
+			case "SearchHeadCluster":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+					{MetaName: "*v3.SearchHeadCluster-test-stack1"},
+				}...)
+
+			case "ClusterMaster":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v3.ClusterMaster-test-stack1"},
+					{MetaName: "*v3.ClusterMaster-test-stack1"},
+				}...)
+
+			case "MonitoringConsole":
+				mockCalls["Get"] = append(mockCalls["Get"], spltest.MockFuncCall{MetaName: "*v3.MonitoringConsole-test-stack1"})
 			}
 		} else {
 			mockCalls["Update"] = []spltest.MockFuncCall{
@@ -145,6 +176,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v3.ClusterMaster-test-master1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v3.IndexerCluster-test-stack1"},
+				{MetaName: "*v3.IndexerCluster-test-stack1"},
 			}
 		}
 	}

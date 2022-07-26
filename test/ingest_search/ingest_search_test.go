@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -69,14 +69,14 @@ var _ = Describe("Ingest and Search Test", func() {
 			// Wait for standalone to be in READY Status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			Eventually(func() splcommon.Phase {
+			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
 
 				searchString := "index=_internal | stats count by host"
 				searchResultsResp, err := testenv.PerformSearchSync(ctx, podName, searchString, deployment)
 				if err != nil {
 					testcaseEnvInst.Log.Error(err, "Failed to execute search on pod", "pod", podName, "searchString", searchString)
-					return splcommon.PhaseError
+					return enterpriseApi.PhaseError
 				}
 				testcaseEnvInst.Log.Info("Performed a search", "searchString", searchString)
 
@@ -94,9 +94,9 @@ var _ = Describe("Ingest and Search Test", func() {
 				}
 
 				return standalone.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
-			Eventually(func() splcommon.Phase {
+			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
 				searchString := "index=_internal GUID component=ServerConfig"
 
@@ -104,7 +104,7 @@ var _ = Describe("Ingest and Search Test", func() {
 				sid, reqErr := testenv.PerformSearchReq(ctx, podName, searchString, deployment)
 				if reqErr != nil {
 					testcaseEnvInst.Log.Error(reqErr, "Failed to execute search on pod", "pod", podName, "searchString", searchString)
-					return splcommon.PhaseError
+					return enterpriseApi.PhaseError
 				}
 				testcaseEnvInst.Log.Info("Got a search with sid", "sid", sid)
 
@@ -112,7 +112,7 @@ var _ = Describe("Ingest and Search Test", func() {
 				searchStatusResult, statusErr := testenv.GetSearchStatus(ctx, podName, sid, deployment)
 				if statusErr != nil {
 					testcaseEnvInst.Log.Error(statusErr, "Failed to get search status on pod", "pod", podName, "sid", sid)
-					return splcommon.PhaseError
+					return enterpriseApi.PhaseError
 				}
 				testcaseEnvInst.Log.Info("Search status:", "searchStatusResult", searchStatusResult)
 
@@ -120,7 +120,7 @@ var _ = Describe("Ingest and Search Test", func() {
 				searchResultsResp, resErr := testenv.GetSearchResults(ctx, podName, sid, deployment)
 				if resErr != nil {
 					testcaseEnvInst.Log.Error(resErr, "Failed to get search results on pod", "pod", podName, "sid", sid)
-					return splcommon.PhaseError
+					return enterpriseApi.PhaseError
 				}
 
 				// Display results for debug purposes
@@ -132,7 +132,7 @@ var _ = Describe("Ingest and Search Test", func() {
 				}
 
 				return standalone.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 		})
 	})
 
@@ -146,7 +146,7 @@ var _ = Describe("Ingest and Search Test", func() {
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Verify splunk status is up
-			Eventually(func() splcommon.Phase {
+			Eventually(func() enterpriseApi.Phase {
 				podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
 
 				splunkBin := "/opt/splunk/bin/splunk"
@@ -159,17 +159,17 @@ var _ = Describe("Ingest and Search Test", func() {
 				statusCmdResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, statusCmd, false)
 				if err != nil {
 					testcaseEnvInst.Log.Error(err, "Failed to execute command on pod", "pod", podName, "statusCmd", statusCmd, "statusCmdResp", statusCmdResp, "stderr", stderr)
-					return splcommon.PhaseError
+					return enterpriseApi.PhaseError
 				}
 
 				if !strings.Contains(strings.ToLower(statusCmdResp), strings.ToLower("splunkd is running")) {
 					testcaseEnvInst.Log.Error(err, "Failed to find splunkd running", "pod", podName, "statusCmdResp", statusCmdResp)
-					return splcommon.PhaseError
+					return enterpriseApi.PhaseError
 				}
 
 				testcaseEnvInst.Log.Info("Waiting for standalone splunkd status to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 				return standalone.Status.Phase
-			}, deployment.GetTimeout(), PollInterval).Should(Equal(splcommon.PhaseReady))
+			}, deployment.GetTimeout(), PollInterval).Should(Equal(enterpriseApi.PhaseReady))
 
 			// Create an index
 			podName := fmt.Sprintf("splunk-%s-standalone-0", deployment.GetName())
