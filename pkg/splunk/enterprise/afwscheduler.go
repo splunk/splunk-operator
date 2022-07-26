@@ -116,6 +116,7 @@ func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, 
 	return err
 }
 
+// Get extension for name of telemetry app
 func getTelAppNameExtension(crKind string) (string, error) {
 	switch crKind {
 	case "Standalone":
@@ -132,7 +133,7 @@ func getTelAppNameExtension(crKind string) (string, error) {
 }
 
 // addTelApp adds a telemetry app
-func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas int32, cr splcommon.MetaObject) error {
+var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 	var err error
 
 	reqLogger := log.FromContext(ctx)
@@ -141,7 +142,6 @@ func addTelApp(ctx context.Context, client splcommon.ControllerClient, replicas 
 		"namespace", cr.GetObjectMeta().GetNamespace())
 
 	// Create pod exec client
-	podExecClient := splutil.GetPodExecClient(client, cr, "")
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	// Get Tel App Name Extension

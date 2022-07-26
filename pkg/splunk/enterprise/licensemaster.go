@@ -31,6 +31,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 // ApplyLicenseManager reconciles the state for the Splunk Enterprise license manager.
@@ -157,9 +158,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		// Add a splunk operator telemetry app
-		if (cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled) && !cr.Spec.Mock {
-
-			err := addTelApp(ctx, client, numberOfLicenseMasterReplicas, cr)
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, numberOfLicenseMasterReplicas, cr)
 			if err != nil {
 				return result, err
 			}

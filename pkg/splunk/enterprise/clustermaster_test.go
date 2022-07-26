@@ -1155,7 +1155,6 @@ func TestClusterMasterWithReadyState(t *testing.T) {
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
-				Mock: true,
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},
@@ -1351,6 +1350,11 @@ func TestClusterMasterWithReadyState(t *testing.T) {
 	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation

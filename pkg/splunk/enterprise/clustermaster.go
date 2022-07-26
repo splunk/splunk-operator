@@ -194,8 +194,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		// Add a splunk operator telemetry app
-		if (cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled) && !cr.Spec.Mock {
-			err := addTelApp(ctx, client, numberOfClusterMasterReplicas, cr)
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
 			if err != nil {
 				return result, err
 			}

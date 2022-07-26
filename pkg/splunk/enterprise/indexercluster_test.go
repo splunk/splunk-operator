@@ -1345,7 +1345,6 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
-				Mock: true,
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},
@@ -1484,6 +1483,11 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation

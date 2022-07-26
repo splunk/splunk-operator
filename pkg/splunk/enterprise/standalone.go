@@ -24,6 +24,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -229,9 +230,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		result = *finalResult
 
 		// Add a splunk operator telemetry app
-		if (cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled) && !cr.Spec.Mock {
-
-			err := addTelApp(ctx, client, cr.Spec.Replicas, cr)
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
 				return result, err
 			}

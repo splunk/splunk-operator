@@ -212,9 +212,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 
 		// Add a splunk operator telemetry app
-		if (cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled) && !cr.Spec.Mock {
-
-			err := addTelApp(ctx, client, numberOfDeployerReplicas, cr)
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
 			if err != nil {
 				return result, err
 			}
