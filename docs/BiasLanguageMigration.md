@@ -17,8 +17,8 @@ All new deployments are recommended to use the new ClusterManager and LicenseMan
 
 ## How to plan for a migration?
 
-We are providing a script to assist you migrating your deployment. This script should be used during a maintenance window because Search and Indexing Services might become unavailable for a period of time.
-No data loss is expected but is recommended you ensure your backup policy is up-to-date prior to running this script. 
+We are providing a script to assist you in migrating your deployment. This script should be used during a maintenance window because Search and Indexing Services might become unavailable for a period of time.
+No data loss is expected but it is recommended you ensure your backup policy is up-to-date prior to running this script. 
 
 **There are two options to perform the migration:**
 1) You can use our script to generate all yaml files needed. Then you apply them yourself while monitoring / validating your environment at each step.
@@ -63,7 +63,7 @@ current_folder/
 
 
 #### After the generation is completed
-The `updated` folder has all of the files needed for the migration. The next step is to apply each one of these files following the order below. This order ensures Statefulset are updated correctly. If any of these CRs are not deployed in your environment, you can skip to the next item.
+The `updated` folder has all of the files needed for the migration. The next step is to apply each one of these files following the order below. This order ensures Statefulsets are updated correctly. If any of these CRs are not deployed in your environment, you can skip to the next item.
 
 **Order for migration:**
 
@@ -98,9 +98,9 @@ Example:
 This will start a migration where we clone deployed ClusterMaster/LicenseMaster into a new independent ClusterManager/LicenseManager. Then we use a Rsync job to copy the data from Master to Manager.
 Next script updates originally deployed Statefulsets for all CRs that references the CM/LM. 
 
-Once the migration is completed the operator will restart Indexer pods to update environment variables. While the Indexer and Search services should be available, it will take some time until RF/SF are reestablished. We recommend you do not apply any other changes until the Operator completes the restart of all Indexers and RF/SF are met. Once the entire environment is stable and validated, we recommend you to delete the CRs using the files created in the `to_remove_CRs` folder.
+Once the migration is completed the operator will restart Indexer pods to update environment variables. While the Indexer and Search services should be available, it will take some time until RF/SF are re-established. We recommend you do not apply any other changes until the Operator completes the restart of all Indexers and RF/SF are met. Once the entire environment is stable and validated, we recommend you to delete the CRs using the files created in the `to_remove_CRs` folder.
 
-**Important:** Do not interrupt the script execution once it starts because it might leave your deployment at a bad state if some operations are not fully completed.
+**Important:** Do not interrupt the script execution once it starts because it might leave your deployment in a bad state if some operations are not fully completed.
 
 ## Script Requirements
 
