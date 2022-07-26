@@ -96,6 +96,24 @@ jobs:
         exclude: "ChangeLog.md"
         include: "**.md"
 
+    - name: Update Splunk Operator upgrade string in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.old_operator_version }}"
+        replace: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: "**.md"
+
+    - name: Update Splunk Operator Release URL in DOCS
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "https://github.com/splunk/splunk-operator/releases/download/${{ github.event.inputs.old_operator_version }}/splunk-operator-install.yaml"
+        replace: "https://github.com/splunk/splunk-operator/releases/download/${{ github.event.inputs.new_operator_version }}/splunk-operator-install.yaml"
+        exclude: "ChangeLog.md"
+        include: "**.md"
+
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
