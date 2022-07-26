@@ -1,4 +1,4 @@
----
+# assert for LM, Standalone, and MC to ready
 apiVersion: enterprise.splunk.com/v3
 kind: LicenseMaster
 metadata:

@@ -1,4 +1,4 @@
----
+# assert for IDXC site-1 to use clusterManagerRef
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:
@@ -9,6 +9,7 @@ spec:
   clusterManagerRef:
     name: test
 ---
+# assert for IDXC site-2 to use clusterManagerRef
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:

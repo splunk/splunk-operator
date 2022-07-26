@@ -1,4 +1,4 @@
----
+# check IDXC was updated to use clusterManagerRef
 apiVersion: enterprise.splunk.com/v3
 kind: IndexerCluster
 metadata:

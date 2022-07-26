@@ -7,7 +7,7 @@ status:
   phase: Ready
 
 ---
-# check if stateful sets are created
+# check if statefulsets are created
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
@@ -16,7 +16,7 @@ status:
   replicas: 1
 
 ---
-# check if stateful sets are created
+# check if secret is created
 apiVersion: v1
 kind: Secret
 metadata: 

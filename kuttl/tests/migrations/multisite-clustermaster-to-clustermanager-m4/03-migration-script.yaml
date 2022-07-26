@@ -2,4 +2,3 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
   - command: ../../../../tools/bias_lang_migration.sh test $NAMESPACE
-#    namespaced: true

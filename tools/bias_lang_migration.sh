@@ -622,7 +622,7 @@ if [[ "$1" != "test" ]]; then
   # User warning for optional backup of PVs
   echo -e "\n\n************************** Important Notice **************************\n"
   echo -e "1 - This script should be used during Maintenance hours because it requires pod restarts."
-  echo -e "2 - Interrupting the execution of this script can leave your deployment at a bad state."
+  echo -e "2 - Interrupting the execution of this script can leave your deployment in a bad state."
   echo -e "3 - Large deployments should review timeout variables for POD restarts and Rsync."
   echo -e "\n Do you wish to proceed with the migration for mode=$1 NS=${NS}?"
   echo -e "\n Press Enter to continue or Crtl+C to cancel"
