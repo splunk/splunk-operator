@@ -150,42 +150,36 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 		return err
 	}
 
+	// Commands to run on pods
+	var command1, command2 string
+
 	// Handle non SHC scenarios(Standalone, CM, LM)
 	if crKind != "SearchHeadCluster" {
-		command := fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
-
-		// create the app on Splunk pod/s
-		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
-		if err != nil {
-			scopedLog.Error(err, "unable to run command on splunk pod")
-			return err
-		}
+		// Create dir on pods
+		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
 
 		// App reload
-		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, telAppReloadString, podExecClient)
-		if err != nil {
-			scopedLog.Error(err, "unable to run command on splunk pod")
-			return err
-		}
+		command2 = telAppReloadString
+
 	} else {
-		// SHC scenario
-		command := fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
+		// Create dir on pods
+		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
 
-		// create the app on Splunk pod/s
-		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
-		if err != nil {
-			scopedLog.Error(err, "unable to run command on splunk pod")
-			return err
-		}
+		// Bundle push
+		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
+	}
 
-		command = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
+	// Run the commands on Splunk pods
+	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command1, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
+	}
 
-		// Bundle push from deployer
-		err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
-		if err != nil {
-			scopedLog.Error(err, "unable to run command on splunk pod")
-			return err
-		}
+	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command2, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
 	}
 
 	return err
