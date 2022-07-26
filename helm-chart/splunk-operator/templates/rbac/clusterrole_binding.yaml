@@ -1,12 +1,14 @@
+{{- if and .Values.splunkOperator.clusterWideAccess .Values.splunkOperator.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "splunk-operator.operator.fullname" . }}-proxy-rolebinding
+  name: {{ include "splunk-operator.operator.fullname" . }}-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "splunk-operator.operator.fullname" . }}-proxy-role
+  name: {{ include "splunk-operator.operator.fullname" . }}-manager-role
 subjects:
 - kind: ServiceAccount
   name: {{ include "splunk-operator.operator.fullname" . }}-controller-manager
   namespace: {{ include "splunk-operator.namespace" . }}
+{{- end }}

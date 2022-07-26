@@ -879,6 +879,15 @@ spec:
                 description: Splunk enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
+                  appInstallPeriodSeconds:
+                    default: 90
+                    description: 'App installation period within a reconcile. Apps
+                      will be installed during this period before the next reconcile
+                      is attempted. Note: Do not change this setting unless instructed
+                      to do so by Splunk Support'
+                    format: int64
+                    minimum: 30
+                    type: integer
                   appSources:
                     description: List of App sources on remote storage
                     items:
@@ -907,10 +916,10 @@ spec:
                       App changes. The default value for this config is 1 hour(3600
                       sec), minimum value is 1 minute(60sec) and maximum value is
                       1 day(86400 sec). We assign the value based on following conditions
-                      -    1. If no value or 0 is specified then it will be defaulted
-                      to 1 hour.    2. If anything less than min is specified then
-                      we set it to 1 min.    3. If anything more than the max value
-                      is specified then we set it to 1 day.
+                      -    1. If no value or 0 is specified then it means periodic
+                      polling is disabled.    2. If anything less than min is specified
+                      then we set it to 1 min.    3. If anything more than the max
+                      value is specified then we set it to 1 day.
                     format: int64
                     type: integer
                   defaults:
@@ -926,6 +935,17 @@ spec:
                         description: Remote Storage Volume name
                         type: string
                     type: object
+                  installMaxRetries:
+                    default: 2
+                    description: Maximum number of retries to install Apps
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  maxConcurrentAppDownloads:
+                    description: Maximum number of apps that can be downloaded at
+                      same time
+                    format: int64
+                    type: integer
                   volumes:
                     description: List of remote storage volumes
                     items:
@@ -943,6 +963,10 @@ spec:
                         provider:
                           description: 'App Package Remote Store provider. Supported
                             values: aws, minio'
+                          type: string
+                        region:
+                          description: Region of the remote storage volume where apps
+                            reside
                           type: string
                         secretRef:
                           description: Secret object name
@@ -1009,6 +1033,7 @@ spec:
                 properties:
                   ephemeralStorage:
                     description: If true, ephemeral (emptyDir) storage will be used
+                      default false
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
@@ -1138,6 +1163,19 @@ spec:
                 - Always
                 - IfNotPresent
                 type: string
+              imagePullSecrets:
+                description: Sets imagePullSecrets if image is being pulled from a
+                  private registry. See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+                items:
+                  description: LocalObjectReference contains enough information to
+                    let you locate the referenced object inside the same namespace.
+                  properties:
+                    name:
+                      description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        TODO: Add other useful fields. apiVersion, kind, uid?'
+                      type: string
+                  type: object
+                type: array
               licenseMasterRef:
                 description: LicenseMasterRef refers to a Splunk Enterprise license
                   manager managed by the operator within Kubernetes
@@ -1184,6 +1222,7 @@ spec:
                   for the Liveness probe Note: If needed, Operator overrides with
                   a higher value'
                 format: int32
+                minimum: 0
                 type: integer
               monitoringConsoleRef:
                 description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
@@ -1228,6 +1267,7 @@ spec:
                   for Readiness probe Note: If needed, Operator overrides with a higher
                   value'
                 format: int32
+                minimum: 0
                 type: integer
               resources:
                 description: resource requirements for the pod containers
@@ -1339,14 +1379,11 @@ spec:
                           a Service to type ExternalName.  If this field is not specified,
                           it will be initialized from the clusterIP field.  If this
                           field is specified, clients must ensure that clusterIPs[0]
-                          and clusterIP have the same value. \n Unless the \"IPv6DualStack\"
-                          feature gate is enabled, this field is limited to one value,
-                          which must be the same as the clusterIP field.  If the feature
-                          gate is enabled, this field may hold a maximum of two entries
-                          (dual-stack IPs, in either order).  These IPs must correspond
-                          to the values of the ipFamilies field. Both clusterIPs and
-                          ipFamilies are governed by the ipFamilyPolicy field. More
-                          info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies"
+                          and clusterIP have the same value. \n This field may hold
+                          a maximum of two entries (dual-stack IPs, in either order).
+                          These IPs must correspond to the values of the ipFamilies
+                          field. Both clusterIPs and ipFamilies are governed by the
+                          ipFamilyPolicy field. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies"
                         items:
                           type: string
                         type: array
@@ -1401,18 +1438,17 @@ spec:
                         type: string
                       ipFamilies:
                         description: "IPFamilies is a list of IP families (e.g. IPv4,
-                          IPv6) assigned to this service, and is gated by the \"IPv6DualStack\"
-                          feature gate.  This field is usually assigned automatically
-                          based on cluster configuration and the ipFamilyPolicy field.
-                          If this field is specified manually, the requested family
-                          is available in the cluster, and ipFamilyPolicy allows it,
-                          it will be used; otherwise creation of the service will
-                          fail.  This field is conditionally mutable: it allows for
+                          IPv6) assigned to this service. This field is usually assigned
+                          automatically based on cluster configuration and the ipFamilyPolicy
+                          field. If this field is specified manually, the requested
+                          family is available in the cluster, and ipFamilyPolicy allows
+                          it, it will be used; otherwise creation of the service will
+                          fail. This field is conditionally mutable: it allows for
                           adding or removing a secondary IP family, but it does not
-                          allow changing the primary IP family of the Service.  Valid
+                          allow changing the primary IP family of the Service. Valid
                           values are \"IPv4\" and \"IPv6\".  This field only applies
                           to Services of types ClusterIP, NodePort, and LoadBalancer,
-                          and does apply to \"headless\" services.  This field will
+                          and does apply to \"headless\" services. This field will
                           be wiped when updating a Service to type ExternalName. \n
                           This field may hold a maximum of two entries (dual-stack
                           families, in either order).  These families must correspond
@@ -1428,15 +1464,14 @@ spec:
                         x-kubernetes-list-type: atomic
                       ipFamilyPolicy:
                         description: IPFamilyPolicy represents the dual-stack-ness
-                          requested or required by this Service, and is gated by the
-                          "IPv6DualStack" feature gate.  If there is no value provided,
-                          then this field will be set to SingleStack. Services can
-                          be "SingleStack" (a single IP family), "PreferDualStack"
+                          requested or required by this Service. If there is no value
+                          provided, then this field will be set to SingleStack. Services
+                          can be "SingleStack" (a single IP family), "PreferDualStack"
                           (two IP families on dual-stack configured clusters or a
                           single IP family on single-stack clusters), or "RequireDualStack"
                           (two IP families on dual-stack configured clusters, otherwise
                           fail). The ipFamilies and clusterIPs fields depend on the
-                          value of this field.  This field will be wiped when updating
+                          value of this field. This field will be wiped when updating
                           a service to type ExternalName.
                         type: string
                       loadBalancerClass:
@@ -1799,6 +1834,7 @@ spec:
                 properties:
                   ephemeralStorage:
                     description: If true, ephemeral (emptyDir) storage will be used
+                      default false
                     type: boolean
                   storageCapacity:
                     description: Storage capacity to request persistent volume claims
@@ -2209,9 +2245,7 @@ spec:
                         volumes if the CSI driver is meant to be used that way - see
                         the documentation of the driver for more information. \n A
                         pod can use both types of ephemeral volumes and persistent
-                        volumes at the same time. \n This is a beta feature and only
-                        available when the GenericEphemeralVolume feature gate is
-                        enabled."
+                        volumes at the same time."
                       properties:
                         volumeClaimTemplate:
                           description: "Will be used to create a stand-alone PVC to
@@ -2328,7 +2362,11 @@ spec:
                                   type: object
                                 resources:
                                   description: 'Resources represents the minimum resources
-                                    the volume should have. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources'
+                                    the volume should have. If RecoverVolumeExpansionFailure
+                                    feature is enabled users are allowed to specify
+                                    resource requirements that are lower than previous
+                                    value but must still be higher than capacity recorded
+                                    in the status field of the claim. More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources'
                                   properties:
                                     limits:
                                       additionalProperties:
@@ -3295,6 +3333,15 @@ spec:
                     description: List of App package (*.spl, *.tgz) locations on remote
                       volume
                     properties:
+                      appInstallPeriodSeconds:
+                        default: 90
+                        description: 'App installation period within a reconcile.
+                          Apps will be installed during this period before the next
+                          reconcile is attempted. Note: Do not change this setting
+                          unless instructed to do so by Splunk Support'
+                        format: int64
+                        minimum: 30
+                        type: integer
                       appSources:
                         description: List of App sources on remote storage
                         items:
@@ -3325,10 +3372,10 @@ spec:
                           hour(3600 sec), minimum value is 1 minute(60sec) and maximum
                           value is 1 day(86400 sec). We assign the value based on
                           following conditions -    1. If no value or 0 is specified
-                          then it will be defaulted to 1 hour.    2. If anything less
-                          than min is specified then we set it to 1 min.    3. If
-                          anything more than the max value is specified then we set
-                          it to 1 day.
+                          then it means periodic polling is disabled.    2. If anything
+                          less than min is specified then we set it to 1 min.    3.
+                          If anything more than the max value is specified then we
+                          set it to 1 day.
                         format: int64
                         type: integer
                       defaults:
@@ -3344,6 +3391,17 @@ spec:
                             description: Remote Storage Volume name
                             type: string
                         type: object
+                      installMaxRetries:
+                        default: 2
+                        description: Maximum number of retries to install Apps
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      maxConcurrentAppDownloads:
+                        description: Maximum number of apps that can be downloaded
+                          at same time
+                        format: int64
+                        type: integer
                       volumes:
                         description: List of remote storage volumes
                         items:
@@ -3361,6 +3419,10 @@ spec:
                             provider:
                               description: 'App Package Remote Store provider. Supported
                                 values: aws, minio'
+                              type: string
+                            region:
+                              description: Region of the remote storage volume where
+                                apps reside
                               type: string
                             secretRef:
                               description: Secret object name
@@ -3387,14 +3449,54 @@ spec:
                                 type: integer
                               appName:
                                 type: string
+                              auxPhaseInfo:
+                                description: Used to track the copy and install status
+                                  for each replica member. Each Pod's phase info is
+                                  mapped to its ordinal value. Ignored, once the DeployStatus
+                                  is marked as Complete
+                                items:
+                                  description: PhaseInfo defines the status to track
+                                    the App framework installation phase
+                                  properties:
+                                    failCount:
+                                      description: represents number of failures
+                                      format: int32
+                                      type: integer
+                                    phase:
+                                      description: Phase type
+                                      type: string
+                                    status:
+                                      description: Status of the phase
+                                      format: int32
+                                      type: integer
+                                  type: object
+                                type: array
                               deployStatus:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
                                 type: integer
+                              isUpdate:
+                                type: boolean
                               lastModifiedTime:
                                 type: string
                               objectHash:
                                 type: string
+                              phaseInfo:
+                                description: App phase info to track download, copy
+                                  and install
+                                properties:
+                                  failCount:
+                                    description: represents number of failures
+                                    format: int32
+                                    type: integer
+                                  phase:
+                                    description: Phase type
+                                    type: string
+                                  status:
+                                    description: Status of the phase
+                                    format: int32
+                                    type: integer
+                                type: object
                               repoState:
                                 description: AppRepoState represent the App state
                                   on remote store
@@ -3411,6 +3513,24 @@ spec:
                       are different.
                     format: int64
                     type: integer
+                  appsStatusMaxConcurrentAppDownloads:
+                    description: Represents the Status field for maximum number of
+                      apps that can be downloaded at same time
+                    format: int64
+                    type: integer
+                  bundlePushStatus:
+                    description: Internal to the App framework. Used in case of CM(IDXC)
+                      and deployer(SHC)
+                    properties:
+                      bundlePushStage:
+                        description: Represents the current stage. Internal to the
+                          App framework
+                        type: integer
+                      retryCount:
+                        description: defines the number of retries completed so far
+                        format: int32
+                        type: integer
+                    type: object
                   isDeploymentInProgress:
                     description: IsDeploymentInProgress indicates if the Apps deployment
                       is in progress

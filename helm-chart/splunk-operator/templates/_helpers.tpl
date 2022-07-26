@@ -23,6 +23,24 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 {{- end }}
 
+{{/* 
+Create standard operator fullname for uniform installation across Helm and manifest
+*/}}
+{{- define "splunk-operator.operator.fullname" -}}
+{{- default "splunk-operator" .Values.splunkOperator.nameOverride }}
+{{- end }}
+
+{{/*
+Create the name of the service account to use for splunk operator TODO: issue if create not selected
+*/}}
+{{- define "splunk-operator.operator.serviceAccountName" -}}
+{{- if .Values.splunkOperator.serviceAccount.create }}
+{{- printf "%s-%s"  (include "splunk-operator.operator.fullname" .) (default "controller-manager" .Values.splunkOperator.serviceAccount.name ) }}
+{{- else }}
+{{- default "default" .Values.splunkOperator.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
 {{/*
 Create chart name and version as used by the chart label.
 */}}
@@ -62,3 +80,18 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Define namespace of release and allow for namespace override
+*/}}
+{{- define "splunk-operator.namespace" -}}
+{{- default .Release.Namespace .Values.namespaceOverride }}
+{{- end }}
+
+{{/*
+Define namespace access of operator and allow for namespace override, default is release cluster-wide
+*/}}
+{{- define "splunk-operator.operator.namespace" -}}
+{{- default .Release.Namespace .Values.splunkOperator.watchNamespace }}
+{{- end }}
+

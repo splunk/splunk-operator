@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-clustermaster-viewer-role
+  name: {{ include "splunk-operator.operator.fullname" . }}-clustermaster-viewer-role
 rules:
 - apiGroups:
   - enterprise.splunk.com

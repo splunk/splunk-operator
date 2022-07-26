@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: monitoringconsole-editor-role
+  name: {{ include "splunk-operator.operator.fullname" . }}-monitoringconsole-editor-role
 rules:
 - apiGroups:
   - enterprise.splunk.com

@@ -1,33 +1,40 @@
+{{- if .Values.splunkOperator.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "splunk-operator.fullname" . }}-controller-manager
+  name: {{ include "splunk-operator.operator.fullname" . }}-controller-manager
+  namespace: {{ include "splunk-operator.namespace" . }}
   labels:
     {{- include "splunk-operator.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
       {{- include "splunk-operator.selectorLabels" . | nindent 6 }}
+  strategy: 
+    type: Recreate
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- with .Values.splunkOperator.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "splunk-operator.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.splunkOperator.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "splunk-operator.serviceAccountName" . }}-controller-manager
+      serviceAccountName: {{ include "splunk-operator.operator.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.splunkOperator.securityContext | nindent 8 }}
+      hostNetwork: {{ .Values.splunkOperator.hostNetwork }}
+      hostPID: {{ .Values.splunkOperator.hostPID }}
+      hostIPC: {{ .Values.splunkOperator.hostIPC }}
       containers:
         - name: kube-rbac-proxy
-          image: "{{ .Values.kubeRbacProxy.image.repository}}:{{ .Values.kubeRbacProxy.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.kubeRbacProxy.image.repository }}:{{ .Values.kubeRbacProxy.image.tag }}"
           imagePullPolicy: {{ .Values.kubeRbacProxy.image.pullPolicy }}
           args:
           - "--secure-listen-address=0.0.0.0:8443"
@@ -39,15 +46,25 @@ spec:
             name: https
         - name: manager
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository}}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.splunkOperator.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.splunkOperator.image.repository}}"
+          imagePullPolicy: {{ .Values.splunkOperator.image.pullPolicy }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
           env:
           - name: WATCH_NAMESPACE
-          {{- if .Values.clusterScope }}          
-            value: 
+          {{- if .Values.splunkOperator.watchNamespace }}          
+            value: {{ .Values.splunkOperator.watchNamespace }}
           {{- else }}
             valueFrom:
               fieldRef:
@@ -58,18 +75,25 @@ spec:
               fieldRef:
                 fieldPath: metadata.name          
           - name: OPERATOR_NAME
-            value: "{{ include "splunk-operator.fullname" . }}"      
+            value: {{ include "splunk-operator.operator.fullname" . }}     
           - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-            value: "{{ .Values.splunkimage.repository}}"        
-      {{- with .Values.nodeSelector }}
+            value: "{{ .Values.image.repository}}"   
+          ports:
+            - containerPort: {{ .Values.splunkOperator.service.port}}
+              name: http        
+          resources:
+            {{- toYaml .Values.splunkOperator.resources | nindent 12 }}
+      {{- with .Values.splunkOperator.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with .Values.splunkOperator.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with .Values.splunkOperator.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      terminationGracePeriodSeconds: 10
+{{- end }}

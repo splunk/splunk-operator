@@ -1,17 +1,6 @@
-# Default values for splunk-operator.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-# By default the operator is installed for cluster scope set to False
-# to deploy operator per namespace
-clusterScope: True
-replicaCount: 1
-
-splunkimage:
-  repository: docker.io/splunk/splunk:edge
-
+# Splunk image
 image:
-  repository: docker.io/splunk/splunk-operator:latest
-  pullPolicy: IfNotPresent
+  repository: docker.io/splunk/splunk:edge
 
 kubeRbacProxy:
   image: 
@@ -19,58 +8,66 @@ kubeRbacProxy:
     pullPolicy: IfNotPresent
     tag: "v0.11.0"
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+# Operator that manages splunk resources
+splunkOperator: 
 
-serviceAccount:
-  # Specifies whether a service account should be created
-  create: true
-  # Annotations to add to the service account
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  # Deploy operator
+  enabled: true
 
-podLabels:
-  control-plane: controller-manager
+  # Splunk operator image
+  image:
+    repository: docker.io/splunk/splunk-operator:latest
+    pullPolicy: IfNotPresent
 
-service:
-  type: ClusterIP
-  port: 80
-  
-podAnnotations: {}
+  imagePullSecrets: []
 
-podSecurityContext:
-  {}
-  # fsGroup: 2000
+  nameOverride: ""
 
-securityContext:
-  {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+  fullnameOverride: ""
 
-resources:
-  {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  # Give operator cluster-wide access, otherwise access is limited to operator namespace
+  clusterWideAccess: true
 
-nodeSelector:
-  #Image only support x86
-  kubernetes.io/arch: amd64
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
 
-tolerations: []
+  podAnnotations: {}
 
-affinity: {}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+
+  securityContext:
+    runAsUser: 1001
+    fsGroup: 1001
+    runAsNonRoot: true
+
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    # We usually recommend not to specify default resources and to leave this as a conscious
+    # choice for the user. This also increases chances charts run on environments with little
+    # resources, such as Minikube. If you do want to specify resources, uncomment the following
+    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    limits:
+      cpu: 200m
+      memory: 100Mi
+    requests:
+      cpu: 100m
+      memory: 20Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
