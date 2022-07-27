@@ -953,6 +953,11 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
+	}
+
 	// call reconciliation
 	_, err = ApplyClusterManager(ctx, c, clustermaster)
 	if err != nil {
