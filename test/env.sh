@@ -31,7 +31,7 @@
 # Set to DEBUG_RUN:=True to skip tear down of test environment in case of test failure
 : "${DEBUG_RUN:=False}"
 # Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"
-: "${DEPLOYMENT_TYPE:=manifest}"
+: "${DEPLOYMENT_TYPE:=helm}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then

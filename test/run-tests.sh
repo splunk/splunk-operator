@@ -57,8 +57,13 @@ fi
 
 if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then 
   echo "Installing Splunk Operator using Helm charts"
-  helm uninstall splunk-operator -n splunk-operator
-  helm install splunk-operator --namespace splunk-operator --create-namespace --set image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set splunkimage.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
+  if [ "${CLUSTER_WIDE}" != "true" ]; then
+    helm uninstall splunk-operator -n splunk-operator
+    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
+  else
+    helm uninstall splunk-operator -n splunk-operator
+    helm install splunk-operator --create-namespace --namespace splunk-operator --set --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
+  fi
 elif [  "${CLUSTER_WIDE}" != "true" ]; then 
   # Install the CRDs
   echo "Installing enterprise CRDs..."
