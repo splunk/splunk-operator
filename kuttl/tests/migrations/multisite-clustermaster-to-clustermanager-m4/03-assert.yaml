@@ -1,0 +1,23 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterManager
+metadata:
+  name: test
+status:
+  phase: Ready
+
+---
+# check if statefulsets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-test-cluster-manager
+status:
+  replicas: 1
+
+---
+# check if secret is created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-test-cluster-manager-secret-v1

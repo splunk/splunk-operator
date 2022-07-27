@@ -1,0 +1,10 @@
+# assert for SHC site to use clusterManagerRef
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: test-shc
+status:
+  phase: Ready
+spec:
+  clusterManagerRef:
+    name: test

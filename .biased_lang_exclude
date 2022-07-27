@@ -70,6 +70,7 @@ test/clustermaster/cmaster_appframework_test.go
 test/licensemaster/lmaster_m4_test.go
 tools/k8s_collectors/k8s-splunk-collector.sh
 #Below should be reviewed once CRDs have no bias lang
+tools/bias_lang_migration.sh
 go.sum
 .github/
 .circleci/
