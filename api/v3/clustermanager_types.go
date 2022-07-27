@@ -64,6 +64,9 @@ type ClusterManagerStatus struct {
 
 	// App Framework status
 	AppContext AppDeploymentContext `json:"appContext"`
+
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
 // BundlePushInfo Indicates if bundle push required

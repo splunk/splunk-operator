@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -31,6 +30,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -193,8 +193,20 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 			}
 		}
 
-		// Master apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
-		// So keep PerformCmasterBundlePush() as the last call in this block of code, so that other functionalities are not blocked
+		// Add a splunk operator telemetry app
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
+			if err != nil {
+				return result, err
+			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
+		}
+
+		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
+		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmasterBundlePush(ctx, client, cr)
 		if err != nil {
 			return result, err

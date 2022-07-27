@@ -1201,7 +1201,7 @@ func TestGetIndexerClusterList(t *testing.T) {
 	}
 }
 
-func TestIndexerClusterWitReadyState(t *testing.T) {
+func TestIndexerClusterWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
 	type Entry1 struct {
@@ -1483,6 +1483,11 @@ func TestIndexerClusterWitReadyState(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation

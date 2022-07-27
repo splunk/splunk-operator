@@ -3888,6 +3888,9 @@ spec:
                       type: object
                     type: array
                 type: object
+              telAppInstalled:
+                description: Telemetry App installation flag
+                type: boolean
             type: object
         type: object
     served: true

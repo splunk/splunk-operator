@@ -288,6 +288,11 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	client := spltest.NewMockClient()
 
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
+	}
+
 	// Without S3 keys, ApplyClusterManager should fail
 	_, err := ApplyClusterManager(ctx, client, &current)
 	if err == nil {
@@ -1350,6 +1355,11 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation

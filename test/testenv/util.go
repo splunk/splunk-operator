@@ -1083,3 +1083,14 @@ func DumpGetSplunkVersion(ctx context.Context, ns string, deployment *Deployment
 		}
 	}
 }
+
+// CreateDummyFileOnOperator creates a dummy file of specified size at path provided
+func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podName string, filepath string, size string, filename string) error {
+	cmd := fmt.Sprintf("cd %s && dd if=/dev/zero of=./%s bs=4k iflag=fullblock,count_bytes count=%s", filepath, filename, size)
+	_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
+	if err != nil {
+		logf.Log.Error(err, "Failed to create file on the pod", "Pod Name", podName)
+		return err
+	}
+	return nil
+}

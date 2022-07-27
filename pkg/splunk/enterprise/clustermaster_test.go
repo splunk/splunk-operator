@@ -206,8 +206,6 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -229,8 +227,6 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -288,7 +284,12 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	client := spltest.NewMockClient()
 
-	// Without S3 keys, ApplyClusterMaster should fail
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
+	}
+
+	// Without S3 keys, ApplyClusterManager should fail
 	_, err := ApplyClusterMaster(ctx, client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterMaster should fail without S3 secrets configured")
@@ -1350,6 +1351,11 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation

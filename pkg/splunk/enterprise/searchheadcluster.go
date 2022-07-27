@@ -211,6 +211,17 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 
+		// Add a splunk operator telemetry app
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
+			if err != nil {
+				return result, err
+			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
+		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {
 			result = *finalResult

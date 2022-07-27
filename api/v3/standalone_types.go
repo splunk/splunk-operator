@@ -70,6 +70,9 @@ type StandaloneStatus struct {
 
 	// App Framework Context
 	AppContext AppDeploymentContext `json:"appContext"`
+
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

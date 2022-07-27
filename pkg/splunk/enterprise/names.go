@@ -124,6 +124,37 @@ const (
 	livenessProbeDefaultDelaySec = 300
 	livenessProbeTimeoutSec      = 30
 	livenessProbePeriodSec       = 30
+
+	// Number of ClusterMasterReplicas
+	numberOfClusterMasterReplicas = 1
+
+	// Number of Deployer replicas
+	numberOfDeployerReplicas = 1
+
+	// Number of Licensemaster replicas
+	numberOfLicenseMasterReplicas = 1
+
+	// Telemetry app.conf string
+	telAppConfString = `[install]
+is_configured = 1
+	
+[ui]
+is_visible = 0
+label = Splunk Operator for K8s
+
+[launcher]
+author = Splunk
+description = When telemetry is enabled, this app is used to help Splunk understand how many customers are deploying Splunk using Splunk Operator for K8s
+version = 1.0.0
+`
+	// Command to create telemetry app on non SHC scenarios
+	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/app.conf"
+
+	// Command to create telemetry app on SHC scenarios
+	createTelAppShcString = "mkdir -p %s/app_tel_for_sok8s_%s/default/; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/default/app.conf"
+
+	// Command to reload app configuration
+	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
