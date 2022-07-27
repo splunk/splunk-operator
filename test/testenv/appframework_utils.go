@@ -103,6 +103,9 @@ var PVTestAppsLocation = "appframework/100mb_sample_apps/"
 // AppStagingLocOnPod is the volume on Splunk pod where apps will be copied from operator
 var AppStagingLocOnPod = "/operator-staging/appframework/"
 
+// AppDownloadVolume location on Operator pod for App framework downloads
+var AppDownloadVolume = "/opt/splunk/appframework/downloadedApps/"
+
 // GenerateAppSourceSpec return AppSourceSpec struct with given values
 func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSourceDefaultSpec enterpriseApi.AppSourceDefaultSpec) enterpriseApi.AppSourceSpec {
 	return enterpriseApi.AppSourceSpec{
