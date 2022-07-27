@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2021 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -87,6 +87,102 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 	}
 
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
+}
+
+// runCustomCommandOnSplunkPods  runs the specified custom command on the pod/s
+func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, command string, podExecClient splutil.PodExecClientImpl) error {
+	var err error
+	var stdOut string
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	// Run the command on each replica pod
+	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
+		// get the target pod name
+		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
+		podExecClient.SetTargetPodName(ctx, podName)
+
+		// CSPL-1639: reset the Stdin so that reader pipe can read from the correct offset of the string reader.
+		// This is particularly needed in the cases where we are trying to run the same command across multiple pods
+		// and we need to clear the reader pipe so that we can read the read buffer from the correct offset again.
+		splutil.ResetStringReader(streamOptions, command)
+
+		// Throw an error if we are not able to run the command
+		stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+		if err != nil {
+			err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
+			break
+		}
+	}
+	return err
+}
+
+// Get extension for name of telemetry app
+func getTelAppNameExtension(crKind string) (string, error) {
+	switch crKind {
+	case "Standalone":
+		return "stdaln", nil
+	case "LicenseMaster":
+		return "lm", nil
+	case "SearchHeadCluster":
+		return "shc", nil
+	case "ClusterMaster":
+		return "cm", nil
+	default:
+		return "", errors.New("Invalid CR kind for telemetry app")
+	}
+}
+
+// addTelApp adds a telemetry app
+var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	var err error
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("addTelApp").WithValues(
+		"name", cr.GetObjectMeta().GetName(),
+		"namespace", cr.GetObjectMeta().GetNamespace())
+
+	// Create pod exec client
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	// Get Tel App Name Extension
+	appNameExt, err := getTelAppNameExtension(crKind)
+	if err != nil {
+		return err
+	}
+
+	// Commands to run on pods
+	var command1, command2 string
+
+	// Handle non SHC scenarios(Standalone, CM, LM)
+	if crKind != "SearchHeadCluster" {
+		// Create dir on pods
+		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
+
+		// App reload
+		command2 = telAppReloadString
+
+	} else {
+		// Create dir on pods
+		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
+
+		// Bundle push
+		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
+	}
+
+	// Run the commands on Splunk pods
+	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command1, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
+	}
+
+	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command2, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
+	}
+
+	return err
 }
 
 // getOrdinalValFromPodName returns the pod ordinal value

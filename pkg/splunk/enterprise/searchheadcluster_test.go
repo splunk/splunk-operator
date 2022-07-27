@@ -1452,7 +1452,6 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
-				//ClusterMasterRef: clusterObjRef,
 			},
 			Replicas: 3,
 		},
@@ -1837,6 +1836,12 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
 	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
+	}
+
 	// call reconciliation
 	_, err = ApplySearchHeadCluster(ctx, c, &searchheadcluster)
 	if err != nil {
