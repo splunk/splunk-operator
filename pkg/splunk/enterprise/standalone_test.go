@@ -1083,7 +1083,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	}
 }
 
-func TestStandaloneWitReadyState(t *testing.T) {
+func TestStandaloneWithReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	err := os.MkdirAll(newpath, os.ModePerm)
@@ -1338,6 +1338,11 @@ func TestStandaloneWitReadyState(t *testing.T) {
 	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation
