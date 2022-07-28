@@ -415,6 +415,20 @@ func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Conte
 	return deployed.(*enterpriseApi.ClusterManager), err
 }
 
+//DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
+func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
+	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
+	deployed, err := d.deployCR(ctx, name, cm)
+	if err != nil {
+		return nil, err
+	}
+	// Verify standalone goes to ready state
+	//ClusterManagerReady(ctx, d, d.testenv)
+
+	return deployed.(*enterpriseApi.ClusterMaster), err
+}
+
 //DeployIndexerCluster deploys the indexer cluster
 func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
@@ -543,6 +557,15 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			ucr := cr.(*enterpriseApi.LicenseMaster)
 			current.Spec = ucr.Spec
 			cobject = current
+		case "LicenseManager":
+			current := &enterpriseApi.LicenseManager{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.LicenseManager)
+			current.Spec = ucr.Spec
+			cobject = current
 		case "IndexerCluster":
 			current := &enterpriseApi.IndexerCluster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
@@ -559,6 +582,15 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 				return err
 			}
 			ucr := cr.(*enterpriseApi.ClusterMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "ClusterManager":
+			current := &enterpriseApi.ClusterManager{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.ClusterManager)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "MonitoringConsole":
@@ -941,6 +973,61 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-manager", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: site0
+`, name, "cluster-manager")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "")
+	return err
+}
+
+// DeployMultisiteClusterMasterWithSearchHeadAndIndexes deploys a lm, cluster-master, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx context.Context, name string, indexerReplicas int, siteCount int, indexesSecret string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
+
+	var LicenseManager string
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		LicenseManager = name
+	}
+
+	// Deploy the cluster-manager
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployClusterMasterWithSmartStoreIndexes(ctx, name, LicenseManager, defaults, smartStoreSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: %s
+`, name, "cluster-master", siteName)
 		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err

@@ -76,7 +76,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			siteCount := 3
 			mcName := deployment.GetName()
-			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
+			err = deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
