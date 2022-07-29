@@ -587,12 +587,22 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
+		case *enterpriseApi.LicenseMaster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
 		case *enterpriseApi.IndexerCluster:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
 		case *enterpriseApi.ClusterManager:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApi.ClusterMaster:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion

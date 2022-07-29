@@ -260,7 +260,7 @@ var _ = Describe("Scaling test", func() {
 
 			defaultIndexerReplicas := 1
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase

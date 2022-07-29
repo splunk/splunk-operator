@@ -1037,7 +1037,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx co
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, "cluster-manager")
+`, name, "cluster-master")
 	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "")
 	return err
 }
