@@ -3059,4 +3059,64 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 		})
 	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
+
+			/* Test Steps
+			   ################## SETUP ###################
+			   * Deploy C3 CRD
+			   * Deploy Standalone with clusterMasterRef
+			   ############# VERIFICATION #################
+			   * Verify clusterMasterRef is present in Standalone's server.conf file
+			*/
+			//################## SETUP ####################
+			// Deploy C3 CRD
+			indexerReplicas := 3
+			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "")
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
+
+			// Create spec with clusterMasterRef for Standalone
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+					ClusterMasterRef: corev1.ObjectReference{
+						Name: deployment.GetName(),
+					},
+				},
+			}
+
+			// Deploy Standalone with clusterMasterRef
+			testcaseEnvInst.Log.Info("Deploy Standalone with clusterMasterRef")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with clusterMasterRef")
+
+			// Ensure that the Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			//  Ensure that the Standalone goes to Ready phase
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############# VERIFICATION #################
+			// Verify Standalone is configured as a Search Head for the Cluster Manager
+			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, standalonePodName)).To(Equal(true))
+
+			// Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+		})
+	})
 })
