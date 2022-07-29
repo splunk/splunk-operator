@@ -53,7 +53,7 @@ jobs:
 
     - name: Generate Release Artifacts
       run: |    
-        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
     
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
