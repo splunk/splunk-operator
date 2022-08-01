@@ -3394,9 +3394,11 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 func TestGetTelAppNameExtension(t *testing.T) {
 	crKinds := map[string]string{
 		"Standalone":        "stdaln",
-		"LicenseMaster":     "lm",
+		"LicenseMaster":     "lmaster",
+		"LicenseManager":    "lmanager",
 		"SearchHeadCluster": "shc",
-		"ClusterMaster":     "cm",
+		"ClusterMaster":     "cmaster",
+		"ClusterManager":    "cmanager",
 	}
 
 	// Test all CR kinds
@@ -3414,7 +3416,7 @@ func TestGetTelAppNameExtension(t *testing.T) {
 	}
 }
 
-func TestAddTelApp(t *testing.T) {
+func TestAddTelAppCMaster(t *testing.T) {
 	ctx := context.TODO()
 
 	// Define CRs
@@ -3432,7 +3434,120 @@ func TestAddTelApp(t *testing.T) {
 
 	// Define mock podexec context
 	podExecCommands := []string{
+		fmt.Sprintf(createTelAppNonShcString, "cmaster", telAppConfString, "cmaster"),
+		telAppReloadString,
+	}
+
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+		},
+		{
+			StdOut: "",
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	// Test non-shc
+	err := addTelApp(ctx, mockPodExecClient, 1, cmCr)
+	if err != nil {
+		t.Errorf("Tel app not added successfully, error: %v", err)
+	}
+
+	// Test shc
+	podExecCommands = []string{
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
+	}
+
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.Cr = shcCr
+
+	err = addTelApp(ctx, mockPodExecClient, 1, shcCr)
+	if err != nil {
+		t.Errorf("Tel app not added successfully, error: %v", err)
+	}
+
+	// Testing error handling
+
+	// Test non-shc error 1
+	podExecCommandsError := []string{
+		fmt.Sprintf(createTelAppNonShcString, "cmerror", telAppConfString, "cmerror"),
+	}
+
+	mockPodExecReturnContextsError := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+		},
+	}
+
+	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClientError1.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError1, 1, cmCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Test non-shc error 2
+	podExecCommandsError = []string{
 		fmt.Sprintf(createTelAppNonShcString, "cm", telAppConfString, "cm"),
+	}
+	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError2, 1, cmCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Test shc error 1
+	podExecCommandsError = []string{
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror"),
+	}
+
+	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	mockPodExecClientError3.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError3, 1, shcCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Test shc error 2
+	podExecCommandsError = []string{
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+	}
+	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
+
+func TestAddTelAppCManager(t *testing.T) {
+	ctx := context.TODO()
+
+	// Define CRs
+	cmCr := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+	}
+
+	shcCr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+	}
+
+	// Define mock podexec context
+	podExecCommands := []string{
+		fmt.Sprintf(createTelAppNonShcString, "cmanager", telAppConfString, "cmanager"),
 		telAppReloadString,
 	}
 
