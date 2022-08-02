@@ -52,7 +52,6 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "splunk-operator.labels" -}}
-control-plane: controller-manager
 helm.sh/chart: {{ include "splunk-operator.chart" . }}
 {{ include "splunk-operator.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
@@ -86,12 +85,5 @@ Define namespace of release and allow for namespace override
 */}}
 {{- define "splunk-operator.namespace" -}}
 {{- default .Release.Namespace .Values.namespaceOverride }}
-{{- end }}
-
-{{/*
-Define namespace access of operator and allow for namespace override, default is release cluster-wide
-*/}}
-{{- define "splunk-operator.operator.namespace" -}}
-{{- default .Release.Namespace .Values.splunkOperator.watchNamespace }}
 {{- end }}
 

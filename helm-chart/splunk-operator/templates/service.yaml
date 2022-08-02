@@ -3,13 +3,16 @@ kind: Service
 metadata:
   name: {{ include "splunk-operator.operator.fullname" . }}-controller-manager-service
   labels:
-    {{- include "splunk-operator.labels" . | nindent 4 }}
+{{- include "splunk-operator.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.splunkOperator.service.type }}
-  ports:
-    - port: {{ .Values.splunkOperator.service.port }}
-      targetPort: http
-      protocol: TCP
-      name: http
+  ports:   
+    - name: http 
+      port: {{ .Values.splunkOperator.service.httpPort }}
+      protocol: TCP 
+      targetPort: http 
+{{- if .Values.splunkOperator.service.additionalPorts }}
+{{ toYaml .Values.splunkOperator.service.additionalPorts | indent 4 }}
+{{- end }}
   selector:
-    {{- include "splunk-operator.selectorLabels" . | nindent 4 }}
+{{- include "splunk-operator.selectorLabels" . | nindent 4 }}
