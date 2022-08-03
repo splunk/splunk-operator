@@ -80,6 +80,5 @@ spec:
           name: config
         name: splunk-operator-config
       - name:  app-staging
-        persistentVolumeClaim:
-          claimName: app-download
+        emptyDir: {} 
       terminationGracePeriodSeconds: 10

@@ -807,9 +807,8 @@ spec:
               - configMap:
                   name: splunk-operator-config
                 name: splunk-operator-config
-              - name: app-staging
-                persistentVolumeClaim:
-                  claimName: splunk-operator-app-download
+              - emptyDir: {}
+                name: app-staging
       permissions:
       - rules:
         - apiGroups:
