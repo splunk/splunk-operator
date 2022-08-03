@@ -8,6 +8,7 @@
       openAPIV3Schema:
         type: object
         x-kubernetes-preserve-unknown-fields: true
+        description: ClusterMaster is the Schema for the cluster manager API v1
         properties:
           apiVersion:
             type: string
@@ -21,6 +22,7 @@
       openAPIV3Schema:
         type: object
         x-kubernetes-preserve-unknown-fields: true
+        description: ClusterMaster is the Schema for the cluster manager API v1alpha1
         properties:
           apiVersion:
             type: string
@@ -34,6 +36,7 @@
       openAPIV3Schema:
         type: object
         x-kubernetes-preserve-unknown-fields: true
+        description: ClusterMaster is the Schema for the cluster manager API v1beta1
         properties:
           apiVersion:
             type: string
@@ -47,6 +50,7 @@
       openAPIV3Schema:
         type: object
         x-kubernetes-preserve-unknown-fields: true
+        description: ClusterMaster is the Schema for the cluster manager API v1beta2
         properties:
           apiVersion:
             type: string
@@ -60,6 +64,7 @@
       openAPIV3Schema:
         type: object
         x-kubernetes-preserve-unknown-fields: true
+        description: ClusterMaster is the Schema for the cluster manager API v1beta3
         properties:
           apiVersion:
             type: string
@@ -73,6 +78,7 @@
       openAPIV3Schema:
         type: object
         x-kubernetes-preserve-unknown-fields: true
+        description: ClusterMaster is the Schema for the cluster manager API v2
         properties:
           apiVersion:
             type: string
