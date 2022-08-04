@@ -6,13 +6,9 @@ metadata:
 {{- include "splunk-operator.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.splunkOperator.service.type }}
+{{- with .Values.splunkOperator.service.ports }}
   ports:   
-    - name: http 
-      port: {{ .Values.splunkOperator.service.httpPort }}
-      protocol: TCP 
-      targetPort: http 
-{{- if .Values.splunkOperator.service.additionalPorts }}
-{{ toYaml .Values.splunkOperator.service.additionalPorts | indent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
   selector:
 {{- include "splunk-operator.selectorLabels" . | nindent 4 }}

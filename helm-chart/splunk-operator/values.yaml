@@ -16,17 +16,14 @@ kubeRbacProxy:
   # Set resource requests and limits for kube-rbac-proxy container
   resources:
     limits:
-      cpu: 200m
-      memory: 100Mi
+      cpu: 500m
+      memory: 128Mi
     requests:
-      cpu: 100m
-      memory: 20Mi
+      cpu: 5m
+      memory: 64Mi
 
 # Splunk Operator configurations
 splunkOperator: 
-
-  # Enable to deploy Splunk Operator
-  enabled: true
 
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
@@ -40,7 +37,8 @@ splunkOperator:
   # Give operator cluster-wide access, otherwise access is limited to operator namespace
   clusterWideAccess: true
 
-  # List specific namespaces to watch e.x "namespace1,namespace2", must have cluster-wide access
+  # List namespaces to be watched by Splunk Operator e.x "namespace1,namespace2", must have cluster-wide access
+  # Default watches the entire cluster
   watchNamespaces: ""
 
   serviceAccount:
@@ -92,12 +90,15 @@ splunkOperator:
     initialDelaySeconds: 5
     periodSeconds: 10
 
-  # Set manager service http port and define additional ports if necessary
+  # Define splunk operator manager service ports
   # reference: https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/
   service:
     type: ClusterIP
-    httpPort: 80
-    additionalPorts: []
+    ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
   # - name: metric
   #   port: 8080
   #   protocol: TCP
@@ -106,11 +107,11 @@ splunkOperator:
   # Set resource requests and limits for manager container
   resources:
     limits:
-      cpu: 200m
-      memory: 100Mi
+      cpu: 1000m
+      memory: 2000Mi
     requests:
-      cpu: 100m
-      memory: 20Mi
+      cpu: 1000m
+      memory: 2000Mi
 
   # Specify nodes that can schedule the Splunk Operator pod
   # reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
@@ -128,10 +129,20 @@ splunkOperator:
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#pod-v1-core
   terminationGracePeriodSeconds: 10
 
-  # Specify volumes for Splunk Operator pod
-  # refernece: https://kubernetes.io/docs/concepts/storage/volumes/
-  volumes: []
+  # Specify volumes for Splunk Operator pod, append additional volumes to list
+  # reference: https://kubernetes.io/docs/concepts/storage/volumes/
+  volumes:
+  - name: app-staging
+    persistentVolumeClaim:
+      claimName: splunk-operator-app-download
+# - name:
+#   persistentVolumeClaim:
+#     claimName:
 
-  # Specify volume mounts for the manager container
+  # Specify volume mounts for the manager container, append additional volume mounts to list
   # reference: https://kubernetes.io/docs/tasks/configure-pod-container/configure-volume-storage/
-  volumeMounts: []
+  volumeMounts:
+  - mountPath: /opt/splunk/appframework/
+    name: app-staging
+# - mountPath:
+#   name:
