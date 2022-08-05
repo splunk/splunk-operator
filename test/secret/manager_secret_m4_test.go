@@ -26,7 +26,7 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-var _ = Describe("Secret Test for SVA C3", func() {
+var _ = Describe("Secret Test for M4 SVA", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
@@ -35,8 +35,11 @@ var _ = Describe("Secret Test for SVA C3", func() {
 	BeforeEach(func() {
 		var err error
 		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		// SpecifiedTestTimeout override default timeout for m4 test cases as we have seen
+		// it takes more than 3000 seconds for one of the test case
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
+		testenv.SpecifiedTestTimeout = 4000
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -54,8 +57,8 @@ var _ = Describe("Secret Test for SVA C3", func() {
 		}
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("secret, smoke, c3: secret update on indexers and search head cluster", func() {
+	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
+		It("managersecret, integration, m4: secret update on multisite indexers and search head cluster", func() {
 
 			// Test Scenario
 			// 1. Update Secrets Data
@@ -71,8 +74,9 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Create License Config Map
 			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
-			mcRef := deployment.GetName()
-			err = deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
+			siteCount := 3
+			mcName := deployment.GetName()
+			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
@@ -81,11 +85,14 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure cluster configured as multisite
+			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
@@ -106,6 +113,13 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to get secret struct")
 
+			// Test 1
+			// Update Secrets Data and
+			// Verify New versioned secret are created with correct value.
+			// Verify new secrets are mounted on pods.
+			// Verify New Secrets are present in server.conf (Pass4SymmKey)
+			// Verify New Secrets via api access (password)
+
 			// Update Secret Value on Secret Object
 			testcaseEnvInst.Log.Info("Data in secret object", "data", secretStruct.Data)
 			modifiedHecToken := testenv.GetRandomeHECToken()
@@ -118,14 +132,14 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Ensure that Cluster Manager goes to update phase
 			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
-			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
 			// Ensure that the cluster-manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			// Wait for License Manager to be in READY status
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
@@ -146,7 +160,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// Verify Secrets on versioned secret objects
 			testenv.VerifySecretsOnSecretObjects(ctx, deployment, testcaseEnvInst, secretObjectNames, updatedSecretData, true)
 
-			// Once Pods are READY check each pod for updated secret keys
+			// Once Pods are READY check each versioned secret for updated secret keys
 			verificationPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
 
 			// Verify secrets on pods

@@ -60,7 +60,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("scaling_test, integration: Can Scale Up and Scale Down Standalone CR", func() {
+		It("managerscaling, integration: Can Scale Up and Scale Down Standalone CR", func() {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -107,7 +107,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
+		It("managerscaling, integration: SHC and IDXC can be scaled up and data is searchable", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
@@ -256,7 +256,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Multisite Indexer Cluster (M4 - Multisite indexer Cluster, search head cluster)", func() {
-		It("scaling_test, integration: Multisite IDXC can be scaled up and data is searchable", func() {
+		It("managerscaling, integration: Multisite IDXC can be scaled up and data is searchable", func() {
 
 			defaultIndexerReplicas := 1
 			siteCount := 3

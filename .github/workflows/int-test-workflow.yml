@@ -51,16 +51,14 @@ jobs:
         test:
           [
             appframeworks1,
-            appframeworkc3,
-            appframeworkm4,
-            secret,
-            smartstore,
-            monitoringconsole,
-            scaling,
-            crcrud,
+            managerappframeworkc3,
+            managerappframeworkm4,
+            managersecret,
+            managersmartstore,
+            managermonitoringconsole,
+            managerscaling,
+            managercrcrud,
             licensemanager,
-            cmaster,
-            lmaster,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image
