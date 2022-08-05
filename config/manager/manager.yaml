@@ -71,15 +71,15 @@ spec:
           requests:
             cpu: 1000m
             memory: 2000Mi
-        volumeMounts:
-          - mountPath: /opt/splunk/appframework/
-            name: app-staging
+        #volumeMounts:
+        #  - mountPath: /opt/splunk/appframework/
+        #    name: app-staging
       serviceAccountName: controller-manager
       volumes:
       - configMap:
           name: config
         name: splunk-operator-config
-      - name:  app-staging
-        persistentVolumeClaim:
-          claimName: app-download
+      #- name:  app-staging
+      #  persistentVolumeClaim:
+      #    claimName: app-download
       terminationGracePeriodSeconds: 10
