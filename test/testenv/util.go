@@ -207,7 +207,7 @@ func swapLicenseManager(name string, licenseManagerName string) (string, string)
 // newClusterManager creates and initialize the CR for ClusterManager Kind
 func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterManager {
 
-	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
 	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -226,10 +226,10 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -242,7 +242,7 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 // newClusterManager creates and initialize the CR for ClusterManager Kind
 func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
 
-	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -261,10 +261,10 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -277,7 +277,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 // newClusterManager creates and initialize the CR for ClusterManager Kind
 func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterManager {
 
-	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
 	new := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -297,10 +297,10 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -313,7 +313,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 // newClusterManager creates and initialize the CR for ClusterManager Kind
 func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
 
-	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
 	new := enterpriseApi.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -333,10 +333,10 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -349,7 +349,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
 func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
 
-	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
 
 	new := enterpriseApi.IndexerCluster{
@@ -375,10 +375,10 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 					Name: clusterMasterRef,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -391,7 +391,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 
 func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
 
-	licenseMasterName, licenseManagerName := swapLicenseManager(name, licenseManagerName)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
 
 	new := enterpriseApi.SearchHeadCluster{
@@ -417,10 +417,10 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 					Name: clusterMasterRef,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -600,6 +600,8 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
 func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterpriseApi.Standalone {
 
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
+
 	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -616,7 +618,10 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: licenseManagerName,
+					Name: licenseManagerRef,
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: licenseMasterRef,
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -664,7 +669,7 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 // newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
 func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) *enterpriseApi.MonitoringConsole {
 
-	licenseMasterName, LicenseManagerRef := swapLicenseManager(name, LicenseManagerRef)
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, LicenseManagerRef)
 
 	mcSpec := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
@@ -682,10 +687,10 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) 
 					ImagePullPolicy: "IfNotPresent",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
-					Name: LicenseManagerRef,
+					Name: licenseManagerRef,
 				},
 				LicenseMasterRef: corev1.ObjectReference{
-					Name: licenseMasterName,
+					Name: licenseMasterRef,
 				},
 				Volumes: []corev1.Volume{},
 			},

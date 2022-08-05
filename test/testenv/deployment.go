@@ -874,6 +874,33 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
 	return nil
 }
 
+// DeployStandaloneWithLMaster deploys a standalone splunk enterprise instance with license manager on the specified testenv
+func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name string, mcRef string) (*enterpriseApi.Standalone, error) {
+	var LicenseManager string
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		LicenseManager = name
+	}
+
+	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager)
+	if mcRef != "" {
+		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
+			Name: mcRef,
+		}
+	}
+	deployed, err := d.deployCR(ctx, name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApi.Standalone), err
+}
+
 // DeployStandaloneWithLM deploys a standalone splunk enterprise instance with license manager on the specified testenv
 func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mcRef string) (*enterpriseApi.Standalone, error) {
 	var LicenseManager string
