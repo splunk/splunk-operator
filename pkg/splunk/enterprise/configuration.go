@@ -1343,15 +1343,20 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 			scopedLog.Info("No valid SecretRef for volume.", "volumeName", volume.Name)
 		}
 
-		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
+		// provider is used in App framework to pick the S3 client(supported providers are aws and minio),
+		// or Blob client (supported provider is azure) and is not applicable to Smartstore
 		// For now, Smartstore supports only S3, which is by default.
 		if isAppFramework {
 			if !isValidStorageType(volume.Type) {
-				return fmt.Errorf("remote volume type is invalid. Only storageType=s3 is supported")
+				return fmt.Errorf("storageType '%s' is invalid. Valid values are 's3' and 'blob'", volume.Type)
 			}
 
 			if !isValidProvider(volume.Provider) {
-				return fmt.Errorf("s3 Provider is invalid")
+				return fmt.Errorf("provider '%s' is invalid. Valid values are 'aws', 'minio' and 'azure'", volume.Provider)
+			}
+
+			if !isValidProviderForStorageType(volume.Type, volume.Provider) {
+				return fmt.Errorf("storageType '%s' cannot be used with provider '%s'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)", volume.Type, volume.Provider)
 			}
 		}
 	}
@@ -1360,12 +1365,19 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 
 // isValidStorageType checks if the storage type specified is valid and supported
 func isValidStorageType(storage string) bool {
-	return storage != "" && storage == "s3"
+	return storage != "" && (storage == "s3" || storage == "blob")
 }
 
 // isValidProvider checks if the provider specified is valid and supported
 func isValidProvider(provider string) bool {
-	return provider != "" && (provider == "aws" || provider == "minio")
+	return provider != "" && (provider == "aws" || provider == "minio" || provider == "azure")
+}
+
+// Valid provider for s3 are aws and minio
+// Valid provider for blob is azure
+func isValidProviderForStorageType(storageType string, provider string) bool {
+	return ((storageType == "s3" && (provider == "aws" || provider == "minio")) ||
+		(storageType == "blob" && provider == "azure"))
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec
