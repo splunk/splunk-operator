@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	//splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -40,7 +40,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -64,7 +64,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
@@ -72,7 +72,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -158,7 +158,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
@@ -166,7 +166,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -194,7 +194,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, true, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) exists
-			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "cluster-manager", 1, true, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}
@@ -211,7 +211,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
 			// Delete the Cluster Manager
-			cm := &enterpriseApi.ClusterManager{}
+			cm := &enterpriseApi.ClusterMaster{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
 			err = deployment.DeleteCR(ctx, cm)
@@ -233,7 +233,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, false, verificationTimeout)
 
 			// Verify Cluster Manager PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "cluster-manager", 1, false, verificationTimeout)
+			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, false, verificationTimeout)
 
 			// Verify Monitoring Console PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "monitoring-console", 1, false, verificationTimeout)

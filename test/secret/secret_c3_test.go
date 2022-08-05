@@ -34,7 +34,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -55,7 +55,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("secret, smoke, c3: secret update on indexers and search head cluster", func() {
+		It("mastersecret, smoke, c3: secret update on indexers and search head cluster", func() {
 
 			// Test Scenario
 			// 1. Update Secrets Data
@@ -76,10 +76,10 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -116,13 +116,13 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
+			testenv.VerifyClusterMasterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
 			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)

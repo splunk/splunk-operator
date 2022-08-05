@@ -18,21 +18,11 @@ package deletecr
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"strings"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
-
-func dumpGetPods(ns string) {
-	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
-	for _, line := range strings.Split(string(output), "\n") {
-		testenvInstance.Log.Info(line)
-	}
-}
 
 var _ = Describe("DeleteCR test", func() {
 
@@ -42,7 +32,7 @@ var _ = Describe("DeleteCR test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -69,7 +59,7 @@ var _ = Describe("DeleteCR test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)

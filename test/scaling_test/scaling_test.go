@@ -36,7 +36,7 @@ var _ = Describe("Scaling test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -60,7 +60,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("scaling_test, integration: Can Scale Up and Scale Down Standalone CR", func() {
+		It("scaling_test_master, integration: Can Scale Up and Scale Down Standalone CR", func() {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -107,7 +107,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
+		It("scaling_test_master, integration: SHC and IDXC can be scaled up and data is searchable", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
@@ -115,7 +115,7 @@ var _ = Describe("Scaling test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -256,15 +256,15 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Multisite Indexer Cluster (M4 - Multisite indexer Cluster, search head cluster)", func() {
-		It("scaling_test, integration: Multisite IDXC can be scaled up and data is searchable", func() {
+		It("scaling_test_master, integration: Multisite IDXC can be scaled up and data is searchable", func() {
 
 			defaultIndexerReplicas := 1
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)

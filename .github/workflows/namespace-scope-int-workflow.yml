@@ -10,14 +10,15 @@ jobs:
         test:
           [
             appframeworks1,
-            appframeworkc3,
-            appframeworkm4,
-            secret,
-            smartstore,
-            monitoringconsole,
-            scaling,
-            crcrud,
+            masterappframeworkc3,
+            masterappframeworkm4,
+            mastersecret,
+            mastersmartstore,
+            mastermonitoringconsole,
+            masterscaling,
+            mastercrcrud,
             licensemanager,
+            licensemaster,
           ]
     runs-on: ubuntu-latest
     env:
