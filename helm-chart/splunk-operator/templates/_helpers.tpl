@@ -31,14 +31,10 @@ Create standard operator fullname for uniform installation across Helm and manif
 {{- end }}
 
 {{/*
-Create the name of the service account to use for splunk operator TODO: issue if create not selected
+Create the name of the service account to use for splunk operator
 */}}
 {{- define "splunk-operator.operator.serviceAccountName" -}}
-{{- if .Values.splunkOperator.serviceAccount.create }}
-{{- printf "%s-%s"  (include "splunk-operator.operator.fullname" .) (default "controller-manager" .Values.splunkOperator.serviceAccount.name ) }}
-{{- else }}
-{{- default "default" .Values.splunkOperator.serviceAccount.name }}
-{{- end }}
+{{- printf "%s-%s"  (include "splunk-operator.operator.fullname" .) "controller-manager" }}
 {{- end }}
 
 {{/*
@@ -67,17 +63,6 @@ Selector labels
 control-plane: controller-manager
 app.kubernetes.io/name: {{ include "splunk-operator.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/*
-Create the name of the service account to use
-*/}}
-{{- define "splunk-operator.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "splunk-operator.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
 {{- end }}
 
 {{/*
