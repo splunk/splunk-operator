@@ -141,6 +141,8 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 			path = splcommon.PeerAppsLoc
 		} else if strings.Contains(podName, "cluster-manager") {
 			path = splcommon.ManagerAppsLoc
+		} else if strings.Contains(podName, "cluster-master") {
+			path = splcommon.ManagerAppsLoc
 		} else if strings.Contains(podName, "-deployer-") {
 			path = splcommon.SHClusterAppsLoc
 		}
