@@ -246,3 +246,4 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   version: 2.0.0
+  replaces: splunk-operator.v0.1.0
