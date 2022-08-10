@@ -126,12 +126,10 @@ jobs:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install Go Lint
         run: |
-          go version
-          go get -u golang.org/x/lint/golint
+          make setup/golint
       - name: Install Ginkgo 
         run: |
-          go get github.com/onsi/ginkgo/ginkgo
-          go get github.com/onsi/gomega/...
+          make setup/ginkgo
       - name: Install Helm
         run: |
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
