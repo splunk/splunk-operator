@@ -1546,6 +1546,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
+			Expect(err).To(Succeed(), "Unable to obtain secret object")
 			secretData := secretStruct.Data
 			modifiedSecretData := map[string][]byte{"s3_access_key": []byte(testenv.RandomDNSName(5)), "s3_secret_key": []byte(testenv.RandomDNSName(5))}
 
@@ -1736,11 +1737,16 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
-			// Upload apps to S3
+			// Download apps for test
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
+			appList := testenv.PVTestApps
+			appFileList := testenv.GetAppFileList(appList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			Expect(err).To(Succeed(), "Unable to download app files")
+
+			// Upload apps to S3
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -1774,7 +1780,7 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
@@ -1950,4 +1956,5 @@ var _ = Describe("s1appfw test", func() {
 
 		})
 	})
+
 })
