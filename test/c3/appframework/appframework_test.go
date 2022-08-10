@@ -2821,19 +2821,24 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
-			// Upload apps to S3 for Indexer Cluster
+			// Download apps for test
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
+			appList := testenv.PVTestApps
+			appFileList := testenv.GetAppFileList(appList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			Expect(err).To(Succeed(), "Unable to download app files")
+
+			// Upload apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			s3TestDirIdxc := "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search head Cluster", appVersion))
 			s3TestDirShc := "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
