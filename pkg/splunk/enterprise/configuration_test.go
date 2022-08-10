@@ -907,19 +907,68 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		t.Errorf("Configuring Defaults with invalid volume name should return an error, but failed to detect")
 	}
 
+	AppFramework.Defaults.VolName = "msos_s2s3_vol"
 	// Invalid remote volume type should return error.
 	AppFramework.VolList[0].Type = "s4"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
+	if err == nil || !strings.Contains(err.Error(), "storageType 's4' is invalid. Valid values are 's3' and 'blob'") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
 	}
 
+	AppFramework.VolList[0].Type = "s3"
 	AppFramework.VolList[0].Provider = "invalid-provider"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil || !strings.Contains(err.Error(), "remote volume type is invalid. Only storageType=s3 is supported") {
+	if err == nil || !strings.Contains(err.Error(), "provider 'invalid-provider' is invalid. Valid values are 'aws', 'minio' and 'azure'") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
 
+	// Validate s3 and azure are not right combination
+	AppFramework.VolList[0].Type = "s3"
+	AppFramework.VolList[0].Provider = "azure"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err == nil || !strings.Contains(err.Error(), "storageType 's3' cannot be used with provider 'azure'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
+		t.Errorf("ValidateAppFrameworkSpec with s3 and azure combination should have returned error.")
+	}
+
+	// Validate blob and azure are right combination
+	AppFramework.VolList[0].Type = "blob"
+	AppFramework.VolList[0].Provider = "azure"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("ValidateAppFrameworkSpec with blob and azure combination should not have returned error.")
+	}
+
+	// Validate s3 and aws are right combination
+	AppFramework.VolList[0].Type = "s3"
+	AppFramework.VolList[0].Provider = "aws"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("ValidateAppFrameworkSpec with s3 and aws combination should not have returned error.")
+	}
+
+	// Validate s3 and aws are right combination
+	AppFramework.VolList[0].Type = "s3"
+	AppFramework.VolList[0].Provider = "minio"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err != nil {
+		t.Errorf("ValidateAppFrameworkSpec with s3 and minio combination should not have returned error.")
+	}
+
+	// Validate blob and aws are not right combination
+	AppFramework.VolList[0].Type = "blob"
+	AppFramework.VolList[0].Provider = "aws"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'aws'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
+		t.Errorf("ValidateAppFrameworkSpec with blob and aws combination should have returned error.")
+	}
+
+	// Validate blob and minio are not right combination
+	AppFramework.VolList[0].Type = "blob"
+	AppFramework.VolList[0].Provider = "minio"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
+	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'minio'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
+		t.Errorf("ValidateAppFrameworkSpec with blob and minio combination should have returned error.")
+	}
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
