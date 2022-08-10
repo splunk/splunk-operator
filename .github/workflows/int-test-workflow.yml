@@ -19,6 +19,12 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
+    - name: Install Helm
+      run: |
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        ./get_helm.sh
+        DESIRED_VERSION=v3.8.2 bash get_helm.sh
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -81,6 +87,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
+      DEPLOYMENT_TYPE: "helm"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -122,6 +129,12 @@ jobs:
       - name: Install Ginkgo 
         run: |
           make setup/ginkgo
+      - name: Install Helm
+        run: |
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+          DESIRED_VERSION=v3.8.2 bash get_helm.sh
       - name: Install EKS CTL
         run: |
           curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -170,7 +183,6 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
         run: |
-          export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
