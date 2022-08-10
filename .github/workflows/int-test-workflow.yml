@@ -118,12 +118,10 @@ jobs:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install Go Lint
         run: |
-          go version
-          go get -u golang.org/x/lint/golint
+          make setup/golint
       - name: Install Ginkgo 
         run: |
-          go get github.com/onsi/ginkgo/ginkgo
-          go get github.com/onsi/gomega/...
+          make setup/ginkgo
       - name: Install EKS CTL
         run: |
           curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
