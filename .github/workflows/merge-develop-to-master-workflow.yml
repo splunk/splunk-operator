@@ -70,7 +70,7 @@ jobs:
     
     - name: Install golint
       run: |
-        go get -u golang.org/x/lint/golint
+        make setup/golint
     
     - name: Install goveralls
       run: |
