@@ -349,3 +349,15 @@ clean: stop_clair_scanner
 
 cleanup: 
 	@./tools/cleanup.sh
+
+.PHONY: setup/ginkgo
+setup/ginkgo:
+	@echo Installing ginkgo
+	@go get github.com/onsi/ginkgo/ginkgo
+	@echo Installing gomega
+	@go get github.com/onsi/gomega/...
+
+.PHONY: setup/golint
+setup/golint:
+	@echo Installing golint
+	@go get -u golang.org/x/lint/golint
