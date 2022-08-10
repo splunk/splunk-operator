@@ -1956,7 +1956,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4, appframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, m4, appframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled, install an app then disable it and remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1970,8 +1970,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
 			   * Verify apps are copied and installed on Monitoring Console and on Search Heads and Indexers pods
-			   ############  Upload Disabled App ###########
-			   * Download disabled app from s3
+			   * Disable the app
 			   * Delete the app from s3
 			   * Check for repo state in App Deployment Info
 			*/
@@ -2034,22 +2033,13 @@ var _ = Describe("m4appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// ############ Upload Disabled App ###########
 			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
-			// Download disabled version of app from S3
-			testcaseEnvInst.Log.Info("Download disabled version of apps from S3 for this test")
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirDisabled, downloadDirV1, appFileName)
-			Expect(err).To(Succeed(), "Unable to download apps files")
-
-			// Upload disabled version of app to S3
-			testcaseEnvInst.Log.Info("Upload disabled version of app to S3 for this test")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileName, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
-			uploadedApps = append(uploadedApps, uploadedFiles...)
+			// Disable the app
+			testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
@@ -2066,12 +2056,12 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for App state to update after config file change
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
-			//Delete the file from s3
+			// Delete the file from S3
 			s3Filepath := filepath.Join(s3TestDirIdxc, appFileName[0])
 			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName))
 
-			// Verify repo state is set  to 2 (i.e app deleted from S3 bucket)
+			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 		})
 	})
