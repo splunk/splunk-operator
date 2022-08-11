@@ -57,7 +57,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastermonitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		It("mstrmc, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -223,7 +223,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mastermonitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("mstrmc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster

@@ -164,7 +164,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermonitoringconsole, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("mngrmc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -319,7 +319,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermonitoringconsole, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+		It("mngrmc, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -414,7 +414,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managermonitoringconsole, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		It("mngrmc, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -580,7 +580,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managermonitoringconsole, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("mngrmc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
