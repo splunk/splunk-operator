@@ -88,3 +88,35 @@ environment variable to the operator's deployment spec:
 - name: CLUSTER_DOMAIN
   value: "mydomain.com"
 ```
+
+# Splunk Operator Installation using Helm Chart
+
+## How to use Datadog Helm repository
+
+You need to add this repository to your Helm repositories:
+
+```bash
+helm repo add splunk-operator https://splunk.github.io/splunk-operator
+helm repo update
+```
+
+# Prerequisites
+Kubernetes 1.21+ or Openshift 4.10+, note that:
+
+## Quick start
+
+### Installing the Splunk Operator Chart
+To install the chart with the release name <RELEASE_NAME>, run:
+
+For Helm 3:
+```sh
+helm install 2.0.0 splunk/splunk-operator
+```
+
+For Helm 2:
+```sh
+helm install --name 2.0.0 splunk/splunk-operator
+```
+
+## Configuration
+
