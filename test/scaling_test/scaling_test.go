@@ -114,7 +114,7 @@ var _ = Describe("Scaling test", func() {
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), defaultIndexerReplicas, true, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
+			// Ensure that the cluster-master goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
@@ -162,7 +162,7 @@ var _ = Describe("Scaling test", func() {
 			// Ensure Indexer cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify New Indexer On Cluster Manager
+			// Verify New Indexer On Cluster Master
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
 			testcaseEnvInst.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
@@ -181,7 +181,7 @@ var _ = Describe("Scaling test", func() {
 
 			time.Sleep(60 * time.Second)
 
-			// Verify New SearchHead is added to Cluster Manager
+			// Verify New SearchHead is added to Cluster Master
 			searchHeadName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
 			testcaseEnvInst.Log.Info("Checking for Search Head On CM", "Search Head Name", searchHeadName)
 			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, searchHeadName)).To(Equal(true))
@@ -263,7 +263,7 @@ var _ = Describe("Scaling test", func() {
 			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
+			// Ensure that the cluster-master goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
@@ -310,7 +310,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.CreateMockLogfile(logFile, 2000)
 			testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
 
-			// Verify New Indexer On Cluster Manager
+			// Verify New Indexer On Cluster Master
 			indexerName := podName
 			testcaseEnvInst.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))

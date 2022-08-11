@@ -72,12 +72,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Create License Config Map
 			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
-			// Create standalone Deployment with License Manager
+			// Create standalone Deployment with License Master
 			mcName := deployment.GetName()
 			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -110,7 +110,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -163,12 +163,12 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Create License Config Map
 			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
-			// Create standalone Deployment with License Manager
+			// Create standalone Deployment with License Master
 			mcName := deployment.GetName()
 			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -197,7 +197,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status

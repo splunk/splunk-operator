@@ -62,12 +62,12 @@ var _ = Describe("Licensemanager test", func() {
 			// Create License Config Map
 			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 
-			// Create standalone Deployment with License Manager
+			// Create standalone Deployment with License Master
 			mcRef := deployment.GetName()
 			standalone, err := deployment.DeployStandaloneWithLMaster(ctx, deployment.GetName(), mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
