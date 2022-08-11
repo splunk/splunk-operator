@@ -14,8 +14,7 @@ jobs:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: Install golint
       run: |
-        go version
-        go install golang.org/x/lint/golint@latest
+        make setup/golint
     - name: Check Source formatting
       run: X=`make fmt` && if [[ $? -ne 0 ]]; then false; fi
     - name: Lint source code
@@ -34,8 +33,7 @@ jobs:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install golint
         run: |
-          go version
-          go install golang.org/x/lint/golint@latest
+          make setup/golint
       - name: Install goveralls
         run: |
           go version
@@ -57,6 +55,7 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      DEPLOYMENT_TYPE: helm
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -152,6 +151,7 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
+      DEPLOYMENT_TYPE: "helm"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -179,12 +179,16 @@ jobs:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
       - name: Install Go Lint
         run: |
-          go version
-          go get -u golang.org/x/lint/golint
+          make setup/golint
       - name: Install Ginkgo
         run: |
-          go get github.com/onsi/ginkgo/ginkgo
-          go get github.com/onsi/gomega/...
+          make setup/ginkgo
+      - name: Install Helm
+        run: |
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+          DESIRED_VERSION=v3.8.2 bash get_helm.sh
       - name: Install EKS CTL
         run: |
           curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -234,7 +238,6 @@ jobs:
       - name: Run smoke test
         id: smoketest
         run: |
-          export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}

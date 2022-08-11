@@ -53,7 +53,7 @@ jobs:
 
     - name: Generate Release Artifacts
       run: |    
-        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
+        make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
     
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
@@ -70,7 +70,7 @@ jobs:
     - name: Create Release
       uses: ncipollo/release-action@40bb172bd05f266cf9ba4ff965cb61e9ee5f6d01
       with:
-        artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-install.yaml"
+        artifacts: "release-${{ github.event.inputs.release_version }}/splunk-operator-cluster.yaml,release-${{ github.event.inputs.release_version }}/splunk-operator-namespace.yaml"
         bodyFile: "docs/ReleaseNotes.md"
         tag: "${{ github.event.inputs.release_version }}"
         draft: true
