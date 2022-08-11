@@ -164,7 +164,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("mngrmc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -319,7 +319,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("mngrmc, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+		It("managermc, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -414,7 +414,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mngrmc, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
+		It("managermc, smoke: MC can configure SHC, indexer instances after scale up and standalone in a namespace", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -580,7 +580,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("mngrmc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -802,7 +802,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
-		It("monitoring_console, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
+		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
 			/*
 				Test Steps
 				1. Deploy Multisite Indexer Cluster
