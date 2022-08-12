@@ -3632,6 +3632,9 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              telAppInstalled:
+                description: Telemetry App installation flag
+                type: boolean
             type: object
         type: object
     served: true

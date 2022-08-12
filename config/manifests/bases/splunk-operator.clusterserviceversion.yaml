@@ -20,6 +20,11 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: ClusterManager is the Schema for the cluster manager API
+      displayName: Cluster Manager
+      kind: ClusterManager
+      name: clustermanagers.enterprise.splunk.com
+      version: v3
     - description: ClusterMaster is the Schema for the cluster manager API
       displayName: Cluster Master
       kind: ClusterMaster
@@ -250,5 +255,5 @@ spec:
   provider:
     name: Splunk Inc.
     url: www.splunk.com
-  version: 2.0.0
   replaces: splunk-operator.v0.1.0
+  version: 2.0.0

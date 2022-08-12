@@ -11,7 +11,7 @@ metadata:
             "finalizers": [
               "enterprise.splunk.com/delete-pvc"
             ],
-            "name": "clustermaster-sample"
+            "name": "clustermanager-sample"
           },
           "spec": {}
         },
@@ -92,196 +92,146 @@ metadata:
     marketplace.openshift.io/remote-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/pricing?utm_source=openshift_console
     marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.21.0
+    operators.operatorframework.io/builder: operator-sdk-v1.15.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
-  name: splunk.v2.0.0
+  name: splunk-operator.v2.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: ClusterManager is the Schema for the cluster manager API
+      displayName: Cluster Manager
+      kind: ClusterManager
+      name: clustermanagers.enterprise.splunk.com
+      version: v3
     - description: ClusterMaster is the Schema for the cluster manager API
-      displayName: Cluster Master v3
+      displayName: Cluster Master
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       version: v3
     - kind: ClusterMaster
-      displayName: Cluster Master v1
       name: clustermasters.enterprise.splunk.com
       version: v1
-      description: cluster master v1 api
     - kind: ClusterMaster
-      displayName: Cluster Master v1alpha1
       name: clustermasters.enterprise.splunk.com
       version: v1alpha1
-      description: cluster master v1alpha1 api
     - kind: ClusterMaster
-      displayName: Cluster Master v1beta1
       name: clustermasters.enterprise.splunk.com
       version: v1beta1
-      description: cluster master v1beta1 api
     - kind: ClusterMaster
-      displayName: Cluster Master v1beta2
       name: clustermasters.enterprise.splunk.com
       version: v1beta2
-      description: cluster master v1beta2 api
     - kind: ClusterMaster
-      displayName: Cluster Master v1beta3
       name: clustermasters.enterprise.splunk.com
       version: v1beta3
-      description: cluster master v1beta3 api
     - kind: ClusterMaster
-      displayName: Cluster Master v2
       name: clustermasters.enterprise.splunk.com
       version: v2
-      description: cluster master v2 api
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
-      displayName: Indexer Cluster v3
+      displayName: Indexer Cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v3
     - kind: IndexerCluster
-      displayName: Indexer Cluster v1
       name: indexerclusters.enterprise.splunk.com
       version: v1
-      description: indexer cluster v1 api
     - kind: IndexerCluster
-      displayName: Indexer Cluster v1alpha1
       name: indexerclusters.enterprise.splunk.com
       version: v1alpha1
-      description: indexer cluster v1alpha1 api
     - kind: IndexerCluster
-      displayName: Indexer Cluster v1beta1
       name: indexerclusters.enterprise.splunk.com
       version: v1beta1
-      description: indexer cluster v1beta1 api
     - kind: IndexerCluster
-      displayName: Indexer Cluster v1beta2
       name: indexerclusters.enterprise.splunk.com
       version: v1beta2
-      description: indexer cluster v1beta2 api
     - kind: IndexerCluster
-      displayName: Indexer Cluster v1beta3
       name: indexerclusters.enterprise.splunk.com
       version: v1beta3
-      description: indexer cluster v1beta3 api
     - kind: IndexerCluster
-      displayName: Indexer Cluster v2
       name: indexerclusters.enterprise.splunk.com
       version: v2
-      description: indexer cluster v2 api
-    - description: LicenseMaster is the Schema for a Splunk Enterprise license manager.
-      displayName: License Master v3
+    - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
+      displayName: License Manager
+      kind: LicenseManager
+      name: licensemanagers.enterprise.splunk.com
+      version: v3
+    - description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+      displayName: License Master
       kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
       version: v3
     - kind: LicenseMaster
-      displayName: License Master v1
       name: licensemasters.enterprise.splunk.com
       version: v1
-      description: LicenseMaster v1 is the Schema for a Splunk Enterprise license manager.
     - kind: LicenseMaster
-      displayName: License Master v1alpha1
       name: licensemasters.enterprise.splunk.com
       version: v1alpha1
-      description: LicenseMaster v1alpha1 is the Schema for a Splunk Enterprise license manager.
     - kind: LicenseMaster
-      displayName: License Master v1beta1
       name: licensemasters.enterprise.splunk.com
       version: v1beta1
-      description: LicenseMaster v1beta1 is the Schema for a Splunk Enterprise license manager.
     - kind: LicenseMaster
-      displayName: License Master v1beta2
       name: licensemasters.enterprise.splunk.com
       version: v1beta2
-      description: LicenseMaster v1beta2 is the Schema for a Splunk Enterprise license manager.
     - kind: LicenseMaster
-      displayName: License Master v1beta3
       name: licensemasters.enterprise.splunk.com
       version: v1beta3
-      description: LicenseMaster v1beta3 is the Schema for a Splunk Enterprise license manager.
     - kind: LicenseMaster
-      displayName: License Master v2
       name: licensemasters.enterprise.splunk.com
       version: v2
-      description: LicenseMaster v2 is the Schema for a Splunk Enterprise license manager.
     - description: MonitoringConsole is the Schema for the monitoringconsole API
-      displayName: Monitoring Console v3
+      displayName: Monitoring Console
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
       version: v3
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
-      displayName: Search Head Cluster v3
+      displayName: Search Head Cluster
       kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v3
     - kind: SearchHeadCluster
-      displayName: Search Head Cluster v1
       name: searchheadclusters.enterprise.splunk.com
       version: v1
-      description: SearchHeadCluster v1 is the Schema for a Splunk Enterprise search
     - kind: SearchHeadCluster
-      displayName: Search Head Cluster v1alpha1
       name: searchheadclusters.enterprise.splunk.com
       version: v1alpha1
-      description: SearchHeadCluster v1alpha1 is the Schema for a Splunk Enterprise search
     - kind: SearchHeadCluster
-      displayName: Search Head Cluster v1beta1
       name: searchheadclusters.enterprise.splunk.com
       version: v1beta1
-      description: SearchHeadCluster v1beta1 is the Schema for a Splunk Enterprise search
     - kind: SearchHeadCluster
-      displayName: Search Head Cluster v1beta2
       name: searchheadclusters.enterprise.splunk.com
       version: v1beta2
-      description: SearchHeadCluster v1beta2 is the Schema for a Splunk Enterprise search
     - kind: SearchHeadCluster
-      displayName: Search Head Cluster v1beta3
       name: searchheadclusters.enterprise.splunk.com
       version: v1beta3
-      description: SearchHeadCluster v1beta3 is the Schema for a Splunk Enterprise search
     - kind: SearchHeadCluster
-      displayName: Search Head Cluster v2
       name: searchheadclusters.enterprise.splunk.com
       version: v2
-      description: SearchHeadCluster v2 is the Schema for a Splunk Enterprise search
     - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
-      displayName: Standalone v1
+      displayName: Standalone
       kind: Standalone
       name: standalones.enterprise.splunk.com
       version: v3
     - kind: Standalone
-      displayName: Standalone v1
       name: standalones.enterprise.splunk.com
       version: v1
-      description: Standalone v1 is the Schema for a Splunk Enterprise standalone instances.
     - kind: Standalone
-      displayName: Standalone v1alpha1
       name: standalones.enterprise.splunk.com
       version: v1alpha1
-      description: Standalone v1alpha1 is the Schema for a Splunk Enterprise standalone instances.
     - kind: Standalone
-      displayName: Standalone v1beta1
       name: standalones.enterprise.splunk.com
       version: v1beta1
-      description: Standalone v1beat1 is the Schema for a Splunk Enterprise standalone instances.
     - kind: Standalone
-      displayName: Standalone v1beta2
       name: standalones.enterprise.splunk.com
       version: v1beta2
-      description: Standalone v1beta2 is the Schema for a Splunk Enterprise standalone instances.
     - kind: Standalone
-      displayName: Standalone v1beta3
       name: standalones.enterprise.splunk.com
       version: v1beta3
-      description: Standalone v1beta3 is the Schema for a Splunk Enterprise standalone instances.
     - kind: Standalone
-      displayName: Standalone v2
       name: standalones.enterprise.splunk.com
       version: v2
-      description: Standalone v2 is the Schema for a Splunk Enterprise standalone instances.
   description: "# Getting Started with the Splunk Operator for Kubernetes\n\nThe Splunk
     Operator for Kubernetes enables you to quickly and easily deploy Splunk Enterprise
     on your choice of private or public cloud provider. The Operator simplifies scaling
@@ -810,10 +760,7 @@ spec:
           - create
         serviceAccountName: splunk-operator-controller-manager
       deployments:
-      - label:
-          control-plane: controller-manager
-          name: splunk-operator
-        name: splunk-operator-controller-manager
+      - name: splunk-operator-controller-manager
         spec:
           replicas: 1
           selector:
@@ -837,7 +784,7 @@ spec:
                 - --upstream=http://127.0.0.1:8080/
                 - --logtostderr=true
                 - --v=0
-                image: gcr.io/kubebuilder/kube-rbac-proxy@sha256:db06cc4c084dd0253134f156dddaaf53ef1c3fb3cc809e5d81711baa4029ea4c
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
                 name: kube-rbac-proxy
                 ports:
                 - containerPort: 8443
@@ -861,14 +808,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk@sha256:dc97f8a61f947deb52648c3b3ea48b765cdbac5fdb171479d0961f8d80b6dcce
+                  value: docker.io/splunk/splunk:edge
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
+                image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -905,8 +852,9 @@ spec:
               - configMap:
                   name: splunk-operator-config
                 name: splunk-operator-config
-              - emptyDir: {}
-                name: app-staging
+              - name: app-staging
+                persistentVolumeClaim:
+                  claimName: splunk-operator-app-download
       permissions:
       - rules:
         - apiGroups:
@@ -969,8 +917,5 @@ spec:
   provider:
     name: Splunk Inc.
     url: www.splunk.com
-  relatedImages:
-  - image: docker.io/splunk/splunk@sha256:dc97f8a61f947deb52648c3b3ea48b765cdbac5fdb171479d0961f8d80b6dcce
-    name: splunk-enterprise
   replaces: splunk-operator.v0.1.0
   version: 2.0.0
