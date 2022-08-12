@@ -2582,11 +2582,9 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
 			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
-			   ############ Upload Disabled App ###########
-			   * Download disabled app from s3
-			   * Delete the app from s3
+			   * Disable the app
+			   * Delete the app from S3
 			   * Check for repo state in App Deployment Info
-
 			*/
 
 			//################## SETUP ####################
@@ -2646,22 +2644,13 @@ var _ = Describe("c3appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// ############ Upload Disabled App ###########
 			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
-			// Download disabled version of app from S3
-			testcaseEnvInst.Log.Info("Download disabled version of apps from S3 for this test")
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirDisabled, downloadDirV1, appFileName)
-			Expect(err).To(Succeed(), "Unable to download apps files")
-
-			// Upload disabled version of app to S3
-			testcaseEnvInst.Log.Info("Upload disabled version of app to S3 for this test")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileName, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
-			uploadedApps = append(uploadedApps, uploadedFiles...)
+			// Disable the app
+			testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
@@ -2675,12 +2664,12 @@ var _ = Describe("c3appfw test", func() {
 			// Wait for App state to update after config file change
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
-			//Delete the file from s3
+			// Delete the file from S3
 			s3Filepath := filepath.Join(s3TestDirIdxc, appFileName[0])
 			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName[0]))
 
-			// Verify repo state is set  to 2 (i.e app deleted from S3 bucket)
+			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 
 		})
@@ -2831,19 +2820,24 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
-			// Upload apps to S3 for Indexer Cluster
+			// Download apps for test
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
+			appList := testenv.PVTestApps
+			appFileList := testenv.GetAppFileList(appList)
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			Expect(err).To(Succeed(), "Unable to download app files")
+
+			// Upload apps to S3 for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
 			s3TestDirIdxc := "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload apps to S3 for Search Head Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search head Cluster", appVersion))
 			s3TestDirShc := "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -3056,6 +3050,66 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+		})
+	})
+
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
+
+			/* Test Steps
+			   ################## SETUP ###################
+			   * Deploy C3 CRD
+			   * Deploy Standalone with clusterMasterRef
+			   ############# VERIFICATION #################
+			   * Verify clusterMasterRef is present in Standalone's server.conf file
+			*/
+			//################## SETUP ####################
+			// Deploy C3 CRD
+			indexerReplicas := 3
+			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "")
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
+
+			// Create spec with clusterMasterRef for Standalone
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+					ClusterMasterRef: corev1.ObjectReference{
+						Name: deployment.GetName(),
+					},
+				},
+			}
+
+			// Deploy Standalone with clusterMasterRef
+			testcaseEnvInst.Log.Info("Deploy Standalone with clusterMasterRef")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with clusterMasterRef")
+
+			// Ensure that the Cluster Manager goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			//  Ensure that the Standalone goes to Ready phase
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############# VERIFICATION #################
+			// Verify Standalone is configured as a Search Head for the Cluster Manager
+			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
+			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, standalonePodName)).To(Equal(true))
+
+			// Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 		})
 	})
 })

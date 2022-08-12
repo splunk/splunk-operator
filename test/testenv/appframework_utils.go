@@ -86,7 +86,7 @@ var BigSingleApp = []string{"test_app"}
 var ExtraApps = []string{"test_app2", "test_app3"}
 
 // PVTestApps is a group of 100MB-size apps used to test Operator PV
-var PVTestApps = []string{"100mb-app-1", "100mb-app-2", "100mb-app-3", "100mb-app-4", "100mb-app-5", "100mb-app-6", "100mb-app-7", "100mb-app-8", "100mb-app-9", "100mb-app-10", "100mb-app-11", "100mb-app-12", "100mb-app-13", "100mb-app-14", "100mb-app-15"}
+var PVTestApps = []string{"100mb-app-1", "100mb-app-2"}
 
 // AppLocationV1 Location of apps on S3 for V1 Apps
 var AppLocationV1 = "appframework/v1apps/"
