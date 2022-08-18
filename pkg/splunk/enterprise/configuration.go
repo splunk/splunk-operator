@@ -740,6 +740,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+		{Name: "SPLUNK_CONTAINER_ENV", Value: "true"}, //need for splunkd to determine its running in containerized env
 	}
 
 	// update variables for licensing, if configured
@@ -757,6 +758,14 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		env = append(env, corev1.EnvVar{
 			Name:  "SPLUNK_LICENSE_MASTER_URL",
 			Value: licenseManagerURL,
+		})
+	}
+
+	// update splunk cgroup path, if configured else will use default /sys/fs/cgroup/ for collecting CPU/RAM information
+	if spec.Cgroup != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_CGROUP_PATH",
+			Value: spec.Cgroup,
 		})
 	}
 

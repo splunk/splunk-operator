@@ -61,6 +61,9 @@ spec:
             description: SearchHeadClusterSpec defines the desired state of a Splunk
               Enterprise search head cluster
             properties:
+              Cgroup:
+                description: Cgroup defines the cgroup splunk is running in
+                type: string
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
                 type: boolean
