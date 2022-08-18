@@ -1,0 +1,111 @@
+{{- if .Values.indexerCluster.enabled }}
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: {{ .Values.indexerCluster.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.indexerCluster.namespaceOverride }}
+{{- with .Values.indexerCluster.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.indexerCluster.replicaCount }}
+  replicas: {{ .Values.indexerCluster.replicaCount }}
+{{- end }}
+{{- if .Values.existingClusterMaster }}
+  clusterMasterRef:
+    name: {{ .Values.existingClusterMaster.name }}
+  {{- if .Values.existingClusterMaster.namespace }}
+    namespace: {{ .Values.existingClusterMaster.namespace }}
+  {{- end }}
+{{- else if .Values.clusterMaster.enabled }}
+  clusterMasterRef:
+    name: {{ .Values.clusterMaster.name }}
+  {{- if .Values.clusterMaster.namespaceOverride }}
+    namespace: {{ .Values.clusterMaster.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingLicenseMaster }}
+  licenseMasterRef:
+    name: {{ .Values.existingLicenseMaster.name }}
+  {{- if .Values.existingLicenseMaster.namespace }}
+    namespace: {{ .Values.existingLicenseMaster.namespace }}
+  {{- end }}
+{{- else if .Values.licenseMaster.enabled }}
+  licenseMasterRef:
+    name: {{ .Values.licenseMaster.name }}
+  {{- if .Values.licenseMaster.namespaceOverride }}
+    namespace: {{ .Values.licenseMaster.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingMonitoringConsole }}
+  monitoringConsoleRef:
+    name: {{ .Values.existingMonitoringConsole.name }}
+  {{- if .Values.existingMonitoringConsole.namespace }}
+    namespace: {{ .Values.existingMonitoringConsole.namespace }}
+  {{- end }}
+{{- else if .Values.monitoringConsole.enabled }}
+  monitoringConsoleRef:
+    name: {{ .Values.monitoringConsole.name }}
+  {{- if .Values.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.indexerCluster.volumes }}      
+  volumes:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.indexerCluster.licenseUrl }}
+  licenseUrl: {{ .Values.indexerCluster.licenseUrl }}
+{{- end }}
+{{- if .Values.indexerCluster.defaultsUrl }}
+  defaultsUrl: {{ .Values.indexerCluster.defaultsUrl }}
+{{- end }}
+{{- if .Values.indexerCluster.defaults }}
+  defaults: |-
+{{ toYaml .Values.indexerCluster.defaults | indent 4 }}
+{{- end }}
+{{- with .Values.indexerCluster.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.indexerCluster.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.indexerCluster.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.indexerCluster.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.indexerCluster.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.indexerCluster.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.indexerCluster.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.indexerCluster.resources }}
+  resources:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.indexerCluster.serviceAccount }}
+  serviceAccount: {{ .Values.indexerCluster.serviceAccount }}
+{{- end }}
+{{- with .Values.indexerCluster.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.indexerCluster.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}
