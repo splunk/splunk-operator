@@ -18,11 +18,12 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -36,7 +37,7 @@ import (
 )
 
 // ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster manager.
-func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
+func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -228,19 +229,19 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 type clusterMasterPodManager struct {
 	c               splcommon.ControllerClient
 	log             logr.Logger
-	cr              *enterpriseApi.ClusterMaster
+	cr              *enterpriseApiV3.ClusterMaster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
 // getClusterMasterClient for clusterMasterPodManager returns a SplunkClient for cluster manager
-func (mgr *clusterMasterPodManager) getClusterMasterClient(cr *enterpriseApi.ClusterMaster) *splclient.SplunkClient {
+func (mgr *clusterMasterPodManager) getClusterMasterClient(cr *enterpriseApiV3.ClusterMaster) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
-func validateClusterMasterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+func validateClusterMasterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
 		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
@@ -260,7 +261,7 @@ func validateClusterMasterSpec(ctx context.Context, c splcommon.ControllerClient
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getClusterMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (*appsv1.StatefulSet, error) {
+func getClusterMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
@@ -279,7 +280,7 @@ func getClusterMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 }
 
 // CheckIfMastersmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
-func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
+func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfMastersmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
@@ -310,7 +311,7 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 }
 
 // PerformCmasterBundlePush initiates the bundle push from cluster manager
-func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 		return nil
 	}
@@ -354,7 +355,7 @@ func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient,
 }
 
 // PushMasterAppsBundle issues the REST command to for cluster manager bundle push
-func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
@@ -389,7 +390,7 @@ func getClusterMasterList(ctx context.Context, c splcommon.ControllerClient, cr 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getClusterMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	objectList := enterpriseApi.ClusterMasterList{}
+	objectList := enterpriseApiV3.ClusterMasterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
@@ -403,7 +404,7 @@ func getClusterMasterList(ctx context.Context, c splcommon.ControllerClient, cr 
 }
 
 //VerifyCMasterisMultisite checks if its a multisite
-func VerifyCMasterisMultisite(ctx context.Context, cr *enterpriseApi.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+func VerifyCMasterisMultisite(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())

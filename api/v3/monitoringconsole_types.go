@@ -17,6 +17,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,28 +37,28 @@ const (
 
 // MonitoringConsoleSpec defines the desired state of MonitoringConsole
 type MonitoringConsoleSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
-	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // MonitoringConsoleStatus defines the observed state of MonitoringConsole
 type MonitoringConsoleStatus struct {
 	// current phase of the monitoring console
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
 	// Bundle push status tracker
-	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
+	BundlePushTracker enterpriseApi.BundlePushInfo `json:"bundlePushInfo"`
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
 	// App Framework status
-	AppContext AppDeploymentContext `json:"appContext,omitempty"`
+	AppContext enterpriseApi.AppDeploymentContext `json:"appContext,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

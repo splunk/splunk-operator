@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 

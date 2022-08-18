@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"io"
 	"os"
 	"path"
@@ -38,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -2039,12 +2040,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		return latestStdlnCR, nil
 
 	case "LicenseMaster":
-		latestLmCR := &enterpriseApi.LicenseMaster{}
+		latestLmCR := &enterpriseApiV3.LicenseMaster{}
 		err = client.Get(ctx, namespacedName, latestLmCR)
 		if err != nil {
 			return nil, err
 		}
-		origCR.(*enterpriseApi.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
+		origCR.(*enterpriseApiV3.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
 		return latestLmCR, nil
 
 	case "LicenseManager":
@@ -2075,12 +2076,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		return latestIdxcCR, nil
 
 	case "ClusterMaster":
-		latestCmCR := &enterpriseApi.ClusterMaster{}
+		latestCmCR := &enterpriseApiV3.ClusterMaster{}
 		err = client.Get(ctx, namespacedName, latestCmCR)
 		if err != nil {
 			return nil, err
 		}
-		origCR.(*enterpriseApi.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
+		origCR.(*enterpriseApiV3.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
 		return latestCmCR, nil
 
 	case "ClusterManager":

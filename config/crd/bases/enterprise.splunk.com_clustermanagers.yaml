@@ -39,7 +39,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    name: v4
     schema:
       openAPIV3Schema:
         description: ClusterManager is the Schema for the cluster manager API

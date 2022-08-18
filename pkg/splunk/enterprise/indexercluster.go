@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"regexp"
 	"strconv"
 	"time"
@@ -31,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -333,7 +334,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.ClusterMasterRef.Name,
 	}
-	managerIdxCluster := &enterpriseApi.ClusterMaster{}
+	managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
 	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
 	if err == nil {
 		// when user creates both cluster manager and index cluster yaml file at the same time
@@ -1035,7 +1036,7 @@ func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *
 
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
-		var cmCR enterpriseApi.ClusterMaster
+		var cmCR enterpriseApiV3.ClusterMaster
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
 			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name

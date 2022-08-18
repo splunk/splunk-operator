@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/minio/minio-go/v7"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
 // MockMinioS3Client is used to store all the objects for an app source

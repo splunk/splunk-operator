@@ -17,6 +17,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,22 +37,22 @@ const (
 
 // StandaloneSpec defines the desired state of a Splunk Enterprise standalone instances.
 type StandaloneSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Number of standalone pods
 	Replicas int32 `json:"replicas"`
 
 	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
-	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
 type StandaloneStatus struct {
 	// current phase of the standalone instances
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
 
 	// number of desired standalone instances
 	Replicas int32 `json:"replicas"`
@@ -63,13 +64,13 @@ type StandaloneStatus struct {
 	Selector string `json:"selector"`
 
 	//Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
 	// App Framework Context
-	AppContext AppDeploymentContext `json:"appContext"`
+	AppContext enterpriseApi.AppDeploymentContext `json:"appContext"`
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`

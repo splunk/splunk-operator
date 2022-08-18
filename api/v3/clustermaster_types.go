@@ -17,6 +17,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,34 +37,34 @@ const (
 
 // ClusterMasterSpec defines the desired state of ClusterMaster
 type ClusterMasterSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
-	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster
 type ClusterMasterStatus struct {
 	// current phase of the cluster manager
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Bundle push status tracker
-	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
+	BundlePushTracker enterpriseApi.BundlePushInfo `json:"bundlePushInfo"`
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
 	// App Framework status
-	AppContext AppDeploymentContext `json:"appContext"`
+	AppContext enterpriseApi.AppDeploymentContext `json:"appContext"`
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
