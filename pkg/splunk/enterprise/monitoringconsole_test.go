@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -350,7 +350,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
-	cr.Spec.ClusterMasterRef.Name = "stack2"
+	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
@@ -838,7 +838,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermaster instance before reconcilation
+	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, monitoringconsole)
 
 	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)

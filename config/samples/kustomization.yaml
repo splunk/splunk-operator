@@ -6,4 +6,9 @@ resources:
 - enterprise_v3_monitoringconsole.yaml
 - enterprise_v3_searchheadcluster.yaml
 - enterprise_v3_standalone.yaml
+- enterprise_v4_clustermanager.yaml
+- enterprise_v4_licensemanager.yaml
+- enterprise_v4_monitoringconsole.yaml
+- enterprise_v4_indexercluster.yaml
+- enterprise_v4_searchheadcluster.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

@@ -18,11 +18,12 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -35,8 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyClusterManager reconciles the state of a Splunk Enterprise cluster manager.
-func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
+// ApplyClusterMaster reconciles the state of a Splunk Enterprise cluster manager.
+func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -44,7 +45,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		RequeueAfter: time.Second * 5,
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyClusterManager")
+	scopedLog := reqLogger.WithName("ApplyClusterMaster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
 	if cr.Status.ResourceRevMap == nil {
@@ -52,7 +53,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// validate and updates defaults for CR
-	err := validateClusterManagerSpec(ctx, client, cr)
+	err := validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -62,7 +63,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), splcommon.ClusterManager)
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
-		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterManager, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
+		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterMaster, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
@@ -115,7 +116,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, err := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
+			extraEnv, err := VerifyCMasterisMultisite(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
@@ -126,7 +127,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
 		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkClusterManager)
+			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkClusterMaster)
 			if err != nil {
 				return result, err
 			}
@@ -152,19 +153,19 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update a regular service for the cluster manager
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, false))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, false))
 	if err != nil {
 		return result, err
 	}
 
 	// create or update statefulset for the cluster manager
-	statefulSet, err := getClusterManagerStatefulSet(ctx, client, cr)
+	statefulSet, err := getClusterMasterStatefulSet(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	extraEnv, err := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
+	extraEnv, err := VerifyCMasterisMultisite(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		return result, err
@@ -207,7 +208,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
-		err = PerformCmBundlePush(ctx, client, cr)
+		err = PerformCmasterBundlePush(ctx, client, cr)
 		if err != nil {
 			return result, err
 		}
@@ -224,23 +225,23 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	return result, nil
 }
 
-// clusterMasterPodManager is used to manage the cluster manager pod
-type clusterManagerPodManager struct {
+// clusterMasterPodMaster is used to manage the cluster manager pod
+type clusterMasterPodManager struct {
 	c               splcommon.ControllerClient
 	log             logr.Logger
-	cr              *enterpriseApi.ClusterMaster
+	cr              *enterpriseApiV3.ClusterMaster
 	secrets         *corev1.Secret
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
 // getClusterMasterClient for clusterMasterPodManager returns a SplunkClient for cluster manager
-func (mgr *clusterManagerPodManager) getClusterManagerClient(cr *enterpriseApi.ClusterMaster) *splclient.SplunkClient {
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false))
+func (mgr *clusterMasterPodManager) getClusterMasterClient(cr *enterpriseApiV3.ClusterMaster) *splclient.SplunkClient {
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
-func validateClusterManagerSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+func validateClusterMasterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) {
 		err := ValidateSplunkSmartstoreSpec(ctx, &cr.Spec.SmartStore)
@@ -259,15 +260,15 @@ func validateClusterManagerSpec(ctx context.Context, c splcommon.ControllerClien
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-// getClusterManagerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getClusterManagerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) (*appsv1.StatefulSet, error) {
+// getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
+func getClusterMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, 1, extraEnvVar)
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, 1, extraEnvVar)
 	if err != nil {
 		return ss, err
 	}
-	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterManager)
+	smartStoreConfigMap := getSmartstoreConfigMap(ctx, client, cr, SplunkClusterMaster)
 
 	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForCMSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
@@ -278,10 +279,10 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 	return ss, err
 }
 
-// CheckIfsmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
-func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
+// CheckIfMastersmartstoreConfigMapUpdatedToPod checks if the smartstore configMap is updated on Pod or not
+func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("CheckIfMastersmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
@@ -293,7 +294,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 		return fmt.Errorf("failed to check config token value on pod. stdout=%s, stderror=%s, error=%v", stdOut, stdErr, err)
 	}
 
-	smartStoreConfigMap := getSmartstoreConfigMap(ctx, c, cr, SplunkClusterManager)
+	smartStoreConfigMap := getSmartstoreConfigMap(ctx, c, cr, SplunkClusterMaster)
 	if smartStoreConfigMap != nil {
 		tokenFromConfigMap := smartStoreConfigMap.Data[configToken]
 		if tokenFromConfigMap == stdOut {
@@ -309,14 +310,14 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	return fmt.Errorf("Smartstore ConfigMap is missing")
 }
 
-// PerformCmBundlePush initiates the bundle push from cluster manager
-func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+// PerformCmasterBundlePush initiates the bundle push from cluster manager
+func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
 		return nil
 	}
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("PerformCmBundlePush").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("PerformCmasterBundlePush").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
@@ -338,12 +339,12 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 
 	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), splcommon.ClusterManager)
 	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
+	err := CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
 	if err != nil {
 		return err
 	}
 
-	err = PushManagerAppsBundle(ctx, c, cr)
+	err = PushMasterAppsBundle(ctx, c, cr)
 	if err == nil {
 		scopedLog.Info("Bundle push success")
 		cr.Status.BundlePushTracker.NeedToPushMasterApps = false
@@ -353,8 +354,8 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	return err
 }
 
-// PushManagerAppsBundle issues the REST command to for cluster manager bundle push
-func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterMaster) error {
+// PushMasterAppsBundle issues the REST command to for cluster manager bundle push
+func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
@@ -362,21 +363,21 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
 	if err != nil {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
+		eventPublisher.Warning(ctx, "PushMasterAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
 		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)
 	}
 
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not find admin password while trying to push the manager apps bundle"))
+		eventPublisher.Warning(ctx, "PushMasterAppsBundle", fmt.Sprintf("Could not find admin password while trying to push the manager apps bundle"))
 		return fmt.Errorf("Could not find admin password while trying to push the manager apps bundle")
 	}
 
 	scopedLog.Info("Issuing REST call to push manager aps bundle")
 
 	managerIdxcName := cr.GetName()
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, managerIdxcName, false))
 
 	// Get a Splunk client to execute the REST call
 	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
@@ -384,12 +385,12 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	return splunkClient.BundlePush(true)
 }
 
-// helper function to get the list of ClusterManager types in the current namespace
-func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+// helper function to get the list of ClusterMaster types in the current namespace
+func getClusterMasterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getClusterMasterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	objectList := enterpriseApi.ClusterMasterList{}
+	objectList := enterpriseApiV3.ClusterMasterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	numOfObjects := len(objectList.Items)
@@ -402,13 +403,13 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return numOfObjects, nil
 }
 
-//VerifyCMisMultisite checks if its a multisite
-func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+//VerifyCMasterisMultisite checks if its a multisite
+func VerifyCMasterisMultisite(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	mgr := clusterManagerPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
-	cm := mgr.getClusterManagerClient(cr)
+	mgr := clusterMasterPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
+	cm := mgr.getClusterMasterClient(cr)
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
 		return nil, err
@@ -416,7 +417,7 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterMaster, n
 	multiSite := clusterInfo.MultiSite
 	extraEnv := getClusterMasterExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
 	if multiSite == "true" {
-		extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
+		extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false)})
 	}
 	return extraEnv, err
 }

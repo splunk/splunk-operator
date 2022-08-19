@@ -22,7 +22,8 @@ import (
 	"reflect"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -53,12 +54,16 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 	dstP := *dst
 	srcP := *src
 	switch srcP.(type) {
-	case *enterpriseApi.ClusterMaster:
-		*dstP.(*enterpriseApi.ClusterMaster) = *srcP.(*enterpriseApi.ClusterMaster)
+	case *enterpriseApi.ClusterManager:
+		*dstP.(*enterpriseApi.ClusterManager) = *srcP.(*enterpriseApi.ClusterManager)
+	case *enterpriseApiV3.ClusterMaster:
+		*dstP.(*enterpriseApiV3.ClusterMaster) = *srcP.(*enterpriseApiV3.ClusterMaster)
 	case *enterpriseApi.IndexerCluster:
 		*dstP.(*enterpriseApi.IndexerCluster) = *srcP.(*enterpriseApi.IndexerCluster)
-	case *enterpriseApi.LicenseMaster:
-		*dstP.(*enterpriseApi.LicenseMaster) = *srcP.(*enterpriseApi.LicenseMaster)
+	case *enterpriseApi.LicenseManager:
+		*dstP.(*enterpriseApi.LicenseManager) = *srcP.(*enterpriseApi.LicenseManager)
+	case *enterpriseApiV3.LicenseMaster:
+		*dstP.(*enterpriseApiV3.LicenseMaster) = *srcP.(*enterpriseApiV3.LicenseMaster)
 	case *enterpriseApi.Standalone:
 		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
 	case *enterpriseApi.SearchHeadCluster:
@@ -108,12 +113,16 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 	switch srcP.(type) {
 	case *enterpriseApi.IndexerClusterList:
 		*dstP.(*enterpriseApi.IndexerClusterList) = *srcP.(*enterpriseApi.IndexerClusterList)
-	case *enterpriseApi.LicenseMasterList:
-		*dstP.(*enterpriseApi.LicenseMasterList) = *srcP.(*enterpriseApi.LicenseMasterList)
+	case *enterpriseApi.LicenseManagerList:
+		*dstP.(*enterpriseApi.LicenseManagerList) = *srcP.(*enterpriseApi.LicenseManagerList)
+	case *enterpriseApiV3.LicenseMasterList:
+		*dstP.(*enterpriseApiV3.LicenseMasterList) = *srcP.(*enterpriseApiV3.LicenseMasterList)
 	case *enterpriseApi.SearchHeadClusterList:
 		*dstP.(*enterpriseApi.SearchHeadClusterList) = *srcP.(*enterpriseApi.SearchHeadClusterList)
-	case *enterpriseApi.ClusterMasterList:
-		*dstP.(*enterpriseApi.ClusterMasterList) = *srcP.(*enterpriseApi.ClusterMasterList)
+	case *enterpriseApi.ClusterManagerList:
+		*dstP.(*enterpriseApi.ClusterManagerList) = *srcP.(*enterpriseApi.ClusterManagerList)
+	case *enterpriseApiV3.ClusterMasterList:
+		*dstP.(*enterpriseApiV3.ClusterMasterList) = *srcP.(*enterpriseApiV3.ClusterMasterList)
 	case *enterpriseApi.StandaloneList:
 		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
 	default:
@@ -455,16 +464,24 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 		cr := resource.(*enterpriseApi.Standalone)
 		c.Create(context.Background(), cr)
 
-	case *enterpriseApi.LicenseMaster:
-		cr := resource.(*enterpriseApi.LicenseMaster)
+	case *enterpriseApiV3.LicenseMaster:
+		cr := resource.(*enterpriseApiV3.LicenseMaster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.LicenseManager:
+		cr := resource.(*enterpriseApi.LicenseManager)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.IndexerCluster:
 		cr := resource.(*enterpriseApi.IndexerCluster)
 		c.Create(context.Background(), cr)
 
-	case *enterpriseApi.ClusterMaster:
-		cr := resource.(*enterpriseApi.ClusterMaster)
+	case *enterpriseApiV3.ClusterMaster:
+		cr := resource.(*enterpriseApiV3.ClusterMaster)
+		c.Create(context.Background(), cr)
+
+	case *enterpriseApi.ClusterManager:
+		cr := resource.(*enterpriseApi.ClusterManager)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.MonitoringConsole:

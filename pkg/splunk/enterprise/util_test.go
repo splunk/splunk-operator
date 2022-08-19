@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 
 	//"io"
 	"os"
@@ -36,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -80,7 +81,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test search head with indexer reference
-	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
+	searchHeadRevised.Spec.ClusterManagerRef.Name = "stack2"
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test indexer with license manager
@@ -95,7 +96,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	}
 	indexerRevised := indexerCR.DeepCopy()
 	indexerRevised.Spec.Image = "splunk/test"
-	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
+	indexerRevised.Spec.LicenseManagerRef.Name = "stack2"
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.IndexerCluster)
 		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
@@ -111,20 +112,19 @@ func TestApplySplunkConfig(t *testing.T) {
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
-	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
 
-	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	cr.Spec.LicenseManagerRef.Name = "stack1"
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.TestStack1LicenseManagerService,
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service",
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -133,12 +133,12 @@ func TestGetLicenseManagerURL(t *testing.T) {
 		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
-	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	cr.Spec.LicenseManagerRef.Namespace = "test"
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.TestStack1LicenseManagerClusterLocal,
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service.test.svc.cluster.local",
 		},
 	}
 
@@ -151,12 +151,12 @@ func TestGetLicenseManagerURL(t *testing.T) {
 
 func TestApplySmartstoreConfigMap(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -216,12 +216,12 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -277,12 +277,12 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 
 	// If the secret object doesn't exist, should return an error
 	// Here in the volume references, secrets splunk-test-sec_1, to splunk-test-sec_4 doesn't exist
-	cr = enterpriseApi.ClusterMaster{
+	cr = enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "testWithNoSecret",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-sec_1"},
@@ -309,12 +309,12 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 
 func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -1640,7 +1640,7 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 
 func TestGetAppPackageLocalPath(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -1648,7 +1648,7 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -2350,7 +2350,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	}
 
 	// LicenseMaster: Should return a valid CR
-	lmCR := enterpriseApi.LicenseMaster{
+	lmCR := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "LicenseMaster",
 			APIVersion: "enterprise.splunk.com/v3",
@@ -2360,7 +2360,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
@@ -2417,7 +2417,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	}
 
 	// ClusterMaster: Should return a valid CR
-	cmCR := enterpriseApi.ClusterMaster{
+	cmCR := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterMaster",
 			APIVersion: "enterprise.splunk.com/v3",
@@ -2427,7 +2427,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
@@ -2435,7 +2435,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 				Volumes: []corev1.Volume{},
 			},
 		},
-		Status: enterpriseApi.ClusterMasterStatus{},
+		Status: enterpriseApiV3.ClusterMasterStatus{},
 	}
 
 	err = c.Create(ctx, &cmCR)

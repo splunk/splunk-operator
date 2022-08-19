@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -48,15 +49,15 @@ func TestIsFanOutApplicableToCR(t *testing.T) {
 		t.Errorf("For Standalone, fanout is always applicable")
 	}
 
-	// Fan out is not applicable for ClusterMaster
-	crClusterMaster := &enterpriseApi.ClusterMaster{
+	// Fan out is not applicable for ClusterManager
+	crClusterManager := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 	}
 
-	if isFanOutApplicableToCR(crClusterMaster) {
-		t.Errorf("For ClusterMaster, fanout is not applicable")
+	if isFanOutApplicableToCR(crClusterManager) {
+		t.Errorf("For ClusterManager, fanout is not applicable")
 	}
 
 	// When the CR kind is not "Standalone", fanout is not applicable
@@ -240,15 +241,15 @@ func TestCreateFanOutWorker(t *testing.T) {
 }
 
 func TestGetApplicablePodNameForAppFramework(t *testing.T) {
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -257,7 +258,7 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 
 	podID := 0
 
-	expectedPodName := "splunk-stack1-cluster-master-0"
+	expectedPodName := "splunk-stack1-cluster-manager-0"
 	returnedPodName := getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
@@ -270,8 +271,8 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
-	cr.TypeMeta.Kind = "LicenseMaster"
-	expectedPodName = "splunk-stack1-license-master-0"
+	cr.TypeMeta.Kind = "LicenseManager"
+	expectedPodName = "splunk-stack1-license-manager-0"
 	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
@@ -294,7 +295,7 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 
 func TestInitAppInstallPipeline(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{}
+	cr := enterpriseApi.ClusterManager{}
 	c := spltest.NewMockClient()
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
 	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
@@ -307,15 +308,15 @@ func TestInitAppInstallPipeline(t *testing.T) {
 func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -385,15 +386,15 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 
 func TestTransitionWorkerPhase(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -570,7 +571,7 @@ func TestCheckIfWorkerIsEligibleForRun(t *testing.T) {
 func TestPhaseManagersTermination(t *testing.T) {
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -578,7 +579,7 @@ func TestPhaseManagersTermination(t *testing.T) {
 			Name:      "stand1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -629,7 +630,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 
 	// Test for each phase can send the worker to down stream
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -637,7 +638,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
@@ -802,15 +803,15 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 func TestIsPipelineEmpty(t *testing.T) {
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -879,13 +880,13 @@ func TestCheckIfBundlePushIsDone(t *testing.T) {
 		t.Errorf("checkIfBundlePushIsDone should have returned true")
 	}
 
-	if checkIfBundlePushIsDone("ClusterMaster", enterpriseApi.BundlePushPending) {
+	if checkIfBundlePushIsDone("ClusterManager", enterpriseApi.BundlePushPending) {
 		t.Errorf("checkIfBundlePushIsDone should have returned false")
 	}
 }
 
 func TestNeedToUseAuxPhaseInfo(t *testing.T) {
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -893,7 +894,7 @@ func TestNeedToUseAuxPhaseInfo(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -902,7 +903,7 @@ func TestNeedToUseAuxPhaseInfo(t *testing.T) {
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-cluster-master",
+			Name:      "splunk-stack1-cluster-manager",
 			Namespace: "test",
 		},
 	}
@@ -1088,7 +1089,7 @@ func TestIsPhaseInfoEligibleForSchedulerEntry(t *testing.T) {
 
 func TestGetPhaseInfoByPhaseType(t *testing.T) {
 	ctx := context.TODO()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -1096,7 +1097,7 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -1105,7 +1106,7 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-cluster-master",
+			Name:      "splunk-stack1-cluster-manager",
 			Namespace: "test",
 		},
 	}
@@ -1136,7 +1137,7 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 
 	// For CRs that are not standalone, we should not use the Aux phase info
 	expectedPhaseInfo = &worker.appDeployInfo.PhaseInfo
-	cr.Kind = "ClusterMaster"
+	cr.Kind = "ClusterManager"
 	retPhaseInfo = getPhaseInfoByPhaseType(ctx, worker, enterpriseApi.PhasePodCopy)
 	if expectedPhaseInfo != retPhaseInfo {
 		t.Errorf("Got the incorrect phase info for CM")
@@ -1153,15 +1154,15 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 }
 func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -1173,7 +1174,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 	// Test if STS works for cluster master
 	current := appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-cluster-master",
+			Name:      "splunk-stack1-cluster-manager",
 			Namespace: "test",
 		},
 	}
@@ -1201,10 +1202,10 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 	}
 
 	// Test if STS works for LM
-	cr.TypeMeta.Kind = "LicenseMaster"
+	cr.TypeMeta.Kind = "LicenseManager"
 	current = appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-license-master",
+			Name:      "splunk-stack1-license-manager",
 			Namespace: "test",
 		},
 	}
@@ -1734,7 +1735,7 @@ func getConvertedClient(client splcommon.ControllerClient) splcommon.ControllerC
 func TestExtractClusterScopedAppOnPod(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -1742,7 +1743,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				PhaseMaxRetries:           3,
 				AppsRepoPollInterval:      60,
@@ -1772,7 +1773,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermaster-0",
+			Name:      "splunk-stack1-clustermanager-0",
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -1793,7 +1794,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 		appSrcName:    "appSrc1",
 		afwConfig:     &cr.Spec.AppFrameworkConfig,
 		cr:            &cr,
-		targetPodName: "splunk-stack1-clustermaster-0",
+		targetPodName: "splunk-stack1-clustermanager-0",
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
@@ -1836,7 +1837,7 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 	}
 
 	// Calling with correct params should not cause an error
-	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.TypeMeta.Kind = "ClusterManager"
 	err = extractClusterScopedAppOnPod(ctx, worker, enterpriseApi.ScopeCluster, dstPath, srcPath, mockPodExecClient)
 	if err != nil {
 		t.Errorf("Calling with correct parameters should not cause an error, but got error %v", err)
@@ -1855,15 +1856,15 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 
 func TestRunPodCopyWorker(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -1872,7 +1873,7 @@ func TestRunPodCopyWorker(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermaster-0",
+			Name:      "splunk-stack1-clustermanager-0",
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -1919,7 +1920,7 @@ func TestRunPodCopyWorker(t *testing.T) {
 	//var client splcommon.ControllerClient
 	worker := &PipelineWorker{
 		cr:            &cr,
-		targetPodName: "splunk-stack1-clustermaster-0",
+		targetPodName: "splunk-stack1-clustermanager-0",
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
@@ -1981,15 +1982,15 @@ func TestRunPodCopyWorker(t *testing.T) {
 
 func TestPodCopyWorkerHandler(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -1998,7 +1999,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermaster-0",
+			Name:      "splunk-stack1-clustermanager-0",
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -2040,7 +2041,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 	worker := &PipelineWorker{
 		cr:            &cr,
-		targetPodName: "splunk-stack1-clustermaster-0",
+		targetPodName: "splunk-stack1-clustermanager-0",
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
@@ -2118,9 +2119,9 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 
 func TestIDXCRunPlaybook(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -2445,15 +2446,15 @@ func TestSHCRunPlaybook(t *testing.T) {
 func TestRunLocalScopedPlaybook(t *testing.T) {
 	ctx := context.TODO()
 	// Test for each phase can send the worker to down stream
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval:      60,
 				MaxConcurrentAppDownloads: 5,
@@ -2497,7 +2498,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermaster-0",
+			Name:      "splunk-stack1-clustermanager-0",
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -2545,7 +2546,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	var localInstallCtxt *localScopePlaybookContext = &localScopePlaybookContext{
 		worker: &PipelineWorker{
 			appSrcName:    cr.Spec.AppFrameworkConfig.AppSources[0].Name,
-			targetPodName: "splunk-stack1-clustermaster-0",
+			targetPodName: "splunk-stack1-clustermanager-0",
 			sts:           sts,
 			cr:            &cr,
 			appDeployInfo: &enterpriseApi.AppDeploymentInfo{
@@ -2605,9 +2606,9 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 
 func TestDeleteAppPkgFromOperator(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -2730,7 +2731,7 @@ func TestFreeInstallSlotForPod(t *testing.T) {
 }
 
 func TestIsPendingClusterScopeWork(t *testing.T) {
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -2738,7 +2739,7 @@ func TestIsPendingClusterScopeWork(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -2759,7 +2760,7 @@ func TestIsPendingClusterScopeWork(t *testing.T) {
 	}
 
 	// For cluster scoped CR, cluster scope pending activity should be detected
-	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.TypeMeta.Kind = "ClusterManager"
 	afwPipeline.cr = cr
 	if !isPendingClusterScopeWork(afwPipeline) {
 		t.Errorf("When the bundle push activity is there, should return true")
@@ -2768,7 +2769,7 @@ func TestIsPendingClusterScopeWork(t *testing.T) {
 	// When there is no pending bundle push, should return false
 	afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushComplete
 	// For cluster scoped CR, cluster scope pending activity should be detected
-	afwPipeline.cr.GetObjectMeta().SetName("ClusterMaster")
+	afwPipeline.cr.GetObjectMeta().SetName("ClusterManager")
 	if isPendingClusterScopeWork(afwPipeline) {
 		t.Errorf("Should return false, when there is no bundle push activity")
 	}
@@ -2777,7 +2778,7 @@ func TestIsPendingClusterScopeWork(t *testing.T) {
 
 func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 	ctx := context.TODO()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -2785,7 +2786,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -2805,7 +2806,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 		t.Errorf("Should not return true for local only scoped CRs")
 	}
 
-	statefulSetName := "splunk-stack1-clustermaster"
+	statefulSetName := "splunk-stack1-clustermanager"
 	var replicas int32 = 1
 
 	sts := &appsv1.StatefulSet{
@@ -2828,7 +2829,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 		AppsStatusMaxConcurrentAppDownloads: 10,
 	}
 
-	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.TypeMeta.Kind = "ClusterManager"
 	afwPipeline = initAppInstallPipeline(ctx, appDeployContext, client, cr)
 	podCopyWorker := &PipelineWorker{appDeployInfo: &enterpriseApi.AppDeploymentInfo{PhaseInfo: enterpriseApi.PhaseInfo{FailCount: 10}}}
 
@@ -3008,7 +3009,7 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 	}
 
 	// For a CR, other than standalone, whenever the install is complete, should also delete the app pkg from operator pod
-	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.TypeMeta.Kind = "ClusterManager"
 	worker.appDeployInfo.AuxPhaseInfo = nil
 	appPkgLocalPath = getAppPackageLocalPath(ctx, worker)
 	appPkgLocalDir = path.Dir(appPkgLocalPath)
@@ -3035,15 +3036,15 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 
 func TestInstallWorkerHandler(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -3052,7 +3053,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-stack1-clustermaster-0",
+			Name:      "splunk-stack1-clustermanager-0",
 			Namespace: "test",
 			Labels: map[string]string{
 				"controller-revision-hash": "v0",
@@ -3093,7 +3094,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 	client.AddObject(pod)
 
 	// create statefulset for the cluster master
-	statefulSetName := "splunk-stack1-clustermaster"
+	statefulSetName := "splunk-stack1-clustermanager"
 	var replicas int32 = 1
 
 	sts := &appsv1.StatefulSet{
@@ -3113,7 +3114,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 
 	worker := &PipelineWorker{
 		cr:            &cr,
-		targetPodName: "splunk-stack1-clustermaster-0",
+		targetPodName: "splunk-stack1-clustermanager-0",
 		appDeployInfo: &enterpriseApi.AppDeploymentInfo{
 			AppName: "app1.tgz",
 			PhaseInfo: enterpriseApi.PhaseInfo{
@@ -3167,15 +3168,15 @@ func TestInstallWorkerHandler(t *testing.T) {
 
 func TestAfwYieldWatcher(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterMaster",
+			Kind: "ClusterManager",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -3239,7 +3240,7 @@ func TestAfwYieldWatcher(t *testing.T) {
 // If the scheduler is blocked for an extended period of time, it should fail at infra level.
 func TestAfwSchedulerEntry(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -3247,7 +3248,7 @@ func TestAfwSchedulerEntry(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -3302,7 +3303,7 @@ func TestAfwSchedulerEntry(t *testing.T) {
 }
 
 func TestGetClusterScopedAppsLocOnPod(t *testing.T) {
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -3314,7 +3315,7 @@ func TestGetClusterScopedAppsLocOnPod(t *testing.T) {
 	}
 
 	// should return master apps location
-	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.TypeMeta.Kind = "ClusterManager"
 	retLoc := getClusterScopedAppsLocOnPod(cr)
 	if retLoc != idxcAppsLocationOnClusterManager {
 		t.Errorf("ClusterManager: Expected location: %v, but got: %v", idxcAppsLocationOnClusterManager, retLoc)
@@ -3330,7 +3331,7 @@ func TestGetClusterScopedAppsLocOnPod(t *testing.T) {
 
 func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	ctx := context.TODO()
-	cr := &enterpriseApi.ClusterMaster{
+	cr := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
 		},
@@ -3361,7 +3362,7 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	}
 
 	// For CM, should not return an error
-	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.TypeMeta.Kind = "ClusterManager"
 	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err != nil {
 		t.Errorf("For CM CR kind should not cause an error, but got error: %v", err)
@@ -3394,9 +3395,11 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 func TestGetTelAppNameExtension(t *testing.T) {
 	crKinds := map[string]string{
 		"Standalone":        "stdaln",
-		"LicenseMaster":     "lm",
+		"LicenseMaster":     "lmaster",
+		"LicenseManager":    "lmanager",
 		"SearchHeadCluster": "shc",
-		"ClusterMaster":     "cm",
+		"ClusterMaster":     "cmaster",
+		"ClusterManager":    "cmanager",
 	}
 
 	// Test all CR kinds
@@ -3414,11 +3417,11 @@ func TestGetTelAppNameExtension(t *testing.T) {
 	}
 }
 
-func TestAddTelApp(t *testing.T) {
+func TestAddTelAppCMaster(t *testing.T) {
 	ctx := context.TODO()
 
 	// Define CRs
-	cmCr := &enterpriseApi.ClusterMaster{
+	cmCr := &enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -3432,7 +3435,120 @@ func TestAddTelApp(t *testing.T) {
 
 	// Define mock podexec context
 	podExecCommands := []string{
+		fmt.Sprintf(createTelAppNonShcString, "cmaster", telAppConfString, "cmaster"),
+		telAppReloadString,
+	}
+
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+		},
+		{
+			StdOut: "",
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	// Test non-shc
+	err := addTelApp(ctx, mockPodExecClient, 1, cmCr)
+	if err != nil {
+		t.Errorf("Tel app not added successfully, error: %v", err)
+	}
+
+	// Test shc
+	podExecCommands = []string{
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
+	}
+
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+	mockPodExecClient.Cr = shcCr
+
+	err = addTelApp(ctx, mockPodExecClient, 1, shcCr)
+	if err != nil {
+		t.Errorf("Tel app not added successfully, error: %v", err)
+	}
+
+	// Testing error handling
+
+	// Test non-shc error 1
+	podExecCommandsError := []string{
+		fmt.Sprintf(createTelAppNonShcString, "cmerror", telAppConfString, "cmerror"),
+	}
+
+	mockPodExecReturnContextsError := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+		},
+	}
+
+	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClientError1.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError1, 1, cmCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Test non-shc error 2
+	podExecCommandsError = []string{
 		fmt.Sprintf(createTelAppNonShcString, "cm", telAppConfString, "cm"),
+	}
+	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError2, 1, cmCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Test shc error 1
+	podExecCommandsError = []string{
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror"),
+	}
+
+	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	mockPodExecClientError3.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError3, 1, shcCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Test shc error 2
+	podExecCommandsError = []string{
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+	}
+	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
+	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
+
+	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
+
+func TestAddTelAppCManager(t *testing.T) {
+	ctx := context.TODO()
+
+	// Define CRs
+	cmCr := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+	}
+
+	shcCr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+	}
+
+	// Define mock podexec context
+	podExecCommands := []string{
+		fmt.Sprintf(createTelAppNonShcString, "cmanager", telAppConfString, "cmanager"),
 		telAppReloadString,
 	}
 

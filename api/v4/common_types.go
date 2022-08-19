@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package v4
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +22,7 @@ import (
 const (
 
 	// APIVersion is a string representation of this API
-	APIVersion = "enterprise.splunk.com/v3"
+	APIVersion = "enterprise.splunk.com/v4"
 
 	// TotalWorker concurrent workers to reconcile
 	TotalWorker int = 15
@@ -154,10 +154,18 @@ type CommonSplunkSpec struct {
 	LicenseURL string `json:"licenseUrl"`
 
 	// LicenseMasterRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
-	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef"`
+	// +optional
+	LicenseMasterRef corev1.ObjectReference `json:"licenseMasterRef,omitempty"`
+
+	// LicenseManagerRef refers to a Splunk Enterprise license manager managed by the operator within Kubernetes
+	// +optional
+	LicenseManagerRef corev1.ObjectReference `json:"licenseManagerRef,omitempty"`
 
 	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`
+
+	// ClusterManagerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	ClusterManagerRef corev1.ObjectReference `json:"clusterManagerRef"`
 
 	// MonitoringConsoleRef refers to a Splunk Enterprise monitoring console managed by the operator within Kubernetes
 	MonitoringConsoleRef corev1.ObjectReference `json:"monitoringConsoleRef"`

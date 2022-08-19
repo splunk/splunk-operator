@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"

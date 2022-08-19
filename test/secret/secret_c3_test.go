@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -34,7 +34,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -55,7 +55,7 @@ var _ = Describe("Secret Test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("secret, smoke, c3: secret update on indexers and search head cluster", func() {
+		It("mastersecret, smoke, c3: secret update on indexers and search head cluster", func() {
 
 			// Test Scenario
 			// 1. Update Secrets Data
@@ -75,11 +75,11 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			err = deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -115,14 +115,14 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
-			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
+			// Ensure that Cluster Master goes to update phase
+			testenv.VerifyClusterMasterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
-			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)

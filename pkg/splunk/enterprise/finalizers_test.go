@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"testing"
 	"time"
 
@@ -26,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -37,12 +38,16 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		component = "standalone"
+	case "LicenseManager":
+		component = "license-manager"
 	case "LicenseMaster":
 		component = splcommon.LicenseManager
 	case "SearchHeadCluster":
 		component = "search-head"
 	case "IndexerCluster":
 		component = "indexer"
+	case "ClusterManager":
+		component = "cluster-manager"
 	case "ClusterMaster":
 		component = splcommon.ClusterManager
 	case "MonitoringConsole":
@@ -140,6 +145,12 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 					{MetaName: "*v3.LicenseMaster-test-stack1"},
 				}...)
 
+			case "LicenseManager":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v3.LicenseManager-test-stack1"},
+					{MetaName: "*v3.LicenseManager-test-stack1"},
+				}...)
+
 			case "SearchHeadCluster":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
 					{MetaName: "*v3.SearchHeadCluster-test-stack1"},
@@ -150,6 +161,12 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
 					{MetaName: "*v3.ClusterMaster-test-stack1"},
 					{MetaName: "*v3.ClusterMaster-test-stack1"},
+				}...)
+
+			case "ClusterManager":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v3.ClusterManager-test-stack1"},
+					{MetaName: "*v3.ClusterManager-test-stack1"},
 				}...)
 
 			case "MonitoringConsole":
@@ -174,7 +191,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
-				{MetaName: "*v3.ClusterMaster-test-master1"},
+				{MetaName: "*v3.ClusterManager-test-manager1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v3.IndexerCluster-test-stack1"},
 				{MetaName: "*v3.IndexerCluster-test-stack1"},
@@ -202,6 +219,8 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		component = "standalone"
+	case "LicenseManager":
+		component = "license-manager"
 	case "LicenseMaster":
 		component = splcommon.LicenseManager
 	case "SearchHeadCluster":
@@ -210,6 +229,8 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 		component = "indexer"
 	case "ClusterMaster":
 		component = splcommon.ClusterManager
+	case "ClusterManager":
+		component = "cluster-manager"
 	case "MonitoringConsole":
 		component = "monitoring-console"
 	}
@@ -286,7 +307,7 @@ func TestDeleteSplunkPvc(t *testing.T) {
 
 func TestDeleteSplunkClusterManagerPvc(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},

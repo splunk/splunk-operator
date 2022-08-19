@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -272,7 +272,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
-	cr.Spec.ClusterMasterRef.Name = "stack2"
+	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"

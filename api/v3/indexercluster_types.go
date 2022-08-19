@@ -17,6 +17,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,7 +37,7 @@ const (
 
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
@@ -66,10 +67,15 @@ type IndexerClusterMemberStatus struct {
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster
 type IndexerClusterStatus struct {
 	// current phase of the indexer cluster
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
+
+	// current phase of the cluster master
+	// +optional
+	ClusterMasterPhase enterpriseApi.Phase `json:"clusterMasterPhase,omitempty"`
 
 	// current phase of the cluster manager
-	ClusterMasterPhase Phase `json:"clusterMasterPhase"`
+	// +optional
+	ClusterManagerPhase enterpriseApi.Phase `json:"clusterManagerPhase,omitempty"`
 
 	// desired number of indexer peers
 	Replicas int32 `json:"replicas"`
@@ -113,11 +119,11 @@ type IndexerClusterStatus struct {
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=indexerclusters,scope=Namespaced,shortName=idc;idxc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of indexer cluster"
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
+// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster master"
+// +kubebuilder:printcolumn:name="Manager",type="string",JSONPath=".status.clusterManagerPhase",description="Status of cluster manager"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of indexer cluster"
-// +kubebuilder:storageversion
 type IndexerCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -74,6 +74,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		podType = "standalone"
+	case "LicenseManager":
+		podType = "license-manager"
 	case "LicenseMaster":
 		podType = "license-master"
 	case "SearchHeadCluster":
@@ -82,6 +84,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		return ""
 	case "ClusterMaster":
 		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
 	}
@@ -122,11 +126,15 @@ func getTelAppNameExtension(crKind string) (string, error) {
 	case "Standalone":
 		return "stdaln", nil
 	case "LicenseMaster":
-		return "lm", nil
+		return "lmaster", nil
+	case "LicenseManager":
+		return "lmanager", nil
 	case "SearchHeadCluster":
 		return "shc", nil
 	case "ClusterMaster":
-		return "cm", nil
+		return "cmaster", nil
+	case "ClusterManager":
+		return "cmanager", nil
 	default:
 		return "", errors.New("Invalid CR kind for telemetry app")
 	}
@@ -1193,7 +1201,7 @@ func isAppInstallationCompleteOnAllReplicas(auxPhaseInfo []enterpriseApi.PhaseIn
 
 // isClusterScoped checks whether current cr is a SHC or a CM
 func isClusterScoped(kind string) bool {
-	return kind == "ClusterMaster" || kind == "SearchHeadCluster"
+	return kind == "ClusterMaster" || kind == "ClusterManager" || kind == "SearchHeadCluster"
 }
 
 // checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
@@ -1261,11 +1269,15 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		instanceID = SplunkStandalone
-	case "LicenseMaster":
+	case "LicenseManager":
 		instanceID = SplunkLicenseManager
+	case "LicenseMaster":
+		instanceID = SplunkLicenseMaster
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
+		instanceID = SplunkClusterMaster
+	case "ClusterManager":
 		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
@@ -1319,7 +1331,7 @@ func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWo
 func getClusterScopePlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlaybookImpl {
 
 	switch kind {
-	case "ClusterMaster":
+	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	case "SearchHeadCluster":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
@@ -1417,7 +1429,7 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 // getClusterScopedAppsLocOnPod returns the cluster apps directory
 func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "ClusterMaster":
+	case "ClusterManager", "ClusterMaster":
 		return idxcAppsLocationOnClusterManager
 	case "SearchHeadCluster":
 		return shcAppsLocationOnDeployer
