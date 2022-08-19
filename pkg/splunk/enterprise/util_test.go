@@ -610,7 +610,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	var appDeployContext enterpriseApi.AppDeploymentContext
-	var remoteObjListMap map[string]splclient.RemoteDataListResponse
+	var remoteObjListMap map[string]splclient.S3Response
 	var appFramworkConf enterpriseApi.AppFrameworkSpec = cr.Spec.AppFrameworkConfig
 	var err error
 
@@ -618,7 +618,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
-	var RemoteDataListResponse splclient.RemoteDataListResponse
+	var S3Response splclient.S3Response
 
 	// Test-1: Empty remoteObjectList Map should return an error
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
@@ -629,11 +629,11 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-2: Valid remoteObjectList should not cause an error
 	startAppPathAndName := "bucketpath1/bpath2/locationpath1/lpath2/adminCategoryOne.tgz"
-	remoteObjListMap = make(map[string]splclient.RemoteDataListResponse)
-	// Prepare a RemoteDataListResponse
-	RemoteDataListResponse.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
+	remoteObjListMap = make(map[string]splclient.S3Response)
+	// Prepare a S3Response
+	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	// Set the app source with a matching one
-	remoteObjListMap[appFramworkConf.AppSources[0].Name] = RemoteDataListResponse
+	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
 
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
@@ -683,9 +683,9 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
 	// delete an object on remote store for the app source
-	tmpRemoteDataListResponse := RemoteDataListResponse
-	tmpRemoteDataListResponse.Objects = append(tmpRemoteDataListResponse.Objects[:0], tmpRemoteDataListResponse.Objects[1:]...)
-	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpRemoteDataListResponse
+	tmpS3Response := S3Response
+	tmpS3Response.Objects = append(tmpS3Response.Objects[:0], tmpS3Response.Objects[1:]...)
+	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpS3Response
 
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
@@ -698,8 +698,8 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	}
 
 	// Test-7: Object hash change on the remote store should cause App state and status as Active and Pending.
-	RemoteDataListResponse.Objects = createRemoteObjectList("e41d8cd98f00", startAppPathAndName, 2322, nil, 10)
-	remoteObjListMap[appFramworkConf.AppSources[0].Name] = RemoteDataListResponse
+	S3Response.Objects = createRemoteObjectList("e41d8cd98f00", startAppPathAndName, 2322, nil, 10)
+	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
 
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
@@ -728,9 +728,9 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-9: Unknown App source in remote obj listing should return an error
 	startAppPathAndName = "csecurityApps.spl"
-	RemoteDataListResponse.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
+	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	invalidAppSourceName := "UnknownAppSourceInConfig"
-	remoteObjListMap[invalidAppSourceName] = RemoteDataListResponse
+	remoteObjListMap[invalidAppSourceName] = S3Response
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err == nil {

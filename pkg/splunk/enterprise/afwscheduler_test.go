@@ -1349,7 +1349,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splclient.RegisterS3Client(ctx, "aws")
 
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
 
@@ -1371,12 +1371,12 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		defer os.Remove(appLoc)
 
 		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.RemoteDataClientsMap["aws"]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+		getClientWrapper := splclient.S3Clients["aws"]
+		getClientWrapper.SetS3ClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
 
-		initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+		initFunc := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-		s3ClientMgr, err := getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
+		s3ClientMgr, err := getS3ClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
 		if err != nil {
 			t.Errorf("unable to get S3ClientMgr instance")
 		}
@@ -1470,7 +1470,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		}
 	}
 
-	s3ClientMgr := &RemoteDataClientManager{}
+	s3ClientMgr := &S3ClientManager{}
 
 	// Test1. Invalid appSrcName
 	worker := &PipelineWorker{
@@ -1512,14 +1512,14 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterRemoteDataClient(ctx, "aws")
+	splclient.RegisterS3Client(ctx, "aws")
 	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+	getClientWrapper := splclient.S3Clients["aws"]
+	getClientWrapper.SetS3ClientFuncPtr(ctx, "ctx, aws", splclient.NewMockAWSS3Client)
 
-	initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	initFunc := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-	s3ClientMgr, err = getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
+	s3ClientMgr, err = getS3ClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
 	if err != nil {
 		t.Errorf("unable to get S3ClientMgr instance")
 	}

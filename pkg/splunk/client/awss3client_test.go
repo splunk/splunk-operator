@@ -18,6 +18,7 @@ package client
 import (
 	"context"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -60,6 +61,26 @@ func TestNewAWSS3Client(t *testing.T) {
 	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
 		t.Errorf("NewAWSS3Client should have returned error.")
+	}
+}
+
+func TestGetInitContainerImage(t *testing.T) {
+	ctx := context.TODO()
+	awsClient := &AWSS3Client{}
+
+	if awsClient.GetInitContainerImage(ctx) != "amazon/aws-cli" {
+		t.Errorf("Got invalid init container image for AWS client.")
+	}
+}
+
+func TestGetAWSInitContainerCmd(t *testing.T) {
+	ctx := context.TODO()
+	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
+
+	awsClient := &AWSS3Client{}
+	gotCmd := awsClient.GetInitContainerCmd(ctx, "https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin/", "admin", "/mnt/apps-local/")
+	if !reflect.DeepEqual(wantCmd, gotCmd) {
+		t.Errorf("Got incorrect Init container cmd")
 	}
 }
 
@@ -167,9 +188,9 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+		// Update the GetS3Client with our mock call which initializes mock AWS client
+		getClientWrapper := S3Clients[vol.Provider]
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
@@ -177,19 +198,19 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			return cl
 		}
 
-		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		RemoteDataListResponse, err := awsClient.GetAppsList(ctx)
+		s3Response, err := awsClient.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
 		var mockResponse spltest.MockS3Client
-		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
+		mockResponse, err = ConvertS3Response(ctx, s3Response)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -206,7 +227,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to get apps list for all the app sources")
 	}
 	method := "GetAppsList"
-	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
+	mockAwsHandler.CheckAWSS3Response(t, method)
 }
 
 func TestAWSGetAppsListShouldFail(t *testing.T) {
@@ -267,9 +288,9 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
-	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	// Update the GetS3Client with our mock call which initializes mock AWS client
+	getClientWrapper := S3Clients[vol.Provider]
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
@@ -277,10 +298,10 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		return cl
 	}
 
-	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+	awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
 	s3Resp, err := awsClient.GetAppsList(ctx)
 	if err != nil {
@@ -375,27 +396,22 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
-		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+		// Update the GetS3Client with our mock call which initializes mock AWS client
+		getClientWrapper := S3Clients[vol.Provider]
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
 			return cl
 		}
 
-		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		downloadRequest := RemoteDataDownloadRequest{
-			LocalFile:  LocalFiles[index],
-			RemoteFile: RemoteFiles[index],
-			Etag:       Etags[index],
-		}
-		downloadSuccess, err := awsClient.DownloadApp(ctx, downloadRequest)
+		downloadSuccess, err := awsClient.DownloadApp(ctx, RemoteFiles[index], LocalFiles[index], Etags[index])
 		if err != nil {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
@@ -469,39 +485,30 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
-	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	// Update the GetS3Client with our mock call which initializes mock AWS client
+	getClientWrapper := S3Clients[vol.Provider]
+	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
 
-	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
 
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	downloadRequest := RemoteDataDownloadRequest{
-		LocalFile:  LocalFile[0],
-		RemoteFile: RemoteFile,
-		Etag:       Etag,
-	}
-	_, err = awsClient.DownloadApp(ctx, downloadRequest)
+	_, err = awsClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
 	}
 
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
-	downloadRequest = RemoteDataDownloadRequest{
-		LocalFile:  LocalFile[0],
-		RemoteFile: RemoteFile,
-		Etag:       Etag,
-	}
-	_, err = awsClient.DownloadApp(ctx, downloadRequest)
+
+	_, err = awsClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
 	os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")
