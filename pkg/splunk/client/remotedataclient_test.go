@@ -20,58 +20,64 @@ import (
 	"testing"
 )
 
-func TestRegisterS3Client(t *testing.T) {
+func TestRegisterRemoteDataClient(t *testing.T) {
 	ctx := context.TODO()
-	// clear any stale entries present in the S3clients map
-	for k := range S3Clients {
-		delete(S3Clients, k)
+	// clear any stale entries present in the RemoteDataClientsMap map
+	for k := range RemoteDataClientsMap {
+		delete(RemoteDataClientsMap, k)
 	}
 
 	// 1. Test for aws
-	RegisterS3Client(ctx, "aws")
-	if len(S3Clients) == 0 {
+	RegisterRemoteDataClient(ctx, "aws")
+	if len(RemoteDataClientsMap) == 0 {
 		t.Errorf("We should have initialized the client for aws.")
 	}
 
 	// 2. Test for minio
-	RegisterS3Client(ctx, "minio")
-	if len(S3Clients) == 1 {
+	RegisterRemoteDataClient(ctx, "minio")
+	if len(RemoteDataClientsMap) == 1 {
 		t.Errorf("We should have initialized the client for minio as well.")
 	}
 
+	// 3. Test for azure
+	RegisterRemoteDataClient(ctx, "azure")
+	if len(RemoteDataClientsMap) == 1 {
+		t.Errorf("We should have initialized the client for azure as well.")
+	}
+
 	// 3. Test for invalid provider
-	RegisterS3Client(ctx, "invalid")
-	if len(S3Clients) > 2 {
-		t.Errorf("We should only have initialized the client for aws and minio and not for an invalid provider.")
+	RegisterRemoteDataClient(ctx, "invalid")
+	if len(RemoteDataClientsMap) > 3 {
+		t.Errorf("We should only have initialized the client for aws, minio and azure but not for an invalid provider.")
 	}
 
 }
 
-func TestGetSetS3ClientFuncPtr(t *testing.T) {
-	c := &GetS3ClientWrapper{}
+func TestGetSetRemoteDataClientFuncPtr(t *testing.T) {
+	c := &GetRemoteDataClientWrapper{}
 	ctx := context.TODO()
 
-	fn := c.GetS3ClientFuncPtr(ctx)
+	fn := c.GetRemoteDataClientFuncPtr(ctx)
 	if fn != nil {
 		t.Errorf("We should have received a nil function pointer")
 	}
 
-	c.SetS3ClientFuncPtr(ctx, "aws", NewAWSS3Client)
-	if c.GetS3Client == nil {
-		t.Errorf("We should have set GetS3Client func pointer for AWS client.")
+	c.SetRemoteDataClientFuncPtr(ctx, "aws", NewAWSS3Client)
+	if c.GetRemoteDataClient == nil {
+		t.Errorf("We should have set GetRemoteDataClient func pointer for AWS client.")
 	}
 }
 
-func TestGetSetS3ClientInitFuncPtr(t *testing.T) {
+func TestGetSetRemoteDataClientInitFuncPtr(t *testing.T) {
 	ctx := context.TODO()
-	c := &GetS3ClientWrapper{}
+	c := &GetRemoteDataClientWrapper{}
 
-	fn := c.GetS3ClientInitFuncPtr(ctx)
+	fn := c.GetRemoteDataClientInitFuncPtr(ctx)
 	if fn != nil {
 		t.Errorf("We should have received a nil init function pointer")
 	}
 
-	c.SetS3ClientInitFuncPtr(ctx, "aws", InitAWSClientWrapper)
+	c.SetRemoteDataClientInitFuncPtr(ctx, "aws", InitAWSClientWrapper)
 	if c.GetInitFunc == nil {
 		t.Errorf("We should have set GetInitFunc func pointer for AWS client.")
 	}
