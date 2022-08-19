@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/controllers"
 	debug "github.com/splunk/splunk-operator/controllers/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -53,6 +54,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+	utilruntime.Must(enterprisev4.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }

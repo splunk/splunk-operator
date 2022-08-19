@@ -34,13 +34,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	"github.com/splunk/splunk-operator/pkg/config"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -94,6 +96,12 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = enterprisev4.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = enterprisev4.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
