@@ -27,7 +27,7 @@ type MockS3DownloadClient struct {
 	DownloadSuccess bool
 }
 
-func checkRemoteDataListResponse(t *testing.T, testMethod string, gotObjects, wantObjects []*MockS3Object, appSourceName string) {
+func checkS3Response(t *testing.T, testMethod string, gotObjects, wantObjects []*MockS3Object, appSourceName string) {
 	if !reflect.DeepEqual(gotObjects, wantObjects) {
 		for n, gotObject := range gotObjects {
 			if *gotObject.Etag != *wantObjects[n].Etag {

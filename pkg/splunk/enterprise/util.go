@@ -125,16 +125,16 @@ func updateStorageTracker(ctx context.Context) error {
 	}()
 }
 
-// GetRemoteStorageClient returns the corresponding RemoteDataClient
-func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
+// GetRemoteStorageClient returns the corresponding S3Client
+func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	remoteDataClient := splclient.SplunkRemoteDataClient{}
+	s3Client := splclient.SplunkS3Client{}
 	//use the provider name to get the corresponding function pointer
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	getClient := getClientWrapper.GetRemoteDataClientFuncPtr(ctx)
+	getClientWrapper := splclient.S3Clients[vol.Provider]
+	getClient := getClientWrapper.GetS3ClientFuncPtr(ctx)
 
 	appSecretRef := vol.SecretRef
 	var accessKeyID string
@@ -146,23 +146,23 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		secretAccessKey = ""
 	} else {
 		// Get credentials through the secretRef
-		remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
+		s3ClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
 		if err != nil {
-			return remoteDataClient, err
+			return s3Client, err
 		}
 
 		// Get access keys
-		accessKeyID = string(remoteDataClientSecret.Data["s3_access_key"])
-		secretAccessKey = string(remoteDataClientSecret.Data["s3_secret_key"])
+		accessKeyID = string(s3ClientSecret.Data["s3_access_key"])
+		secretAccessKey = string(s3ClientSecret.Data["s3_secret_key"])
 
 		// Do we need to handle if IAM_ROLE is set in the secret as well?
 		if accessKeyID == "" {
 			err = fmt.Errorf("accessKey missing")
-			return remoteDataClient, err
+			return s3Client, err
 		}
 		if secretAccessKey == "" {
 			err = fmt.Errorf("s3 Secret Key is missing")
-			return remoteDataClient, err
+			return s3Client, err
 		}
 	}
 
@@ -185,84 +185,14 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 
 	var err error
 
-	remoteDataClient.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
+	s3Client.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
 
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
-		return remoteDataClient, err
+		return s3Client, err
 	}
 
-	return remoteDataClient, nil
-}
-
-// GetRemoteStorageClientV2 returns the corresponding RemoteDataClient
-func GetRemoteStorageClientV2(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
-
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	remoteDataClient := splclient.SplunkRemoteDataClient{}
-	//use the provider name to get the corresponding function pointer
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	getClient := getClientWrapper.GetRemoteDataClientFuncPtr(ctx)
-
-	appSecretRef := vol.SecretRef
-	var accessKeyID string
-	var secretAccessKey string
-	if appSecretRef == "" {
-		// No secretRef means we should try to use the credentials available in the pod already via kube2iam or something similar
-		scopedLog.Info("No secrectRef provided.  Attempt to access remote storage client without access/secret keys")
-		accessKeyID = ""
-		secretAccessKey = ""
-	} else {
-		// Get credentials through the secretRef
-		RemoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
-		if err != nil {
-			return remoteDataClient, err
-		}
-
-		// Get access keys
-		accessKeyID = string(RemoteDataClientSecret.Data["s3_access_key"])
-		secretAccessKey = string(RemoteDataClientSecret.Data["s3_secret_key"])
-
-		// Do we need to handle if IAM_ROLE is set in the secret as well?
-		if accessKeyID == "" {
-			err = fmt.Errorf("accessKey missing")
-			return remoteDataClient, err
-		}
-		if secretAccessKey == "" {
-			err = fmt.Errorf("s3 Secret Key is missing")
-			return remoteDataClient, err
-		}
-	}
-
-	// Get the bucket name form the "path" field
-	bucket := strings.Split(vol.Path, "/")[0]
-
-	//Get the prefix from the "path" field
-	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
-	// if vol.Path contains just the bucket name(i.e without ending "/"), TrimPrefix returns the vol.Path
-	// So, just reset the basePrefix to null
-	if basePrefix == bucket {
-		basePrefix = ""
-	}
-
-	// Join takes care of merging two paths and returns a clean result
-	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
-	prefix := filepath.Join(basePrefix, location) + "/"
-
-	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
-
-	var err error
-
-	remoteDataClient.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
-
-	if err != nil {
-		scopedLog.Error(err, "Failed to get the S3 client")
-		return remoteDataClient, err
-	}
-
-	return remoteDataClient, nil
+	return s3Client, nil
 }
 
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
@@ -417,9 +347,9 @@ func extractAppNameFromKey(ctx context.Context, key string) string {
 	return key[nameAt+1:]
 }
 
-// getRemoteObjectFromRemoteDataListResponse returns the remote object for the app from RemoteDataListResponse
-func getRemoteObjectFromRemoteDataListResponse(ctx context.Context, appName string, RemoteDataListResponse splclient.RemoteDataListResponse) *splclient.RemoteObject {
-	for _, object := range RemoteDataListResponse.Objects {
+// getRemoteObjectFromS3Response returns the remote object for the app from S3Response
+func getRemoteObjectFromS3Response(ctx context.Context, appName string, s3Response splclient.S3Response) *splclient.RemoteObject {
+	for _, object := range s3Response.Objects {
 		rcvdAppName := extractAppNameFromKey(ctx, *object.Key)
 		if rcvdAppName == appName {
 			return object
@@ -568,10 +498,10 @@ func getRemoteObjectKey(ctx context.Context, cr splcommon.MetaObject, appFramewo
 	return remoteObjectKey, nil
 }
 
-// getRemoteDataClientMgr gets the RemoteDataClientMgr instance to download apps
-func getRemoteDataClientMgr(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appSrcName string) (*RemoteDataClientManager, error) {
+// getS3ClientMgr gets the S3ClientMgr instance to download apps
+func getS3ClientMgr(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkConfig *enterpriseApi.AppFrameworkSpec, appSrcName string) (*S3ClientManager, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("RemoteDataClientMgr").WithValues("crName", cr.GetName(), "namespace", cr.GetNamespace(), "appSrcName", appSrcName)
+	scopedLog := reqLogger.WithName("getS3ClientMgr").WithValues("crName", cr.GetName(), "namespace", cr.GetNamespace(), "appSrcName", appSrcName)
 	var vol enterpriseApi.VolumeSpec
 	appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
 	if err != nil {
@@ -585,18 +515,18 @@ func getRemoteDataClientMgr(ctx context.Context, client splcommon.ControllerClie
 		return nil, err
 	}
 
-	remoteDataClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	initFunc := remoteDataClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	remoteDataClientMgr := &RemoteDataClientManager{
-		client:              client,
-		cr:                  cr,
-		appFrameworkRef:     appFrameworkConfig,
-		vol:                 &vol,
-		location:            appSrc.Location,
-		initFn:              initFunc,
-		getRemoteDataClient: GetRemoteStorageClient,
+	s3ClientWrapper := splclient.S3Clients[vol.Provider]
+	initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr(ctx)
+	s3ClientMgr := &S3ClientManager{
+		client:          client,
+		cr:              cr,
+		appFrameworkRef: appFrameworkConfig,
+		vol:             &vol,
+		location:        appSrc.Location,
+		initFn:          initFunc,
+		getS3Client:     GetRemoteStorageClient,
 	}
-	return remoteDataClientMgr, nil
+	return s3ClientMgr, nil
 }
 
 // getAppPackageLocalDir returns the Operator volume directory for a given app package
@@ -789,50 +719,44 @@ func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcomm
 	return err
 }
 
-// RemoteClientManager is used to manage all the Remote data storage clients and their connections.
-type RemoteDataClientManager struct {
-	client              splcommon.ControllerClient
-	cr                  splcommon.MetaObject
-	appFrameworkRef     *enterpriseApi.AppFrameworkSpec
-	vol                 *enterpriseApi.VolumeSpec
-	location            string
-	initFn              splclient.GetInitFunc
-	getRemoteDataClient func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+// S3ClientManager is used to manage all the S3 storage clients and their connections.
+type S3ClientManager struct {
+	client          splcommon.ControllerClient
+	cr              splcommon.MetaObject
+	appFrameworkRef *enterpriseApi.AppFrameworkSpec
+	vol             *enterpriseApi.VolumeSpec
+	location        string
+	initFn          splclient.GetInitFunc
+	getS3Client     func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 		appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-		location string, fp splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error)
+		location string, fp splclient.GetInitFunc) (splclient.SplunkS3Client, error)
 }
 
 // GetAppsList gets the apps list
-func (s3mgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splclient.RemoteDataListResponse, error) {
-	var remoteDataListResponse splclient.RemoteDataListResponse
+func (s3mgr *S3ClientManager) GetAppsList(ctx context.Context) (splclient.S3Response, error) {
+	var s3Response splclient.S3Response
 
-	c, err := s3mgr.getRemoteDataClient(ctx, s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	c, err := s3mgr.getS3Client(ctx, s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
 	if err != nil {
-		return remoteDataListResponse, err
+		return s3Response, err
 	}
 
-	remoteDataListResponse, err = c.Client.GetAppsList(ctx)
+	s3Response, err = c.Client.GetAppsList(ctx)
 	if err != nil {
-		return remoteDataListResponse, err
+		return s3Response, err
 	}
-	return remoteDataListResponse, nil
+	return s3Response, nil
 }
 
 // DownloadApp downloads the app from remote storage
-func (s3mgr *RemoteDataClientManager) DownloadApp(ctx context.Context, remoteFile string, localFile string, etag string) error {
+func (s3mgr *S3ClientManager) DownloadApp(ctx context.Context, remoteFile string, localFile string, etag string) error {
 
-	c, err := s3mgr.getRemoteDataClient(ctx, s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	c, err := s3mgr.getS3Client(ctx, s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
 	if err != nil {
 		return err
 	}
 
-	downloadRequest := splclient.RemoteDataDownloadRequest{
-		LocalFile:  localFile,
-		RemoteFile: remoteFile,
-		Etag:       etag,
-	}
-
-	_, err = c.Client.DownloadApp(ctx, downloadRequest)
+	_, err = c.Client.DownloadApp(ctx, remoteFile, localFile, etag)
 	if err != nil {
 		return err
 	}
@@ -840,22 +764,22 @@ func (s3mgr *RemoteDataClientManager) DownloadApp(ctx context.Context, remoteFil
 }
 
 // GetAppsList this func pointer is to use this function in unit test cases
-var GetAppsList = func(ctx context.Context, RemoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
-	remoteDataListResponse, err := RemoteDataClientMgr.GetAppsList(ctx)
-	return remoteDataListResponse, err
+var GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
+	s3Response, err := s3ClientMgr.GetAppsList(ctx)
+	return s3Response, err
 }
 
-// GetAppListFromRemoteBucket gets the list of apps from remote storage.
-func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splclient.RemoteDataListResponse, error) {
+// GetAppListFromS3Bucket gets the list of apps from remote storage.
+func GetAppListFromS3Bucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splclient.S3Response, error) {
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetAppListFroGetAppListFromRemoteBucketS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("GetAppListFromS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	sourceToAppListMap := make(map[string]splclient.RemoteDataListResponse)
+	sourceToAppListMap := make(map[string]splclient.S3Response)
 
 	scopedLog.Info("Getting the list of apps from remote storage...")
 
-	var remoteDataListResponse splclient.RemoteDataListResponse
+	var s3Response splclient.S3Response
 	var vol enterpriseApi.VolumeSpec
 	var err error
 	var allSuccess bool = true
@@ -867,20 +791,20 @@ func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.Controller
 			continue
 		}
 
-		remoteDataClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-		initFunc := remoteDataClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		remoteDataClientMgr := RemoteDataClientManager{
-			client:              client,
-			cr:                  cr,
-			appFrameworkRef:     appFrameworkRef,
-			vol:                 &vol,
-			location:            appSource.Location,
-			initFn:              initFunc,
-			getRemoteDataClient: GetRemoteStorageClient,
+		s3ClientWrapper := splclient.S3Clients[vol.Provider]
+		initFunc := s3ClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		s3ClientMgr := S3ClientManager{
+			client:          client,
+			cr:              cr,
+			appFrameworkRef: appFrameworkRef,
+			vol:             &vol,
+			location:        appSource.Location,
+			initFn:          initFunc,
+			getS3Client:     GetRemoteStorageClient,
 		}
 
 		// Now, get the apps list from remote storage
-		remoteDataListResponse, err = GetAppsList(ctx, remoteDataClientMgr)
+		s3Response, err = GetAppsList(ctx, s3ClientMgr)
 		if err != nil {
 			// move on to the next appSource if we are not able to get apps list
 			scopedLog.Error(err, "Unable to get apps list", "appSource", appSource.Name)
@@ -888,7 +812,7 @@ func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.Controller
 			continue
 		}
 
-		sourceToAppListMap[appSource.Name] = remoteDataListResponse
+		sourceToAppListMap[appSource.Name] = s3Response
 	}
 
 	if !allSuccess {
@@ -910,7 +834,7 @@ func checkIfAnAppIsActiveOnRemoteStore(appName string, list []*splclient.RemoteO
 }
 
 // checkIfAppSrcExistsWithRemoteListing checks if a given AppSrc is part of the remote listing
-func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map[string]splclient.RemoteDataListResponse) bool {
+func checkIfAppSrcExistsWithRemoteListing(appSrc string, remoteObjListingMap map[string]splclient.S3Response) bool {
 	if _, ok := remoteObjListingMap[appSrc]; ok {
 		return true
 	}
@@ -1031,7 +955,7 @@ func isAppRepoStateDeleted(appDeployInfo enterpriseApi.AppDeploymentInfo) bool {
 // handleAppRepoChanges parses the remote storage listing and updates the repoState and deployStatus accordingly
 // client and cr are used when we put the glue logic to hand-off to the side car
 func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.RemoteDataListResponse, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
+	appDeployContext *enterpriseApi.AppDeploymentContext, remoteObjListingMap map[string]splclient.S3Response, appFrameworkConfig *enterpriseApi.AppFrameworkSpec) (bool, error) {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("handleAppRepoChanges").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1070,14 +994,14 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// 2. Go through each AppSrc from the remote listing
-	for appSrc, remoteDataListResponse := range remoteObjListingMap {
+	for appSrc, s3Response := range remoteObjListingMap {
 		// 2.1 Mark Apps for deletion if they are missing in remote listing
 		appSrcDeploymentInfo, appSrcExistsLocally := appDeployContext.AppsSrcDeployStatus[appSrc]
 
 		if appSrcExistsLocally {
 			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
 			for appIdx := range currentList {
-				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) && !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, remoteDataListResponse.Objects) {
+				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) && !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
 					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 				}
@@ -1085,7 +1009,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 		}
 
 		// 2.2 Check for any App changes(Ex. A new App source, a new App added/updated)
-		appsModified = AddOrUpdateAppSrcDeploymentInfoList(ctx, &appSrcDeploymentInfo, remoteDataListResponse.Objects)
+		appsModified = AddOrUpdateAppSrcDeploymentInfoList(ctx, &appSrcDeploymentInfo, s3Response.Objects)
 		scope := getAppSrcScope(ctx, appFrameworkConfig, appSrc)
 		// if some apps were modified or added, and we have cluster scoped apps,
 		// then set the bundle push state to Pending
@@ -1406,7 +1330,7 @@ refCount: %d`, status, numOfObjects)
 	return nil
 }
 
-// initAndCheckAppInfoStatus initializes the RemoteDataClients and checks the status of apps on remote storage.
+// initAndCheckAppInfoStatus initializes the S3Clients and checks the status of apps on remote storage.
 func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 	appFrameworkConf *enterpriseApi.AppFrameworkSpec, appStatusContext *enterpriseApi.AppDeploymentContext) error {
 	reqLogger := log.FromContext(ctx)
@@ -1435,11 +1359,11 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 		}
 
 		appStatusContext.IsDeploymentInProgress = true
-		var sourceToAppsList map[string]splclient.RemoteDataListResponse
+		var sourceToAppsList map[string]splclient.S3Response
 
 		scopedLog.Info("Checking status of apps on remote storage...")
 
-		sourceToAppsList, err = GetAppListFromRemoteBucket(ctx, client, cr, appFrameworkConf)
+		sourceToAppsList, err = GetAppListFromS3Bucket(ctx, client, cr, appFrameworkConf)
 		// TODO: gaurav, we need to handle this case better in Phase-3. There can be a possibility
 		// where if an appSource is missing in remote store, we mark it for deletion. But if it comes up
 		// next time, we will recycle the pod to install the app. We need to find a way to reduce the pod recycles.

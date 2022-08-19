@@ -47,8 +47,8 @@ func (c *MockMinioS3Handler) AddObjects(appFrameworkRef enterpriseApi.AppFramewo
 	}
 }
 
-// CheckMinioRemoteDataListResponse checks if the received objects are same as the one we expect
-func (c *MockMinioS3Handler) CheckMinioRemoteDataListResponse(t *testing.T, testMethod string) {
+// CheckMinioS3Response checks if the received objects are same as the one we expect
+func (c *MockMinioS3Handler) CheckMinioS3Response(t *testing.T, testMethod string) {
 
 	if len(c.WantSourceAppListResponseMap) != len(c.GotSourceAppListResponseMap) {
 		t.Fatalf("%s got %d Responses; want %d", testMethod, len(c.GotSourceAppListResponseMap), len(c.WantSourceAppListResponseMap))
@@ -56,7 +56,7 @@ func (c *MockMinioS3Handler) CheckMinioRemoteDataListResponse(t *testing.T, test
 
 	for appSourceName, gotObjects := range c.GotSourceAppListResponseMap {
 		wantObjects := c.WantSourceAppListResponseMap[appSourceName]
-		checkRemoteDataListResponse(t, testMethod, gotObjects.Objects, wantObjects.Objects, appSourceName)
+		checkS3Response(t, testMethod, gotObjects.Objects, wantObjects.Objects, appSourceName)
 	}
 }
 

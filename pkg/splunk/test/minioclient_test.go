@@ -22,7 +22,7 @@ import (
 func TestMinioClientAddObjects(t *testing.T) {
 }
 
-func TestMinioClientCheckAWSRemoteDataListResponse(t *testing.T) {
+func TestMinioClientCheckAWSS3Response(t *testing.T) {
 }
 
 func TestMinioClientListObjectsV2(t *testing.T) {
