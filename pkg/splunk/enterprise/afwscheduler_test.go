@@ -17,6 +17,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -3420,7 +3421,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	ctx := context.TODO()
 
 	// Define CRs
-	cmCr := &enterpriseApi.ClusterMaster{
+	cmCr := &enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},

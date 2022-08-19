@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,31 +17,60 @@ limitations under the License.
 package v4
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+// default all fields to being optional
+// +kubebuilder:validation:Optional
+
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+// see also https://book.kubebuilder.io/reference/markers/crd.html
+
+const (
+	// MonitoringConsolePausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// an immediate requeue)
+	MonitoringConsolePausedAnnotation = "monitoringconsole.enterprise.splunk.com/paused"
+)
 
 // MonitoringConsoleSpec defines the desired state of MonitoringConsole
 type MonitoringConsoleSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	CommonSplunkSpec `json:",inline"`
 
-	// Foo is an example field of MonitoringConsole. Edit monitoringconsole_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // MonitoringConsoleStatus defines the observed state of MonitoringConsole
 type MonitoringConsoleStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// current phase of the monitoring console
+	Phase Phase `json:"phase"`
+
+	// selector for pods, used by HorizontalPodAutoscaler
+	Selector string `json:"selector"`
+
+	// Bundle push status tracker
+	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
+
+	// Resource Revision tracker
+	ResourceRevMap map[string]string `json:"resourceRevMap"`
+
+	// App Framework status
+	AppContext AppDeploymentContext `json:"appContext,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MonitoringConsole is the Schema for the monitoringconsoles API
+// MonitoringConsole is the Schema for the monitoringconsole API
+// +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:path=monitoringconsoles,scope=Namespaced,shortName=mc
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of monitoring console"
+// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of monitoring console members"
+// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready monitoring console members"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of monitoring console"
+// +kubebuilder:storageversion
 type MonitoringConsole struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -61,4 +90,33 @@ type MonitoringConsoleList struct {
 
 func init() {
 	SchemeBuilder.Register(&MonitoringConsole{}, &MonitoringConsoleList{})
+}
+
+// NewEvent creates a new event associated with the object and ready
+// to be published to the kubernetes API.
+func (mcnsl *MonitoringConsole) NewEvent(eventType, reason, message string) corev1.Event {
+	t := metav1.Now()
+	return corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: reason + "-",
+			Namespace:    mcnsl.ObjectMeta.Namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:       "MonitoringConsole",
+			Namespace:  mcnsl.Namespace,
+			Name:       mcnsl.Name,
+			UID:        mcnsl.UID,
+			APIVersion: GroupVersion.String(),
+		},
+		Reason:  reason,
+		Message: message,
+		Source: corev1.EventSource{
+			Component: "splunk-monitoringconsole-controller",
+		},
+		FirstTimestamp:      t,
+		LastTimestamp:       t,
+		Count:               1,
+		Type:                eventType,
+		ReportingController: "enterprise.splunk.com/monitoringconsole-controller",
+	}
 }

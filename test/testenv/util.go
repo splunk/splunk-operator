@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io/ioutil"
 	"math/rand"
 	"os/exec"
@@ -29,7 +30,7 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
@@ -149,8 +150,8 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 	return &new
 }
 
-func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseMaster {
-	new := enterpriseApi.LicenseMaster{
+func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApiV3.LicenseMaster {
+	new := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},
@@ -160,7 +161,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApi.Lice
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{
 					{
@@ -240,11 +241,11 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterMaster {
+func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApiV3.ClusterMaster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
-	new := enterpriseApi.ClusterMaster{
+	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -254,7 +255,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
@@ -311,11 +312,11 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterMaster {
+func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApiV3.ClusterMaster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
-	new := enterpriseApi.ClusterMaster{
+	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterManager",
 		},
@@ -325,7 +326,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: smartstorespec,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
@@ -911,8 +912,8 @@ func newClusterManagerWithGivenSpec(name string, ns string, spec enterpriseApi.C
 }
 
 // newClusterManagerWithGivenSpec creates and initialize the CR for ClusterManager Kind
-func newClusterMasterWithGivenSpec(name string, ns string, spec enterpriseApi.ClusterMasterSpec) *enterpriseApi.ClusterMaster {
-	new := enterpriseApi.ClusterMaster{
+func newClusterMasterWithGivenSpec(name string, ns string, spec enterpriseApiV3.ClusterMasterSpec) *enterpriseApiV3.ClusterMaster {
+	new := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -961,8 +962,8 @@ func newLicenseManagerWithGivenSpec(name, ns string, spec enterpriseApi.LicenseM
 }
 
 // newLicenseMasterWithGivenSpec create and initializes CR for License Manager Kind with Given Spec
-func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApi.LicenseMasterSpec) *enterpriseApi.LicenseMaster {
-	new := enterpriseApi.LicenseMaster{
+func newLicenseMasterWithGivenSpec(name, ns string, spec enterpriseApiV3.LicenseMasterSpec) *enterpriseApiV3.LicenseMaster {
+	new := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},

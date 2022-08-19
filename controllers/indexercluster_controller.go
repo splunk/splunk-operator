@@ -18,10 +18,11 @@ package controllers
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -157,7 +158,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterpriseApi.IndexerCluster{},
 			}).
-		Watches(&source.Kind{Type: &enterpriseApi.ClusterMaster{}},
+		Watches(&source.Kind{Type: &enterpriseApiV3.ClusterMaster{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
 				OwnerType:    &enterpriseApi.IndexerCluster{},

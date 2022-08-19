@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
@@ -35,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 

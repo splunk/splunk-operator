@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,31 +17,52 @@ limitations under the License.
 package v4
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+// default all fields to being optional
+// +kubebuilder:validation:Optional
+
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+// see also https://book.kubebuilder.io/reference/markers/crd.html
 
-// LicenseManagerSpec defines the desired state of LicenseManager
+const (
+	// LicenseManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// an immediate requeue)
+	LicenseManagerPausedAnnotation = "licensemanager.enterprise.splunk.com/paused"
+)
+
+// LicenseManagerSpec defines the desired state of a Splunk Enterprise license manager.
 type LicenseManagerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	CommonSplunkSpec `json:",inline"`
 
-	// Foo is an example field of LicenseManager. Edit licensemanager_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
+	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
-// LicenseManagerStatus defines the observed state of LicenseManager
+// LicenseManagerStatus defines the observed state of a Splunk Enterprise license manager.
 type LicenseManagerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// current phase of the license manager
+	Phase Phase `json:"phase"`
+
+	// App Framework Context
+	AppContext AppDeploymentContext `json:"appContext"`
+
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseManager is the Schema for the licensemanagers API
+// LicenseManager is the Schema for a Splunk Enterprise license manager.
+// +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:path=licensemanagers,scope=Namespaced,shortName=lmanager
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of license manager"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of license manager"
+// +kubebuilder:storageversion
 type LicenseManager struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -61,4 +82,33 @@ type LicenseManagerList struct {
 
 func init() {
 	SchemeBuilder.Register(&LicenseManager{}, &LicenseManagerList{})
+}
+
+// NewEvent creates a new event associated with the object and ready
+// to be published to the kubernetes API.
+func (lmstr *LicenseManager) NewEvent(eventType, reason, message string) corev1.Event {
+	t := metav1.Now()
+	return corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: reason + "-",
+			Namespace:    lmstr.ObjectMeta.Namespace,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:       "LicenseManager",
+			Namespace:  lmstr.Namespace,
+			Name:       lmstr.Name,
+			UID:        lmstr.UID,
+			APIVersion: GroupVersion.String(),
+		},
+		Reason:  reason,
+		Message: message,
+		Source: corev1.EventSource{
+			Component: "splunk-licensemanager-controller",
+		},
+		FirstTimestamp:      t,
+		LastTimestamp:       t,
+		Count:               1,
+		Type:                eventType,
+		ReportingController: "enterprise.splunk.com/licensemanager-controller",
+	}
 }

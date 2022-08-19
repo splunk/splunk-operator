@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ import (
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -98,7 +99,7 @@ func TestApplyClusterMaster(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[5]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -106,7 +107,7 @@ func TestApplyClusterMaster(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -115,7 +116,7 @@ func TestApplyClusterMaster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApiV3.ClusterMaster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMaster", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -125,7 +126,7 @@ func TestApplyClusterMaster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApiV3.ClusterMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -133,7 +134,7 @@ func TestApplyClusterMaster(t *testing.T) {
 
 func TestGetClusterMasterStatefulSet(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -248,7 +249,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[12]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -256,7 +257,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -319,7 +320,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterMaster(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(context.Background(), c, cr.(*enterpriseApiV3.ClusterMaster))
 		return err
 	}
 
@@ -379,7 +380,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 func TestPerformCmasterBundlePush(t *testing.T) {
 
 	ctx := context.TODO()
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -387,7 +388,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -453,7 +454,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 func TestPushMasterAppsBundle(t *testing.T) {
 
 	ctx := context.TODO()
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -461,7 +462,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -502,7 +503,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	initGlobalResourceTracker()
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -510,7 +511,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 60,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -574,7 +575,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 
 func TestApplyCLusterMasterDeletion(t *testing.T) {
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -582,7 +583,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 0,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -669,12 +670,12 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
@@ -847,12 +848,12 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
@@ -1003,7 +1004,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 func TestGetClusterMasterList(t *testing.T) {
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{}
+	cm := enterpriseApiV3.ClusterMaster{}
 
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
@@ -1018,7 +1019,7 @@ func TestGetClusterMasterList(t *testing.T) {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added cluster manager to the list yet")
 	}
 
-	cmList := &enterpriseApi.ClusterMasterList{}
+	cmList := &enterpriseApiV3.ClusterMasterList{}
 	cmList.Items = append(cmList.Items, cm)
 
 	client.ListObj = cmList
@@ -1035,7 +1036,7 @@ func TestGetClusterMasterList(t *testing.T) {
 
 func TestCheckIfMastersmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -1142,12 +1143,12 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// create clustermaster custom resource
-	clustermaster := &enterpriseApi.ClusterMaster{
+	clustermaster := &enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",

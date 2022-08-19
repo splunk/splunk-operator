@@ -18,6 +18,7 @@ package testenv
 import (
 	"flag"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"time"
 
@@ -35,8 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 const (

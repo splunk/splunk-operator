@@ -38,7 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
@@ -344,7 +345,7 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 }
 
 //DeployLicenseMaster deploys the license manager instance
-func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*enterpriseApi.LicenseMaster, error) {
+func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*enterpriseApiV3.LicenseMaster, error) {
 
 	if d.testenv.licenseFilePath == "" {
 		return nil, fmt.Errorf("no license file path specified")
@@ -358,7 +359,7 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 	// Verify standalone goes to ready state
 	LicenseMasterReady(ctx, d, d.testenv)
 
-	return deployed.(*enterpriseApi.LicenseMaster), err
+	return deployed.(*enterpriseApiV3.LicenseMaster), err
 }
 
 //DeployClusterManager deploys the cluster manager
@@ -382,7 +383,7 @@ func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseMana
 }
 
 //DeployClusterMaster deploys the cluster manager
-func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterMaster, error) {
+func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name, "LicenseRef", LicenseManagerName)
 	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
 	if mcRef != "" {
@@ -398,7 +399,7 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManag
 	// Verify standalone goes to ready state
 	ClusterMasterReady(ctx, d, d.testenv)
 
-	return deployed.(*enterpriseApi.ClusterMaster), err
+	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
 
 //DeployClusterManagerWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
@@ -416,7 +417,7 @@ func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Conte
 }
 
 //DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
-func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterMaster, error) {
+func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
 	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
 	deployed, err := d.deployCR(ctx, name, cm)
@@ -426,7 +427,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 	// Verify standalone goes to ready state
 	//ClusterManagerReady(ctx, d, d.testenv)
 
-	return deployed.(*enterpriseApi.ClusterMaster), err
+	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
 
 //DeployIndexerCluster deploys the indexer cluster
@@ -549,12 +550,12 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			current.Spec = ucr.Spec
 			cobject = current
 		case "LicenseMaster":
-			current := &enterpriseApi.LicenseMaster{}
+			current := &enterpriseApiV3.LicenseMaster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
 			if err != nil {
 				return err
 			}
-			ucr := cr.(*enterpriseApi.LicenseMaster)
+			ucr := cr.(*enterpriseApiV3.LicenseMaster)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "LicenseManager":
@@ -576,12 +577,12 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			current.Spec = ucr.Spec
 			cobject = current
 		case "ClusterMaster":
-			current := &enterpriseApi.ClusterMaster{}
+			current := &enterpriseApiV3.ClusterMaster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
 			if err != nil {
 				return err
 			}
-			ucr := cr.(*enterpriseApi.ClusterMaster)
+			ucr := cr.(*enterpriseApiV3.ClusterMaster)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "ClusterManager":
@@ -1081,14 +1082,14 @@ func (d *Deployment) DeployClusterManagerWithGivenSpec(ctx context.Context, name
 }
 
 // DeployClusterMasterWithGivenSpec deploys the cluster manager with given SPEC
-func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.ClusterMasterSpec) (*enterpriseApi.ClusterMaster, error) {
+func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApiV3.ClusterMasterSpec) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
 	}
-	return deployed.(*enterpriseApi.ClusterMaster), err
+	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
 
 // DeploySearchHeadClusterWithGivenSpec deploys a search head cluster
@@ -1111,14 +1112,14 @@ func (d *Deployment) DeployLicenseManagerWithGivenSpec(ctx context.Context, name
 }
 
 // DeployLicenseMasterWithGivenSpec deploys the license manager with given SPEC
-func (d *Deployment) DeployLicenseMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.LicenseMasterSpec) (*enterpriseApi.LicenseMaster, error) {
+func (d *Deployment) DeployLicenseMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApiV3.LicenseMasterSpec) (*enterpriseApiV3.LicenseMaster, error) {
 	d.testenv.Log.Info("Deploying license-master", "name", name)
 	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(ctx, name, lm)
 	if err != nil {
 		return nil, err
 	}
-	return deployed.(*enterpriseApi.LicenseMaster), err
+	return deployed.(*enterpriseApiV3.LicenseMaster), err
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
@@ -1198,9 +1199,9 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 }
 
 // DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApiV3.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApiV3.ClusterMaster{}
 	idxc := &enterpriseApi.IndexerCluster{}
 	sh := &enterpriseApi.SearchHeadCluster{}
 
@@ -1214,7 +1215,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 	}
 
 	// Deploy the cluster manager
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
@@ -1376,9 +1377,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 }
 
 // DeployMultisiteClusterMasterWithSearchHeadAndAppFramework deploys cluster-master in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) (*enterpriseApiV3.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApiV3.ClusterMaster{}
 	idxc := &enterpriseApi.IndexerCluster{}
 	sh := &enterpriseApi.SearchHeadCluster{}
 
@@ -1406,7 +1407,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 `
 
 	// Cluster Manager Spec
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
@@ -1564,7 +1565,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 	}
 
 	// Deploy the cluster manager
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",

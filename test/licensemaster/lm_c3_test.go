@@ -17,13 +17,14 @@ package licensemaster
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -173,7 +174,7 @@ var _ = Describe("licensemaster test", func() {
 				AppSources:           appSourceSpec,
 			}
 
-			spec := enterpriseApi.LicenseMasterSpec{
+			spec := enterpriseApiV3.LicenseMasterSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Volumes: []corev1.Volume{
 						{
