@@ -54,8 +54,8 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 	updatefuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -73,8 +73,8 @@ func TestApplyStandalone(t *testing.T) {
 	}
 	deltaCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 	updateFuncCalls := append(updatefuncCalls, deltaCalls...)
 
@@ -138,8 +138,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -159,8 +159,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 
 	labels := map[string]string{

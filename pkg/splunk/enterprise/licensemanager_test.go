@@ -53,8 +53,8 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
-		{MetaName: "*v3.LicenseManager-test-stack1"},
-		{MetaName: "*v3.LicenseManager-test-stack1"},
+		{MetaName: "*v4.LicenseManager-test-stack1"},
+		{MetaName: "*v4.LicenseManager-test-stack1"},
 	}
 
 	labels := map[string]string{

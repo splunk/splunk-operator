@@ -40,6 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
@@ -82,7 +83,7 @@ var _ = BeforeSuite(func() {
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApiV3.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
@@ -91,17 +92,17 @@ var _ = BeforeSuite(func() {
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApiV3.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	//err = enterpriseApiV3.AddToScheme(scheme.Scheme)
+	//Expect(err).NotTo(HaveOccurred())
+	//
+	//err = enterpriseApiV3.AddToScheme(scheme.Scheme)
+	//Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
 
@@ -129,6 +130,12 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	if err := (&LicenseManagerReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&LicenseMasterReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {

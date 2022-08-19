@@ -764,7 +764,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// Create App framework volume

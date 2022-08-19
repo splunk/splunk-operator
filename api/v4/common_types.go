@@ -22,7 +22,7 @@ import (
 const (
 
 	// APIVersion is a string representation of this API
-	APIVersion = "enterprise.splunk.com/v3"
+	APIVersion = "enterprise.splunk.com/v4"
 
 	// TotalWorker concurrent workers to reconcile
 	TotalWorker int = 15
