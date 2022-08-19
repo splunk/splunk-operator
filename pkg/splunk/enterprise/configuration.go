@@ -1118,8 +1118,8 @@ func initAppFrameWorkContext(ctx context.Context, client splcommon.ControllerCli
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
-		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-			splclient.RegisterS3Client(ctx, vol.Provider)
+		if _, ok := splclient.RemoteDataClientsMap[vol.Provider]; !ok {
+			splclient.RegisterRemoteDataClient(ctx, vol.Provider)
 		}
 	}
 	return nil

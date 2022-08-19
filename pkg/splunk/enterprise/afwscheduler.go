@@ -429,7 +429,7 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Co
 }
 
 // download API will do the actual work of downloading apps from remote storage
-func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
+func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, s3ClientMgr RemoteDataClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
 
 	defer func() {
 		downloadWorker.isActive = false
@@ -540,11 +540,11 @@ downloadWork:
 					continue
 				}
 
-				// get the S3ClientMgr instance
-				s3ClientMgr, _ := getS3ClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+				// get the remoteDataClientMgr instance
+				remoteDataClientMgr, _ := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
 
 				// start the actual download
-				go downloadWorker.download(ctx, pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
+				go downloadWorker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
 
 			default:
 				<-downloadWorkersRunPool

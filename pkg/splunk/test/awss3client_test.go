@@ -22,7 +22,7 @@ import (
 func TestAwsS3AddObjects(t *testing.T) {
 }
 
-func TestAwsS3CheckAWSS3Response(t *testing.T) {
+func TestAwsS3CheckAWSRemoteDataListResponse(t *testing.T) {
 }
 
 func TestAwsS3ListObjectsV2(t *testing.T) {
