@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - fixed-version-biaslang
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
