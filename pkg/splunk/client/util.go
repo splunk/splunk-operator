@@ -29,7 +29,7 @@ import (
 // Ideally this function should live in test package but due to
 // dependency of some variables in client package and to avoid
 // cyclic dependency this has to live here.
-func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 
@@ -55,7 +55,7 @@ func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID stri
 }
 
 // NewMockMinioS3Client is mock client for testing minio client
-func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
@@ -77,15 +77,36 @@ func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID st
 		Client:            s3SplunkClient,
 	}, nil
 }
+func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+	var s3SplunkClient SplunkAzureBlobClient
+	var err error
 
-// ConvertS3Response converts S3 Response to a mock client response
-func ConvertS3Response(ctx context.Context, s3Response S3Response) (spltest.MockS3Client, error) {
+	cl := fn(ctx, endpoint, storageAccountName, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("failed to create an Azure blob client")
+		return nil, err
+	}
+
+	s3SplunkClient = cl.(SplunkAzureBlobClient)
+
+	return &AzureBlobClient{
+		BucketName:         bucketName,
+		StorageAccountName: storageAccountName,
+		SecretAccessKey:    secretAccessKey,
+		Prefix:             prefix,
+		Endpoint:           endpoint,
+		Client:             s3SplunkClient,
+	}, nil
+}
+
+// ConvertRemoteDataListResponse converts S3 Response to a mock client response
+func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse RemoteDataListResponse) (spltest.MockS3Client, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ConvertS3Response")
+	scopedLog := reqLogger.WithName("ConvertRemoteDataListResponse")
 
 	var mockResponse spltest.MockS3Client
 
-	tmp, err := json.Marshal(s3Response)
+	tmp, err := json.Marshal(RemoteDataListResponse)
 	if err != nil {
 		scopedLog.Error(err, "Unable to marshal s3 response")
 		return mockResponse, err
