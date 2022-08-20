@@ -91,6 +91,7 @@ convert_CR_Kind() {
 convert_CR_version() {
 	FILE_IN=$1
 	CR_TYPE=$2
+	CR_NAME=$3
 	TMP_FILE="${TMP_FOLDER}/${CR_TYPE}.${NS}.${CR_NAME}.${TT}.versioning.json"
 	NEW_VERSION="enterprise.splunk.com/v4"
 	cp ${FILE_IN} ${TMP_FILE}
@@ -505,7 +506,7 @@ get_current_deployment() {
 			fi
 
       # Updates CR to use new version (v4)
-      convert_CR_version ${updated_name} ${CR}
+      convert_CR_version ${updated_name} ${CR} ${CR_NAME}
 
 			# Validate the updated CR is valid
 			dry_run ${updated_name}

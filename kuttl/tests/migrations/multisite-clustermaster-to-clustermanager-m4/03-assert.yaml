@@ -1,5 +1,5 @@
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: test

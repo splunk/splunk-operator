@@ -11,4 +11,6 @@ resources:
 - enterprise_v4_standalone.yaml
 - enterprise_v4_monitoringconsole.yaml
 - enterprise_v4_searchheadcluster.yaml
+- enterprise_v4_clustermanager.yaml
+- enterprise_v4_licensemanager.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

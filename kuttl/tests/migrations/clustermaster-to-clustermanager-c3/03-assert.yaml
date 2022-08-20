@@ -1,5 +1,5 @@
 # check new ClusterManager is ready
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: test
