@@ -87,6 +87,16 @@ convert_CR_Kind() {
 	eval cat ${FILE_IN} | jq ".kind=\"${NEW_TYPE}\"" >${FILE_OUT}
 }
 
+# Convert versions
+convert_CR_version() {
+	FILE_IN=$1
+	CR_TYPE=$2
+	TMP_FILE="${TMP_FOLDER}/${CR_TYPE}.${NS}.${CR_NAME}.${TT}.versioning.json"
+	NEW_VERSION="enterprise.splunk.com/v4"
+	cp ${FILE_IN} ${TMP_FILE}
+	eval cat ${TMP_FILE} | jq ".apiVersion=\"${NEW_VERSION}\"" >${FILE_IN}
+}
+
 # Convert multisite ref to manager service
 convert_multisite() {
 	FILE_IN=$1
@@ -493,6 +503,9 @@ get_current_deployment() {
 				migrate_pvc ${CR_NAME} "cluster-master" "cluster-manager"
 				add_node_affinity ${updated_name}
 			fi
+
+      # Updates CR to use new version (v4)
+      convert_CR_version ${updated_name} ${CR}
 
 			# Validate the updated CR is valid
 			dry_run ${updated_name}
