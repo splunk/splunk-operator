@@ -1,0 +1,91 @@
+{{- if .Values.searchHeadCluster.enabled }}
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: {{ .Values.searchHeadCluster.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.searchHeadCluster.namespaceOverride }}
+{{- with .Values.searchHeadCluster.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.searchHeadCluster.replicaCount }}
+  replicas: {{ .Values.searchHeadCluster.replicaCount }}
+{{- end }}
+{{- with .Values.searchHeadCluster.appRepo }}
+  appRepo: 
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.clusterMaster.enabled }}
+  clusterMasterRef: 
+    name: {{ .Values.clusterMaster.name }}
+{{- end }}
+{{- if .Values.licenseMaster.enabled }}
+  licenseMasterRef:
+    name: {{ .Values.licenseMaster.name }}
+{{- end }}
+{{- if .Values.monitoringConsole.enabled }}
+  monitoringConsoleRef: 
+    name: {{ .Values.monitoringConsole.name }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.searchHeadCluster.volumes }}      
+  volumes:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.searchHeadCluster.licenseUrl }}
+  licenseUrl: {{ .Values.searchHeadCluster.licenseUrl }}
+{{- end }}
+{{- if .Values.searchHeadCluster.defaultsUrl }}
+  defaultsUrl: {{ .Values.searchHeadCluster.defaultsUrl }}
+{{- end }}
+{{- if .Values.searchHeadCluster.defaults }}
+  defaults: |-
+{{ toYaml .Values.searchHeadCluster.defaults | indent 4 }}
+{{- end }}
+{{- if .Values.searchHeadCluster.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.searchHeadCluster.defaultsUrlApps }}
+{{- end }}
+{{- with .Values.searchHeadCluster.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.searchHeadCluster.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.searchHeadCluster.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.searchHeadCluster.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.searchHeadCluster.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.searchHeadCluster.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.searchHeadCluster.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.searchHeadCluster.resources }}
+  resources:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.searchHeadCluster.serviceAccount }}
+  serviceAccount: {{ .Values.searchHeadCluster.serviceAccount }}
+{{- end }}
+{{- with .Values.searchHeadCluster.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.searchHeadCluster.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}
