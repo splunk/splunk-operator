@@ -1301,22 +1301,16 @@ func TestGetLivenessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec)
 	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
-	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
-	}
-
-	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 20)
-	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
-		t.Errorf("Failed to set the configured Liveness probe initial delay value")
 	}
 }
 
@@ -1331,22 +1325,16 @@ func TestGetReadinessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec)
 	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
-	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
-	}
-
-	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 20)
-	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
-		t.Errorf("Failed to set the configured Readiness probe initial delay value")
 	}
 }
 
