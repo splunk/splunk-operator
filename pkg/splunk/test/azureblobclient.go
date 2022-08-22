@@ -59,7 +59,7 @@ func (c *MockAzureBlobHandler) CheckAzureBlobRemoteDataListResponse(t *testing.T
 	}
 }
 
-//TODO : refine this method in next sprint as part of list and download azure rest apis
+//ListApps ... TODO : refine this method in next sprint as part of list and download azure rest apis
 func (mockClient MockAzureBlobClient) ListApps(ctx context.Context, bucketName string, listAppsOpts map[string]string) ([]byte, error) {
 
 	tmp, err := json.Marshal(mockClient.Objects)

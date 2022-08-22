@@ -38,13 +38,16 @@ type azureRestService interface {
 	DownloadApp(ctx context.Context, bucketName string, remoteFile string, localFile string, opts DownloadOptions)
 }
 
+// NewSession ... : TODO: placeholder for next sprint
 func NewSession(ctx context.Context, appAzureBlobEndPoint string, storageAccountName string, secretAccessKey string, config Config) {
 
 }
 
+// ListApps ... TODO: placeholder for next sprint
 func ListApps(ctx context.Context, bucketName string, opts ListBlobsOptions) {
 }
 
+// DownloadApp ... TODO: placeholder for next sprint
 func DownloadApp(ctx context.Context, bucketName string, remoteFile string, localFile string, opts DownloadOptions) {
 
 }

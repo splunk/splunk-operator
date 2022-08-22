@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// RemoteDataClients is a map of remote storage provider name to
+// RemoteDataClientsMap is a map of remote storage provider name to
 // their respective initialization procedures
 // Currently supported remote data clients are:
 // aws
@@ -30,7 +30,6 @@ import (
 // azure
 // in future we may have
 // googlestorage
-
 var RemoteDataClientsMap = make(map[string]GetRemoteDataClientWrapper)
 
 // RemoteObject struct contains contents returned as part of remote data client response
@@ -48,7 +47,7 @@ type RemoteObject struct {
 type RemoteDataListRequest struct {
 }
 
-// RemoteDataClientResponse struct contains list of RemoteObject objects
+// RemoteDataListResponse struct contains list of RemoteObject objects
 type RemoteDataListResponse struct {
 	Objects []*RemoteObject
 }
@@ -62,7 +61,7 @@ type RemoteDataDownloadRequest struct {
 	Etag       string // unique tag of the object
 }
 
-// RemoteDatClient is an interface to provide
+// RemoteDataClient is an interface to provide
 // listing and downloading of apps from remote data storage
 //
 type RemoteDataClient interface {

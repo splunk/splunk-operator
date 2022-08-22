@@ -28,23 +28,27 @@ import (
 // blank assignment to verify that AzureBlobClient implements BlobClient
 var _ RemoteDataClient = &AzureBlobClient{}
 
+// DownloadOptions ...Options for downloading the apps
 type DownloadOptions struct {
 	MaxChunkSize int // chunk size in gb
 	Timeout      int //timeout in seconds
 }
 
+// Config contains configuration for httpclient
 type Config struct {
 	MaxRetries int         // max number of retries for the rest calls
 	HTTPClient http.Client // the http client to use for calling the rest end points
 }
 
+// ListBlobsOptions contains options for listign apps
 type ListBlobsOptions struct {
 	Prefix      string // prefix of the files to list, useful to filter apps based on the path they belong to
 	MaxEnteries int    // total number of files to return in one call
 }
 
+// ListBlobsOutput contains XML output from the blob rest call
 type ListBlobsOutput struct {
-	BlobsFlatXml string
+	BlobsFlatXML string
 }
 
 // SplunkAzureBlobClient is an interface to AzureBlob  client
@@ -53,14 +57,18 @@ type SplunkAzureBlobClient interface {
 	DownloadApp(ctx context.Context, bucketName string, remoteFileName string, localFileName string, downloadOpts map[string]string) error
 }
 
+// SplunkAzureBlobClientTemp is temp struct to let the build successfull and
+// have a place holder for azureblobclient
 type SplunkAzureBlobClientTemp struct {
 	client http.Client
 }
 
+// ListApps to be revisited
 func (client *SplunkAzureBlobClientTemp) ListApps(ctx context.Context, bucketName string, listAppsOpts map[string]string) ([]byte, error) {
 	return nil, nil
 }
 
+// DownloadApp to be revsited
 func (client *SplunkAzureBlobClientTemp) DownloadApp(ctx context.Context, bucketName string, remoteFileName string, localFileName string, downloadOpts map[string]string) error {
 	return nil
 }
@@ -179,10 +187,10 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	return remoteDataListResponse, err
 }
 
-func extractResponse(listBlobsXml []byte) (RemoteDataListResponse, error) {
+func extractResponse(listBlobsXML []byte) (RemoteDataListResponse, error) {
 	remoteDataListResponse := RemoteDataListResponse{}
 
-	err := json.Unmarshal(listBlobsXml, &(remoteDataListResponse.Objects))
+	err := json.Unmarshal(listBlobsXML, &(remoteDataListResponse.Objects))
 	if err != nil {
 		return remoteDataListResponse, err
 	}

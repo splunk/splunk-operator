@@ -195,76 +195,6 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 	return remoteDataClient, nil
 }
 
-// GetRemoteStorageClientV2 returns the corresponding RemoteDataClient
-func GetRemoteStorageClientV2(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
-
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetRemoteStorageClient").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	remoteDataClient := splclient.SplunkRemoteDataClient{}
-	//use the provider name to get the corresponding function pointer
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	getClient := getClientWrapper.GetRemoteDataClientFuncPtr(ctx)
-
-	appSecretRef := vol.SecretRef
-	var accessKeyID string
-	var secretAccessKey string
-	if appSecretRef == "" {
-		// No secretRef means we should try to use the credentials available in the pod already via kube2iam or something similar
-		scopedLog.Info("No secrectRef provided.  Attempt to access remote storage client without access/secret keys")
-		accessKeyID = ""
-		secretAccessKey = ""
-	} else {
-		// Get credentials through the secretRef
-		RemoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), appSecretRef)
-		if err != nil {
-			return remoteDataClient, err
-		}
-
-		// Get access keys
-		accessKeyID = string(RemoteDataClientSecret.Data["s3_access_key"])
-		secretAccessKey = string(RemoteDataClientSecret.Data["s3_secret_key"])
-
-		// Do we need to handle if IAM_ROLE is set in the secret as well?
-		if accessKeyID == "" {
-			err = fmt.Errorf("accessKey missing")
-			return remoteDataClient, err
-		}
-		if secretAccessKey == "" {
-			err = fmt.Errorf("s3 Secret Key is missing")
-			return remoteDataClient, err
-		}
-	}
-
-	// Get the bucket name form the "path" field
-	bucket := strings.Split(vol.Path, "/")[0]
-
-	//Get the prefix from the "path" field
-	basePrefix := strings.TrimPrefix(vol.Path, bucket+"/")
-	// if vol.Path contains just the bucket name(i.e without ending "/"), TrimPrefix returns the vol.Path
-	// So, just reset the basePrefix to null
-	if basePrefix == bucket {
-		basePrefix = ""
-	}
-
-	// Join takes care of merging two paths and returns a clean result
-	// Ex. ("a/b" + "c"),  ("a/b/" + "c"),  ("a/b/" + "/c"),  ("a/b/" + "/c"), ("a/b//", + "c/././") ("a/b/../b", + "c/../c") all are joined as "a/b/c"
-	prefix := filepath.Join(basePrefix, location) + "/"
-
-	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
-
-	var err error
-
-	remoteDataClient.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
-
-	if err != nil {
-		scopedLog.Error(err, "Failed to get the S3 client")
-		return remoteDataClient, err
-	}
-
-	return remoteDataClient, nil
-}
-
 // ApplySplunkConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
 func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
 	var err error
@@ -789,7 +719,7 @@ func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcomm
 	return err
 }
 
-// RemoteClientManager is used to manage all the Remote data storage clients and their connections.
+// RemoteDataClientManager is used to manage all the Remote data storage clients and their connections.
 type RemoteDataClientManager struct {
 	client              splcommon.ControllerClient
 	cr                  splcommon.MetaObject
@@ -1413,7 +1343,7 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 	scopedLog := reqLogger.WithName("initAndCheckAppInfoStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	var err error
-	// Register the S3 clients specific to providers if not done already
+	// Register the RemoteData Clients specific to providers if not done already
 	// This is done to prevent the null pointer dereference in case when
 	// operator crashes and comes back up and the status of app context was updated
 	// to match the spec in the previous run.

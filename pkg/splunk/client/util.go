@@ -77,6 +77,9 @@ func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID st
 		Client:            s3SplunkClient,
 	}, nil
 }
+
+// NewMockAzureBlobClient will create a mock azureblob client
+// TODO next sprint for completeness
 func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
 	var s3SplunkClient SplunkAzureBlobClient
 	var err error
