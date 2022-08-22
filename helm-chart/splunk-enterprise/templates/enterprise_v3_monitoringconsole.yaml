@@ -1,0 +1,102 @@
+{{- if .Values.monitoringConsole.enabled }}
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  name: {{ .Values.monitoringConsole.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.monitoringConsole.namespaceOverride }}
+{{- with .Values.monitoringConsole.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- with .Values.monitoringConsole.appRepo }}
+  appRepo: 
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.existingClusterMaster }}
+  clusterMasterRef:
+    name: {{ .Values.existingClusterMaster.name }}
+  {{- if .Values.existingClusterMaster.namespace }}
+    namespace: {{ .Values.existingClusterMaster.namespace }}
+  {{- end }}
+{{- else if .Values.clusterMaster.enabled }}
+  clusterMasterRef:
+    name: {{ .Values.clusterMaster.name }}
+  {{- if .Values.clusterMaster.namespaceOverride }}
+    namespace: {{ .Values.clusterMaster.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingLicenseMaster }}
+  licenseMasterRef:
+    name: {{ .Values.existingLicenseMaster.name }}
+  {{- if .Values.existingLicenseMaster.namespace }}
+    namespace: {{ .Values.existingLicenseMaster.namespace }}
+  {{- end }}
+{{- else if .Values.licenseMaster.enabled }}
+  licenseMasterRef:
+    name: {{ .Values.licenseMaster.name }}
+  {{- if .Values.licenseMaster.namespaceOverride }}
+    namespace: {{ .Values.licenseMaster.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.monitoringConsole.volumes }}      
+  volumes:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.licenseUrl }}
+  licenseUrl: {{ .Values.monitoringConsole.licenseUrl }}
+{{- end }}
+{{- if .Values.monitoringConsole.defaultsUrl }}
+  defaultsUrl: {{ .Values.monitoringConsole.defaultsUrl }}
+{{- end }}
+{{- if .Values.monitoringConsole.defaults }}
+  defaults: |-
+{{ toYaml .Values.monitoringConsole.defaults | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.monitoringConsole.defaultsUrlApps }}
+{{- end }}
+{{- with .Values.monitoringConsole.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.monitoringConsole.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.monitoringConsole.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.monitoringConsole.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.monitoringConsole.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.monitoringConsole.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.monitoringConsole.resources }}
+  resources:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.serviceAccount }}
+  serviceAccount: {{ .Values.monitoringConsole.serviceAccount }}
+{{- end }}
+{{- with .Values.monitoringConsole.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.monitoringConsole.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}
