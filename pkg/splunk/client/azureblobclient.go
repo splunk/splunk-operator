@@ -40,7 +40,7 @@ type Config struct {
 	HTTPClient http.Client // the http client to use for calling the rest end points
 }
 
-// ListBlobsOptions contains options for listign apps
+// ListBlobsOptions contains options for listing the apps
 type ListBlobsOptions struct {
 	Prefix      string // prefix of the files to list, useful to filter apps based on the path they belong to
 	MaxEnteries int    // total number of files to return in one call
