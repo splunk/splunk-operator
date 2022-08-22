@@ -1,0 +1,37 @@
+name: Openshift Certification Workflow
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Version of Splunk Operator Release'
+        required: true
+      forked_repo_location:
+        description: 'Location of certified operator forked repository'
+        required: true
+jobs:
+  openshift-certification:
+    name: Openshift Certification Workflow
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Checkout Openshift Forked Repo
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ github.event.inputs.forked_repo_location }}
+        path: ./certified-operator
+        token: ${{ secrets.certfied_forked_secret }}
+    
+    - name: Copy bundle directory in splunk operator to forked repository
+      run: |
+       cp -r bundle/ ./certified-operator/operators/splunk-operator/${{ github.event.inputs.release_version }}/
+    
+    - name: Create Pull Request
+      working-directory: ./certified-operator
+      run: |
+        git add splunk-operator/*
+        git status
+        git commit -m "operator splunk-operator (${{ github.event.inputs.release_version }})"
+        git status // Add commit cmd for later
