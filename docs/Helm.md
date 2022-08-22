@@ -11,6 +11,8 @@ helm repo update
 
 The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Custom Resources.
 
+Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
+
 ## Splunk Operator deployments
 
 To install the operator:
@@ -53,6 +55,8 @@ helm install -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEAS
 helm install --set <KEY>=<VALUE> <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
 ```
 
+Read more about configuring values [here](https://helm.sh/docs/intro/using_helm/).
+
 ## Splunk Enterprise deployments
 
 The Splunk Enterprise chart allows you to install and configure Splunk custom resources.
@@ -67,14 +71,14 @@ To install a configured Enterprise deployment:
 helm install <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
 
-This chart automatically installs the Splunk Operator as a dependency.
+This chart installs the Splunk Operator as a dependency by default.
 
 If the operator is already installed then you will need to disable the dependency:
 ```
 helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
 
-To see all configurable values contained in the ```value.yaml``` file:
+To see all configurable values contained in the ```values.yaml``` file:
 ```
 helm show values splunk/splunk-enterprise
 ```
@@ -90,7 +94,7 @@ Install a Single Server Deployment release using the following command:
 ```
 helm install --set s1.enabled=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
-
+Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator]() and [splunk/splunk-enterprise]().
 
 
 
