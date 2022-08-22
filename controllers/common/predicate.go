@@ -196,6 +196,32 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
+			if _, ok := e.ObjectNew.(*enterpriseApi.ClusterManager); !ok {
+				return false
+			}
+
+			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			// if old and new data is the same, don't reconcile
+			newObj := e.ObjectNew.DeepCopyObject().(*enterpriseApi.ClusterManager)
+			oldObj := e.ObjectOld.DeepCopyObject().(*enterpriseApi.ClusterManager)
+			return !cmp.Equal(newObj.Status, oldObj.Status)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
+// ClusterMasterChangedPredicate .
+func ClusterMasterChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*enterpriseApiV3.ClusterMaster); !ok {
 				return false
 			}

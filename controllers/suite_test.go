@@ -98,12 +98,6 @@ var _ = BeforeSuite(func() {
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	//err = enterpriseApiV3.AddToScheme(scheme.Scheme)
-	//Expect(err).NotTo(HaveOccurred())
-	//
-	//err = enterpriseApiV3.AddToScheme(scheme.Scheme)
-	//Expect(err).NotTo(HaveOccurred())
-
 	//+kubebuilder:scaffold:scheme
 
 	// Create New Manager for controllers

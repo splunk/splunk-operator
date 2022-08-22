@@ -132,6 +132,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
 			common.ClusterManagerChangedPredicate(),
+			common.ClusterMasterChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
