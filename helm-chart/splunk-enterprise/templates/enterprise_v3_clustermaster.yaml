@@ -1,0 +1,106 @@
+{{- if .Values.clusterMaster.enabled }}
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: {{ .Values.clusterMaster.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.clusterMaster.namespaceOverride }}
+{{- with .Values.clusterMaster.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- with .Values.clusterMaster.appRepo }}
+  appRepo: 
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterMaster.smartstore }}
+  smartstore:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.existingLicenseMaster }}
+  licenseMasterRef:
+    name: {{ .Values.existingLicenseMaster.name }}
+  {{- if .Values.existingLicenseMaster.namespace }}
+    namespace: {{ .Values.existingLicenseMaster.namespace }}
+  {{- end }}
+{{- else if .Values.licenseMaster.enabled }}
+  licenseMasterRef:
+    name: {{ .Values.licenseMaster.name }}
+  {{- if .Values.licenseMaster.namespaceOverride }}
+    namespace: {{ .Values.licenseMaster.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingMonitoringConsole }}
+  monitoringConsoleRef:
+    name: {{ .Values.existingMonitoringConsole.name }}
+  {{- if .Values.existingMonitoringConsole.namespace }}
+    namespace: {{ .Values.existingMonitoringConsole.namespace }}
+  {{- end }}
+{{- else if .Values.monitoringConsole.enabled }}
+  monitoringConsoleRef:
+    name: {{ .Values.monitoringConsole.name }}
+  {{- if .Values.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterMaster.volumes }}      
+  volumes:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.clusterMaster.licenseUrl }}
+  licenseUrl: {{ .Values.clusterMaster.licenseUrl }}
+{{- end }}
+{{- if .Values.clusterMaster.defaultsUrl }}
+  defaultsUrl: {{ .Values.clusterMaster.defaultsUrl }}
+{{- end }}
+{{- if .Values.clusterMaster.defaults }}
+  defaults: |-
+{{ toYaml .Values.clusterMaster.defaults | indent 4 }}
+{{- end }}
+{{- if .Values.clusterMaster.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.clusterMaster.defaultsUrlApps }}
+{{- end }}
+{{- with .Values.clusterMaster.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.clusterMaster.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.clusterMaster.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.clusterMaster.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.clusterMaster.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.clusterMaster.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterMaster.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterMaster.resources }}
+  resources:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.clusterMaster.serviceAccount }}
+  serviceAccount: {{ .Values.clusterMaster.serviceAccount }}
+{{- end }}
+{{- with .Values.clusterMaster.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterMaster.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}

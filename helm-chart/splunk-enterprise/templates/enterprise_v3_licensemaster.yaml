@@ -1,0 +1,94 @@
+{{- if .Values.licenseMaster.enabled }}
+apiVersion: enterprise.splunk.com/v3
+kind: LicenseMaster
+metadata:
+  name: {{ .Values.licenseMaster.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.licenseMaster.namespaceOverride }}
+{{- with .Values.licenseMaster.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- with .Values.licenseMaster.appRepo }}
+  appRepo: 
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.existingClusterMaster }}
+  clusterMasterRef:
+    name: {{ .Values.existingClusterMaster.name }}
+  {{- if .Values.existingClusterMaster.namespace }}
+    namespace: {{ .Values.existingClusterMaster.namespace }}
+  {{- end }}
+{{- else if .Values.clusterMaster.enabled }}
+  clusterMasterRef:
+    name: {{ .Values.clusterMaster.name }}
+  {{- if .Values.clusterMaster.namespaceOverride }}
+    namespace: {{ .Values.clusterMaster.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingMonitoringConsole }}
+  monitoringConsoleRef:
+    name: {{ .Values.existingMonitoringConsole.name }}
+  {{- if .Values.existingMonitoringConsole.namespace }}
+    namespace: {{ .Values.existingMonitoringConsole.namespace }}
+  {{- end }}
+{{- else if .Values.monitoringConsole.enabled }}
+  monitoringConsoleRef:
+    name: {{ .Values.monitoringConsole.name }}
+  {{- if .Values.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.licenseMaster.volumes }}      
+  volumes:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.licenseMaster.licenseUrl }}
+  licenseUrl: {{ .Values.licenseMaster.licenseUrl }}
+{{- end }}
+{{- if .Values.licenseMaster.defaultsUrl }}
+  defaultsUrl: {{ .Values.licenseMaster.defaultsUrl }}
+{{- end }}
+{{- if .Values.licenseMaster.defaults }}
+  defaults: |-
+{{ toYaml .Values.licenseMaster.defaults | indent 4 }}
+{{- end }}
+{{- if .Values.licenseMaster.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.licenseMaster.defaultsUrlApps }}
+{{- end }}
+{{- with .Values.licenseMaster.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.licenseMaster.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.licenseMaster.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.licenseMaster.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.licenseMaster.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.licenseMaster.resources }}
+  resources:
+{{- toYaml . | nindent 4 }}
+{{- end }}
+{{- if .Values.licenseMaster.serviceAccount }}
+  serviceAccount: {{ .Values.licenseMaster.serviceAccount }}
+{{- end }}
+{{- with .Values.licenseMaster.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.licenseMaster.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}
