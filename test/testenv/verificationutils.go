@@ -26,7 +26,8 @@ import (
 
 	gomega "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -210,7 +211,7 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 // ClusterMasterReady verify Cluster Master Instance is in ready status
 func ClusterMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	// Ensure that the cluster-master goes to Ready phase
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApiV3.ClusterMaster{}
 	gomega.Eventually(func() enterpriseApi.Phase {
 		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
 		if err != nil {
@@ -354,7 +355,7 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 
 // LicenseMasterReady verify LM is in ready status and does not flip flop
 func LicenseMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	LicenseMaster := &enterpriseApi.LicenseMaster{}
+	LicenseMaster := &enterpriseApiV3.LicenseMaster{}
 
 	testenvInstance.Log.Info("Verifying License Master becomes READY")
 	gomega.Eventually(func() enterpriseApi.Phase {
@@ -587,7 +588,7 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
-		case *enterpriseApi.LicenseMaster:
+		case *enterpriseApiV3.LicenseMaster:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
@@ -602,7 +603,7 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
-		case *enterpriseApi.ClusterMaster:
+		case *enterpriseApiV3.ClusterMaster:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
@@ -677,7 +678,7 @@ func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, test
 
 // VerifyClusterMasterPhase verify phase of cluster manager
 func VerifyClusterMasterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase) {
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApiV3.ClusterMaster{}
 	gomega.Eventually(func() enterpriseApi.Phase {
 		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
 		if err != nil {

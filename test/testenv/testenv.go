@@ -18,6 +18,8 @@ package testenv
 import (
 	"flag"
 	"fmt"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"time"
 
@@ -35,8 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 const (
@@ -236,6 +236,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 
 	// Scheme
 	enterpriseApi.SchemeBuilder.AddToScheme(scheme.Scheme)
+	enterpriseApiV3.SchemeBuilder.AddToScheme(scheme.Scheme)
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()

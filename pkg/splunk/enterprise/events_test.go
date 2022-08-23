@@ -17,9 +17,9 @@ package enterprise
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 

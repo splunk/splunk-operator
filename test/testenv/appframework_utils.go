@@ -11,7 +11,8 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -284,7 +285,7 @@ func GetAppDeploymentInfoClusterManager(ctx context.Context, deployment *Deploym
 
 // GetAppDeploymentInfoClusterMaster returns AppDeploymentInfo for given Cluster Manager, appSourceName and appName
 func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApiV3.ClusterMaster{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, cm)
 	if err != nil {
@@ -509,7 +510,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
 	case "ClusterMaster":
-		cr := &enterpriseApi.ClusterMaster{}
+		cr := &enterpriseApiV3.ClusterMaster{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
@@ -525,7 +526,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
 	case "LicenseMaster":
-		cr := &enterpriseApi.LicenseMaster{}
+		cr := &enterpriseApiV3.LicenseMaster{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)

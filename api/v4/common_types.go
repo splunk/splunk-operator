@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package v4
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +22,7 @@ import (
 const (
 
 	// APIVersion is a string representation of this API
-	APIVersion = "enterprise.splunk.com/v3"
+	APIVersion = "enterprise.splunk.com/v4"
 
 	// TotalWorker concurrent workers to reconcile
 	TotalWorker int = 15

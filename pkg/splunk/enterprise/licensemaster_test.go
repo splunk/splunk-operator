@@ -34,7 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -72,7 +73,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[8], funcCalls[9], funcCalls[10]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
-	current := enterpriseApi.LicenseMaster{
+	current := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},
@@ -85,7 +86,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApi.LicenseMaster))
+		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApiV3.LicenseMaster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseMaster", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -95,7 +96,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApi.LicenseMaster))
+		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApiV3.LicenseMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -103,7 +104,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 
 func TestGetLicenseMasterStatefulSet(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApiV3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -160,7 +161,7 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApiV3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -168,7 +169,7 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
@@ -228,12 +229,12 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApiV3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
@@ -405,12 +406,12 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseMaster{
+	lm := enterpriseApiV3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
@@ -561,7 +562,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 func TestApplyLicenseMasterDeletion(t *testing.T) {
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseMaster{
+	lm := enterpriseApiV3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -569,7 +570,7 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 0,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -656,7 +657,7 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 
 func TestLicenseMasterList(t *testing.T) {
 	ctx := context.TODO()
-	lm := enterpriseApi.LicenseMaster{}
+	lm := enterpriseApiV3.LicenseMaster{}
 
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
@@ -671,7 +672,7 @@ func TestLicenseMasterList(t *testing.T) {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added standalone to the list yet")
 	}
 
-	lmList := &enterpriseApi.LicenseMasterList{}
+	lmList := &enterpriseApiV3.LicenseMasterList{}
 	lmList.Items = append(lmList.Items, lm)
 
 	client.ListObj = lmList
@@ -763,7 +764,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// Create App framework volume
@@ -974,12 +975,12 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// create licensemaster custom resource
-	licensemaster := &enterpriseApi.LicenseMaster{
+	licensemaster := &enterpriseApiV3.LicenseMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",

@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"encoding/json"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -53,8 +53,8 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
-		{MetaName: "*v3.LicenseManager-test-stack1"},
-		{MetaName: "*v3.LicenseManager-test-stack1"},
+		{MetaName: "*v4.LicenseManager-test-stack1"},
+		{MetaName: "*v4.LicenseManager-test-stack1"},
 	}
 
 	labels := map[string]string{

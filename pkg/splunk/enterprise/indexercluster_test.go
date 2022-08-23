@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -52,28 +52,28 @@ func TestApplyIndexerClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v3.ClusterManager-test-manager1"},
+		{MetaName: "*v4.ClusterManager-test-manager1"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
-		{MetaName: "*v3.ClusterManager-test-manager1"},
-		{MetaName: "*v3.IndexerCluster-test-stack1"},
-		{MetaName: "*v3.IndexerCluster-test-stack1"},
+		{MetaName: "*v4.ClusterManager-test-manager1"},
+		{MetaName: "*v4.IndexerCluster-test-stack1"},
+		{MetaName: "*v4.IndexerCluster-test-stack1"},
 	}
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v3.ClusterManager-test-manager1"},
+		{MetaName: "*v4.ClusterManager-test-manager1"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
-		{MetaName: "*v3.ClusterManager-test-manager1"},
-		{MetaName: "*v3.IndexerCluster-test-stack1"},
-		{MetaName: "*v3.IndexerCluster-test-stack1"},
+		{MetaName: "*v4.ClusterManager-test-manager1"},
+		{MetaName: "*v4.IndexerCluster-test-stack1"},
+		{MetaName: "*v4.IndexerCluster-test-stack1"},
 	}
 
 	labels := map[string]string{

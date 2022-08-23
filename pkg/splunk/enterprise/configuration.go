@@ -30,7 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -829,7 +830,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Namespace: cr.GetNamespace(),
 				Name:      spec.ClusterMasterRef.Name,
 			}
-			managerIdxCluster := &enterpriseApi.ClusterMaster{}
+			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
 				scopedLog.Error(err, "Unable to get ClusterManager")

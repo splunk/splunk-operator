@@ -22,7 +22,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -304,7 +305,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// #################  Update Monitoring Console In Cluster Master CR ##################################
 
 			mcTwoName := deployment.GetName() + "-two"
-			cm := &enterpriseApi.ClusterMaster{}
+			cm := &enterpriseApiV3.ClusterMaster{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 
@@ -513,7 +514,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// ############ CLUSTER MANAGER MC RECONFIG #################################
 			mcTwoName := deployment.GetName() + "-two"
-			cm := &enterpriseApi.ClusterMaster{}
+			cm := &enterpriseApiV3.ClusterMaster{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Failed to get instance of Cluster Manager")
 

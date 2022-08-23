@@ -69,6 +69,10 @@ test/clustermaster/cmaster_appframework_test.go
 test/clustermaster/cmaster_appframework_test.go
 test/licensemaster/lmaster_m4_test.go
 tools/k8s_collectors/k8s-splunk-collector.sh
+api/v4/clustermanager_types.go
+api/v4/indexercluster_types.go
+api/v4/zz_generated.deepcopy.go
+api/v4/common_types.go
 #Below should be reviewed once CRDs have no bias lang
 tools/bias_lang_migration.sh
 go.sum
