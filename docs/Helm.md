@@ -62,6 +62,8 @@ TEST SUITE: None
 NAME                                                  READY   STATUS    RESTARTS   AGE
 splunk-operator-controller-manager-545cccf79f-9xpll   2/2     Running   0          2m14s
 ```
+The ```helm list``` command can be used to retrieve all deployed releases.
+
 By default, the Splunk Operator has cluster-wide access. Let's upgrade the ```splunk-operator-test``` release by revoking cluster-wide access:
 ```
 helm upgrade --set splunkOperator.clusterWideAccess=false splunk-operator-test splunk/splunk-operator -n splunk-operator
@@ -142,7 +144,7 @@ helm uninstall splunk-enterprise-test -n splunk-operator
 ```
 release "splunk-enterprise-test" uninstalled
 ```
-```uninstall``` terminates all resources deployed by Helm including Persistent Volume Claims created for Splunk Enterprise resources.
+```helm uninstall``` terminates all resources deployed by Helm including Persistent Volume Claims created for Splunk Enterprise resources.
 
 ## Splunk Validated Architecture deployments
 
