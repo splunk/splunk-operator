@@ -128,6 +128,11 @@ $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
 splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ```
+
+### Installation using Helm charts
+
+Installing the Splunk Operator using Helm allows you to quickly deploy the operator and Splunk Enterprise in a Kubernetes cluster. The operator and custom resources are easily configurable allowing for advanced installations including support for Splunk Validated Architectures. Helm also provides a number of features to manage the operator and custom resource lifecycle. The [Installation using Helm](Helm.md) page will walk you through installing and configuring Splunk Enterprise deployments using Helm charts.
+
 ## Upgrading the Splunk Operator
 
 For information on upgrading the Splunk Operator, see the [How to upgrade Splunk Operator and Splunk Enterprise Deployments](SplunkOperatorUpgrade.md) page.
