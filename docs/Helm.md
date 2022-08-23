@@ -15,7 +15,7 @@ Helm provides a long list of commands to manage your deployment, we'll be going 
 
 ## Splunk Operator deployments
 
-To install the operator:
+To install the Splunk Operator:
 
 ```
 helm install <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
@@ -59,14 +59,14 @@ Read more about configuring values [here](https://helm.sh/docs/intro/using_helm/
 
 ## Splunk Enterprise deployments
 
-The Splunk Enterprise chart allows you to install and configure Splunk custom resources.
+The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources.
 
 First build the Splunk Operator chart as a dependency:
 ```
 helm dependency build splunk/splunk-enterprise
 ```
 
-To install a configured Enterprise deployment:
+To install a configured Splunk Enterprise deployment:
 ```
 helm install <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
@@ -90,11 +90,11 @@ The Splunk Enterprise chart has support for three Splunk Validated Architectures
 - [Distributed Clustered Deployment + SHC - Single Site (C3)](https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=14)
 - [Distributed Clustered Deployment + SHC - Multi-Site (M4)](https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=20)
 
-Install a Single Server Deployment release using the following command:
+Install a Standalone deployment using the following command:
 ```
 helm install --set s1.enabled=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
-Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator]() and [splunk/splunk-enterprise]().
+Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-operator/values.yaml) and [splunk/splunk-enterprise](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-enterprise/values.yaml).
 
 
 
