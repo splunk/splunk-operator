@@ -43,7 +43,6 @@ type RemoteObject struct {
 }
 
 // RemoteDataListRequest struct contains inputs specifying storage account
-//
 type RemoteDataListRequest struct {
 }
 
@@ -53,23 +52,22 @@ type RemoteDataListResponse struct {
 }
 
 // RemoteDataDownloadRequest struct specifies the remote data file path,
-// local file where the downloaded data should be written as well as
-// the authontication data if available
+// local file path where the downloaded data should be written as well as
+// the etag data if available
 type RemoteDataDownloadRequest struct {
-	LocalFile  string // file name where the remote data will be written
+	LocalFile  string // file path where the remote data will be written
 	RemoteFile string // file name with path relative to the bucket
 	Etag       string // unique tag of the object
 }
 
 // RemoteDataClient is an interface to provide
-// listing and downloading of apps from remote data storage
-//
+// listing and downloading of app packages from remote data storage
 type RemoteDataClient interface {
 
-	// Get the list of Apps
+	// Get the list of App packages
 	GetAppsList(context.Context) (RemoteDataListResponse, error)
 
-	// Download a given app as per the inputs provided in the `RemoteDataClientRequest`
+	// Download a given app package as per the inputs provided in the `RemoteDataClientRequest`
 	DownloadApp(context.Context, RemoteDataDownloadRequest) (bool /* return pass/fail */, error)
 }
 
