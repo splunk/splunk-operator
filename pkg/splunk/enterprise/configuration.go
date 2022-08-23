@@ -325,12 +325,12 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		},
 	}
 
-	err := validatesLivenessProbe(ctx, cr, spec.LivenessProbe)
+	err := validateLivenessProbe(ctx, cr, spec.LivenessProbe)
 	if err != nil {
 		return err
 	}
 
-	err = validatesReadinessProbe(ctx, cr, spec.ReadinessProbe)
+	err = validateReadinessProbe(ctx, cr, spec.ReadinessProbe)
 	if err != nil {
 		return err
 	}
@@ -881,6 +881,7 @@ func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceTyp
 	return readinessProbe
 }
 
+// getProbeWithConfigUpdates Validates probe values and updates them
 func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *corev1.Probe, configuredDelay int32) *corev1.Probe {
 	if configuredProbe != nil {
 		// Always take a separate probe, instead of referring the memory address from spec.
@@ -1648,25 +1649,25 @@ maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
 // validateProbe validates a generic probe values
 func validateProbe(probe *corev1.Probe) error {
 	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.SuccessThreshold < 0 || probe.FailureThreshold < 0 {
-		return fmt.Errorf("Negative values are not not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, SuccessThreshold = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.SuccessThreshold, probe.FailureThreshold)
+		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, SuccessThreshold = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.SuccessThreshold, probe.FailureThreshold)
 	}
 
 	return nil
 }
 
-// validatesLivenessProbe validates the liveness probe config
-func validatesLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *corev1.Probe) error {
+// validateLivenessProbe validates the liveness probe config
+func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *corev1.Probe) error {
 	var err error
 	if livenessProbe == nil {
 		return err
 	}
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validatesLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	err = validateProbe(livenessProbe)
 	if err != nil {
-		return fmt.Errorf("Invalid Liveness Probe config. Reason: %s", err)
+		return fmt.Errorf("invalid Liveness Probe config. Reason: %s", err)
 	}
 
 	if livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
@@ -1684,18 +1685,18 @@ func validatesLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livene
 	return err
 }
 
-// validatesReadinessProbe validates the Readiness probe config
-func validatesReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *corev1.Probe) error {
+// validateReadinessProbe validates the Readiness probe config
+func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *corev1.Probe) error {
 	var err error
 	if readinessProbe == nil {
 		return err
 	}
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("validatesReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	err = validateProbe(readinessProbe)
 	if err != nil {
-		return fmt.Errorf("Invalid Readiness Probe config. Reason: %s", err)
+		return fmt.Errorf("invalid Readiness Probe config. Reason: %s", err)
 	}
 
 	if readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
