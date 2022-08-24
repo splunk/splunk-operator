@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"strings"
@@ -27,7 +28,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 

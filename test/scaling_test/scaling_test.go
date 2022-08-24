@@ -18,13 +18,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -36,7 +36,7 @@ var _ = Describe("Scaling test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -60,7 +60,7 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("scaling_test, integration: Can Scale Up and Scale Down Standalone CR", func() {
+		It("masterscaling, integration: Can Scale Up and Scale Down Standalone CR", func() {
 
 			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
@@ -107,15 +107,15 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("scaling_test, integration: SHC and IDXC can be scaled up and data is searchable", func() {
+		It("masterscaling, integration: SHC and IDXC can be scaled up and data is searchable", func() {
 
 			defaultSHReplicas := 3
 			defaultIndexerReplicas := 3
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), defaultIndexerReplicas, true, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -162,7 +162,7 @@ var _ = Describe("Scaling test", func() {
 			// Ensure Indexer cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify New Indexer On Cluster Manager
+			// Verify New Indexer On Cluster Master
 			indexerName := fmt.Sprintf(testenv.IndexerPod, deployment.GetName(), scaledIndexerReplicas-1)
 			testcaseEnvInst.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))
@@ -181,7 +181,7 @@ var _ = Describe("Scaling test", func() {
 
 			time.Sleep(60 * time.Second)
 
-			// Verify New SearchHead is added to Cluster Manager
+			// Verify New SearchHead is added to Cluster Master
 			searchHeadName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), scaledSHReplicas-1)
 			testcaseEnvInst.Log.Info("Checking for Search Head On CM", "Search Head Name", searchHeadName)
 			Expect(testenv.CheckSearchHeadOnCM(ctx, deployment, searchHeadName)).To(Equal(true))
@@ -256,15 +256,15 @@ var _ = Describe("Scaling test", func() {
 	})
 
 	Context("Multisite Indexer Cluster (M4 - Multisite indexer Cluster, search head cluster)", func() {
-		It("scaling_test, integration: Multisite IDXC can be scaled up and data is searchable", func() {
+		It("masterscaling, integration: Multisite IDXC can be scaled up and data is searchable", func() {
 
 			defaultIndexerReplicas := 1
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy search head cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure indexers go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
@@ -310,7 +310,7 @@ var _ = Describe("Scaling test", func() {
 			testenv.CreateMockLogfile(logFile, 2000)
 			testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
 
-			// Verify New Indexer On Cluster Manager
+			// Verify New Indexer On Cluster Master
 			indexerName := podName
 			testcaseEnvInst.Log.Info("Checking for Indexer On CM", "Indexer Name", indexerName)
 			Expect(testenv.CheckIndexerOnCM(ctx, deployment, indexerName)).To(Equal(true))

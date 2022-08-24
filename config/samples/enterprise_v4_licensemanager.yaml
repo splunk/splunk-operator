@@ -1,0 +1,6 @@
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: licensemanager-sample
+spec:
+  # Add fields here

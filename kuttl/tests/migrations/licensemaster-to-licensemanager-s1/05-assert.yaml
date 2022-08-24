@@ -1,0 +1,31 @@
+# assert for LinceseManager to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: lc-test
+status:
+  phase: Ready
+
+---
+# assert for Standalone to use licenseManagerRef
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: st-test
+status:
+  phase: Ready
+spec:
+  licenseManagerRef:
+    name: lc-test
+
+---
+# assert for MC to use licenseManagerRef
+apiVersion: enterprise.splunk.com/v4
+kind: MonitoringConsole
+metadata:
+  name: mc-test
+status:
+  phase: Ready
+spec:
+  licenseManagerRef:
+    name: lc-test

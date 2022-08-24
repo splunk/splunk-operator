@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
-  name: clustermaster-sample
+  name: clustermanager-sample
   finalizers:  
   - "enterprise.splunk.com/delete-pvc" 
 spec: {}
