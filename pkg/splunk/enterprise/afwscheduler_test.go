@@ -1349,7 +1349,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client(ctx, "aws")
+	splclient.RegisterRemoteDataClient(ctx, "aws")
 
 	for index, appSrc := range cr.Spec.AppFrameworkConfig.AppSources {
 
@@ -1370,18 +1370,18 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		}
 		defer os.Remove(appLoc)
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.S3Clients["aws"]
-		getClientWrapper.SetS3ClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+		getClientWrapper := splclient.RemoteDataClientsMap["aws"]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
 
-		initFunc := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-		s3ClientMgr, err := getS3ClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
+		remoteDataClientMgr, err := getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
 		if err != nil {
-			t.Errorf("unable to get S3ClientMgr instance")
+			t.Errorf("unable to get RemoteDataClientMgr instance")
 		}
 
-		s3ClientMgr.initFn = initFunc
+		remoteDataClientMgr.initFn = initFunc
 
 		pplnPhase := &PipelinePhase{}
 		worker := &PipelineWorker{
@@ -1395,7 +1395,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		var downloadWorkersRunPool = make(chan struct{}, 1)
 		downloadWorkersRunPool <- struct{}{}
 		worker.waiter.Add(1)
-		go worker.download(ctx, pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
+		go worker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
 		worker.waiter.Wait()
 	}
 
@@ -1470,7 +1470,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		}
 	}
 
-	s3ClientMgr := &S3ClientManager{}
+	remoteDataClientMgr := &RemoteDataClientManager{}
 
 	// Test1. Invalid appSrcName
 	worker := &PipelineWorker{
@@ -1486,7 +1486,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	var downloadWorkersRunPool = make(chan struct{}, 1)
 	downloadWorkersRunPool <- struct{}{}
 	worker.waiter.Add(1)
-	go worker.download(ctx, pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(ctx, pplnPhase, *remoteDataClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 
 	// we should return error here
@@ -1512,23 +1512,23 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client(ctx, "aws")
-	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.S3Clients["aws"]
-	getClientWrapper.SetS3ClientFuncPtr(ctx, "ctx, aws", splclient.NewMockAWSS3Client)
+	splclient.RegisterRemoteDataClient(ctx, "aws")
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
 
-	initFunc := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+	initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-	s3ClientMgr, err = getS3ClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
+	remoteDataClientMgr, err = getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
 	if err != nil {
-		t.Errorf("unable to get S3ClientMgr instance")
+		t.Errorf("unable to get RemoteDataClientMgr instance")
 	}
 
-	s3ClientMgr.initFn = initFunc
+	remoteDataClientMgr.initFn = initFunc
 
 	worker.waiter.Add(1)
 	downloadWorkersRunPool <- struct{}{}
-	go worker.download(ctx, pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(ctx, pplnPhase, *remoteDataClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 	// we should return error here
 	if ok, _ := areAppsDownloadedSuccessfully(appDeployInfoList); ok {
