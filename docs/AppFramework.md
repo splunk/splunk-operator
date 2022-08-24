@@ -338,7 +338,7 @@ Here is a typical App framework configuration in a Custom Resource definition:
   * The cluster scope is only supported on CRs that manage cluster-wide app deployment.
   
     | CRD Type          | Scope support                          | App Framework support |
--------------------| :---------------- | :------------------------------------- | :-------------------- |
+    | :---------------- | :------------------------------------- | :-------------------- |
     | ClusterManager    | cluster, clusterWithPreConfig,  local  | Yes                   |
     | SearchHeadCluster | cluster, clusterWithPreConfig, local   | Yes                   |
     | Standalone        | local                                  | Yes                   |

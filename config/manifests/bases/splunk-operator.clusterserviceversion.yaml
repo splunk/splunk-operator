@@ -24,7 +24,7 @@ spec:
       displayName: Cluster Manager
       kind: ClusterManager
       name: clustermanagers.enterprise.splunk.com
-      version: v3
+      version: v4
     - description: ClusterMaster is the Schema for the cluster manager API
       displayName: Cluster Master
       kind: ClusterMaster
@@ -39,7 +39,7 @@ spec:
       displayName: License Manager
       kind: LicenseManager
       name: licensemanagers.enterprise.splunk.com
-      version: v3
+      version: v4
     - description: LicenseMaster is the Schema for a Splunk Enterprise license master.
       displayName: License Master
       kind: LicenseMaster
