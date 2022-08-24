@@ -733,10 +733,10 @@ type RemoteDataClientManager struct {
 }
 
 // GetAppsList gets the apps list
-func (s3mgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splclient.RemoteDataListResponse, error) {
+func (rdcMgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splclient.RemoteDataListResponse, error) {
 	var remoteDataListResponse splclient.RemoteDataListResponse
 
-	c, err := s3mgr.getRemoteDataClient(ctx, s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	c, err := rdcMgr.getRemoteDataClient(ctx, rdcMgr.client, rdcMgr.cr, rdcMgr.appFrameworkRef, rdcMgr.vol, rdcMgr.location, rdcMgr.initFn)
 	if err != nil {
 		return remoteDataListResponse, err
 	}
@@ -749,9 +749,9 @@ func (s3mgr *RemoteDataClientManager) GetAppsList(ctx context.Context) (splclien
 }
 
 // DownloadApp downloads the app from remote storage
-func (s3mgr *RemoteDataClientManager) DownloadApp(ctx context.Context, remoteFile string, localFile string, etag string) error {
+func (rdcMgr *RemoteDataClientManager) DownloadApp(ctx context.Context, remoteFile string, localFile string, etag string) error {
 
-	c, err := s3mgr.getRemoteDataClient(ctx, s3mgr.client, s3mgr.cr, s3mgr.appFrameworkRef, s3mgr.vol, s3mgr.location, s3mgr.initFn)
+	c, err := rdcMgr.getRemoteDataClient(ctx, rdcMgr.client, rdcMgr.cr, rdcMgr.appFrameworkRef, rdcMgr.vol, rdcMgr.location, rdcMgr.initFn)
 	if err != nil {
 		return err
 	}
