@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// blank assignment to verify that MinioClient implements S3Client
+// blank assignment to verify that MinioClient implements RemoteDataClient
 var _ RemoteDataClient = &MinioClient{}
 
 // SplunkMinioClient is an interface to Minio S3 client

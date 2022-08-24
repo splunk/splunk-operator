@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// blank assignment to verify that AWSS3Client implements S3Client
+// blank assignment to verify that AWSS3Client implements RemoteDataClient
 var _ RemoteDataClient = &AWSS3Client{}
 
 // SplunkAWSS3Client is an interface to AWS S3 client

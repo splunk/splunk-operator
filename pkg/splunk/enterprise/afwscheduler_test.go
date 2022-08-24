@@ -1370,7 +1370,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		}
 		defer os.Remove(appLoc)
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.RemoteDataClientsMap["aws"]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
 
@@ -1513,7 +1513,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
-	// Update the GetS3Client with our mock call which initializes mock AWS client
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
 

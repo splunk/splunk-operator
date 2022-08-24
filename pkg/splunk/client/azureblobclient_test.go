@@ -163,7 +163,7 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock Azure Blob client
+		// Update the GetRemoteDataClient with our mock call which initializes mock Azure Blob client
 		getClientWrapper := RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
@@ -265,7 +265,7 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock Azure Blob client
+	// Update the GetRemoteDataClient with our mock call which initializes mock Azure Blob client
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
@@ -368,7 +368,7 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock Azure Blob client
+		// Update the GetRemoteDataClient with our mock call which initializes mock Azure Blob client
 		getClientWrapper := RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
@@ -461,7 +461,7 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock Azure Blob client
+	// Update the GetRemoteDataClient with our mock call which initializes mock Azure Blob client
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 

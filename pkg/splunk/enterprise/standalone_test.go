@@ -639,7 +639,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
@@ -758,7 +758,7 @@ func TestStandaloneGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock AWS client
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
