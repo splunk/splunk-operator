@@ -184,6 +184,12 @@ type CommonSplunkSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
 
+	// LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
