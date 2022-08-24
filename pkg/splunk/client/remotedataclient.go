@@ -123,6 +123,6 @@ func RegisterRemoteDataClient(ctx context.Context, provider string) {
 	case "azure":
 		RegisterAzureBlobClient()
 	default:
-		scopedLog.Error(nil, "invalid provider specified", "provider", provider)
+		scopedLog.Error(nil, "Invalid provider specified", "provider", provider)
 	}
 }
