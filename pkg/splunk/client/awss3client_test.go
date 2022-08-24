@@ -282,11 +282,11 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	s3Resp, err := awsClient.GetAppsList(ctx)
+	remoteDataClientResponse, err := awsClient.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
 	}
-	if len(s3Resp.Objects) != 0 {
+	if len(remoteDataClientResponse.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty list in response")
 	}
 

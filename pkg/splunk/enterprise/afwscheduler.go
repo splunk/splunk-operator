@@ -429,7 +429,7 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Co
 }
 
 // download API will do the actual work of downloading apps from remote storage
-func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, s3ClientMgr RemoteDataClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
+func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, remoteDataClientMgr RemoteDataClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
 
 	defer func() {
 		downloadWorker.isActive = false
@@ -458,7 +458,7 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 	}
 
 	// download the app from remote storage
-	err = s3ClientMgr.DownloadApp(ctx, remoteFile, localFile, appDeployInfo.ObjectHash)
+	err = remoteDataClientMgr.DownloadApp(ctx, remoteFile, localFile, appDeployInfo.ObjectHash)
 	if err != nil {
 		scopedLog.Error(err, "unable to download app", "appName", appName)
 

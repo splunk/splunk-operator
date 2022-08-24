@@ -1284,7 +1284,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	err = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, s3ClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}

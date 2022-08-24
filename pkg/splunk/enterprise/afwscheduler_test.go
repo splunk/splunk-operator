@@ -1376,12 +1376,12 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 
 		initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-		s3ClientMgr, err := getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
+		remoteDataClientMgr, err := getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, appSrc.Name)
 		if err != nil {
-			t.Errorf("unable to get S3ClientMgr instance")
+			t.Errorf("unable to get RemoteDataClientMgr instance")
 		}
 
-		s3ClientMgr.initFn = initFunc
+		remoteDataClientMgr.initFn = initFunc
 
 		pplnPhase := &PipelinePhase{}
 		worker := &PipelineWorker{
@@ -1395,7 +1395,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 		var downloadWorkersRunPool = make(chan struct{}, 1)
 		downloadWorkersRunPool <- struct{}{}
 		worker.waiter.Add(1)
-		go worker.download(ctx, pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
+		go worker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
 		worker.waiter.Wait()
 	}
 
@@ -1470,7 +1470,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 		}
 	}
 
-	s3ClientMgr := &RemoteDataClientManager{}
+	remoteDataClientMgr := &RemoteDataClientManager{}
 
 	// Test1. Invalid appSrcName
 	worker := &PipelineWorker{
@@ -1486,7 +1486,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	var downloadWorkersRunPool = make(chan struct{}, 1)
 	downloadWorkersRunPool <- struct{}{}
 	worker.waiter.Add(1)
-	go worker.download(ctx, pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(ctx, pplnPhase, *remoteDataClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 
 	// we should return error here
@@ -1519,16 +1519,16 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 
 	initFunc := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-	s3ClientMgr, err = getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
+	remoteDataClientMgr, err = getRemoteDataClientMgr(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, "appSrc1")
 	if err != nil {
-		t.Errorf("unable to get S3ClientMgr instance")
+		t.Errorf("unable to get RemoteDataClientMgr instance")
 	}
 
-	s3ClientMgr.initFn = initFunc
+	remoteDataClientMgr.initFn = initFunc
 
 	worker.waiter.Add(1)
 	downloadWorkersRunPool <- struct{}{}
-	go worker.download(ctx, pplnPhase, *s3ClientMgr, "", downloadWorkersRunPool)
+	go worker.download(ctx, pplnPhase, *remoteDataClientMgr, "", downloadWorkersRunPool)
 	worker.waiter.Wait()
 	// we should return error here
 	if ok, _ := areAppsDownloadedSuccessfully(appDeployInfoList); ok {

@@ -359,7 +359,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
-		s3ClientMgr := &RemoteDataClientManager{client: client,
+		remoteDataClientMgr := &RemoteDataClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
 			location: appSource.Location,
@@ -374,7 +374,7 @@ func TestLicensemanagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		}
 
-		RemoteDataListResponse, err := s3ClientMgr.GetAppsList(ctx)
+		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -479,7 +479,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
-	s3ClientMgr := &RemoteDataClientManager{
+	remoteDataClientMgr := &RemoteDataClientManager{
 		client:          client,
 		cr:              &lm,
 		appFrameworkRef: &lm.Spec.AppFrameworkConfig,
@@ -498,7 +498,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		},
 	}
 
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
@@ -514,21 +514,21 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
@@ -536,24 +536,24 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create S3 secret
 	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
 
-	// This should return an error as we have initialized initFn for s3ClientMgr
+	// This should return an error as we have initialized initFn for remoteDataClientMgr
 	// to return a nil client.
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	s3ClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	s3Resp, err := s3ClientMgr.GetAppsList(ctx)
+	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
 	}
-	if len(s3Resp.Objects) != 0 {
+	if len(remoteDataClientResponse.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
 	}
 }
@@ -755,7 +755,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	err = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, s3ClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}

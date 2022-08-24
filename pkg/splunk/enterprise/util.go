@@ -779,7 +779,7 @@ var GetAppsList = func(ctx context.Context, RemoteDataClientMgr RemoteDataClient
 func GetAppListFromRemoteBucket(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (map[string]splclient.RemoteDataListResponse, error) {
 
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("GetAppListFroGetAppListFromRemoteBucketS3Bucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("GetAppListFromRemoteBucket").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	sourceToAppListMap := make(map[string]splclient.RemoteDataListResponse)
 

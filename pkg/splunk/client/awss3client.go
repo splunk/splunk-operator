@@ -190,7 +190,7 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 	scopedLog := reqLogger.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
-	s3Resp := RemoteDataListResponse{}
+	remoteDataClientResponse := RemoteDataListResponse{}
 
 	options := &s3.ListObjectsV2Input{
 		Bucket:     aws.String(awsclient.BucketName),
@@ -204,27 +204,27 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 	resp, err := client.ListObjectsV2(options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
+		return remoteDataClientResponse, err
 	}
 
 	if resp.Contents == nil {
 		scopedLog.Info("empty objects list in bucket. No apps to install", "bucketName", awsclient.BucketName)
-		return s3Resp, nil
+		return remoteDataClientResponse, nil
 	}
 
 	tmp, err := json.Marshal(resp.Contents)
 	if err != nil {
 		scopedLog.Error(err, "Failed to marshal s3 response", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
+		return remoteDataClientResponse, err
 	}
 
-	err = json.Unmarshal(tmp, &(s3Resp.Objects))
+	err = json.Unmarshal(tmp, &(remoteDataClientResponse.Objects))
 	if err != nil {
 		scopedLog.Error(err, "Failed to unmarshal s3 response", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
+		return remoteDataClientResponse, err
 	}
 
-	return s3Resp, nil
+	return remoteDataClientResponse, nil
 }
 
 // DownloadApp downloads the app from remote storage to local file system

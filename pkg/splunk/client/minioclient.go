@@ -132,7 +132,7 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 	scopedLog := reqLogger.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
-	s3Resp := RemoteDataListResponse{}
+	remoteDataClientResponse := RemoteDataListResponse{}
 	s3Client := client.Client
 
 	// Create a bucket list command for all files in bucket
@@ -146,7 +146,7 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 	for object := range s3Client.ListObjects(context.Background(), client.BucketName, opts) {
 		if object.Err != nil {
 			err := fmt.Errorf("got an object error: %v for bucket: %s", object.Err, client.BucketName)
-			return s3Resp, err
+			return remoteDataClientResponse, err
 		}
 		scopedLog.Info("Got an object", "object", object)
 
@@ -157,10 +157,10 @@ func (client *MinioClient) GetAppsList(ctx context.Context) (RemoteDataListRespo
 		newSize := object.Size
 		newStorageClass := object.StorageClass
 		newRemoteObject := RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
-		s3Resp.Objects = append(s3Resp.Objects, &newRemoteObject)
+		remoteDataClientResponse.Objects = append(remoteDataClientResponse.Objects, &newRemoteObject)
 	}
 
-	return s3Resp, nil
+	return remoteDataClientResponse, nil
 }
 
 // DownloadApp downloads an app package from remote storage
