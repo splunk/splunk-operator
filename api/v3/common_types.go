@@ -187,6 +187,9 @@ type CommonSplunkSpec struct {
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// Cgroup defines the cgroup splunk is running in
+	Cgroup string `json:"Cgroup"`
 }
 
 // StorageClassSpec defines storage class configuration

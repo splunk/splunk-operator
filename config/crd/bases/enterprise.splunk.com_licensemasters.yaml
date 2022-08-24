@@ -48,6 +48,9 @@ spec:
             description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
               license manager.
             properties:
+              Cgroup:
+                description: Cgroup defines the cgroup splunk is running in
+                type: string
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
                 type: boolean
