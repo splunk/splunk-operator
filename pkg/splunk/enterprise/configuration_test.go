@@ -1441,7 +1441,7 @@ func TestGetProbeWithConfigUpdates(t *testing.T) {
 		t.Errorf("Failed to set InitialDelaySeconds to configured default delay")
 	}
 
-	// Test when empty probe is passed with0 configuredDelay. InitialDelaySeconds is set to configuredDelay.
+	// Test when empty probe is passed with 0 configuredDelay. InitialDelaySeconds is set to configuredDelay.
 	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, nil, 0)
 	if returnedProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set InitialDelay seconds when configuredDelay is 0")
