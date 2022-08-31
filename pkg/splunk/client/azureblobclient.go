@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -309,8 +310,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
 
 	// create rest request URL with storage account name, container, prefix
-	// Eg. appsListFetchUrl := "https://akondursg.blob.core.windows.net//newcontainer?prefix=apps/restype=container&comp=list&include=snapshots&include=metadata"
-	appsListFetchUrl := client.Endpoint + "/" + client.BucketName + "?prefix=" + client.Prefix + "&restype=container&comp=list&include=snapshots&include=metadata"
+	appsListFetchUrl := fmt.Sprintf(azureBlobListAppFetchUrl, client.Endpoint, client.BucketName, client.Prefix)
 
 	// Create a http request with the URL
 	httpRequest, err := http.NewRequest("GET", appsListFetchUrl, nil)
