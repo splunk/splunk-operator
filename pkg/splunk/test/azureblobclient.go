@@ -59,7 +59,7 @@ func (c *MockAzureBlobHandler) CheckAzureBlobRemoteDataListResponse(t *testing.T
 	}
 }
 
-//Returns the bytes containing blobs list in the XML form
+// ListApps returns the bytes containing blobs list in the XML form
 func (mockClient MockAzureBlobClient) ListApps(ctx context.Context, bucketName string, listAppsOpts map[string]string) ([]byte, error) {
 
 	tmp, err := json.Marshal(mockClient.Objects)
