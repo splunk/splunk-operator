@@ -1,4 +1,4 @@
-{{- if .Values.clusterMaster.enabled }}
+{{- if or .Values.clusterMaster.enabled ( and (not $.Values.existingClusterMaster) ( or .Values.sva.c3.enabled .Values.sva.m4.enabled ) )}}
 apiVersion: enterprise.splunk.com/v3
 kind: ClusterMaster
 metadata:
@@ -55,7 +55,7 @@ spec:
 {{- end }}
 {{- with .Values.clusterMaster.volumes }}      
   volumes:
-{{- toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.clusterMaster.licenseUrl }}
   licenseUrl: {{ .Values.clusterMaster.licenseUrl }}
@@ -63,7 +63,20 @@ spec:
 {{- if .Values.clusterMaster.defaultsUrl }}
   defaultsUrl: {{ .Values.clusterMaster.defaultsUrl }}
 {{- end }}
-{{- if .Values.clusterMaster.defaults }}
+{{- if .Values.sva.m4.enabled }}
+  defaults: |-
+    splunk:
+      site: {{ .Values.sva.m4.clusterMaster.site }}
+      multisite_master: localhost
+      all_sites: {{ .Values.sva.m4.clusterMaster.allSites }}
+      multisite_replication_factor_origin: 1
+      multisite_replication_factor_total: 2
+      multisite_search_factor_origin: 1
+      multisite_search_factor_total: 2
+      idxc:
+        search_factor: 2
+        replication_factor: 2
+{{- else if .Values.clusterMaster.defaults }}
   defaults: |-
 {{ toYaml .Values.clusterMaster.defaults | indent 4 }}
 {{- end }}
@@ -90,7 +103,7 @@ spec:
 {{- end }}
 {{- with .Values.clusterMaster.resources }}
   resources:
-{{- toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.clusterMaster.serviceAccount }}
   serviceAccount: {{ .Values.clusterMaster.serviceAccount }}
@@ -99,8 +112,20 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.clusterMaster.affinity }}
+{{- if $.Values.sva.m4.enabled }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+            - {{ .Values.sva.m4.clusterMaster.zone }}
+{{- else }}
+  {{- with .Values.clusterMaster.affinity }}
   affinity:
 {{ toYaml . | indent 4 }}
+  {{- end }}
 {{- end }}
 {{- end }}

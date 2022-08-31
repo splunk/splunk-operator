@@ -19,7 +19,7 @@ spec:
   {{- if .Values.existingClusterMaster.namespace }}
     namespace: {{ .Values.existingClusterMaster.namespace }}
   {{- end }}
-{{- else if .Values.clusterMaster.enabled }}
+{{- else if or .Values.clusterMaster.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
   clusterMasterRef:
     name: {{ .Values.clusterMaster.name }}
   {{- if .Values.clusterMaster.namespaceOverride }}
@@ -51,7 +51,7 @@ spec:
 {{- end }}
 {{- with .Values.licenseMaster.volumes }}      
   volumes:
-{{- toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.licenseMaster.licenseUrl }}
   licenseUrl: {{ .Values.licenseMaster.licenseUrl }}
@@ -78,7 +78,7 @@ spec:
 {{- end }}
 {{- with .Values.licenseMaster.resources }}
   resources:
-{{- toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.licenseMaster.serviceAccount }}
   serviceAccount: {{ .Values.licenseMaster.serviceAccount }}
