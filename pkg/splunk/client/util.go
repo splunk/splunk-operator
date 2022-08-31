@@ -81,7 +81,6 @@ func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID st
 // NewMockAzureBlobClient will create a mock azureblob client
 // TODO next sprint for completeness
 func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
-	var azureBlobClient SplunkAzureBlobClient
 	var err error
 
 	cl := fn(ctx, endpoint, storageAccountName, secretAccessKey)
@@ -90,15 +89,13 @@ func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccou
 		return nil, err
 	}
 
-	azureBlobClient = cl.(SplunkAzureBlobClient)
-
 	return &AzureBlobClient{
 		BucketName:         bucketName,
 		StorageAccountName: storageAccountName,
 		SecretAccessKey:    secretAccessKey,
 		Prefix:             prefix,
 		Endpoint:           endpoint,
-		Client:             azureBlobClient,
+		HttpClient:         cl.(*spltest.MockHTTPClient),
 	}, nil
 }
 
