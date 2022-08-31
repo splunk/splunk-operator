@@ -26,7 +26,7 @@ import (
 
 // MockMinioS3Client is used to store all the objects for an app source
 type MockMinioS3Client struct {
-	Objects []*MockS3Object
+	Objects []*MockRemoteDataObject
 }
 
 // MockMinioS3Handler is used for checking response received

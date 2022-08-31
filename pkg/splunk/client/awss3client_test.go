@@ -120,7 +120,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -131,7 +131,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -142,7 +142,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -188,7 +188,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		var mockResponse spltest.MockS3Client
+		var mockResponse spltest.MockRemoteDataClient
 		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
@@ -243,7 +243,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etag,
 					Key:          &Key,
@@ -344,9 +344,9 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
-	mockAwsDownloadHandler := spltest.MockS3DownloadHandler{}
+	mockAwsDownloadHandler := spltest.MockRemDataClntDownloadHandler{}
 
-	mockAwsDownloadObjects := []spltest.MockS3DownloadClient{
+	mockAwsDownloadObjects := []spltest.MockRemoteDataClientDownloadClient{
 		{
 			RemoteFile:      RemoteFiles[0],
 			DownloadSuccess: true,
@@ -400,20 +400,20 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
 
-		mockDownloadObject := spltest.MockS3DownloadClient{
+		mockDownloadObject := spltest.MockRemoteDataClientDownloadClient{
 			RemoteFile:      RemoteFiles[index],
 			DownloadSuccess: downloadSuccess,
 		}
 
 		if mockAwsDownloadHandler.GotLocalToRemoteFileMap == nil {
-			mockAwsDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockS3DownloadClient)
+			mockAwsDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockRemoteDataClientDownloadClient)
 		}
 
 		mockAwsDownloadHandler.GotLocalToRemoteFileMap[LocalFiles[index]] = mockDownloadObject
 	}
 
 	method := "DownloadApp"
-	mockAwsDownloadHandler.CheckS3DownloadResponse(t, method)
+	mockAwsDownloadHandler.CheckRemDataClntDownloadResponse(t, method)
 }
 
 func TestAWSDownloadAppShouldFail(t *testing.T) {

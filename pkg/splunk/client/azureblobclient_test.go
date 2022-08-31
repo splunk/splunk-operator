@@ -116,7 +116,7 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 
 	mockAzureBlobObjects := []spltest.MockAzureBlobClient{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -127,7 +127,7 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -138,7 +138,7 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -184,7 +184,7 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		var mockResponse spltest.MockS3Client
+		var mockResponse spltest.MockRemoteDataClient
 		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
@@ -241,7 +241,7 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 
 	mockAzureBlobObjects := []spltest.MockAzureBlobClient{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etag,
 					Key:          &Key,
@@ -337,9 +337,9 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
-	mockAzureBlobDownloadHandler := spltest.MockS3DownloadHandler{}
+	mockAzureBlobDownloadHandler := spltest.MockRemDataClntDownloadHandler{}
 
-	mockAzureBlobDownloadObjects := []spltest.MockS3DownloadClient{
+	mockAzureBlobDownloadObjects := []spltest.MockRemoteDataClientDownloadClient{
 		{
 			RemoteFile:      RemoteFiles[0],
 			DownloadSuccess: true,
@@ -394,20 +394,20 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
 
-		mockDownloadObject := spltest.MockS3DownloadClient{
+		mockDownloadObject := spltest.MockRemoteDataClientDownloadClient{
 			RemoteFile:      RemoteFiles[index],
 			DownloadSuccess: downloadSuccess,
 		}
 
 		if mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap == nil {
-			mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockS3DownloadClient)
+			mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockRemoteDataClientDownloadClient)
 		}
 
 		mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap[LocalFiles[index]] = mockDownloadObject
 	}
 
 	method := "DownloadApp"
-	mockAzureBlobDownloadHandler.CheckS3DownloadResponse(t, method)
+	mockAzureBlobDownloadHandler.CheckRemDataClntDownloadResponse(t, method)
 }
 
 func TestAzureBlobDownloadAppShouldFail(t *testing.T) {

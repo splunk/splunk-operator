@@ -103,11 +103,11 @@ func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccou
 }
 
 // ConvertRemoteDataListResponse converts S3 Response to a mock client response
-func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse RemoteDataListResponse) (spltest.MockS3Client, error) {
+func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse RemoteDataListResponse) (spltest.MockRemoteDataClient, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ConvertRemoteDataListResponse")
 
-	var mockResponse spltest.MockS3Client
+	var mockResponse spltest.MockRemoteDataClient
 
 	tmp, err := json.Marshal(RemoteDataListResponse)
 	if err != nil {
