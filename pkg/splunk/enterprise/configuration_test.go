@@ -1430,3 +1430,52 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
 	}
 }
+
+func TestGetProbeWithConfigUpdates(t *testing.T) {
+
+	defaultInitialDelay := int32(10)
+
+	// Test when empty probe is passed with non-zero configuredDelay. InitialDelaySeconds is set to configuredDelay.
+	returnedProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, nil, defaultInitialDelay)
+	if returnedProbe.InitialDelaySeconds != defaultInitialDelay {
+		t.Errorf("Failed to set InitialDelaySeconds to configured default delay")
+	}
+
+	// Test when empty probe is passed with 0 configuredDelay. InitialDelaySeconds is set to configuredDelay.
+	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, nil, 0)
+	if returnedProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
+		t.Errorf("Failed to set InitialDelay seconds when configuredDelay is 0")
+	}
+	if returnedProbe != &defaultReadinessProbe {
+		t.Errorf("Failed to set to defaultProbe when configured probe is nil")
+	}
+
+	// Test when configured probe has 0 initialdelay and configured delay is non-zero
+	// TimoutSeconds, PeriodSeconds is 0. Exec is empty
+	configuredProbe := defaultReadinessProbe
+	configuredProbe.InitialDelaySeconds = 0
+	configuredProbe.TimeoutSeconds = 0
+	configuredProbe.PeriodSeconds = 0
+	configuredProbe.Exec = nil
+	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, defaultInitialDelay)
+	if returnedProbe.InitialDelaySeconds != defaultInitialDelay {
+		t.Errorf("Failed to set InitialDelaySeconds to default delay when default initialDelay is zero.")
+	}
+	if returnedProbe.TimeoutSeconds != defaultReadinessProbe.TimeoutSeconds {
+		t.Errorf("Failed to set TimeoutSeconds")
+	}
+	if returnedProbe.PeriodSeconds != defaultReadinessProbe.PeriodSeconds {
+		t.Errorf("Failed to set PeriodSeconds")
+	}
+	if returnedProbe.Exec != defaultReadinessProbe.Exec {
+		t.Errorf("Failed to set Exec")
+	}
+
+	// Test when configured probe has 0 initialDelay and defaultDelay is 0
+	configuredProbe = defaultReadinessProbe
+	configuredProbe.InitialDelaySeconds = 0
+	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, 0)
+	if returnedProbe.InitialDelaySeconds != defaultReadinessProbe.InitialDelaySeconds {
+		t.Errorf("Failed to set InitialDelaySeconds to default when default initialDelay is zero.")
+	}
+}
