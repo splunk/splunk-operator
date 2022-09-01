@@ -17,7 +17,7 @@ const (
 	azureBlobListAppFetchURL = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
 
 	// Azure URL for listing apps
-	azureBlobListAppFetchUrl = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
+	azureBlobListAppFetchURL = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
 
 	// Header strings
 	headerAuthorization      = "Authorization"
