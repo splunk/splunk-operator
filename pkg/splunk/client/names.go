@@ -2,13 +2,13 @@ package client
 
 const (
 	// Azure token fetch URL
-	azureTokenFetchUrl = "http://169.254.169.254/metadata/identity/oauth2/token"
+	azureTokenFetchURL = "http://169.254.169.254/metadata/identity/oauth2/token"
 
 	// Azure http header XMS version
-	azureHttpHeaderXmsVersion = "2017-11-09"
+	azureHTTPHeaderXmsVersion = "2017-11-09"
 
 	// Azure URL for listing apps
-	azureBlobListAppFetchUrl = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
+	azureBlobListAppFetchURL = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
 
 	// Header strings
 	headerAuthorization      = "Authorization"

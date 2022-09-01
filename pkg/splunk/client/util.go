@@ -95,7 +95,7 @@ func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccou
 		SecretAccessKey:    secretAccessKey,
 		Prefix:             prefix,
 		Endpoint:           endpoint,
-		HttpClient:         cl.(*spltest.MockHTTPClient),
+		HTTPClient:         cl.(*spltest.MockHTTPClient),
 	}, nil
 }
 

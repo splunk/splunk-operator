@@ -47,10 +47,10 @@ type AzureBlobClient struct {
 	Prefix             string
 	StartAfter         string
 	Endpoint           string
-	HttpClient         SplunkHTTPClient
+	HTTPClient         SplunkHTTPClient
 }
 
-// Structs representing http response used to unmarshal
+// ContainerProperties represents blob properties
 type ContainerProperties struct {
 	CreationTime  string `xml:"Creation-Time"`
 	LastModified  string `xml:"Last-Modified"`
@@ -58,25 +58,29 @@ type ContainerProperties struct {
 	ContentLength string `xml:"Content-Length"`
 }
 
+// MyBlob represents a single blob
 type MyBlob struct {
 	XMLName    xml.Name            `xml:"Blob"`
 	Name       string              `xml:"Name"`
 	Properties ContainerProperties `xml:"Properties"`
 }
 
+// Blobs represents a slice of blobs
 type Blobs struct {
 	XMLName xml.Name `xml:"Blobs"`
 	Blob    []MyBlob `xml:"Blob"`
 }
 
+// EnumerationResults holds unmarshaled data from listing APIs
 type EnumerationResults struct {
 	XMLName xml.Name `xml:"EnumerationResults"`
 	Blobs   Blobs    `xml:"Blobs"`
 }
 
+// TokenResponse holds the unmarshaled oauth token
 type TokenResponse struct {
 	AccessToken string `json:"access_token"`
-	ClientId    string `json:"client_id"`
+	ClientID    string `json:"client_id"`
 }
 
 // ComputeHMACSHA256 generates a hash signature for an HTTP request or for a SAS.
@@ -87,7 +91,7 @@ func ComputeHMACSHA256(message string, base64DecodedAccountKey []byte) (base64St
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
-// TODO: Add an explanation here
+// buildStringToSign is a helper API for adding auth signature to HTTP headers
 func buildStringToSign(request http.Request, accountName string) (string, error) {
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
 	headers := request.Header
@@ -120,7 +124,7 @@ func buildStringToSign(request http.Request, accountName string) (string, error)
 	return stringToSign, nil
 }
 
-// TODO: Add an explanation here
+// buildCanonicalizedHeader is a helper API for adding auth signature to HTTP headers
 func buildCanonicalizedHeader(headers http.Header) string {
 	cm := map[string][]string{}
 	for k, v := range headers {
@@ -150,7 +154,7 @@ func buildCanonicalizedHeader(headers http.Header) string {
 	return ch.String()
 }
 
-// TODO: Add an explanation here
+// buildCanonicalizedResource is a helper API for adding auth signature to HTTP headers
 func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) {
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
 	cr := bytes.NewBufferString("/")
@@ -194,7 +198,7 @@ func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) 
 // NewAzureBlobClient returns an AzureBlob client
 func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
 	// Get http client
-	azureHttpClient := fn(ctx, endpoint, storageAccountName, secretAccessKey)
+	azureHTTPClient := fn(ctx, endpoint, storageAccountName, secretAccessKey)
 
 	return &AzureBlobClient{
 		BucketName:         bucketName,
@@ -203,7 +207,7 @@ func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountNa
 		Prefix:             prefix,
 		StartAfter:         startAfter,
 		Endpoint:           endpoint,
-		HttpClient:         azureHttpClient.(SplunkHTTPClient),
+		HTTPClient:         azureHTTPClient.(SplunkHTTPClient),
 	}, nil
 }
 
@@ -218,7 +222,7 @@ func InitAzureBlobClientSession() SplunkHTTPClient {
 }
 
 // Update http request header with secrets info
-func updateAzureHttpRequestHeaderWithSecrets(ctx context.Context, client *AzureBlobClient, httpRequest *http.Request) error {
+func updateAzureHTTPRequestHeaderWithSecrets(ctx context.Context, client *AzureBlobClient, httpRequest *http.Request) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateHttpRequestHeaderWithSecrets")
 
@@ -226,7 +230,7 @@ func updateAzureHttpRequestHeaderWithSecrets(ctx context.Context, client *AzureB
 
 	// Update httpRequest header with data and version
 	httpRequest.Header[headerXmsDate] = []string{time.Now().UTC().Format(http.TimeFormat)}
-	httpRequest.Header[headerXmsVersion] = []string{azureHttpHeaderXmsVersion}
+	httpRequest.Header[headerXmsVersion] = []string{azureHTTPHeaderXmsVersion}
 
 	// Get HMAC signature using storage account name and secret access key
 	stringToSign, err := buildStringToSign(*httpRequest, client.StorageAccountName)
@@ -250,14 +254,14 @@ func updateAzureHttpRequestHeaderWithSecrets(ctx context.Context, client *AzureB
 }
 
 // Update http request header with IAM info
-func updateAzureHttpRequestHeaderWithIAM(ctx context.Context, client *AzureBlobClient, httpRequest *http.Request) error {
+func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobClient, httpRequest *http.Request) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateHttpRequestHeaderWithIAM")
 
 	scopedLog.Info("Updating Azure Http Request with IAM")
 
 	// Create http request to retrive IAM oauth token from metadata URL
-	oauthRequest, err := http.NewRequest("GET", azureTokenFetchUrl, nil)
+	oauthRequest, err := http.NewRequest("GET", azureTokenFetchURL, nil)
 	if err != nil {
 		scopedLog.Error(err, "Azure Blob Failed to create new token request")
 		return err
@@ -273,7 +277,7 @@ func updateAzureHttpRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 	oauthRequest.URL.RawQuery = values.Encode()
 
 	// Retrieve oauth token
-	resp, err := client.HttpClient.Do(oauthRequest)
+	resp, err := client.HTTPClient.Do(oauthRequest)
 	if err != nil {
 		scopedLog.Error(err, "Azure blob,Errored when sending request to the server")
 		return err
@@ -310,10 +314,10 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
 
 	// create rest request URL with storage account name, container, prefix
-	appsListFetchUrl := fmt.Sprintf(azureBlobListAppFetchUrl, client.Endpoint, client.BucketName, client.Prefix)
+	appsListFetchURL := fmt.Sprintf(azureBlobListAppFetchURL, client.Endpoint, client.BucketName, client.Prefix)
 
 	// Create a http request with the URL
-	httpRequest, err := http.NewRequest("GET", appsListFetchUrl, nil)
+	httpRequest, err := http.NewRequest("GET", appsListFetchURL, nil)
 	if err != nil {
 		scopedLog.Error(err, "Azure Blob Failed to create request for App fetch URL")
 		return RemoteDataListResponse{}, err
@@ -322,10 +326,10 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	// Setup the httpRequest with required authentication
 	if client.StorageAccountName != "" && client.SecretAccessKey != "" {
 		// Use Secrets
-		err = updateAzureHttpRequestHeaderWithSecrets(ctx, client, httpRequest)
+		err = updateAzureHTTPRequestHeaderWithSecrets(ctx, client, httpRequest)
 	} else {
 		// No Secret provided, try using IAM
-		err = updateAzureHttpRequestHeaderWithIAM(ctx, client, httpRequest)
+		err = updateAzureHTTPRequestHeaderWithIAM(ctx, client, httpRequest)
 	}
 	if err != nil {
 		scopedLog.Error(err, "Failed to get http request authenticated")
@@ -333,7 +337,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	}
 
 	// List the apps
-	httpResponse, err := client.HttpClient.Do(httpRequest)
+	httpResponse, err := client.HTTPClient.Do(httpRequest)
 	if err != nil {
 		scopedLog.Error(err, "Azure blob, unable to execute list apps http request")
 		return RemoteDataListResponse{}, err

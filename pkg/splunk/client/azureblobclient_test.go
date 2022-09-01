@@ -114,7 +114,7 @@ func TestAzureBlobGetAppsList(t *testing.T) {
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HttpClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -133,7 +133,7 @@ func TestAzureBlobGetAppsList(t *testing.T) {
 	wantRequest, _ = http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
 	respTokenData := &TokenResponse{
 		AccessToken: "acctoken",
-		ClientId:    "ClientId",
+		ClientID:    "ClientId",
 	}
 	mrespdata, _ = json.Marshal(respTokenData)
 	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
