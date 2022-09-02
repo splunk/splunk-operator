@@ -83,7 +83,7 @@ func TestAzureBlobGetAppsList(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
 	respdata := &EnumerationResults{
 		Blobs: Blobs{
-			Blob: []MyBlob{
+			Blob: []Blob{
 				{
 					Properties: ContainerProperties{
 						CreationTime:  time.Now().UTC().Format(http.TimeFormat),
@@ -170,7 +170,7 @@ func TestAzureBlobGetAppsList(t *testing.T) {
 	// Incorrect last modified time
 	respdata = &EnumerationResults{
 		Blobs: Blobs{
-			Blob: []MyBlob{
+			Blob: []Blob{
 				{
 					Properties: ContainerProperties{
 						CreationTime:  time.Now().UTC().Format(http.TimeFormat),

@@ -58,8 +58,8 @@ type ContainerProperties struct {
 	ContentLength string `xml:"Content-Length"`
 }
 
-// MyBlob represents a single blob
-type MyBlob struct {
+// Blob represents a single blob
+type Blob struct {
 	XMLName    xml.Name            `xml:"Blob"`
 	Name       string              `xml:"Name"`
 	Properties ContainerProperties `xml:"Properties"`
@@ -68,7 +68,7 @@ type MyBlob struct {
 // Blobs represents a slice of blobs
 type Blobs struct {
 	XMLName xml.Name `xml:"Blobs"`
-	Blob    []MyBlob `xml:"Blob"`
+	Blob    []Blob   `xml:"Blob"`
 }
 
 // EnumerationResults holds unmarshaled data from listing APIs
@@ -385,9 +385,9 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 		// Extract blob
 		blob := data.Blobs.Blob[count]
 
-		scopedLog.Info("Listing App package details", "Count:", count, "App package name:", blob.Name, "Etag:", blob.Properties.ETag,
-			"Created on:", blob.Properties.CreationTime, "Modified on:",
-			blob.Properties.LastModified, "Content Size:", blob.Properties)
+		scopedLog.Info("Listing App package details", "Count:", count, "App package name", blob.Name,
+			"Etag", blob.Properties.ETag, "Created on", blob.Properties.CreationTime,
+			"Modified on", blob.Properties.LastModified, "Content Size", blob.Properties)
 
 		// Extract properties
 		newETag := blob.Properties.ETag
