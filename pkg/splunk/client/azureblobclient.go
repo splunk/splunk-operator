@@ -300,7 +300,7 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 	}
 
 	// Update http request header with IAM access token
-	httpRequest.Header.Set("x-ms-version", "2017-11-09")
+	httpRequest.Header.Set("x-ms-version", azureHTTPHeaderXmsVersion)
 	httpRequest.Header.Set("Authorization", "Bearer "+azureOauthTokenResponse.AccessToken)
 
 	return nil

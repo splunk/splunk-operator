@@ -5,7 +5,8 @@ const (
 	azureTokenFetchURL = "http://169.254.169.254/metadata/identity/oauth2/token"
 
 	// Azure http header XMS version
-	azureHTTPHeaderXmsVersion = "2017-11-09"
+	// https://docs.microsoft.com/en-us/rest/api/storageservices/versioning-for-the-azure-storage-services
+	azureHTTPHeaderXmsVersion = "2021-08-06"
 
 	// Azure URL for listing apps
 	azureBlobListAppFetchURL = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
