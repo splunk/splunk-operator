@@ -1,0 +1,23 @@
+splunk-operator:
+  enabled: false
+sva: 
+    m4:
+      enabled: true
+
+      clusterMaster:
+        allSites: "site1,site2"
+        site: site1
+        zone: us-west-2a
+
+      indexerClusters:
+        - name: idx1
+          site: site1
+          zone: us-west-2a
+        - name: idx2
+          site: site2
+          zone: us-west-2b
+
+      searchHeadClusters:
+        - name: shc1
+          site: site2
+          zone: us-west-2b

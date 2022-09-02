@@ -1,0 +1,15 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  name: mc
+status:
+  phase: Ready
+
+---
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  phase: Ready

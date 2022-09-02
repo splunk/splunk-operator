@@ -1,0 +1,17 @@
+---
+# assert for indexer cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: idxc
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-idxc-indexer
+status:
+  replicas: 4

@@ -1,0 +1,89 @@
+---
+# assert for cluster Master custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: cm
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-cm-cluster-master
+status:
+  replicas: 1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-cm-cluster-master-secret-v1
+
+---
+# assert for indexer cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v3
+kind: IndexerCluster
+metadata:
+  name: idxc
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-idxc-indexer
+status:
+  replicas: 3
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-idxc-indexer-secret-v1
+
+---
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: shc
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-shc-deployer-secret-v1
+
+---
+# check if stateful sets are created
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: splunk-shc-search-head-secret-v1
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-shc-search-head
+status:
+  replicas: 3
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: 
+  name: splunk-shc-deployer
+status:
+  replicas: 1

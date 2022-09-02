@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+- ./kuttl/tests/helm
+parallel: 1
+timeout: 1000
+startKIND: false
+artifactsDir: kuttl-artifacts
+kindNodeCache: false
+commands:
+  - command: bash -c "helm upgrade --install splunk-operator helm-chart/splunk-operator --namespace splunk-operator --create-namespace"
+    background: false
