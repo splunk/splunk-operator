@@ -333,7 +333,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
-	mockMinioDownloadHandler := spltest.MockRemDataClntDownloadHandler{}
+	mockMinioDownloadHandler := spltest.MockRemoteDataClientDownloadHandler{}
 
 	mockMinioDownloadObjects := []spltest.MockRemoteDataClientDownloadClient{
 		{

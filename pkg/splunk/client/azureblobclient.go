@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// blank assignment to verify that AzureBlobClient implements BlobClient
+// blank assignment to verify that AzureBlobClient implements RemoteDataClient
 var _ RemoteDataClient = &AzureBlobClient{}
 
 // AzureBlobClient is a client to implement Azure Blob specific APIs
@@ -85,7 +85,7 @@ type TokenResponse struct {
 
 // ComputeHMACSHA256 generates a hash signature for an HTTP request or for a SAS.
 func ComputeHMACSHA256(message string, base64DecodedAccountKey []byte) (base64String string) {
-	//	Signature=Base64(HMAC-SHA256(UTF8(StringToSign), Base64.decode(<your_azure_storage_account_shared_key>)))
+	// Signature=Base64(HMAC-SHA256(UTF8(StringToSign), Base64.decode(<your_azure_storage_account_shared_key>)))
 	h := hmac.New(sha256.New, base64DecodedAccountKey)
 	h.Write([]byte(message))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
@@ -272,7 +272,7 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 
 	// Create raw query for http request
 	values := oauthRequest.URL.Query()
-	values.Add("api-version", "2018-02-01")
+	values.Add("api-version", azureIMDSApiVersion)
 	values.Add("resource", "https://storage.azure.com/")
 	oauthRequest.URL.RawQuery = values.Encode()
 
@@ -311,7 +311,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList")
 
-	scopedLog.Info("Getting Apps list", " S3 Bucket", client.BucketName, "Prefix", client.Prefix)
+	scopedLog.Info("Getting Apps list", "Azure Blob Bucket", client.BucketName, "Prefix", client.Prefix)
 
 	// create rest request URL with storage account name, container, prefix
 	appsListFetchURL := fmt.Sprintf(azureBlobListAppFetchURL, client.Endpoint, client.BucketName, client.Prefix)

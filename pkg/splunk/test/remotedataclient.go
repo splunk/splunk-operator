@@ -49,14 +49,14 @@ func checkRemoteDataListResponse(t *testing.T, testMethod string, gotObjects, wa
 	}
 }
 
-// MockRemDataClntDownloadHandler is a mock handler to check mock download response
-type MockRemDataClntDownloadHandler struct {
+// MockRemoteDataClientDownloadHandler is a mock handler to check mock download response
+type MockRemoteDataClientDownloadHandler struct {
 	WantLocalToRemoteFileMap map[string]MockRemoteDataClientDownloadClient
 	GotLocalToRemoteFileMap  map[string]MockRemoteDataClientDownloadClient
 }
 
 // AddObjects adds objects to MockRemoteDataClientDownloadHandler
-func (c *MockRemDataClntDownloadHandler) AddObjects(localFiles []string, objects ...MockRemoteDataClientDownloadClient) {
+func (c *MockRemoteDataClientDownloadHandler) AddObjects(localFiles []string, objects ...MockRemoteDataClientDownloadClient) {
 	for n := range objects {
 		mockMinioDownloadClient := objects[n]
 		localFile := localFiles[n]
@@ -68,7 +68,7 @@ func (c *MockRemDataClntDownloadHandler) AddObjects(localFiles []string, objects
 }
 
 // CheckRemDataClntDownloadResponse checks if the received object is same as the one we expect
-func (c *MockRemDataClntDownloadHandler) CheckRemDataClntDownloadResponse(t *testing.T, testMethod string) {
+func (c *MockRemoteDataClientDownloadHandler) CheckRemDataClntDownloadResponse(t *testing.T, testMethod string) {
 	if len(c.WantLocalToRemoteFileMap) != len(c.GotLocalToRemoteFileMap) {
 		t.Fatalf("%s got %d Responses; want %d", testMethod, len(c.GotLocalToRemoteFileMap), len(c.WantLocalToRemoteFileMap))
 	}

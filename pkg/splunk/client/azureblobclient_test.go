@@ -130,7 +130,7 @@ func TestAzureBlobGetAppsList(t *testing.T) {
 	// Test Listing Apps with IAM
 	azureBlobClient.StorageAccountName = ""
 	azureBlobClient.SecretAccessKey = ""
-	wantRequest, _ = http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
+	wantRequest, _ = http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-10-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
 	respTokenData := &TokenResponse{
 		AccessToken: "acctoken",
 		ClientID:    "ClientId",
@@ -238,7 +238,7 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
-	mockAzureBlobDownloadHandler := spltest.MockRemDataClntDownloadHandler{}
+	mockAzureBlobDownloadHandler := spltest.MockRemoteDataClientDownloadHandler{}
 
 	mockAzureBlobDownloadObjects := []spltest.MockRemoteDataClientDownloadClient{
 		{

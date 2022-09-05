@@ -8,6 +8,11 @@ const (
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/versioning-for-the-azure-storage-services
 	azureHTTPHeaderXmsVersion = "2021-08-06"
 
+	// Azure Instance Metadata Service (IMDS) api-version parameter
+	// IMDS is versioned and specifying the API version in the HTTP request is mandatory
+	// https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service?tabs=linux
+	azureIMDSApiVersion = "2021-10-01"
+
 	// Azure URL for listing apps
 	azureBlobListAppFetchURL = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
 
