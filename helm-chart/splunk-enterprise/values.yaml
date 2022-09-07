@@ -10,9 +10,57 @@ image:
 splunk-operator:
   enabled: true
 
+sva:
+
+  # Single Server Deployment (S1) 
+  # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=9
+  s1:
+
+    enabled: false
+
+    standalones: 1
+
+  # Distributed Clustered Deployment + SHC - Single Site (C3)
+  # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=14
+  c3:
+
+    enabled: false
+
+    indexerClusters: []
+      # - name: idx1
+      # - name: idx2
+
+    searchHeadClusters: []
+      # - name: shc1
+      # - name: shc2
+
+  # Distributed Clustered Deployment + SHC - Multi-Site (M4)
+  # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=20
+  m4:
+
+    enabled: false
+
+    clusterMaster: {}
+      # allSites: "site1,site2"
+      # site: site1
+      # zone: us-west-1a
+
+    indexerClusters: []
+      # - name: idx1
+      #   site: site1
+      #   zone: us-west-1a
+      # - name: idx2
+      #   site: site2
+      #   zone: us-west-1c
+        
+    searchHeadClusters: []
+      # - name: shc1
+      #   site: site2
+      #   zone: us-west-1c
+
 # Set name reference if ClusterMaster is already deployed
 # Namespace is optional, set if the resource exists outside of the release namespace
-existingClusterMaster:
+existingClusterMaster: {}
   # name:
   # namespace: 
 
@@ -47,7 +95,7 @@ clusterMaster:
   # Splunk Enterprise App repository
   # Specifies remote App location and scope for Splunk App management
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/AppFramework.md
-  appRepo:
+  appRepo: {}
     ## Example: Deploy apps on cluster master instance for local use
     # appsRepoPollIntervalSeconds: 900
     # appSources:

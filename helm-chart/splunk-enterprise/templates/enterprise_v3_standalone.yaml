@@ -1,4 +1,4 @@
-{{- if .Values.standalone.enabled }}
+{{- if or .Values.standalone.enabled .Values.sva.s1.enabled }}
 apiVersion: enterprise.splunk.com/v3
 kind: Standalone
 metadata:
@@ -9,7 +9,9 @@ metadata:
 {{ toYaml . | indent 4 }}
 {{- end }}
 spec:
-{{- if .Values.standalone.replicaCount }}
+{{- if and .Values.sva.s1.enabled .Values.sva.s1.standalones }}
+  replicas: {{ .Values.sva.s1.standalones }}
+{{- else if and .Values.standalone.enabled .Values.standalone.replicaCount }}
   replicas: {{ .Values.standalone.replicaCount }}
 {{- end }}
 {{- with .Values.standalone.appRepo }}
@@ -71,7 +73,7 @@ spec:
 {{- end }}
 {{- with .Values.standalone.volumes }}      
   volumes:
-{{- toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.standalone.licenseUrl }}
   licenseUrl: {{ .Values.standalone.licenseUrl }}
@@ -106,7 +108,7 @@ spec:
 {{- end }}
 {{- with .Values.standalone.resources }}
   resources:
-{{- toYaml . | nindent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.standalone.serviceAccount }}
   serviceAccount: {{ .Values.standalone.serviceAccount }}
