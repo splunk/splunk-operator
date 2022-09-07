@@ -30,7 +30,7 @@ import (
 
 // MockAWSS3Client is used to store all the objects for an app source
 type MockAWSS3Client struct {
-	Objects []*MockS3Object
+	Objects []*MockRemoteDataObject
 }
 
 // MockAWSS3Handler is used for checking response received

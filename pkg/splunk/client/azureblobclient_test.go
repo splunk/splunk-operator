@@ -17,7 +17,10 @@ package client
 
 import (
 	"context"
-	"os"
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -29,7 +32,7 @@ func TestInitAzureBlobClientWrapper(t *testing.T) {
 	ctx := context.TODO()
 	azureBlobClientSession := InitAzureBlobClientWrapper(ctx, "https://mystorageaccount.blob.core.windows.net", "abcd", "1234")
 	if azureBlobClientSession == nil {
-		t.Errorf("We should have got a valid Azure Blob client object")
+		t.Errorf("We should not have got a nil Azure Blob Client")
 	}
 }
 
@@ -37,254 +40,152 @@ func TestNewAzureBlobClient(t *testing.T) {
 	ctx := context.TODO()
 	fn := InitAzureBlobClientWrapper
 
-	// Test1. Test for endpoint with https
 	azureBlobClient, err := NewAzureBlobClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://mystorageaccount.blob.core.windows.net", fn)
-
 	if azureBlobClient == nil || err != nil {
 		t.Errorf("NewAzureBlobClient should have returned a valid Azure Blob client.")
 	}
-
-	// Test2. Test for endpoint with http
-	azureBlobClient, err = NewAzureBlobClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "http://mystorageaccount.blob.core.windows.net", fn)
-
-	if azureBlobClient == nil || err != nil {
-		t.Errorf("NewAzureBlobClient should have returned a valid Azure Blob client.")
-	}
-
-	// Test3. Test for invalid endpoint
-	//TODO : revisit and fix it for next sprint
-	// azureBlobClient, err = NewAzureBlobClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "random-endpoint.com", fn)
-
-	// if azureBlobClient != nil || err == nil {
-	// 	t.Errorf("NewAzureBlobClient should have returned a error.")
-	// }
 }
 
-func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
+func TestAzureBlobGetAppsList(t *testing.T) {
 	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		Defaults: enterpriseApi.AppSourceDefaultSpec{
-			VolName: "msos_s2s3_vol2",
+			VolName: "azure_vol1",
 			Scope:   enterpriseApi.ScopeLocal,
 		},
 		VolList: []enterpriseApi.VolumeSpec{
 			{
-				Name:      "msos_s2s3_vol",
+				Name:      "azure_vol1",
 				Endpoint:  "https://mystorageaccount.blob.core.windows.net",
-				Path:      "testbucket-rs-london",
+				Path:      "appscontainer1",
 				SecretRef: "blob-secret",
 				Type:      "blob",
 				Provider:  "azure",
 			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
 			{
-				Name:      "msos_s2s3_vol2",
-				Endpoint:  "https://mystorageaccount.blob.core.windows.net",
-				Path:      "testbucket-rs-london2",
-				SecretRef: "blob-secret",
-				Type:      "blob",
-				Provider:  "azure",
-			},
-		},
-		AppSources: []enterpriseApi.AppSourceSpec{
-			{Name: "adminApps",
+				Name:     "adminApps",
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol",
-					Scope:   enterpriseApi.ScopeLocal},
-			},
-			{Name: "securityApps",
-				Location: "securityAppsRepo",
-				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol",
-					Scope:   enterpriseApi.ScopeLocal},
-			},
-			{Name: "authenticationApps",
-				Location: "authenticationAppsRepo",
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
 			},
 		},
 	}
 
+	// Initialize clients
 	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
 
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
-	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
-	Sizes := []int64{10, 20, 30}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAzureBlobHandler := spltest.MockAzureBlobHandler{}
-
-	mockAzureBlobObjects := []spltest.MockAzureBlobClient{
-		{
-			Objects: []*spltest.MockS3Object{
+	// Add handler for mock client(handles secrets case initially)
+	wantRequest, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
+	respdata := &EnumerationResults{
+		Blobs: Blobs{
+			Blob: []Blob{
 				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockS3Object{
-				{
-					Etag:         &Etags[1],
-					Key:          &Keys[1],
-					LastModified: &randomTime,
-					Size:         &Sizes[1],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockS3Object{
-				{
-					Etag:         &Etags[2],
-					Key:          &Keys[2],
-					LastModified: &randomTime,
-					Size:         &Sizes[2],
-					StorageClass: &StorageClass,
+					Properties: ContainerProperties{
+						CreationTime:  time.Now().UTC().Format(http.TimeFormat),
+						LastModified:  time.Now().UTC().Format(http.TimeFormat),
+						ETag:          "abcd",
+						ContentLength: fmt.Sprint(64),
+					},
 				},
 			},
 		},
 	}
+	mrespdata, _ := xml.Marshal(respdata)
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
 
-	mockAzureBlobHandler.AddObjects(appFrameworkRef, mockAzureBlobObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-	var err error
-	var allSuccess bool = true
-	for index, appSource := range appFrameworkRef.AppSources {
-
-		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		// Update the GetRemoteDataClient with our mock call which initializes mock Azure Blob client
-		getClientWrapper := RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
-
-		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-			cl := spltest.MockAzureBlobClient{}
-			cl.Objects = mockAzureBlobObjects[index].Objects
-			return cl
-		}
-
-		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
-
-		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		azureBlobClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAzureBlobClient)
-
-		RemoteDataListResponse, err := azureBlobClient.GetAppsList(ctx)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		var mockResponse spltest.MockS3Client
-		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		if mockAzureBlobHandler.GotSourceAppListResponseMap == nil {
-			mockAzureBlobHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAzureBlobClient)
-		}
-
-		mockAzureBlobHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAzureBlobClient(mockResponse)
-
-	}
-
-	if allSuccess == false {
-		t.Errorf("Unable to get apps list for all the app sources")
-	}
-
-	method := "GetAppsList"
-	mockAzureBlobHandler.CheckAzureBlobRemoteDataListResponse(t, method)
-
-}
-
-func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
-	ctx := context.TODO()
-	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
-		VolList: []enterpriseApi.VolumeSpec{
-			{Name: "msos_s2s3_vol",
-				Endpoint:  "https://mystorageaccount.blob.core.windows.net",
-				Path:      "testbucket-rs-london",
-				SecretRef: "blob-secret",
-				Type:      "blob",
-				Provider:  "Azure"},
-		},
-		AppSources: []enterpriseApi.AppSourceSpec{
-			{Name: "adminApps",
-				Location: "adminAppsRepo",
-				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol",
-					Scope:   enterpriseApi.ScopeLocal},
-			},
-		},
-	}
-
-	azureBlobClient := &AzureBlobClient{}
-
-	Etag := "cc707187b036405f095a8ebb43a782c1"
-	Key := "admin_app.tgz"
-	Size := int64(10)
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAzureBlobHandler := spltest.MockAzureBlobHandler{}
-
-	mockAzureBlobObjects := []spltest.MockAzureBlobClient{
-		{
-			Objects: []*spltest.MockS3Object{
-				{
-					Etag:         &Etag,
-					Key:          &Key,
-					LastModified: &randomTime,
-					Size:         &Size,
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	mockAzureBlobHandler.AddObjects(appFrameworkRef, mockAzureBlobObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-	var err error
-
+	// Get App source and volume from spec
 	appSource := appFrameworkRef.AppSources[0]
+	vol, _ := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 
-	vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-	if err != nil {
-		t.Errorf("Unable to get Volume due to error=%s", err)
-	}
-
-	// Update the GetRemoteDataClient with our mock call which initializes mock Azure Blob client
+	// Update the GetRemoteDataClient function pointer
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
+	// Update the GetRemoteDataClientInit function pointer
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		cl := spltest.MockAzureBlobClient{}
-		// return empty objects list here to test the negative scenario
-		return cl
+		return &mclient
 	}
-
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
+	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAzureBlobClient)
-	//TODO: revisit after next sprint
-	// _, err = azureBlobClient.GetAppsList(ctx)
-	// if err == nil {
-	// 	t.Errorf("GetAppsList should have returned error since we have empty objects in the response")
-	// }
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
 
+	// Test Listing apps with secrets
+	azureBlobClient.StorageAccountName = vol.Path
+	azureBlobClient.SecretAccessKey = "abcd"
+	_, err := azureBlobClient.GetAppsList(ctx)
+	if err != nil {
+		t.Errorf("GetAppsList should not return nil")
+	}
+
+	// Test Listing Apps with IAM
+	azureBlobClient.StorageAccountName = ""
+	azureBlobClient.SecretAccessKey = ""
+	wantRequest, _ = http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-10-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
+	respTokenData := &TokenResponse{
+		AccessToken: "acctoken",
+		ClientID:    "ClientId",
+	}
+	mrespdata, _ = json.Marshal(respTokenData)
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
+
+	_, err = azureBlobClient.GetAppsList(ctx)
+	if err != nil {
+		t.Errorf("GetAppsList should not return nil")
+	}
+
+	// Test error conditions
+
+	// Test error for Ouath request
+	mclient.RemoveHandlers()
+	_, err = azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("Expected error for incorrect oauth request")
+	}
+
+	// Test error for get app list request
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
+	_, err = azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("Expected error for incorrect get apps list request")
+	}
+
+	// Test error for extract response
+	wantRequest, _ = http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
+	mclient.AddHandler(wantRequest, 200, string("FailToUnmarshal"), nil)
+	_, err = azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("Expected error for incorrect http response from get apps list, unable to unmarshal")
+	}
+
+	// Incorrect last modified time
+	respdata = &EnumerationResults{
+		Blobs: Blobs{
+			Blob: []Blob{
+				{
+					Properties: ContainerProperties{
+						CreationTime:  time.Now().UTC().Format(http.TimeFormat),
+						LastModified:  fmt.Sprint(time.Now()),
+						ETag:          "abcd",
+						ContentLength: "",
+					},
+				},
+			},
+		},
+	}
+	mrespdata, _ = xml.Marshal(respdata)
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
+	// GetAppsList doesn't return error as we move onto the next blob
+	_, _ = azureBlobClient.GetAppsList(ctx)
 }
 
 func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
@@ -337,9 +238,9 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
-	mockAzureBlobDownloadHandler := spltest.MockS3DownloadHandler{}
+	mockAzureBlobDownloadHandler := spltest.MockRemoteDataClientDownloadHandler{}
 
-	mockAzureBlobDownloadObjects := []spltest.MockS3DownloadClient{
+	mockAzureBlobDownloadObjects := []spltest.MockRemoteDataClientDownloadClient{
 		{
 			RemoteFile:      RemoteFiles[0],
 			DownloadSuccess: true,
@@ -379,10 +280,6 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 
 		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
-		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-
-		azureBlobClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAzureBlobClient)
-
 		downloadRequest := RemoteDataDownloadRequest{
 			LocalFile:  LocalFiles[index],
 			RemoteFile: RemoteFiles[index],
@@ -394,22 +291,23 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
 
-		mockDownloadObject := spltest.MockS3DownloadClient{
+		mockDownloadObject := spltest.MockRemoteDataClientDownloadClient{
 			RemoteFile:      RemoteFiles[index],
 			DownloadSuccess: downloadSuccess,
 		}
 
 		if mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap == nil {
-			mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockS3DownloadClient)
+			mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockRemoteDataClientDownloadClient)
 		}
 
 		mockAzureBlobDownloadHandler.GotLocalToRemoteFileMap[LocalFiles[index]] = mockDownloadObject
 	}
 
 	method := "DownloadApp"
-	mockAzureBlobDownloadHandler.CheckS3DownloadResponse(t, method)
+	mockAzureBlobDownloadHandler.CheckRemDataClntDownloadResponse(t, method)
 }
 
+/*
 func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
@@ -472,10 +370,6 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
-	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-
-	azureBlobClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAzureBlobClient)
-
 	downloadRequest := RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
 		RemoteFile: RemoteFile,
@@ -499,3 +393,4 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")
 	}
 }
+*/

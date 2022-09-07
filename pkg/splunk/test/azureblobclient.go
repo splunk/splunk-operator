@@ -25,7 +25,7 @@ import (
 
 // MockAzureBlobClient is used to store all the objects for an app source
 type MockAzureBlobClient struct {
-	Objects []*MockS3Object
+	Objects []*MockRemoteDataObject
 }
 
 // MockAzureBlobHandler is used for checking response received
@@ -59,7 +59,7 @@ func (c *MockAzureBlobHandler) CheckAzureBlobRemoteDataListResponse(t *testing.T
 	}
 }
 
-//ListApps ... TODO : refine this method in next sprint as part of list and download azure rest apis
+// ListApps returns the bytes containing blobs list in the XML form
 func (mockClient MockAzureBlobClient) ListApps(ctx context.Context, bucketName string, listAppsOpts map[string]string) ([]byte, error) {
 
 	tmp, err := json.Marshal(mockClient.Objects)

@@ -99,3 +99,10 @@ func (c *MockHTTPClient) CheckRequests(t *testing.T, testMethod string) {
 		}
 	}
 }
+
+// RemoveHandlers removes all handlers for mock client
+func (c *MockHTTPClient) RemoveHandlers() {
+	for k := range c.Handlers {
+		delete(c.Handlers, k)
+	}
+}

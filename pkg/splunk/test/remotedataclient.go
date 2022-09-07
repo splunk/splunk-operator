@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// MockS3Object struct contains contents returned as part of S3 response
-type MockS3Object struct {
+// MockRemoteDataObject struct contains contents returned as part of RemoteData Client response
+type MockRemoteDataObject struct {
 	Etag         *string
 	Key          *string
 	LastModified *time.Time
@@ -16,18 +16,18 @@ type MockS3Object struct {
 	StorageClass *string
 }
 
-// MockS3Client is used to store all the objects for an app source
-type MockS3Client struct {
-	Objects []*MockS3Object
+// MockRemoteDataClient is used to store all the objects for an app source
+type MockRemoteDataClient struct {
+	Objects []*MockRemoteDataObject
 }
 
-// MockS3DownloadClient is a mock download client
-type MockS3DownloadClient struct {
+// MockRemoteDataClientDownloadClient is a mock download client
+type MockRemoteDataClientDownloadClient struct {
 	RemoteFile      string
 	DownloadSuccess bool
 }
 
-func checkRemoteDataListResponse(t *testing.T, testMethod string, gotObjects, wantObjects []*MockS3Object, appSourceName string) {
+func checkRemoteDataListResponse(t *testing.T, testMethod string, gotObjects, wantObjects []*MockRemoteDataObject, appSourceName string) {
 	if !reflect.DeepEqual(gotObjects, wantObjects) {
 		for n, gotObject := range gotObjects {
 			if *gotObject.Etag != *wantObjects[n].Etag {
@@ -49,26 +49,26 @@ func checkRemoteDataListResponse(t *testing.T, testMethod string, gotObjects, wa
 	}
 }
 
-// MockS3DownloadHandler is a mock handler to check mock download response
-type MockS3DownloadHandler struct {
-	WantLocalToRemoteFileMap map[string]MockS3DownloadClient
-	GotLocalToRemoteFileMap  map[string]MockS3DownloadClient
+// MockRemoteDataClientDownloadHandler is a mock handler to check mock download response
+type MockRemoteDataClientDownloadHandler struct {
+	WantLocalToRemoteFileMap map[string]MockRemoteDataClientDownloadClient
+	GotLocalToRemoteFileMap  map[string]MockRemoteDataClientDownloadClient
 }
 
-// AddObjects adds objects to MockS3DownloadHandler
-func (c *MockS3DownloadHandler) AddObjects(localFiles []string, objects ...MockS3DownloadClient) {
+// AddObjects adds objects to MockRemoteDataClientDownloadHandler
+func (c *MockRemoteDataClientDownloadHandler) AddObjects(localFiles []string, objects ...MockRemoteDataClientDownloadClient) {
 	for n := range objects {
 		mockMinioDownloadClient := objects[n]
 		localFile := localFiles[n]
 		if c.WantLocalToRemoteFileMap == nil {
-			c.WantLocalToRemoteFileMap = make(map[string]MockS3DownloadClient)
+			c.WantLocalToRemoteFileMap = make(map[string]MockRemoteDataClientDownloadClient)
 		}
 		c.WantLocalToRemoteFileMap[localFile] = mockMinioDownloadClient
 	}
 }
 
-// CheckS3DownloadResponse checks if the received object is same as the one we expect
-func (c *MockS3DownloadHandler) CheckS3DownloadResponse(t *testing.T, testMethod string) {
+// CheckRemDataClntDownloadResponse checks if the received object is same as the one we expect
+func (c *MockRemoteDataClientDownloadHandler) CheckRemDataClntDownloadResponse(t *testing.T, testMethod string) {
 	if len(c.WantLocalToRemoteFileMap) != len(c.GotLocalToRemoteFileMap) {
 		t.Fatalf("%s got %d Responses; want %d", testMethod, len(c.GotLocalToRemoteFileMap), len(c.WantLocalToRemoteFileMap))
 	}

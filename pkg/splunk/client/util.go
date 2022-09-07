@@ -81,7 +81,6 @@ func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID st
 // NewMockAzureBlobClient will create a mock azureblob client
 // TODO next sprint for completeness
 func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
-	var azureBlobClient SplunkAzureBlobClient
 	var err error
 
 	cl := fn(ctx, endpoint, storageAccountName, secretAccessKey)
@@ -90,24 +89,22 @@ func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccou
 		return nil, err
 	}
 
-	azureBlobClient = cl.(SplunkAzureBlobClient)
-
 	return &AzureBlobClient{
 		BucketName:         bucketName,
 		StorageAccountName: storageAccountName,
 		SecretAccessKey:    secretAccessKey,
 		Prefix:             prefix,
 		Endpoint:           endpoint,
-		Client:             azureBlobClient,
+		HTTPClient:         cl.(*spltest.MockHTTPClient),
 	}, nil
 }
 
 // ConvertRemoteDataListResponse converts S3 Response to a mock client response
-func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse RemoteDataListResponse) (spltest.MockS3Client, error) {
+func ConvertRemoteDataListResponse(ctx context.Context, RemoteDataListResponse RemoteDataListResponse) (spltest.MockRemoteDataClient, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ConvertRemoteDataListResponse")
 
-	var mockResponse spltest.MockS3Client
+	var mockResponse spltest.MockRemoteDataClient
 
 	tmp, err := json.Marshal(RemoteDataListResponse)
 	if err != nil {
