@@ -372,7 +372,6 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	if err != nil {
 		scopedLog.Error(err, "Azure blob,Errored when reading resp body for app download")
 	}
-	defer httpResponse.Body.Close()
 
 	// Variable to hold unmarshaled data
 	data := &EnumerationResults{}
