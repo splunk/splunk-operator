@@ -307,7 +307,6 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 
 	return nil
 }
-	defer resp.Body.Close()
 
 // GetAppsList gets the list of apps from remote storage
 func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
@@ -373,6 +372,7 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	if err != nil {
 		scopedLog.Error(err, "Azure blob,Errored when reading resp body for app download")
 	}
+	defer httpResponse.Body.Close()
 
 	// Variable to hold unmarshaled data
 	data := &EnumerationResults{}
@@ -415,23 +415,7 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 
 	return azureAppsRemoteData, nil
 }
-		newStorageClass := "standard" //TODO : map to a azure blob field
 
-		// Create new object and append
-		newRemoteObject := RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
-		azureAppsRemoteData.Objects = append(azureAppsRemoteData.Objects, &newRemoteObject)
-	}
-<<<<<<< HEAD
-
-	return azureAppsRemoteData, nil
-}
-
-=======
-
-	return azureAppsRemoteData, nil
-}
-
->>>>>>> 1a05e2a8... Add support to list azure apis with auth framework for secrets and IAM
 // DownloadApp downloads an app package from remote storage
 func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
 	reqLogger := log.FromContext(ctx)

@@ -8,7 +8,6 @@ const (
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/versioning-for-the-azure-storage-services
 	azureHTTPHeaderXmsVersion = "2021-08-06"
 
-<<<<<<< HEAD
 	// Azure Instance Metadata Service (IMDS) api-version parameter.
 	// IMDS is versioned and specifying the API version in the HTTP request is mandatory.
 	// https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service?tabs=linux
@@ -18,12 +17,6 @@ const (
 	// URL format is {azure_end_point}/{bucketName}?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
 	// For example : https://mystorageaccount.blob.core.windows.net/myappsbucket?prefix=standalone&restype=container&comp=list&include=snapshots&include=metadata
 	azureBlobListAppFetchURL = "%s/%s?prefix=%s&restype=container&comp=list&include=snapshots&include=metadata"
-=======
-	// Azure URL for downloading an app package
-	// URL format is {azure_end_point}/{bucketName}/{pathToAppPackage}
-	// For example : https://mystorageaccount.blob.core.windows.net/myappsbucket/standlone/myappsteamapp.tgz
-	azureBlobDownloadAppFetchURL = "%s/%s/%s"
->>>>>>> be844fd4... CSPL-1923 - addition for downloading app packages
 
 	// Azure URL for downloading an app package
 	// URL format is {azure_end_point}/{bucketName}/{pathToAppPackage}

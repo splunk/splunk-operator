@@ -163,8 +163,8 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 	// GetAppsList doesn't return error as we move onto the next blob
 	resp, err := azureBlobClient.GetAppsList(ctx)
 
-	if err == nil {
-		t.Errorf("Expected error for incorrect http response from get apps list, unable to unmarshal")
+	if err != nil {
+		t.Errorf("Did not expect error but one blob should have been returned")
 	}
 
 	//check only one blob is returned as it has correct lastmodified date
