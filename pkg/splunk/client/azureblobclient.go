@@ -25,9 +25,11 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -310,9 +312,10 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 // GetAppsList gets the list of apps from remote storage
 func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList")
+	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList").WithValues("Endpoint", client.Endpoint, "Storage Account", client.BucketName,
+		"Prefix", client.Prefix)
 
-	scopedLog.Info("Getting Apps list", "Azure Blob Bucket", client.BucketName, "Prefix", client.Prefix)
+	scopedLog.Info("Getting Apps list")
 
 	// create rest request URL with storage account name, container, prefix
 	appsListFetchURL := fmt.Sprintf(azureBlobListAppFetchURL, client.Endpoint, client.BucketName, client.Prefix)
@@ -431,36 +434,66 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 >>>>>>> 1a05e2a8... Add support to list azure apis with auth framework for secrets and IAM
 // DownloadApp downloads an app package from remote storage
 func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
-	/*
-		reqLogger := log.FromContext(ctx)
-		scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", downloadRequest.RemoteFile,
-			downloadRequest.LocalFile, downloadRequest.Etag)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("AzureBlob:DownloadApp").WithValues("Endpoint", client.Endpoint, "Storage Account", client.BucketName,
+		"Prefix", client.Prefix, "downloadRequest", downloadRequest)
 
-		file, err := os.Create(downloadRequest.LocalFile)
-		if err != nil {
-			scopedLog.Error(err, "Unable to create local file")
-			return false, err
-		}
-		defer file.Close()
+	scopedLog.Info("Download App package")
 
-		azureBlobClient := client.Client
+	// create rest request URL with storage account name, container, prefix
+	appPackageFetchURL := fmt.Sprintf(azureBlobDownloadAppFetchURL, client.Endpoint, client.BucketName, downloadRequest.RemoteFile)
 
-		//TODO : revise in next sprint . these are just place holder to more
-		// specific data structure so we can pass download options to rest calls
-		downloadOptions := make(map[string]string)
+	// Create a http request with the URL
+	httpRequest, err := http.NewRequest("GET", appPackageFetchURL, nil)
+	if err != nil {
+		scopedLog.Error(err, "Azure Blob Failed to create request for App package fetch URL")
+		return false, err
+	}
 
-		downloadOptions["maxChunkSize"] = "5gb"
-		downloadOptions["timeout"] = "5sec"
+	// Setup the httpRequest with required authentication
+	if client.StorageAccountName != "" && client.SecretAccessKey != "" {
+		// Use Secrets
+		err = updateAzureHTTPRequestHeaderWithSecrets(ctx, client, httpRequest)
+	} else {
+		// No Secret provided, try using IAM
+		err = updateAzureHTTPRequestHeaderWithIAM(ctx, client, httpRequest)
+	}
+	if err != nil {
+		scopedLog.Error(err, "Failed to get http request authenticated")
+		return false, err
+	}
 
-		err = azureBlobClient.DownloadApp(ctx, client.BucketName, downloadRequest.RemoteFile, downloadRequest.LocalFile, downloadOptions)
-		if err != nil {
-			scopedLog.Error(err, "Unable to download remote file")
-			return false, err
-		}
+	scopedLog.Info("Calling the download rest request")
 
-		scopedLog.Info("File downloaded")
-	*/
-	return true, nil
+	// Download the app
+	httpResponse, err := client.HTTPClient.Do(httpRequest)
+	if err != nil {
+		scopedLog.Error(err, "Azure blob, unable to execute download apps http request")
+		return false, err
+	}
+	defer httpResponse.Body.Close()
+
+	// Create local file on operator
+	localFile, err := os.Create(downloadRequest.LocalFile)
+	if err != nil {
+		scopedLog.Error(err, "Unable to open local file")
+		return false, err
+	}
+	defer localFile.Close()
+
+	scopedLog.Info("Copying the download response to localFile")
+
+	// Copy the http response (app packages to the local file path)
+	_, err = io.Copy(localFile, httpResponse.Body)
+	if err != nil {
+		fmt.Println(err.Error(), "Failed when copying resp body for app download")
+		return false, err
+	}
+
+	// Successfully listed apps
+	scopedLog.Info("Download apps successful")
+
+	return true, err
 }
 
 // RegisterAzureBlobClient will add the corresponding function pointer to the map
