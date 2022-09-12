@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
@@ -215,12 +216,33 @@ func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountNa
 
 // InitAzureBlobClientWrapper is a wrapper around InitAzureBlobClientSession
 func InitAzureBlobClientWrapper(ctx context.Context, appAzureBlobEndPoint string, storageAccountName string, secretAccessKey string) interface{} {
-	return InitAzureBlobClientSession()
+	return InitAzureBlobClientSession(ctx)
 }
 
 // InitAzureBlobClientSession initializes and returns a client session object
-func InitAzureBlobClientSession() SplunkHTTPClient {
-	return &http.Client{}
+func InitAzureBlobClientSession(ctx context.Context) SplunkHTTPClient {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("InitAzureBlobClientSession")
+
+	// Enforcing minimum version TLS1.2
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	tr.ForceAttemptHTTP2 = true
+
+	httpClient := http.Client{Transport: tr}
+
+	// Validate transport
+	tlsVersion := "Unknown"
+	if tr, ok := httpClient.Transport.(*http.Transport); ok {
+		tlsVersion = getTLSVersion(tr)
+	}
+
+	scopedLog.Info("Azure Blob Client Session initialization successful.", "TLS Version", tlsVersion)
+
+	return &httpClient
 }
 
 // Update http request header with secrets info
@@ -302,8 +324,8 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 	}
 
 	// Update http request header with IAM access token
-	httpRequest.Header.Set("x-ms-version", azureHTTPHeaderXmsVersion)
-	httpRequest.Header.Set("Authorization", "Bearer "+azureOauthTokenResponse.AccessToken)
+	httpRequest.Header.Set(headerXmsVersion, azureHTTPHeaderXmsVersion)
+	httpRequest.Header.Set(headerAuthorization, "Bearer "+azureOauthTokenResponse.AccessToken)
 
 	return nil
 }
@@ -371,6 +393,7 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	responseDownloadBody, err := ioutil.ReadAll(httpResponse.Body)
 	if err != nil {
 		scopedLog.Error(err, "Azure blob,Errored when reading resp body for app download")
+		return azureAppsRemoteData, err
 	}
 
 	// Variable to hold unmarshaled data
@@ -473,8 +496,8 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 		return false, err
 	}
 
-	// Successfully listed apps
-	scopedLog.Info("Download apps successful")
+	// Successfully downloaded app package
+	scopedLog.Info("Download app package successful")
 
 	return true, err
 }
