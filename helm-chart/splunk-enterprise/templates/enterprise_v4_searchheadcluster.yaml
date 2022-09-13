@@ -3,7 +3,7 @@ apiVersion: v1
 kind: List
 items:
 {{- range default (default (until 1) .Values.sva.c3.searchHeadClusters) .Values.sva.m4.searchHeadClusters }}
-- apiVersion: enterprise.splunk.com/v3
+- apiVersion:  enterprise.splunk.com/v4
   kind: SearchHeadCluster
   metadata:
   {{- if or $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
@@ -24,30 +24,30 @@ items:
     appRepo: 
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.existingClusterMaster }}
-    clusterMasterRef:
-      name: {{ $.Values.existingClusterMaster.name }}
-    {{- if $.Values.existingClusterMaster.namespace }}
-      namespace: {{ $.Values.existingClusterMaster.namespace }}
+  {{- if $.Values.existingClusterManager }}
+    clusterManagerRef:
+      name: {{ $.Values.existingClusterManager.name }}
+    {{- if $.Values.existingClusterManager.namespace }}
+      namespace: {{ $.Values.existingClusterManager.namespace }}
     {{- end }}
-  {{- else if or $.Values.clusterMaster.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
-    clusterMasterRef:
-      name: {{ $.Values.clusterMaster.name }}
-    {{- if $.Values.clusterMaster.namespaceOverride }}
-      namespace: {{ $.Values.clusterMaster.namespaceOverride }}
+  {{- else if or $.Values.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
+    clusterManagerRef:
+      name: {{ $.Values.clusterManager.name }}
+    {{- if $.Values.clusterManager.namespaceOverride }}
+      namespace: {{ $.Values.clusterManager.namespaceOverride }}
     {{- end }}
   {{- end }}
-  {{- if $.Values.existingLicenseMaster }}
-    licenseMasterRef:
-      name: {{ $.Values.existingLicenseMaster.name }}
-    {{- if $.Values.existingLicenseMaster.namespace }}
-      namespace: {{ $.Values.existingLicenseMaster.namespace }}
+  {{- if $.Values.existingLicenseManager }}
+    licenseManagerRef:
+      name: {{ $.Values.existingLicenseManager.name }}
+    {{- if $.Values.existingLicenseManager.namespace }}
+      namespace: {{ $.Values.existingLicenseManager.namespace }}
     {{- end }}
-  {{- else if or $.Values.licenseMaster.enabled }}
-    licenseMasterRef:
-      name: {{ $.Values.licenseMaster.name }}
-    {{- if $.Values.licenseMaster.namespaceOverride }}
-      namespace: {{ $.Values.licenseMaster.namespaceOverride }}
+  {{- else if or $.Values.licenseManager.enabled }}
+    licenseManagerRef:
+      name: {{ $.Values.licenseManager.name }}
+    {{- if $.Values.licenseManager.namespaceOverride }}
+      namespace: {{ $.Values.licenseManager.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.existingMonitoringConsole }}
@@ -84,13 +84,13 @@ items:
     defaultsUrl: {{ $.Values.searchHeadCluster.defaultsUrl }}
   {{- end }}
   {{- if $.Values.sva.m4.enabled }}
-    {{- $cm_name := $.Values.clusterMaster.name -}}
-    {{- if $.Values.existingClusterMaster }}
-      {{- $cm_name = $.Values.existingClusterMaster.name -}}
+    {{- $cm_name := $.Values.clusterManager.name -}}
+    {{- if $.Values.existingClusterManager }}
+      {{- $cm_name = $.Values.existingClusterManager.name -}}
     {{- end }}
     defaults: |-
       splunk:
-        multisite_master: splunk-{{ $cm_name }}-cluster-master-service
+        multisite_manager: splunk-{{ $cm_name }}-cluster-manager-service
         site: {{ .site }}
   {{- else if $.Values.searchHeadCluster.defaults }}
     defaults: |-

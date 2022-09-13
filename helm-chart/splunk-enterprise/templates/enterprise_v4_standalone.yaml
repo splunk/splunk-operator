@@ -1,5 +1,5 @@
 {{- if or .Values.standalone.enabled .Values.sva.s1.enabled }}
-apiVersion: enterprise.splunk.com/v3
+apiVersion:  enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: {{ .Values.standalone.name }}
@@ -22,30 +22,30 @@ spec:
   smartstore:
 {{ toYaml .Values.standalone.smartstore | indent 4 }}
 {{- end }}
-{{- if .Values.existingClusterMaster }}
-  clusterMasterRef:
-    name: {{ .Values.existingClusterMaster.name }}
-  {{- if .Values.existingClusterMaster.namespace }}
-    namespace: {{ .Values.existingClusterMaster.namespace }}
+{{- if .Values.existingClusterManager }}
+  clusterManagerRef:
+    name: {{ .Values.existingClusterManager.name }}
+  {{- if .Values.existingClusterManager.namespace }}
+    namespace: {{ .Values.existingClusterManager.namespace }}
   {{- end }}
-{{- else if .Values.clusterMaster.enabled }}
-  clusterMasterRef:
-    name: {{ .Values.clusterMaster.name }}
-  {{- if .Values.clusterMaster.namespaceOverride }}
-    namespace: {{ .Values.clusterMaster.namespaceOverride }}
+{{- else if .Values.clusterManager.enabled }}
+  clusterManagerRef:
+    name: {{ .Values.clusterManager.name }}
+  {{- if .Values.clusterManager.namespaceOverride }}
+    namespace: {{ .Values.clusterManager.namespaceOverride }}
   {{- end }}
 {{- end }}
-{{- if .Values.existingLicenseMaster }}
-  licenseMasterRef:
-    name: {{ .Values.existingLicenseMaster.name }}
-  {{- if .Values.existingLicenseMaster.namespace }}
-    namespace: {{ .Values.existingLicenseMaster.namespace }}
+{{- if .Values.existingLicenseManager }}
+  licenseManagerRef:
+    name: {{ .Values.existingLicenseManager.name }}
+  {{- if .Values.existingLicenseManager.namespace }}
+    namespace: {{ .Values.existingLicenseManager.namespace }}
   {{- end }}
-{{- else if .Values.licenseMaster.enabled }}
-  licenseMasterRef:
-    name: {{ .Values.licenseMaster.name }}
-  {{- if .Values.licenseMaster.namespaceOverride }}
-    namespace: {{ .Values.licenseMaster.namespaceOverride }}
+{{- else if .Values.licenseManager.enabled }}
+  licenseManagerRef:
+    name: {{ .Values.licenseManager.name }}
+  {{- if .Values.licenseManager.namespaceOverride }}
+    namespace: {{ .Values.licenseManager.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if .Values.existingMonitoringConsole }}
