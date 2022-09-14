@@ -90,6 +90,9 @@ cat << EOF >$YAML_SCRIPT_FILE
   path: spec.customresourcedefinitions.owned[1].displayName
   value: LicenseMaster
 - command: update
+  path: spec.customresourcedefinitions.owned[1].displayName
+  value: LicenseManager
+- command: update
   path: spec.customresourcedefinitions.owned[2].displayName
   value: SearchHeadCluster
 - command: update
@@ -112,6 +115,15 @@ cat << EOF >$YAML_SCRIPT_FILE
     {
       "apiVersion": "enterprise.splunk.com/v3",
       "kind": "LicenseMaster",
+      "metadata": {
+        "name": "example",
+        "finalizers": [ "enterprise.splunk.com/delete-pvc" ]
+      },
+      "spec": {}
+    },
+    {
+      "apiVersion": "enterprise.splunk.com/v3",
+      "kind": "LicenseManager",
       "metadata": {
         "name": "example",
         "finalizers": [ "enterprise.splunk.com/delete-pvc" ]

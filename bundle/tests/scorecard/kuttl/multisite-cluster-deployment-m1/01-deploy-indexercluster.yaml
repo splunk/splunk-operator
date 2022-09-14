@@ -8,7 +8,7 @@ spec:
   volumes: []
   spec: 
     imagePullPolicy: IfNotPresent
-  clusterMasterRef:
+  clusterManagerRef:
     name: test
   defaults: ""
   replicas: 3

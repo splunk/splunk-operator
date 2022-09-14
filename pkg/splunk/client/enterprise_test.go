@@ -179,7 +179,7 @@ func TestSetSearchHeadDetention(t *testing.T) {
 
 func TestBundlePush(t *testing.T) {
 	body := strings.NewReader("&ignore_identical_bundle=true")
-	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerApplyBundle, body)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/manager/control/default/apply", body)
 
 	test := func(c SplunkClient) error {
 		return c.BundlePush(true)
@@ -229,15 +229,15 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 404, "", wantRequest, test)
 }
 
-func TestGetClusterMasterInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetInfo, nil)
-	wantInfo := ClusterMasterInfo{
+func TestGetclusterManagerInfo(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/manager/info?count=0&output_mode=json", nil)
+	wantInfo := ClusterManagerInfo{
 		Initialized:     true,
 		IndexingReady:   true,
 		ServiceReady:    true,
 		MaintenanceMode: false,
 		RollingRestart:  false,
-		Label:           fmt.Sprintf(splcommon.TestClusterManagerID, "s1", "0"),
+		Label:           fmt.Sprintf("splunk-%s-cluster-manager-%s", "s1", "0"),
 		ActiveBundle: ClusterBundleInfo{
 			BundlePath: "/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle",
 			Checksum:   "14310A4AABD23E85BBD4559C4A3B59F8",
@@ -260,8 +260,8 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		}
 		return nil
 	}
-	body := splcommon.TestGetCMInfo
-	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
+	body := `{"links":{},"origin":"https://localhost:8089/services/cluster/manager/info","updated":"2020-03-18T01:04:53+00:00","generator":{"build":"a7f645ddaf91","version":"8.0.2"},"entry":[{"name":"manager","id":"https://localhost:8089/services/cluster/manager/info/master","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/manager/info/master","list":"/services/cluster/manager/info/master"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"active_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870198},"apply_bundle_status":{"invalid_bundle":{"bundle_path":"","bundle_validation_errors_on_master":[],"checksum":"","timestamp":0},"reload_bundle_issued":false,"status":"None"},"backup_and_restore_primaries":false,"controlled_rolling_restart_flag":false,"eai:acl":null,"indexing_ready_flag":true,"initialized_flag":true,"label":"splunk-s1-cluster-manager-0","last_check_restart_bundle_result":false,"last_dry_run_bundle":{"bundle_path":"","checksum":"","timestamp":0},"last_validated_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/0af7c0e95f313f7be3b0cb1d878df9a1-1583948640.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","is_valid_bundle":true,"timestamp":1583948640},"latest_bundle":{"bundle_path":"/opt/splunk/var/run/splunk/cluster/remote-bundle/506c58d5aeda1dd6017889e3186e7337-1583870198.bundle","checksum":"14310A4AABD23E85BBD4559C4A3B59F8","timestamp":1583870198},"maintenance_mode":false,"multisite":false,"previous_active_bundle":{"bundle_path":"","checksum":"","timestamp":0},"primaries_backup_status":"No on-going (or) completed primaries backup yet. Check back again in few minutes if you expect a backup.","quiet_period_flag":false,"rolling_restart_flag":false,"rolling_restart_or_upgrade":false,"service_ready_flag":true,"start_time":1583948636,"summary_replication":"false"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
+	splunkClientTester(t, "TestGetclusterManagerInfo", 200, body, wantRequest, test)
 
 	// test body with no entries
 	test = func(c SplunkClient) error {
@@ -272,14 +272,14 @@ func TestGetClusterMasterInfo(t *testing.T) {
 		return nil
 	}
 	body = splcommon.TestGetCMInfoEmpty
-	splunkClientTester(t, "TestGetClusterMasterInfo", 200, body, wantRequest, test)
+	splunkClientTester(t, "TestGetclusterManagerInfo", 200, body, wantRequest, test)
 
 	// test error code
 	splunkClientTester(t, "TestGetClusterManagerInfo", 500, "", wantRequest, test)
 }
 
 func TestGetIndexerClusterPeerInfo(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", splcommon.URLPeerInfo, nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/peer/info?count=0&output_mode=json", nil)
 	wantMemberStatus := "Up"
 	test := func(c SplunkClient) error {
 		info, err := c.GetIndexerClusterPeerInfo()
@@ -310,7 +310,7 @@ func TestGetIndexerClusterPeerInfo(t *testing.T) {
 }
 
 func TestGetClusterManagerPeers(t *testing.T) {
-	wantRequest, _ := http.NewRequest("GET", splcommon.LocalURLClusterManagerGetPeers, nil)
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/manager/peers?count=0&output_mode=json", nil)
 	var wantPeers = []struct {
 		ID     string
 		Label  string
@@ -358,7 +358,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 }
 
 func TestRemoveIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", splcommon.LocalURLClusterManagerRemovePeers+"?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/manager/control/control/remove_peers?peers=D39B1729-E2C5-4273-B9B2-534DA7C2F866", nil)
 	test := func(c SplunkClient) error {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
@@ -366,7 +366,7 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 }
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
-	wantRequest, _ := http.NewRequest("POST", splcommon.URLPeerDecommission+"?enforce_counts=1", nil)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/cluster/peer/control/control/decommission?enforce_counts=1", nil)
 	test := func(c SplunkClient) error {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
@@ -502,7 +502,7 @@ func TestUpdateLookupUISettings(t *testing.T) {
 		EaiAppName:  "splunk_monitoring_console",
 		EaiUserName: "nobody",
 	}
-	wantconfiguredPeers := "&member=" + splcommon.TestExampleClusterManagerMgmtPort + "&"
+	wantconfiguredPeers := "&member=splunk-example-cluster-manager-service:8089&"
 	body := strings.NewReader("output_mode=json&trigger_actions=true&dispatch.auto_cancel=30&dispatch.buckets=300&dispatch.enablePreview=true")
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", body)
 	wantRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")

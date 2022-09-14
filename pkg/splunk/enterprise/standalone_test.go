@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -30,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -54,8 +54,8 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 	updatefuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -73,8 +73,8 @@ func TestApplyStandalone(t *testing.T) {
 	}
 	deltaCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 	updateFuncCalls := append(updatefuncCalls, deltaCalls...)
 
@@ -138,8 +138,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -159,8 +159,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		{MetaName: "*v3.Standalone-test-stack1"},
-		{MetaName: "*v3.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
+		{MetaName: "*v4.Standalone-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -272,7 +272,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
-	cr.Spec.ClusterMasterRef.Name = "stack2"
+	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
@@ -1083,7 +1083,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	}
 }
 
-func TestStandaloneWitReadyState(t *testing.T) {
+func TestStandaloneWithReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
 	err := os.MkdirAll(newpath, os.ModePerm)
@@ -1338,6 +1338,11 @@ func TestStandaloneWitReadyState(t *testing.T) {
 	err = splutil.CreateResource(ctx, c, &configmap)
 	if err != nil {
 		t.Errorf("Failed to create resource  %s", current.GetName())
+	}
+
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
 	}
 
 	// call reconciliation

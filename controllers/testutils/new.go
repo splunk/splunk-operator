@@ -1,10 +1,11 @@
 package testutils
 
 import (
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	corev1 "k8s.io/api/core/v1"
 
 	//"k8s.io/apimachinery/pkg/api/resource"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -113,7 +114,7 @@ func NewMonitoringConsole(name, ns, image string) *enterpriseApi.MonitoringConso
 }
 
 // NewClusterMaster returns new serach head cluster instance with its config hash
-func NewClusterMaster(name, ns, image string) *enterpriseApi.ClusterMaster {
+func NewClusterMaster(name, ns, image string) *enterpriseApiV3.ClusterMaster {
 
 	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
@@ -128,7 +129,7 @@ func NewClusterMaster(name, ns, image string) *enterpriseApi.ClusterMaster {
 		},
 	}
 
-	ad := &enterpriseApi.ClusterMaster{
+	ad := &enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "ClusterMaster",
@@ -140,14 +141,14 @@ func NewClusterMaster(name, ns, image string) *enterpriseApi.ClusterMaster {
 		},
 	}
 
-	ad.Spec = enterpriseApi.ClusterMasterSpec{
+	ad.Spec = enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad
 }
 
-// NewLicenseMaster returns new serach head cluster instance with its config hash
-func NewLicenseMaster(name, ns, image string) *enterpriseApi.LicenseMaster {
+// NewClusterManager returns new serach head cluster instance with its config hash
+func NewClusterManager(name, ns, image string) *enterpriseApi.ClusterManager {
 
 	c := &enterpriseApi.Spec{
 		ImagePullPolicy: string(pullPolicy),
@@ -162,7 +163,75 @@ func NewLicenseMaster(name, ns, image string) *enterpriseApi.LicenseMaster {
 		},
 	}
 
-	ad := &enterpriseApi.LicenseMaster{
+	ad := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v3",
+			Kind:       "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+	}
+
+	ad.Spec = enterpriseApi.ClusterManagerSpec{
+		CommonSplunkSpec: *cs,
+	}
+	return ad
+}
+
+// NewLicenseManager returns new serach head cluster instance with its config hash
+func NewLicenseManager(name, ns, image string) *enterpriseApi.LicenseManager {
+
+	c := &enterpriseApi.Spec{
+		ImagePullPolicy: string(pullPolicy),
+	}
+
+	cs := &enterpriseApi.CommonSplunkSpec{
+		Mock:    true,
+		Spec:    *c,
+		Volumes: []corev1.Volume{},
+		MonitoringConsoleRef: corev1.ObjectReference{
+			Name: "mcName",
+		},
+	}
+
+	ad := &enterpriseApi.LicenseManager{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v3",
+			Kind:       "LicenseManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+	}
+
+	ad.Spec = enterpriseApi.LicenseManagerSpec{
+		CommonSplunkSpec: *cs,
+	}
+	return ad
+}
+
+// NewLicenseMaster returns new serach head cluster instance with its config hash
+func NewLicenseMaster(name, ns, image string) *enterpriseApiV3.LicenseMaster {
+
+	c := &enterpriseApi.Spec{
+		ImagePullPolicy: string(pullPolicy),
+	}
+
+	cs := &enterpriseApi.CommonSplunkSpec{
+		Mock:    true,
+		Spec:    *c,
+		Volumes: []corev1.Volume{},
+		MonitoringConsoleRef: corev1.ObjectReference{
+			Name: "mcName",
+		},
+	}
+
+	ad := &enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v3",
 			Kind:       "LicenseMaster",
@@ -174,7 +243,7 @@ func NewLicenseMaster(name, ns, image string) *enterpriseApi.LicenseMaster {
 		},
 	}
 
-	ad.Spec = enterpriseApi.LicenseMasterSpec{
+	ad.Spec = enterpriseApiV3.LicenseMasterSpec{
 		CommonSplunkSpec: *cs,
 	}
 	return ad

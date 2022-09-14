@@ -18,14 +18,13 @@ package test
 import (
 	"encoding/json"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 // MockAWSS3Client is used to store all the objects for an app source

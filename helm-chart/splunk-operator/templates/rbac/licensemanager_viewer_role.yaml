@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-licensemanager-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - licensemanagers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - licensemanagers/status
+  verbs:
+  - get

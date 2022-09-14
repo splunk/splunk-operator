@@ -17,6 +17,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -29,31 +30,34 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// LicenseManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// LicenseMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	LicenseManagerPausedAnnotation = "licensemanager.enterprise.splunk.com/paused"
+	LicenseMasterPausedAnnotation = "licensemaster.enterprise.splunk.com/paused"
 )
 
 // LicenseMasterSpec defines the desired state of a Splunk Enterprise license manager.
 type LicenseMasterSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Splunk enterprise App repository. Specifies remote App location and scope for Splunk App management
-	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // LicenseMasterStatus defines the observed state of a Splunk Enterprise license manager.
 type LicenseMasterStatus struct {
 	// current phase of the license manager
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
 
 	// App Framework Context
-	AppContext AppDeploymentContext `json:"appContext"`
+	AppContext enterpriseApi.AppDeploymentContext `json:"appContext"`
+
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LicenseMaster is the Schema for a Splunk Enterprise license manager.
+// LicenseMaster is the Schema for a Splunk Enterprise license master.
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=licensemasters,scope=Namespaced,shortName=lm

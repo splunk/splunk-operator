@@ -1,0 +1,7 @@
+# check for standalone to be scaled
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  replicas: 2
