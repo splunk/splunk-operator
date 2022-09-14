@@ -102,7 +102,10 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 
 	// Get App source and volume from spec
 	appSource := appFrameworkRef.AppSources[0]
-	vol, _ := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
 
 	// Update the GetRemoteDataClient function pointer
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
@@ -245,7 +248,10 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 
 	// Get App source and volume from spec
 	appSource := appFrameworkRef.AppSources[0]
-	vol, _ := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
 
 	// Update the GetRemoteDataClient function pointer
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
@@ -267,7 +273,7 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 	azureBlobClient.StorageAccountName = vol.Path
 	azureBlobClient.SecretAccessKey = "abcd"
 	azureBlobClient.Endpoint = "not-a-valid-end-point"
-	_, err := azureBlobClient.GetAppsList(ctx)
+	_, err = azureBlobClient.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("Expected error for invalid endpoint")
 	}
@@ -341,7 +347,10 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 
 	// Get App source and volume from spec
 	appSource := appFrameworkRef.AppSources[0]
-	vol, _ := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
 
 	// Update the GetRemoteDataClient function pointer
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
@@ -369,7 +378,7 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 		LocalFile:  "app1.tgz",
 		RemoteFile: "adminAppsRepo/app1.tgz",
 	}
-	_, err := azureBlobClient.DownloadApp(ctx, downloadRequest)
+	_, err = azureBlobClient.DownloadApp(ctx, downloadRequest)
 	if err != nil {
 		t.Errorf("DownloadApps should not return nil")
 	}
@@ -449,7 +458,10 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 
 	// Get App source and volume from spec
 	appSource := appFrameworkRef.AppSources[0]
-	vol, _ := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
 
 	// Update the GetRemoteDataClient function pointer
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
@@ -482,17 +494,6 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 
 	// Test error for http request to download
 	azureBlobClient.Endpoint = "dummy"
-	_, err := azureBlobClient.DownloadApp(ctx, downloadRequest)
-	if err == nil {
-		t.Errorf("Expected error for incorrect http request")
-	}
-
-	// Test invalid oauth request
-	// Test Download App package with secret
-	azureBlobClient.StorageAccountName = ""
-	azureBlobClient.SecretAccessKey = ""
-	mclient.RemoveHandlers()
-	azureBlobClient.Endpoint = vol.Endpoint
 	_, err = azureBlobClient.DownloadApp(ctx, downloadRequest)
 	if err == nil {
 		t.Errorf("Expected error for incorrect oauth request")
