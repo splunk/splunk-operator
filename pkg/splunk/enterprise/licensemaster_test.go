@@ -42,6 +42,18 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
+func init() {
+	// Re-Assigning GetReadinessScriptLocation and GetLivenessScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
+	GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../" + "../" + "../" + readinessScriptLocation)
+		return fileLocation
+	}
+	GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../" + "../" + "../" + readinessScriptLocation)
+		return fileLocation
+	}
+}
+
 func TestApplyLicenseManager(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -49,6 +61,8 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerServiceTestService},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerSecret},
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
@@ -68,8 +82,8 @@ func TestApplyLicenseManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[8], funcCalls[9], funcCalls[10]}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[10]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[9], funcCalls[11], funcCalls[12]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{

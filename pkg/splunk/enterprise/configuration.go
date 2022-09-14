@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 
@@ -33,6 +34,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -45,7 +47,7 @@ var defaultLivenessProbe corev1.Probe = corev1.Probe{
 	ProbeHandler: corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
 			Command: []string{
-				"/sbin/checkstate.sh",
+				GetProbeMountDirectory() + "/" + GetLivenessScriptName(),
 			},
 		},
 	},
@@ -58,7 +60,7 @@ var defaultReadinessProbe corev1.Probe = corev1.Probe{
 	ProbeHandler: corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
 			Command: []string{
-				"/sbin/checkstate.sh",
+				GetProbeMountDirectory() + "/" + GetReadinessScriptName(),
 			},
 		},
 	},
@@ -497,7 +499,11 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 }
 
 // addStorageVolumes adds storage volumes to the StatefulSet
-func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("addStorageVolumes").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
 		// add ephemeral volumes
@@ -522,7 +528,55 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 		}
 	}
 
+	// Add Splunk Probe config map
+	probeConfigMap := getProbeConfigMap(ctx, client, cr)
+	if probeConfigMap == nil {
+		scopedLog.Error(nil, "Unable to get probeConfigMap")
+	}
+	addProbeConfigMapVolume(probeConfigMap, statefulSet)
 	return nil
+}
+
+func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) *corev1.ConfigMap {
+
+	configMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetProbeConfigMapName(cr.GetNamespace()),
+			Namespace: cr.GetNamespace(),
+		},
+	}
+
+	// Add readiness script to config map
+	data, err := ReadFile(ctx, GetReadinessScriptLocation())
+	if err != nil {
+		return nil
+	}
+	configMapData := map[string]string{GetReadinessScriptName(): data}
+
+	// Add liveness script to config mpa
+	livenessScriptLocation, _ := filepath.Abs(GetLivenessScriptLocation())
+	data, err = ReadFile(ctx, livenessScriptLocation)
+	if err != nil {
+		return nil
+	}
+	configMapData[GetLivenessScriptName()] = data
+
+	configMap.Data = configMapData
+	controller.ApplyConfigMap(ctx, client, &configMap)
+
+	return &configMap
+}
+
+func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.StatefulSet) {
+	configMapVolDefaultMode := GetProbeVolumePermission()
+	addSplunkVolumeToTemplate(&statefulSet.Spec.Template, configMap.Name, GetProbeMountDirectory(), corev1.VolumeSource{
+		ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: configMap.GetName(),
+			},
+			DefaultMode: &configMapVolDefaultMode,
+		},
+	})
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
@@ -597,7 +651,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// Add storage volumes
-	err = addStorageVolumes(cr, spec, statefulSet, labels)
+	err = addStorageVolumes(ctx, cr, client, spec, statefulSet, labels)
 	if err != nil {
 		return statefulSet, err
 	}
