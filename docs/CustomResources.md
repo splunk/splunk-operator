@@ -140,7 +140,7 @@ Enterprise resources, including: `Standalone`, `LicenseManager`,
 | livenessInitialDelaySeconds | livenessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) | Defines `initialDelaySeconds` for the Liveness probe |
 | imagePullSecrets | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources) |
 
-## LicenseMaster Resource Spec Parameters
+## LicenseManager Resource Spec Parameters
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
