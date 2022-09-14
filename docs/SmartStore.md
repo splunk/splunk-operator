@@ -1,6 +1,6 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is recommended as a temporary way of installing SmartStore configuration & indexes. In the upcoming releases, an enhanced App Installation method will be introduced which is expected to help install SmartStore indexes & configuration using Apps. The new approach, once released, will become the preferred method moving ahead*
+*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration.*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
