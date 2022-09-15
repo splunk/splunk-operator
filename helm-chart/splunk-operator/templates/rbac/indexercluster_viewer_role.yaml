@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-indexercluster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - indexerclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - indexerclusters/status
+  verbs:
+  - get

@@ -1,0 +1,15 @@
+apiVersion: enterprise.splunk.com/v3
+kind: SearchHeadCluster
+metadata:
+  name: test-shc
+  finalizers: 
+    - "enterprise.splunk.com/delete-pvc"
+spec:
+  imagePullPolicy: "IfNotPresent"
+  replicas: 3
+  clusterMasterRef:
+    name: test
+  defaults: |-
+    splunk:
+      multisite_master: splunk-test-cluster-master-service
+      site: site0

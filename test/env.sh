@@ -11,6 +11,14 @@
 : "${ECR_REGISTRY:=}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
+# Azure specific variables
+: "${AZURE_RESOURCE_GROUP:=}"
+: "${AZURE_CONTAINER_REGISTRY:=}"
+: "${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER:=}"
+: "${AZURE_CLUSTER_AGENTPOOL:=}"
+: "${AZURE_CLUSTER_AGENTPOOL_RG:=}"
+: "${AZURE_STORAGE_ACCOUNT:=}"
+: "${AZURE_MANAGED_ID_ENABLED:=}"
 # Below env variables required to run license master test cases
 : "${ENTERPRISE_LICENSE_PATH:=}"
 : "${TEST_S3_BUCKET:=}"
@@ -39,8 +47,8 @@
 : "${SKIP_REGEX:=}"
 # Set to DEBUG_RUN:=True to skip tear down of test environment in case of test failure
 : "${DEBUG_RUN:=False}"
-# Type of deployment, manifest files or helm chart, possible values "manifest" or "helm"
-: "${DEPLOYMENT_TYPE:=}"
+# Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"
+: "${DEPLOYMENT_TYPE:=manifest}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then

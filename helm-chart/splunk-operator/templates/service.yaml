@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-controller-manager-service
+  labels:
+{{- include "splunk-operator.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.splunkOperator.service.type }}
+{{- with .Values.splunkOperator.service.ports }}
+  ports:   
+{{ toYaml . | indent 4 }}
+{{- end }}
+  selector:
+{{- include "splunk-operator.selectorLabels" . | nindent 4 }}

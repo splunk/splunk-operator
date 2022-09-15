@@ -61,4 +61,52 @@ resources:
   kind: Standalone
   path: github.com/splunk/splunk-operator/api/v3
   version: v3
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: splunk.com
+  group: enterprise
+  kind: IndexerCluster
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: splunk.com
+  group: enterprise
+  kind: Standalone
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: splunk.com
+  group: enterprise
+  kind: MonitoringConsole
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: splunk.com
+  group: enterprise
+  kind: SearchHeadCluster
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: splunk.com
+  group: enterprise
+  kind: ClusterManager
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: splunk.com
+  group: enterprise
+  kind: LicenseManager
+  path: github.com/splunk/splunk-operator/api/v4
+  version: v4
 version: "3"
