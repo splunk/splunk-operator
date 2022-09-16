@@ -40,7 +40,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
 Example: Standalone.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: stdln
@@ -103,7 +103,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
 Example: ClusterManager.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: cm
@@ -175,7 +175,7 @@ This example describes the installation of apps on the Deployer and the Search H
 Example: SearchHeadCluster.yaml
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: shc 
@@ -426,7 +426,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.0.0"
+        image: "docker.io/splunk/splunk-operator:2.1.0"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging
