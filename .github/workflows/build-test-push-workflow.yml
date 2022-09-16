@@ -129,7 +129,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [basic, appframeworks1, appframeworkc3, appframeworkm4, secret, monitoringconsole]
+        test: [basic, appframeworks1, managerappframeworkc3, managerappframeworkm4, managersecret, managermc, masterappframeworkc3, masterappframeworkm4, mastersecret, mastermc]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1

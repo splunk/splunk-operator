@@ -6,6 +6,6 @@ metadata:
 spec: 
   volumes: []
   imagePullPolicy: IfNotPresent
-  clusterMasterRef: 
+  clusterManagerRef: 
     name: test
   serviceAccount: test-svc-account-2

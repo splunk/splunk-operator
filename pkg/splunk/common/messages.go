@@ -31,6 +31,6 @@ const (
 	// SecretTokenNotRetrievable indicates missing secret token in pod secret
 	SecretTokenNotRetrievable = "couldn't retrieve %s from secret data"
 
-	// EmptyClusterMasterRef indicates an empty cluster manager reference
-	EmptyClusterMasterRef = "empty cluster manager reference"
+	// EmptyClusterManagerRef indicates an empty cluster manager reference
+	EmptyClusterManagerRef = "empty cluster manager reference"
 )

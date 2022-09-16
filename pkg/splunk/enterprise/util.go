@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"path"
@@ -38,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -238,7 +239,17 @@ func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar
 func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Name:  splcommon.ClusterManagerURL,
+			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+		},
+	}
+}
+
+// getClusterManagerExtraEnv returns extra environment variables used by indexer clusters
+func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  splcommon.ClusterManagerURL,
 			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
 		},
 	}
@@ -255,23 +266,45 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 }
 
 // getLicenseManagerURL returns URL of license manager
-func getLicenseManagerURL(ctx context.Context, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
-	if spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
 		return []corev1.EnvVar{
 			{
-				Name:  "SPLUNK_LICENSE_MASTER_URL",
+				Name:  splcommon.LicenseManagerURL,
 				Value: licenseManagerURL,
 			},
 		}
 	}
 	return []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Name:  splcommon.LicenseManagerURL,
 			Value: GetSplunkServiceName(SplunkLicenseManager, cr.GetName(), false),
+		},
+	}
+}
+
+// getLicenseMasterURL returns URL of license manager
+func getLicenseMasterURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	if spec.LicenseMasterRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+		}
+		return []corev1.EnvVar{
+			{
+				Name:  splcommon.LicenseManagerURL,
+				Value: licenseManagerURL,
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  splcommon.LicenseManagerURL,
+			Value: GetSplunkServiceName(SplunkLicenseMaster, cr.GetName(), false),
 		},
 	}
 }
@@ -442,11 +475,11 @@ func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 
 	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
 	if err != nil {
-		scopedLog.Error(err, "There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir)
+		scopedLog.Error(err, "There is no default volume configured for the App framework, use the temporary location", "dir", TmpAppDownloadDir)
 		splcommon.AppDownloadVolume = TmpAppDownloadDir
 		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the directory %s", splcommon.AppDownloadVolume)
+			scopedLog.Error(err, "Unable to create the directory", "dir", splcommon.AppDownloadVolume)
 			return 0, err
 		}
 	}
@@ -980,7 +1013,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 		// If the AppSrc is missing mark all the corresponding apps for deletion
 		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) ||
 			!checkIfAppSrcExistsWithRemoteListing(appSrc, remoteObjListingMap) {
-			scopedLog.Info("App change", "deleting/disabling all the apps for App source: ", appSrc, "Reason: App source is mising in config or remote listing")
+			scopedLog.Info("App change: App source is missing in config or remote listing, deleting/disabling all the apps", "App source", appSrc)
 			curAppDeployList := appSrcDeploymentInfo.AppDeploymentInfoList
 			var modified bool
 
@@ -1001,8 +1034,9 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 		if appSrcExistsLocally {
 			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
 			for appIdx := range currentList {
-				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) && !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
-					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
+				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) &&
+					!checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
+					scopedLog.Info("App change: deleting/disabling the App, as it is missing in the remote listing", "App name", currentList[appIdx].AppName)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 				}
 			}
@@ -1058,7 +1092,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentIn
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
 		if !isAppExtentionValid(receivedKey) {
-			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extention", "receivedKey", receivedKey)
+			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extension", "receivedKey", receivedKey)
 			continue
 		}
 
@@ -2007,12 +2041,21 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		return latestStdlnCR, nil
 
 	case "LicenseMaster":
-		latestLmCR := &enterpriseApi.LicenseMaster{}
+		latestLmCR := &enterpriseApiV3.LicenseMaster{}
 		err = client.Get(ctx, namespacedName, latestLmCR)
 		if err != nil {
 			return nil, err
 		}
-		origCR.(*enterpriseApi.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
+		origCR.(*enterpriseApiV3.LicenseMaster).Status.DeepCopyInto(&latestLmCR.Status)
+		return latestLmCR, nil
+
+	case "LicenseManager":
+		latestLmCR := &enterpriseApi.LicenseManager{}
+		err = client.Get(ctx, namespacedName, latestLmCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.LicenseManager).Status.DeepCopyInto(&latestLmCR.Status)
 		return latestLmCR, nil
 
 	case "SearchHeadCluster":
@@ -2034,12 +2077,21 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		return latestIdxcCR, nil
 
 	case "ClusterMaster":
-		latestCmCR := &enterpriseApi.ClusterMaster{}
+		latestCmCR := &enterpriseApiV3.ClusterMaster{}
 		err = client.Get(ctx, namespacedName, latestCmCR)
 		if err != nil {
 			return nil, err
 		}
-		origCR.(*enterpriseApi.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
+		origCR.(*enterpriseApiV3.ClusterMaster).Status.DeepCopyInto(&latestCmCR.Status)
+		return latestCmCR, nil
+
+	case "ClusterManager":
+		latestCmCR := &enterpriseApi.ClusterManager{}
+		err = client.Get(ctx, namespacedName, latestCmCR)
+		if err != nil {
+			return nil, err
+		}
+		origCR.(*enterpriseApi.ClusterManager).Status.DeepCopyInto(&latestCmCR.Status)
 		return latestCmCR, nil
 
 	case "MonitoringConsole":

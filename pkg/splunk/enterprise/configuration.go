@@ -30,7 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -151,12 +152,16 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
 	if instanceType == SplunkIndexer {
-		if len(spec.ClusterMasterRef.Name) == 0 {
+		if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
 			// of multisite / multipart IndexerCluster can be used to resolve (headless) or load balance traffic to the indexers of all parts
 			partOfIdentifier = instanceIdentifier
 			instanceIdentifier = ""
-		} else {
+		} else if len(spec.ClusterManagerRef.Name) > 0 {
+			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
+			// in the app.kubernetes.io/part-of label
+			partOfIdentifier = spec.ClusterManagerRef.Name
+		} else if len(spec.ClusterMasterRef.Name) > 0 {
 			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
 			// in the app.kubernetes.io/part-of label
 			partOfIdentifier = spec.ClusterMasterRef.Name
@@ -532,6 +537,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := splcommon.GetIstioAnnotations(ports)
 	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
+	if len(spec.ClusterManagerRef.Name) > 0 && len(spec.ClusterMasterRef.Name) == 0 {
+		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
+	}
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
 	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
@@ -634,7 +642,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	if instanceType == SplunkStandalone || instanceType == SplunkClusterManager {
+	if instanceType == SplunkStandalone || isCMDeployed(instanceType) {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
 		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
@@ -764,7 +772,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	// prepare container env variables
 	role := instanceType.ToRole()
-	if instanceType == SplunkStandalone && len(spec.ClusterMasterRef.Name) > 0 {
+	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
 	env := []corev1.EnvVar{
@@ -783,47 +791,102 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Value: spec.LicenseURL,
 		})
 	}
-	if instanceType != SplunkLicenseManager && spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+	if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
 		env = append(env, corev1.EnvVar{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Name:  splcommon.LicenseManagerURL,
 			Value: licenseManagerURL,
+		})
+	} else if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
+		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  splcommon.LicenseManagerURL,
+			Value: licenseMasterURL,
 		})
 	}
 
 	// append URL for cluster manager, if configured
 	var clusterManagerURL string
-	if instanceType == SplunkClusterManager {
+	if isCMDeployed(instanceType) {
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterManagerURL = "localhost"
-	} else if spec.ClusterMasterRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterMasterRef.Name, false)
-		if spec.ClusterMasterRef.Namespace != "" {
-			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
+	} else if spec.ClusterManagerRef.Name != "" {
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
+		if spec.ClusterManagerRef.Namespace != "" {
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseMasterRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
 			namespacedName := types.NamespacedName{
 				Namespace: cr.GetNamespace(),
-				Name:      spec.ClusterMasterRef.Name,
+				Name:      spec.ClusterManagerRef.Name,
 			}
-			managerIdxCluster := &enterpriseApi.ClusterMaster{}
+			managerIdxCluster := &enterpriseApi.ClusterManager{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
 				scopedLog.Error(err, "Unable to get ClusterManager")
 			}
 
-			if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
+			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
+					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
 				}
 				env = append(env, corev1.EnvVar{
-					Name:  "SPLUNK_LICENSE_MASTER_URL",
+					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
+				})
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseMasterURL,
+				})
+			}
+		}
+	} else if spec.ClusterMasterRef.Name != "" {
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		if spec.ClusterMasterRef.Namespace != "" {
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
+		}
+		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
+			//Check if CM is connected to a LicenseManager
+			namespacedName := types.NamespacedName{
+				Namespace: cr.GetNamespace(),
+				Name:      spec.ClusterMasterRef.Name,
+			}
+			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get ClusterManager")
+			}
+
+			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
+					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseManagerURL,
+				})
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseMasterURL,
 				})
 			}
 		}
@@ -831,7 +894,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	if clusterManagerURL != "" {
 		extraEnv = append(extraEnv, corev1.EnvVar{
-			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Name:  splcommon.ClusterManagerURL,
 			Value: clusterManagerURL,
 		})
 	}
@@ -955,6 +1018,10 @@ func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 	}
 
 	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
+}
+
+func isCMDeployed(instanceType InstanceType) bool {
+	return instanceType == SplunkClusterManager || instanceType == SplunkClusterMaster
 }
 
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed

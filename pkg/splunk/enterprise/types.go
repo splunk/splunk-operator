@@ -17,10 +17,10 @@ package enterprise
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sync"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,8 +47,11 @@ const (
 	// SplunkStandalone is a single instance of Splunk Enterprise
 	SplunkStandalone InstanceType = "standalone"
 
+	// SplunkClusterMaster is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
+	SplunkClusterMaster InstanceType = splcommon.ClusterManager
+
 	// SplunkClusterManager is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
-	SplunkClusterManager InstanceType = splcommon.ClusterManager
+	SplunkClusterManager InstanceType = "cluster-manager"
 
 	// SplunkSearchHead may be a standalone or clustered search head instance
 	SplunkSearchHead InstanceType = "search-head"
@@ -59,8 +62,11 @@ const (
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
+	// SplunkLicenseMaster controls one or more license nodes
+	SplunkLicenseMaster InstanceType = splcommon.LicenseManager
+
 	// SplunkLicenseManager controls one or more license nodes
-	SplunkLicenseManager InstanceType = splcommon.LicenseManager
+	SplunkLicenseManager InstanceType = "license-manager"
 
 	// SplunkMonitoringConsole is a single instance of Splunk monitor for mc
 	SplunkMonitoringConsole InstanceType = "monitoring-console"
@@ -212,14 +218,18 @@ func (instanceType InstanceType) ToRole() string {
 		role = "splunk_standalone"
 	case SplunkClusterManager:
 		role = "splunk_cluster_master"
+	case SplunkClusterMaster:
+		role = "splunk_cluster_master"
 	case SplunkSearchHead:
 		role = "splunk_search_head"
 	case SplunkIndexer:
 		role = "splunk_indexer"
 	case SplunkDeployer:
 		role = "splunk_deployer"
+	case SplunkLicenseMaster:
+		role = splcommon.LicenseManagerRole
 	case SplunkLicenseManager:
-		role = "splunk_license_master"
+		role = splcommon.LicenseManagerRole
 	case SplunkMonitoringConsole:
 		role = "splunk_monitor"
 	}
@@ -234,14 +244,18 @@ func (instanceType InstanceType) ToKind() string {
 		kind = "standalone"
 	case SplunkClusterManager:
 		kind = "indexer"
+	case SplunkClusterMaster:
+		kind = "indexer"
 	case SplunkIndexer:
 		kind = "indexer"
 	case SplunkSearchHead:
 		kind = "search-head"
 	case SplunkDeployer:
 		kind = "search-head"
-	case SplunkLicenseManager:
+	case SplunkLicenseMaster:
 		kind = splcommon.LicenseManager
+	case SplunkLicenseManager:
+		kind = "license-manager"
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
 	}

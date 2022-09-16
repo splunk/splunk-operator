@@ -23,7 +23,7 @@ import (
 
 	"github.com/splunk/splunk-operator/test/testenv"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 )
 

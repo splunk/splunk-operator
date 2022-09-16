@@ -9,7 +9,7 @@ spec:
   affinity: {}
   appRepo:
     defaults: {}
-  clusterMasterRef: {}
+  clusterManagerRef: {}
   defaults: ""
   defaultsUrl: ""
   defaultsUrlApps: ""
@@ -19,7 +19,7 @@ spec:
     storageClassName: ""
   image: ""
   imagePullPolicy: IfNotPresent
-  licenseMasterRef:
+  licenseManagerRef:
     name: lc-test
   licenseUrl: ""
   livenessInitialDelaySeconds: 0
