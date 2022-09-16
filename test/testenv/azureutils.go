@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -41,17 +42,17 @@ func GetAzureEndpoint() string {
 }
 
 // DownloadLicenseFromAzure downloads license file from Azure
-func DownloadLicenseFromAzure() bool {
+func DownloadLicenseFromAzure(ctx context.Context) bool {
 	licenseLocation := enterpriseAzureLicenseLocation
 	licenseName := "enterprise.lic"
 	licenseFullPath := testAzureContainer + licenseLocation + licenseName
 	//dataBucket := testAzureContainer
-	status := DownloadFileFromAzure(AzureStorageAccount, AzureStorageAccountKey, licenseFullPath, licenseName)
+	status := DownloadFileFromAzure(ctx, AzureStorageAccount, AzureStorageAccountKey, licenseFullPath, licenseName)
 	return status
 }
 
 // DownloadFileFromAzure downloads a file from Azure Storage account container
-func DownloadFileFromAzure(accountName, accountKey, appPackageFullPath, localFileName string) bool {
+func DownloadFileFromAzure(ctx context.Context, accountName, accountKey, appPackageFullPath, localFileName string) bool {
 
 	requestAppDownload, err := http.NewRequest("GET", appPackageFullPath, nil)
 
@@ -60,7 +61,7 @@ func DownloadFileFromAzure(accountName, accountKey, appPackageFullPath, localFil
 		return false
 	}
 
-	setSecretHeaders(accountName, accountKey, requestAppDownload)
+	setSecretHeaders(ctx, accountName, accountKey, requestAppDownload)
 
 	logf.Log.Info("Download from Azure", "App to download", appPackageFullPath)
 
@@ -89,7 +90,7 @@ func DownloadFileFromAzure(accountName, accountKey, appPackageFullPath, localFil
 }
 
 // UploadFileToAzure uploads a file to Azure Storage account container
-func UploadFileToAzure(accountName, accountKey, appPackageFullPath, localFileName string) bool {
+func UploadFileToAzure(ctx context.Context, accountName, accountKey, appPackageFullPath, localFileName string) bool {
 
 	httpclient := &http.Client{}
 	data, err := os.Open(localFileName)
@@ -114,8 +115,8 @@ func UploadFileToAzure(accountName, accountKey, appPackageFullPath, localFileNam
 	}
 	x := info.Size()
 
-	setUploadHeaders(localFileName, requestUploadApp, x)
-	setSecretHeaders(accountName, accountKey, requestUploadApp)
+	setUploadHeaders(ctx, localFileName, requestUploadApp, x)
+	setSecretHeaders(ctx, accountName, accountKey, requestUploadApp)
 
 	logf.Log.Info("Upload to Azure blob,", "File to upload:", appPackageFullPath)
 
@@ -190,7 +191,7 @@ const (
 )
 
 // ListAppsonAzure list the files present in an Azure Storage account container
-func ListAppsonAzure(accountName, accountKey, bucketName, pathWithInBucket string) bool {
+func ListAppsonAzure(ctx context.Context, accountName, accountKey, bucketName, pathWithInBucket string) bool {
 
 	logf.Log.Info("List apps parameters:", "accountName", accountName, "accountKey:", accountKey, "bucketName:", bucketName, "pathWithInBucket:", pathWithInBucket)
 
@@ -219,7 +220,7 @@ func ListAppsonAzure(accountName, accountKey, bucketName, pathWithInBucket strin
 		return false
 	}
 
-	setSecretHeaders(accountName, accountKey, requestDownloadUsingKey)
+	setSecretHeaders(ctx, accountName, accountKey, requestDownloadUsingKey)
 	logf.Log.Info("Azure blob with secrets list download requesting", "App List to download", appsListFetchURL)
 	httpclient := &http.Client{}
 	respDownloadWithKey, err := httpclient.Do(requestDownloadUsingKey)
@@ -279,7 +280,7 @@ func ComputeHMACSHA256(message string, base64DecodedAccountKey []byte) (base64St
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
-func buildStringToSign(request http.Request, accountName string) (string, error) {
+func buildStringToSign(ctx context.Context, request http.Request, accountName string) (string, error) {
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
 	headers := request.Header
 	contentLength := headers.Get(headerContentLength)
@@ -287,7 +288,7 @@ func buildStringToSign(request http.Request, accountName string) (string, error)
 		contentLength = ""
 	}
 
-	canonicalizedResource, err := buildCanonicalizedResource(request.URL, accountName)
+	canonicalizedResource, err := buildCanonicalizedResource(ctx, request.URL, accountName)
 	if err != nil {
 		return "", err
 	}
@@ -305,13 +306,13 @@ func buildStringToSign(request http.Request, accountName string) (string, error)
 		headers.Get(headerIfNoneMatch),
 		headers.Get(headerIfUnmodifiedSince),
 		headers.Get(headerRange),
-		buildCanonicalizedHeader(headers),
+		buildCanonicalizedHeader(ctx, headers),
 		canonicalizedResource,
 	}, "\n")
 	return stringToSign, nil
 }
 
-func buildCanonicalizedHeader(headers http.Header) string {
+func buildCanonicalizedHeader(ctx context.Context, headers http.Header) string {
 	cm := map[string][]string{}
 	for k, v := range headers {
 		headerName := strings.TrimSpace(strings.ToLower(k))
@@ -340,7 +341,7 @@ func buildCanonicalizedHeader(headers http.Header) string {
 	return ch.String()
 }
 
-func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) {
+func buildCanonicalizedResource(ctx context.Context, u *url.URL, accountName string) (string, error) {
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
 	cr := bytes.NewBufferString("/")
 	cr.WriteString(accountName)
@@ -380,7 +381,7 @@ func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) 
 	return cr.String(), nil
 }
 
-func setUploadHeaders(fileName string, request *http.Request, contentLength int64) {
+func setUploadHeaders(ctx context.Context, fileName string, request *http.Request, contentLength int64) {
 
 	info, err := os.Stat(fileName)
 	if err != nil {
@@ -401,17 +402,17 @@ func setUploadHeaders(fileName string, request *http.Request, contentLength int6
 	request.Header[headerContentLength] = []string{strconv.FormatInt(x, 10)}
 }
 
-func setSecretHeaders(accountName, accountKey string, request *http.Request) {
+func setSecretHeaders(ctx context.Context, accountName, accountKey string, request *http.Request) {
 	request.Header[headerXmsDate] = []string{time.Now().UTC().Format(http.TimeFormat)}
 	request.Header[headerXmsVersion] = []string{"2021-06-08"}
 
-	authHeader := getSecretAuthHeader(accountName, accountKey, request)
+	authHeader := getSecretAuthHeader(ctx, accountName, accountKey, request)
 	request.Header[headerAuthorization] = []string{authHeader}
 
 }
 
-func getSecretAuthHeader(accountName, accountKey string, request *http.Request) string {
-	stringToSign, err := buildStringToSign(*request, accountName)
+func getSecretAuthHeader(ctx context.Context, accountName, accountKey string, request *http.Request) string {
+	stringToSign, err := buildStringToSign(ctx, *request, accountName)
 	if err != nil {
 		logf.Log.Error(err, "Azure Blob with secrets Failed to build string to sign")
 		return ""
