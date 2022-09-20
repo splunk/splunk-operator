@@ -1,6 +1,6 @@
 ---
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 name: example
 
 ---
@@ -8,7 +8,7 @@ name: example
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
-  name: splunk-example-cluster-master
+  name: splunk-example-cluster-manager
 status:
   replicas: 1
 
@@ -17,4 +17,4 @@ status:
 apiVersion: v1
 kind: Secret
 metadata: 
-  name: splunk-example-cluster-master-secret-v1
+  name: splunk-example-cluster-manager-secret-v1

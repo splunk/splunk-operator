@@ -1,0 +1,1 @@
+Clustered deployment (C3 - clustered indexer, search head cluster, using the Cluster Master CRD)

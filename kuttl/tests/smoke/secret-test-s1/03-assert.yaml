@@ -1,6 +1,6 @@
 ---
 apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+kind: LicenseManager
 metadata:
   name: lc-test
 status:

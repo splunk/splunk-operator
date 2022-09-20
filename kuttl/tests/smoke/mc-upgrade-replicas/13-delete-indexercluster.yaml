@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 delete:
-# Delete a ClusterMaster
+# Delete a Clustermanager
 - apiVersion: enterprise.splunk.com/v3
   kind: IndexerCluster
   name: example-idxc-site1

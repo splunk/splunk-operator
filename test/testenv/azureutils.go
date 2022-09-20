@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -16,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Set Azure Variables
@@ -39,60 +42,60 @@ func GetAzureEndpoint() string {
 }
 
 // DownloadLicenseFromAzure downloads license file from Azure
-func DownloadLicenseFromAzure() bool {
+func DownloadLicenseFromAzure(ctx context.Context) bool {
 	licenseLocation := enterpriseAzureLicenseLocation
 	licenseName := "enterprise.lic"
 	licenseFullPath := testAzureContainer + licenseLocation + licenseName
 	//dataBucket := testAzureContainer
-	status := DownloadFileFromAzure(AzureStorageAccount, AzureStorageAccountKey, licenseFullPath, licenseName)
+	status := DownloadFileFromAzure(ctx, AzureStorageAccount, AzureStorageAccountKey, licenseFullPath, licenseName)
 	return status
 }
 
 // DownloadFileFromAzure downloads a file from Azure Storage account container
-func DownloadFileFromAzure(accountName, accountKey, appPackageFullPath, localFileName string) bool {
+func DownloadFileFromAzure(ctx context.Context, accountName, accountKey, appPackageFullPath, localFileName string) bool {
 
 	requestAppDownload, err := http.NewRequest("GET", appPackageFullPath, nil)
 
 	if err != nil {
-		fmt.Println(err.Error(), "Azure Blob Failed to get App fetch URL")
+		logf.Log.Error(err, "Azure Blob Failed to get App fetch URL")
 		return false
 	}
 
-	setSecretHeaders(accountName, accountKey, requestAppDownload)
+	setSecretHeaders(ctx, accountName, accountKey, requestAppDownload)
 
-	fmt.Println("Download from Azure", "App to download", appPackageFullPath)
+	logf.Log.Info("Download from Azure", "App to download", appPackageFullPath)
 
 	httpclient := &http.Client{}
 	respAppDownload, err := httpclient.Do(requestAppDownload)
 	if err != nil {
-		fmt.Println(err.Error(), "Download from Azure, Errored when request get for the file")
+		logf.Log.Error(err, "Download from Azure, Errored when request get for the file")
 	}
 
 	defer respAppDownload.Body.Close()
 	responseAppDownloadBody, err := ioutil.ReadAll(respAppDownload.Body)
 	if err != nil {
-		fmt.Println(err.Error(), "Download from Azure, Errored when reading resp body for file download")
+		logf.Log.Error(err, "Download from Azure, Errored when reading resp body for file download")
 	}
 
 	err = ioutil.WriteFile(localFileName, responseAppDownloadBody, 0777)
 
 	if err != nil {
-		fmt.Println(err.Error(), "Writing to ", localFileName, " failed")
+		logf.Log.Error(err, "Writing to ", localFileName, " failed")
 		return false
 	}
-	fmt.Println("Azure blob app download", "Resp Status", respAppDownload.Status)
-	fmt.Println("Azure blob app download", "Resp Status", respAppDownload.Status)
-	fmt.Println("Azure blob app download", "Contenth Length", respAppDownload.ContentLength)
+	logf.Log.Info("Azure blob app download", "Resp Status", respAppDownload.Status)
+	logf.Log.Info("Azure blob app download", "Resp Status", respAppDownload.Status)
+	logf.Log.Info("Azure blob app download", "Contenth Length", respAppDownload.ContentLength)
 	return true
 }
 
 // UploadFileToAzure uploads a file to Azure Storage account container
-func UploadFileToAzure(accountName, accountKey, appPackageFullPath, localFileName string) bool {
+func UploadFileToAzure(ctx context.Context, accountName, accountKey, appPackageFullPath, localFileName string) bool {
 
 	httpclient := &http.Client{}
 	data, err := os.Open(localFileName)
 	if err != nil {
-		fmt.Println(err.Error(), "Error when opening file to upload to Azure for reading")
+		logf.Log.Error(err, "Error when opening file to upload to Azure for reading")
 		return false
 	}
 
@@ -101,38 +104,38 @@ func UploadFileToAzure(accountName, accountKey, appPackageFullPath, localFileNam
 	requestUploadApp, err := http.NewRequest(http.MethodPut, appPackageFullPath, data)
 
 	if err != nil {
-		fmt.Println(err.Error(), "Upload to Azure blob, Failed to put App fetch URL")
+		logf.Log.Error(err, "Upload to Azure blob, Failed to put App fetch URL")
 		return false
 	}
 
 	info, err := os.Stat(localFileName)
 	if err != nil {
-		fmt.Println(err.Error(), "Could not get size of file to upload to Azure:", localFileName)
+		logf.Log.Error(err, "Could not get size of file to upload to Azure:", localFileName)
 		return false
 	}
 	x := info.Size()
 
-	setUploadHeaders(localFileName, requestUploadApp, x)
-	setSecretHeaders(accountName, accountKey, requestUploadApp)
+	setUploadHeaders(ctx, localFileName, requestUploadApp, x)
+	setSecretHeaders(ctx, accountName, accountKey, requestUploadApp)
 
-	fmt.Println("Upload to Azure blob,", "File to upload:", appPackageFullPath)
+	logf.Log.Info("Upload to Azure blob,", "File to upload:", appPackageFullPath)
 
 	requestUploadApp.ContentLength = x
 
 	respAppDownload, err := httpclient.Do(requestUploadApp)
 
 	if err != nil {
-		fmt.Println(err.Error(), "Upload to Azure blob, Errored when request put for the app")
+		logf.Log.Error(err, "Upload to Azure blob, Errored when request put for the app")
 		return false
 	}
 	defer respAppDownload.Body.Close()
 
-	fmt.Println("Azure blob app upload", "Resp Status", respAppDownload.Status)
-	fmt.Println("Azure blob app upload", "Resp Status Code", respAppDownload.StatusCode)
-	fmt.Println("\n#######################")
+	logf.Log.Info("Azure blob app upload", "Resp Status", respAppDownload.Status)
+	logf.Log.Info("Azure blob app upload", "Resp Status Code", respAppDownload.StatusCode)
+	logf.Log.Info("#######################")
 
-	fmt.Println("\nAzure blob successfuly uploaded " + localFileName)
-	fmt.Println("\n#######################")
+	logf.Log.Info("Azure blob successfully uploaded ", "file", localFileName)
+	logf.Log.Info("#######################")
 
 	return true
 }
@@ -188,13 +191,9 @@ const (
 )
 
 // ListAppsonAzure list the files present in an Azure Storage account container
-func ListAppsonAzure(accountName, accountKey, bucketName, pathWithInBucket string) bool {
+func ListAppsonAzure(ctx context.Context, accountName, accountKey, bucketName, pathWithInBucket string) bool {
 
-	fmt.Println("List apps parameters:")
-	fmt.Println("accountName:", accountName)
-	fmt.Println("accountKey:", accountKey)
-	fmt.Println("bucketName:", bucketName)
-	fmt.Println("pathWithInBucket:", pathWithInBucket)
+	logf.Log.Info("List apps parameters:", "accountName", accountName, "accountKey:", accountKey, "bucketName:", bucketName, "pathWithInBucket:", pathWithInBucket)
 
 	if !valid("accountName", accountName) {
 		return false
@@ -217,35 +216,35 @@ func ListAppsonAzure(accountName, accountKey, bucketName, pathWithInBucket strin
 	requestDownloadUsingKey, err := http.NewRequest("GET", appsListFetchURL, nil)
 
 	if err != nil {
-		fmt.Println(err.Error(), "List apps on Azure blob: Failed to create request for App fetch URL")
+		logf.Log.Error(err, "List apps on Azure blob: Failed to create request for App fetch URL")
 		return false
 	}
 
-	setSecretHeaders(accountName, accountKey, requestDownloadUsingKey)
-	fmt.Println("Azure blob with secrets list download requesting", "App List to download", appsListFetchURL)
+	setSecretHeaders(ctx, accountName, accountKey, requestDownloadUsingKey)
+	logf.Log.Info("Azure blob with secrets list download requesting", "App List to download", appsListFetchURL)
 	httpclient := &http.Client{}
 	respDownloadWithKey, err := httpclient.Do(requestDownloadUsingKey)
 	if err != nil && respDownloadWithKey != nil && respDownloadWithKey.StatusCode == http.StatusForbidden {
 		// Service failed to authenticate request, log it
-		fmt.Println(err.Error(), "Azure Blob with secrets failed auth:", "===== HTTP Forbidden status")
+		logf.Log.Error(err, "Azure Blob with secrets failed auth:", "===== HTTP Forbidden status")
 		return false
 	}
 
 	responseDownloadBody, err := ioutil.ReadAll(respDownloadWithKey.Body)
 	if err != nil {
-		fmt.Println(err.Error(), "Azure blob with secrets ,Errored when reading resp body for app download")
+		logf.Log.Error(err, "Azure blob with secrets ,Errored when reading resp body for app download")
 		return false
 	}
 
-	fmt.Println("Azure blob with secrets download", "Resp Status", respDownloadWithKey.Status)
-	fmt.Println("Azure blob with secrets download", "resp body", string(responseDownloadBody))
+	logf.Log.Info("Azure blob with secrets download", "Resp Status", respDownloadWithKey.Status)
+	logf.Log.Info("Azure blob with secrets download", "resp body", string(responseDownloadBody))
 
 	dataWithKey := &enumerationResults{}
 
 	err = xml.Unmarshal([]byte(responseDownloadBody), dataWithKey)
 
 	if err != nil {
-		fmt.Println(err.Error(), "Azure blob with secrets, Errored when unmarshalling list")
+		logf.Log.Error(err, "Azure blob with secrets, Errored when unmarshalling list")
 		return false
 	}
 
@@ -254,11 +253,11 @@ func ListAppsonAzure(accountName, accountKey, bucketName, pathWithInBucket strin
 
 	for count = 0; count < max; count++ {
 		blob := dataWithKey.Blobs.Blob[count]
-		fmt.Println("Azure blob app details", "Count:", count, "App name:", blob.Name, "Etag:", blob.Properties.ETag,
+		logf.Log.Info("Azure blob app details", "Count:", count, "App name:", blob.Name, "Etag:", blob.Properties.ETag,
 			"Created on:", blob.Properties.CreationTime, "Modified on:", blob.Properties.LastModified)
 	}
 
-	fmt.Println("Listing of files in Azure Storage Container done")
+	logf.Log.Info("Listing of files in Azure Storage Container done")
 	return true
 }
 
@@ -281,7 +280,7 @@ func ComputeHMACSHA256(message string, base64DecodedAccountKey []byte) (base64St
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
-func buildStringToSign(request http.Request, accountName string) (string, error) {
+func buildStringToSign(ctx context.Context, request http.Request, accountName string) (string, error) {
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
 	headers := request.Header
 	contentLength := headers.Get(headerContentLength)
@@ -289,7 +288,7 @@ func buildStringToSign(request http.Request, accountName string) (string, error)
 		contentLength = ""
 	}
 
-	canonicalizedResource, err := buildCanonicalizedResource(request.URL, accountName)
+	canonicalizedResource, err := buildCanonicalizedResource(ctx, request.URL, accountName)
 	if err != nil {
 		return "", err
 	}
@@ -307,13 +306,13 @@ func buildStringToSign(request http.Request, accountName string) (string, error)
 		headers.Get(headerIfNoneMatch),
 		headers.Get(headerIfUnmodifiedSince),
 		headers.Get(headerRange),
-		buildCanonicalizedHeader(headers),
+		buildCanonicalizedHeader(ctx, headers),
 		canonicalizedResource,
 	}, "\n")
 	return stringToSign, nil
 }
 
-func buildCanonicalizedHeader(headers http.Header) string {
+func buildCanonicalizedHeader(ctx context.Context, headers http.Header) string {
 	cm := map[string][]string{}
 	for k, v := range headers {
 		headerName := strings.TrimSpace(strings.ToLower(k))
@@ -342,7 +341,7 @@ func buildCanonicalizedHeader(headers http.Header) string {
 	return ch.String()
 }
 
-func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) {
+func buildCanonicalizedResource(ctx context.Context, u *url.URL, accountName string) (string, error) {
 	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
 	cr := bytes.NewBufferString("/")
 	cr.WriteString(accountName)
@@ -382,11 +381,11 @@ func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) 
 	return cr.String(), nil
 }
 
-func setUploadHeaders(fileName string, request *http.Request, contentLength int64) {
+func setUploadHeaders(ctx context.Context, fileName string, request *http.Request, contentLength int64) {
 
 	info, err := os.Stat(fileName)
 	if err != nil {
-		fmt.Println(err.Error(), "Azure Blob could not get sizeof fle :", fileName)
+		logf.Log.Error(err, "Azure Blob could not get sizeof fle :", fileName)
 
 		return
 	}
@@ -403,32 +402,32 @@ func setUploadHeaders(fileName string, request *http.Request, contentLength int6
 	request.Header[headerContentLength] = []string{strconv.FormatInt(x, 10)}
 }
 
-func setSecretHeaders(accountName, accountKey string, request *http.Request) {
+func setSecretHeaders(ctx context.Context, accountName, accountKey string, request *http.Request) {
 	request.Header[headerXmsDate] = []string{time.Now().UTC().Format(http.TimeFormat)}
 	request.Header[headerXmsVersion] = []string{"2021-06-08"}
 
-	authHeader := getSecretAuthHeader(accountName, accountKey, request)
+	authHeader := getSecretAuthHeader(ctx, accountName, accountKey, request)
 	request.Header[headerAuthorization] = []string{authHeader}
 
 }
 
-func getSecretAuthHeader(accountName, accountKey string, request *http.Request) string {
-	stringToSign, err := buildStringToSign(*request, accountName)
+func getSecretAuthHeader(ctx context.Context, accountName, accountKey string, request *http.Request) string {
+	stringToSign, err := buildStringToSign(ctx, *request, accountName)
 	if err != nil {
-		fmt.Println(err.Error(), "Azure Blob with secrets Failed to build string to sign")
+		logf.Log.Error(err, "Azure Blob with secrets Failed to build string to sign")
 		return ""
 	}
 
 	decodedAccountKey, err := base64.StdEncoding.DecodeString(accountKey)
 	if err != nil {
 		// failed to decode
-		fmt.Println(err.Error(), "Azure Blob with secrets failed auth:", "failed to decode accountKey")
+		logf.Log.Error(err, "Azure Blob with secrets failed auth:", "failed to decode accountKey")
 		return ""
 	}
 
 	signature := ComputeHMACSHA256(stringToSign, decodedAccountKey)
 
-	fmt.Println("Azure blob with secrets", "signature:", signature)
+	logf.Log.Info("Azure blob with secrets", "signature:", signature)
 
 	authHeader := strings.Join([]string{"SharedKey ", accountName, ":", signature}, "")
 

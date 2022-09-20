@@ -1,0 +1,12 @@
+#create new cluster manager custom resource 
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterManager
+metadata:
+  name: test
+  finalizers: 
+    - "enterprise.splunk.com/delete-pvc"
+spec: 
+  volumes: []
+  imagePullPolicy: "IfNotPresent"
+  serviceAccount: test-svc-account-2
+  
