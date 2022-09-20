@@ -50,11 +50,11 @@ var logt = logf.Log.WithName("splunk.enterprise.configValidation")
 func init() {
 	// Re-Assigning GetReadinessScriptLocation and GetLivenessScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
 	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../" + "../" + "../" + readinessScriptLocation)
+		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
 		return fileLocation
 	}
 	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../" + "../" + "../" + readinessScriptLocation)
+		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
 		return fileLocation
 	}
 }

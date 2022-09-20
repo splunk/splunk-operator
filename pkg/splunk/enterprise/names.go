@@ -58,7 +58,7 @@ const (
 	livenessScriptLocation = "tools/k8_probes/" + livenessScriptName
 
 	// probeMountDirectory
-	probeMountDirectory = "/mnt/probescripts"
+	probeMountDirectory = "/mnt/probes"
 
 	// probeVolumePermission
 	probeVolumePermission = int32(0555)

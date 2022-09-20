@@ -529,15 +529,16 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 	}
 
 	// Add Splunk Probe config map
-	probeConfigMap := getProbeConfigMap(ctx, client, cr)
-	if probeConfigMap == nil {
-		scopedLog.Error(nil, "Unable to get probeConfigMap")
+	probeConfigMap, err := getProbeConfigMap(ctx, client, cr)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get probeConfigMap")
+		return err
 	}
 	addProbeConfigMapVolume(probeConfigMap, statefulSet)
 	return nil
 }
 
-func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) *corev1.ConfigMap {
+func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
 	configMap := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -549,22 +550,19 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	// Add readiness script to config map
 	data, err := ReadFile(ctx, GetReadinessScriptLocation())
 	if err != nil {
-		return nil
+		return &configMap, err
 	}
-	configMapData := map[string]string{GetReadinessScriptName(): data}
+	configMap.Data[GetReadinessScriptName()] = data
 
-	// Add liveness script to config mpa
+	// Add liveness script to config map
 	livenessScriptLocation, _ := filepath.Abs(GetLivenessScriptLocation())
 	data, err = ReadFile(ctx, livenessScriptLocation)
 	if err != nil {
-		return nil
+		return &configMap, err
 	}
-	configMapData[GetLivenessScriptName()] = data
-
-	configMap.Data = configMapData
+	configMap.Data[GetLivenessScriptName()] = data
 	controller.ApplyConfigMap(ctx, client, &configMap)
-
-	return &configMap
+	return &configMap, nil
 }
 
 func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.StatefulSet) {
