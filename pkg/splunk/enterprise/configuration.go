@@ -552,8 +552,7 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	if err != nil {
 		return &configMap, err
 	}
-	configMap.Data[GetReadinessScriptName()] = data
-
+	configMap.Data = map[string]string{GetReadinessScriptName(): data}
 	// Add liveness script to config map
 	livenessScriptLocation, _ := filepath.Abs(GetLivenessScriptLocation())
 	data, err = ReadFile(ctx, livenessScriptLocation)
@@ -561,7 +560,10 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		return &configMap, err
 	}
 	configMap.Data[GetLivenessScriptName()] = data
-	controller.ApplyConfigMap(ctx, client, &configMap)
+	_, err = controller.ApplyConfigMap(ctx, client, &configMap)
+	if err != nil {
+		return &configMap, err
+	}
 	return &configMap, nil
 }
 
