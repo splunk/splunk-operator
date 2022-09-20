@@ -40,7 +40,7 @@ sva:
 
     enabled: false
 
-    clusterMaster: {}
+    clusterManager: {}
       # allSites: "site1,site2"
       # site: site1
       # zone: us-west-1a
@@ -58,9 +58,9 @@ sva:
       #   site: site2
       #   zone: us-west-1c
 
-# Set name reference if ClusterMaster is already deployed
+# Set name reference if ClusterManager is already deployed
 # Namespace is optional, set if the resource exists outside of the release namespace
-existingClusterMaster: {}
+existingClusterManager: {}
   # name:
   # namespace: 
 
@@ -70,16 +70,16 @@ existingMonitoringConsole: {}
   # name: 
   # namespace: 
 
-# Set name reference if LicenseMaster is already deployed
+# Set name reference if LicenseManager is already deployed
 # Namespace is optional, set if the resource exists outside of the release namespace
-existingLicenseMaster: {}
+existingLicenseManager: {}
   # name: 
   # namespace: 
 
-# Configure a Splunk Cluster Master instance
-clusterMaster:
+# Configure a Splunk Cluster Manager instance
+clusterManager:
 
-  # Deploy a cluster master instance
+  # Deploy a cluster manager instance
   enabled: false
 
   # Specify the custom resource name
@@ -96,7 +96,7 @@ clusterMaster:
   # Specifies remote App location and scope for Splunk App management
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/AppFramework.md
   appRepo: {}
-    ## Example: Deploy apps on cluster master instance for local use
+    ## Example: Deploy apps on cluster manager instance for local use
     # appsRepoPollIntervalSeconds: 900
     # appSources:
     #   - name: networkApps
@@ -118,7 +118,7 @@ clusterMaster:
   # Splunk Smartstore configuration
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/SmartStore.md
   smartstore: {}
-    ## Example: Deploy smartstore to a clustermaster, distributes config to indexer peers
+    ## Example: Deploy smartstore to a clustermanager, distributes config to indexer peers
     # volumes:
     #   - name: <remote_volume_name>
     #     path: <remote_volume_path>
@@ -140,7 +140,7 @@ clusterMaster:
   volumes: []
 
   # Full path or URL for a Splunk Enterprise license file
-  # Ignore if deploying a license master instance
+  # Ignore if deploying a license manager instance
   licenseUrl: ""
 
   # Full path or URL for one or more default.yml files, separated by commas
@@ -148,10 +148,10 @@ clusterMaster:
   
   # Specify Splunk default.yaml to override intial environment config
   defaults: {}
-    ## Example: Deploy a multi-site cluster master
+    ## Example: Deploy a multi-site cluster manager
     # splunk:
     #   site: site1
-    #   multisite_master: localhost
+    #   multisite_manager: localhost
     #   all_sites: site1,site2,site3
     #   multisite_replication_factor_origin: 1
     #   multisite_replication_factor_total: 2
@@ -417,7 +417,7 @@ monitoringConsole:
   
   affinity: {}
 
-licenseMaster:
+licenseManager:
 
   enabled: false
 

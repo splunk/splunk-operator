@@ -475,11 +475,11 @@ func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 
 	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
 	if err != nil {
-		scopedLog.Error(err, "There is no volume configured for the App framework, use the temporary location: %s", TmpAppDownloadDir)
+		scopedLog.Error(err, "There is no default volume configured for the App framework, use the temporary location", "dir", TmpAppDownloadDir)
 		splcommon.AppDownloadVolume = TmpAppDownloadDir
 		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 		if err != nil {
-			scopedLog.Error(err, "Unable to create the directory %s", splcommon.AppDownloadVolume)
+			scopedLog.Error(err, "Unable to create the directory", "dir", splcommon.AppDownloadVolume)
 			return 0, err
 		}
 	}
@@ -1013,7 +1013,7 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 		// If the AppSrc is missing mark all the corresponding apps for deletion
 		if !CheckIfAppSrcExistsInConfig(appFrameworkConfig, appSrc) ||
 			!checkIfAppSrcExistsWithRemoteListing(appSrc, remoteObjListingMap) {
-			scopedLog.Info("App change", "deleting/disabling all the apps for App source: ", appSrc, "Reason: App source is mising in config or remote listing")
+			scopedLog.Info("App change: App source is missing in config or remote listing, deleting/disabling all the apps", "App source", appSrc)
 			curAppDeployList := appSrcDeploymentInfo.AppDeploymentInfoList
 			var modified bool
 
@@ -1034,8 +1034,9 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 		if appSrcExistsLocally {
 			currentList := appSrcDeploymentInfo.AppDeploymentInfoList
 			for appIdx := range currentList {
-				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) && !checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
-					scopedLog.Info("App change", "deleting/disabling the App: ", currentList[appIdx].AppName, "as it is missing in the remote listing", nil)
+				if !isAppRepoStateDeleted(appSrcDeploymentInfo.AppDeploymentInfoList[appIdx]) &&
+					!checkIfAnAppIsActiveOnRemoteStore(currentList[appIdx].AppName, s3Response.Objects) {
+					scopedLog.Info("App change: deleting/disabling the App, as it is missing in the remote listing", "App name", currentList[appIdx].AppName)
 					setStateAndStatusForAppDeployInfo(&currentList[appIdx], enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 				}
 			}
@@ -1091,7 +1092,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentIn
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
 		if !isAppExtentionValid(receivedKey) {
-			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extention", "receivedKey", receivedKey)
+			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extension", "receivedKey", receivedKey)
 			continue
 		}
 
