@@ -66,8 +66,9 @@ if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
 elif [  "${CLUSTER_WIDE}" != "true" ]; then 
   # Install the CRDs
   echo "Installing enterprise CRDs..."
-  make kustomize
-  bin/kustomize build config/crd | kubectl apply -f -
+  make kustomize 
+  make uninstall
+  bin/kustomize build config/crd | kubectl create -f -
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""

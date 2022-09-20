@@ -142,8 +142,8 @@ imagePullPolicy: IfNotPresent
 This is an example of the process followed by the Splunk Operator if the operator version is upgraded and a later Splunk Enterprise Docker image is available:
 ​
 1. A new Splunk Operator pod will be created, and the existing operator pod will be terminated.
-2. Any existing License Manager, Search Head, Deployer, ClusterMaster, Standalone pods will be terminated to be redeployed with the upgraded spec.
-3. After a ClusterMaster pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
+2. Any existing License Manager, Search Head, Deployer, ClusterManager, Standalone pods will be terminated to be redeployed with the upgraded spec.
+3. After a ClusterManager pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
 4. After all pods in the Indexer cluster and Search head cluster are redeployed, the Monitoring Console pod is terminated and redeployed.
 
 * Note: If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first

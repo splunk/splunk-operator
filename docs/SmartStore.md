@@ -1,10 +1,10 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is recommended as a temporary way of installing SmartStore configuration & indexes. In the upcoming releases, an enhanced App Installation method will be introduced which is expected to help install SmartStore indexes & configuration using Apps. The new approach, once released, will become the preferred method moving ahead*
+*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration.*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
- * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterMaster.
+ * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterManager.
  * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3 as described below."
  * Use of GCS with SmartStore is supported by using configuration via Splunk App.
  * Specification allows definition of SmartStore-enabled indexes only.
@@ -74,15 +74,15 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
 4. Create/Update the Cluster Manager Customer Resource specification with volume and index configuration (see Example below)
-5. Apply the Customer Resource specification: kubectl -f apply Clustermaster.yaml
+5. Apply the Customer Resource specification: kubectl -f apply Clustermanager.yaml
 6. Follow the rest of the steps to Create an Indexer Cluster. See [Examples](Examples.md)
 
 
-Example. Clustermaster.yaml:
+Example. Clustermanager.yaml:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: <name>
   finalizers:
@@ -114,7 +114,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 
 
 ## SmartStore Resource Spec Parameters
-There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise.  The SmartStore resource applies to the `Standalone` and `ClusterMaster` Custom Resources, and adds the following `Spec` configuration parameters:
+There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise.  The SmartStore resource applies to the `Standalone` and `ClusterManager` Custom Resources, and adds the following `Spec` configuration parameters:
 
 
 ```yaml

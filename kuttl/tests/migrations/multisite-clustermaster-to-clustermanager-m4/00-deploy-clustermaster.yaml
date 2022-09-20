@@ -1,0 +1,28 @@
+apiVersion: enterprise.splunk.com/v3
+kind: ClusterMaster
+metadata:
+  name: test
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  defaults: |-
+    splunk:
+      site: site1
+      multisite_master: localhost
+      all_sites: site1,site2
+      multisite_replication_factor_origin: 1
+      multisite_replication_factor_total: 2
+      multisite_search_factor_origin: 1
+      multisite_search_factor_total: 2
+      idxc:
+        search_factor: 2
+        replication_factor: 2
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                  - us-west-2c
