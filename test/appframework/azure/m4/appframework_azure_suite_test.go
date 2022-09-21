@@ -12,9 +12,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package c3appfw
+package azurem4appfw
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,20 +38,19 @@ const (
 )
 
 var (
-	testenvInstance       *testenv.TestEnv
-	testSuiteName         = "c3appfw-" + testenv.RandomDNSName(3)
-	appListV1             []string
-	appListV2             []string
-	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
-	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	s3AppDirV1            = testenv.AppLocationV1
-	s3AppDirV2            = testenv.AppLocationV2
-	s3AppDirDisabled      = testenv.AppLocationDisabledApps
-	s3PVTestApps          = testenv.PVTestAppsLocation
-	currDir, _            = os.Getwd()
-	downloadDirV1         = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2         = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
-	downloadDirPVTestApps = filepath.Join(currDir, "c3appfwPVTestApps-"+testenv.RandomDNSName(4))
+	testenvInstance     *testenv.TestEnv
+	testSuiteName       = "m4appfw-" + testenv.RandomDNSName(3)
+	appListV1           []string
+	appListV2           []string
+	AzureDataContainer  = os.Getenv("TEST_CONTAINER")
+	AzureContainer      = os.Getenv("INDEXES_CONTAINER")
+	AzureStorageAccount = os.Getenv("AZURE_STORAGE_ACCOUNT")
+	AzureAppDirV1       = testenv.AppLocationV1
+	AzureAppDirV2       = testenv.AppLocationV2
+	AzureAppDirDisabled = testenv.AppLocationDisabledApps
+	currDir, _          = os.Getwd()
+	downloadDirV1       = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2       = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
 )
 
 // TestBasic is the main entry point
@@ -63,24 +63,27 @@ func TestBasic(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	ctx := context.TODO()
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Create a list of apps to upload to S3
+	// Create a list of apps to upload to Azure
 	appListV1 = testenv.BasicApps
 	appFileList := testenv.GetAppFileList(appListV1)
 
-	// Download V1 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+	// Download V1 Apps from Azure
+	containerName := "/test-data/appframework/v1apps/"
+	err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 	Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-	// Create a list of apps to upload to S3 after poll period
+	// Create a list of apps to upload to Azure after poll period
 	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
 	appFileList = testenv.GetAppFileList(appListV2)
 
-	// Download V2 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+	// Download V2 Apps from Azure
+	containerName = "/test-data/appframework/v2apps/"
+	err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 	Expect(err).To(Succeed(), "Unable to download V2 app files")
 
 })

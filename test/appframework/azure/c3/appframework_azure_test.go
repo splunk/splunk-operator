@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.s
-package c3appfw
+package azurec3appfw
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
@@ -35,12 +34,13 @@ var _ = Describe("c3appfw test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 
 	var deployment *testenv.Deployment
-	var s3TestDirShc string
-	var s3TestDirIdxc string
-	var s3TestDirShcLocal string
-	var s3TestDirIdxcLocal string
-	var s3TestDirShcCluster string
-	var s3TestDirIdxcCluster string
+	var azTestDir string
+	var azTestDirShc string
+	var azTestDirIdxc string
+	var azTestDirShcLocal string
+	var azTestDirIdxcLocal string
+	var azTestDirShcCluster string
+	var azTestDirIdxcCluster string
 	var appSourceNameIdxc string
 	var appSourceNameShc string
 	var uploadedApps []string
@@ -71,13 +71,14 @@ var _ = Describe("c3appfw test", func() {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
 
-		// Delete files uploaded to S3
+		// Delete files uploaded to Azure
 		if !testcaseEnvInst.SkipTeardown {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 		}
 
 		if filePresentOnOperator {
-			//Delete files from app-directory
+			// Delete files from app-directory
 			opPod := testenv.GetOperatorPodName(testcaseEnvInst)
 			podDownloadPath := filepath.Join(testenv.AppDownloadVolume, "test_file.img")
 			testenv.DeleteFilesOnOperatorPod(ctx, deployment, opPod, []string{podDownloadPath})
@@ -85,14 +86,14 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to Azure for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -104,7 +105,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
 			   ############### UPGRADE APPS ################
-			   * Upload V2 apps on S3
+			   * Upload V2 apps on Azure
 			   * Wait for Monitoring Console and C3 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -117,24 +118,25 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to Azure for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			azTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
+
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
+						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -150,18 +152,18 @@ var _ = Describe("c3appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			// Upload V1 apps to Azure for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -169,8 +171,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -221,32 +223,34 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
 			// get revision number of the resource
 			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to Azure for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			// Upload V2 apps to Azure for Monitoring Console
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			//uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -292,14 +296,14 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("smoke, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V2 apps to S3 for Monitoring Console
+			   * Upload V2 apps to Azure for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload V2 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V2 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app source for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ########### INITIAL VERIFICATIONS ###########
@@ -311,7 +315,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V2 apps are copied, installed on Monitoring Console and also on Search Heads and Indexers pods
 			   ############## DOWNGRADE APPS ###############
-			   * Upload V1 apps on S3
+			   * Upload V1 apps on Azure
 			   * Wait for Monitoring Console and C3 pods to be ready
 			   ########### FINAL VERIFICATIONS #############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -324,25 +328,25 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V2 apps to S3 for Monitoring Console
+			// Upload V2 apps to Azure for Monitoring Console
 			appVersion := "V2"
 			appFileList := testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			azTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 
 			// Monitoring Console AppFramework Spec
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
+						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -358,18 +362,18 @@ var _ = Describe("c3appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V2 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			// Upload V2 apps to Azure for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -377,8 +381,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
@@ -429,32 +433,33 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############## DOWNGRADE APPS ###############
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
 			// get revision number of the resource
 			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexers", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexers", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexers", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexers", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			// Upload V1 apps to Azure for Monitoring Console
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -499,11 +504,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps on S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps on Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app config and wait for pods to be ready
 			   ########## INITIAL VERIFICATIONS ############
@@ -538,20 +543,20 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
 			appFileList := testenv.GetAppFileList(appListV1)
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -559,8 +564,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -712,11 +717,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, c3, appframeworkc3, appframework: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to Azure
 			   * Create app source with local scope for C3 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ############# INITIAL VERIFICATIONS ##########
@@ -739,20 +744,20 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -760,8 +765,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
@@ -801,20 +806,21 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete V1 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete V1 apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3
+			// Upload V2 apps to Azure
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -851,11 +857,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload ES app to S3
+			   * Upload ES app to Azure
 			   * Create App Source with 'ScopeClusterWithPreConfig' scope for C3 SVA
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ################## VERIFICATION #############
@@ -863,26 +869,27 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download ES app from S3
-			testcaseEnvInst.Log.Info("Download ES app from S3")
+			// Download ES app from Azure
+			testcaseEnvInst.Log.Info("Download ES app from Azure")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-			Expect(err).To(Succeed(), "Unable to download ES app file from S3")
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			Expect(err).To(Succeed(), "Unable to download ES app file from Azure")
 
 			// Create local directory for file download
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
 
-			// Upload ES app to S3
-			testcaseEnvInst.Log.Info("Upload ES app to S3")
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
+			// Upload ES app to Azure
+			testcaseEnvInst.Log.Info("Upload ES app to Azure")
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload ES app to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName := "appframework-shc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeClusterWithPreConfig, appSourceName, s3TestDirShc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeClusterWithPreConfig, appSourceName, azTestDirShc, 60)
 
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
@@ -959,7 +966,7 @@ var _ = Describe("c3appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Split Applist into clusterlist and local list
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster for local and cluster scope
 			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -971,7 +978,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
 			   ############### UPGRADE APPS ################
-			   * Upload V2 apps on S3
+			   * Upload V2 apps on Azure
 			   * Wait for all C3 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -989,36 +996,36 @@ var _ = Describe("c3appfw test", func() {
 			appListLocal := appListV1[len(appListV1)/2:]
 			appListCluster := appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of apps to S3 (to be used for local install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			// Upload appListLocal list of apps to Azure (to be used for local install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
 
-			s3TestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			azTestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
 			localappFileList := testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install for Indexers", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install for Indexers", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
 
-			s3TestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install for Search Head Cluster", appVersion))
+			azTestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
+			// Upload appListCluster list of apps to Azure (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for cluster-wide install (cluster scope)", appVersion))
 
-			s3TestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			azTestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
 			clusterappFileList := testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
+			// Upload appListCluster list of apps to Azure (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for cluster-wide install (cluster scope)", appVersion))
 
-			s3TestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			azTestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1033,26 +1040,26 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 60)
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
 
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
 				Scope:   enterpriseApi.ScopeCluster,
 			}
-			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
+			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, azTestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 60)
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
 				Scope:   enterpriseApi.ScopeCluster,
 			}
-			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, s3TestDirShcCluster, appSourceClusterDefaultSpec)}
+			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, azTestDirShcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecShc.AppSources = append(appFrameworkSpecShc.AppSources, appSourceSpecCluster...)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
@@ -1095,33 +1102,34 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
 			appListLocal = appListV1[len(appListV1)/2:]
 			appListCluster = appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of V2 apps to S3 (to be used for local install)
+			// Upload appListLocal list of V2 apps to Azure (to be used for local install)
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
 			localappFileList = testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install for Indexers", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install for Indexers", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
+			// Upload appListCluster list of V2 apps to Azure (to be used for cluster-wide install)
 			clusterappFileList = testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1170,7 +1178,7 @@ var _ = Describe("c3appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Split Applist into clusterlist and local list
-			   * Upload V2 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Upload V2 apps to Azure for Indexer Cluster and Search Head Cluster for local and cluster scope
 			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -1182,7 +1190,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V2 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
 			   ############### Downgrade APPS ################
-			   * Upload V1 apps on S3
+			   * Upload V1 apps on Azure
 			   * Wait for all C3 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -1200,34 +1208,37 @@ var _ = Describe("c3appfw test", func() {
 			appListLocal := appListV2[len(appListV2)/2:]
 			appListCluster := appListV2[:len(appListV2)/2]
 
-			// Upload appListLocal list of apps to S3 (to be used for local install) for Idxc
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
-			s3TestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			// Upload appListLocal list of apps to Azure (to be used for local install) for Idxc
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
+			azTestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
 			localappFileList := testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxcLocal, localappFileList)
+
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListLocal list of apps to S3 (to be used for local install) for Shc
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
-			s3TestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			// Upload appListLocal list of apps to Azure (to be used for local install) for Shc
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
+			azTestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShcLocal, localappFileList)
+
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
-			s3TestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			// Upload appListCluster list of apps to Azure (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for cluster-wide install (cluster scope)", appVersion))
+			azTestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
 			clusterappFileList := testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxcCluster, clusterappFileList)
+
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
-			s3TestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			// Upload appListCluster list of apps to Azure (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for cluster-wide install (cluster scope)", appVersion))
+			azTestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1241,25 +1252,25 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 60)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 60)
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
 				Scope:   enterpriseApi.ScopeCluster,
 			}
-			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
+			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, azTestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 60)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 60)
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
 				Scope:   enterpriseApi.ScopeCluster,
 			}
-			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, s3TestDirShcCluster, appSourceClusterDefaultSpec)}
+			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, azTestDirShcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecShc.AppSources = append(appFrameworkSpecShc.AppSources, appSourceSpecCluster...)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
@@ -1303,33 +1314,34 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############# DOWNGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
 			appListLocal = appListV1[len(appListV1)/2:]
 			appListCluster = appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of V1 apps to S3 (to be used for local install)
+			// Upload appListLocal list of V1 apps to Azure (to be used for local install)
 			appVersion = "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
 			localappFileList = testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
+			// Upload appListCluster list of V2 apps to Azure (to be used for cluster-wide install)
 			clusterappFileList = testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1373,12 +1385,12 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Create App Source for C3 SVA (Cluster Manager and Deployer)
-			   * Add more apps than usual on S3 for this test
+			   * Add more apps than usual on Azure for this test
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ############### VERIFICATIONS ###############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -1396,25 +1408,26 @@ var _ = Describe("c3appfw test", func() {
 			appFileList := testenv.GetAppFileList(appList)
 			appVersion := "V1"
 
-			// Download apps from S3
-			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			// Download apps from Azure
+			testcaseEnvInst.Log.Info("Download bigger amount of apps from Azure for this test")
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
 			// Create consolidated list of app files
 			appList = append(appListV1, appList...)
 			appFileList = testenv.GetAppFileList(appList)
 
-			// Upload app to S3 for Indexer Cluster
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for Indexer Cluster")
+			// Upload app to Azure for Indexer Cluster
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload app to S3 for Search Head Cluster
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory for Search Head Cluster")
+			// Upload app to Azure for Search Head Cluster
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1422,8 +1435,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			testcaseEnvInst.Log.Info("Create Single Site Indexer Cluster and Search Head Cluster")
@@ -1465,13 +1478,13 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled for manual update", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled for manual update", func() {
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to Azure for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to Azure
 			   * Create app source with manaul poll for M4 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ########## INITIAL VERIFICATION #############
@@ -1499,24 +1512,24 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			// ################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to Azure for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			azTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
+						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1532,16 +1545,16 @@ var _ = Describe("c3appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			// Upload V1 apps to Azure for Indexer Cluster
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1549,8 +1562,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 0)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 0)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			indexerReplicas := 3
@@ -1594,28 +1607,29 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			// ############### UPGRADE APPS ################
-			// Delete V1 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete V1 apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for C3
+			// Upload V2 apps to Azure for C3
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Uploading %s apps to S3", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Uploading %s apps to Azure", appVersion))
 
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			// Upload V2 apps to Azure for Monitoring Console
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1709,11 +1723,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to Azure
 			   * Create app source with local scope for C3 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy C3 CRD with app framework and wait for pods to be ready
 			   ############# INITIAL VERIFICATION ##########
@@ -1740,20 +1754,20 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1761,8 +1775,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 0)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 0)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, azTestDirIdxc, 0)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, azTestDirShc, 0)
 
 			// Deploy C3 CRD
 			indexerReplicas := 3
@@ -1801,20 +1815,21 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete V1 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete V1 apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3
+			// Upload V2 apps to Azure
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1897,7 +1912,7 @@ var _ = Describe("c3appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Split Applist into clusterlist and local list
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster for local and cluster scope
 			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -1909,7 +1924,7 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
 			   ############### UPGRADE APPS ################
-			   * Upload V2 apps on S3
+			   * Upload V2 apps on Azure
 			   * Wait for all C3 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -1927,34 +1942,34 @@ var _ = Describe("c3appfw test", func() {
 			appListLocal := appListV1[len(appListV1)/2:]
 			appListCluster := appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of apps to S3 (to be used for local install) for Idxc
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
-			s3TestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			// Upload appListLocal list of apps to Azure (to be used for local install) for Idxc
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
+			azTestDirIdxcLocal = "c3appfw-" + testenv.RandomDNSName(4)
 			localappFileList := testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListLocal list of apps to S3 (to be used for local install) for Shc
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
-			s3TestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			// Upload appListLocal list of apps to Azure (to be used for local install) for Shc
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
+			azTestDirShcLocal = "c3appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
-			s3TestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			// Upload appListCluster list of apps to Azure (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for cluster-wide install (cluster scope)", appVersion))
+			azTestDirIdxcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
 			clusterappFileList := testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
-			s3TestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			// Upload appListCluster list of apps to Azure (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for cluster-wide install (cluster scope)", appVersion))
+			azTestDirShcCluster = "c3appfw-cluster-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to Azure test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1968,25 +1983,25 @@ var _ = Describe("c3appfw test", func() {
 			appSourceVolumeNameShcCluster := "appframework-test-volume-shc-cluster-" + testenv.RandomDNSName(3)
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 0)
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
 				Scope:   enterpriseApi.ScopeCluster,
 			}
-			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, s3TestDirIdxcCluster, appSourceClusterDefaultSpec)}
+			appSourceSpecCluster := []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterIdxc, azTestDirIdxcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecIdxc.AppSources = append(appFrameworkSpecIdxc.AppSources, appSourceSpecCluster...)
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 0)
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
 				Scope:   enterpriseApi.ScopeCluster,
 			}
-			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, s3TestDirShcCluster, appSourceClusterDefaultSpec)}
+			appSourceSpecCluster = []enterpriseApi.AppSourceSpec{testenv.GenerateAppSourceSpec(appSourceNameClusterShc, azTestDirShcCluster, appSourceClusterDefaultSpec)}
 			appFrameworkSpecShc.AppSources = append(appFrameworkSpecShc.AppSources, appSourceSpecCluster...)
 
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
@@ -2028,33 +2043,34 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
 			appListLocal = appListV1[len(appListV1)/2:]
 			appListCluster = appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of V2 apps to S3 (to be used for local install)
+			// Upload appListLocal list of V2 apps to Azure (to be used for local install)
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for local install (local scope)", appVersion))
 			localappFileList = testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShcLocal, localappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
+			// Upload appListCluster list of V2 apps to Azure (to be used for cluster-wide install)
 			clusterappFileList = testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShcCluster, clusterappFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// ############ ENABLE MANUAL POLL ############
@@ -2116,42 +2132,42 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to Azure for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework
 			   ############## VERIFICATIONS ################
 			   * Verify app installation is in progress on Cluster Manager and Deployer
-			   * Upload more apps from S3 during bigger app install
+			   * Upload more apps from Azure during bigger app install
 			   * Wait for polling interval to pass
 			   * Verify all apps are installed on Cluster Manager and Deployer
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to Azure for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			azTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
+						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -2167,26 +2183,27 @@ var _ = Describe("c3appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Download all apps from S3
+			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload big-size app to S3 for Cluster Manager
+			// Upload big-size app to Azure for Cluster Manager
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Cluster Manager")
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Cluster Manager")
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload big-size app to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Search Head Cluster")
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
+			// Upload big-size app to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Search Head Cluster")
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2194,8 +2211,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2206,18 +2223,18 @@ var _ = Describe("c3appfw test", func() {
 			// Verify App installation is in progress on Cluster Manager
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
-			// Upload more apps to S3 for Cluster Manager
+			// Upload more apps to Azure for Cluster Manager
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Cluster Manager")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for  Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload more apps to Azure for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload more apps to Azure test directory for  Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload more apps to S3 for Deployer
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Deployer")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
+			// Upload more apps to Azure for Deployer
+			testcaseEnvInst.Log.Info("Upload more apps to Azure for Deployer")
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload more apps to Azure test directory for Deployer")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -2244,42 +2261,42 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to Azure for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ############## VERIFICATIONS ################
 			   * Verify App installation is in progress on Cluster Manager and Deployer
-			   * Upload more apps from S3 during bigger app install
+			   * Upload more apps from Azure during bigger app install
 			   * Wait for polling interval to pass
 			   * Verify all apps are installed on Cluster Manager and Deployer
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to Azure for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			azTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
 
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
+						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -2295,26 +2312,27 @@ var _ = Describe("c3appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Download all apps from S3
+			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload big-size app to S3 for Cluster Manager
+			// Upload big-size app to Azure for Cluster Manager
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Cluster Manager")
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Cluster Manager")
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload big-size app to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Search Head Cluster")
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
+			// Upload big-size app to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Search Head Cluster")
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2322,8 +2340,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2334,18 +2352,18 @@ var _ = Describe("c3appfw test", func() {
 
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
-			// Upload more apps to S3 for Cluster Manager
+			// Upload more apps to Azure for Cluster Manager
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Cluster Manager")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload more apps to Azure for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload more apps to Azure test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload more apps to S3 for Deployer
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Deployer")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
+			// Upload more apps to Azure for Deployer
+			testcaseEnvInst.Log.Info("Upload more apps to Azure for Deployer")
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload more apps to Azure test directory for Deployer")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -2379,11 +2397,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   * While app install is in progress, restart the operator
@@ -2398,25 +2416,26 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download all apps from S3
+			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2424,8 +2443,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2473,11 +2492,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   * While app download is in progress, restart the operator
@@ -2492,25 +2511,26 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download all apps from S3
+			// Download all apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to Azure for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2518,8 +2538,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2567,11 +2587,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### VERIFICATIONS #############
@@ -2583,27 +2603,26 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
 			   ############ Upload Disabled App ###########
-			   * Download disabled app from s3
-			   * Delete the app from s3
+			   * Download disabled app from az
+			   * Delete the app from az
 			   * Check for repo state in App Deployment Info
-
 			*/
 
 			//################## SETUP ####################
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			// Upload V1 apps to Azure for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2611,8 +2630,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2647,20 +2666,23 @@ var _ = Describe("c3appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############ Upload Disabled App ###########
-			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
+			// Verify repo state on App to be disabled to be 1 (i.e app present on Azure bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
-			// Download disabled version of app from S3
-			testcaseEnvInst.Log.Info("Download disabled version of apps from S3 for this test")
-			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirDisabled, downloadDirV1, appFileName)
+			// Download disabled version of app from Azure
+			testcaseEnvInst.Log.Info("Download disabled version of apps from Azure for this test")
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			var AzureAppDirectoryDisabled []string
+			AzureAppDirectoryDisabled[0] = AzureAppDirDisabled
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, AzureAppDirectoryDisabled)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
-			// Upload disabled version of app to S3
-			testcaseEnvInst.Log.Info("Upload disabled version of app to S3 for this test")
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileName, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			// Upload disabled version of app to Azure
+			testcaseEnvInst.Log.Info("Upload disabled version of app to Azure for this test")
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileName)
+			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -2675,23 +2697,24 @@ var _ = Describe("c3appfw test", func() {
 			// Wait for App state to update after config file change
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
-			//Delete the file from s3
-			s3Filepath := filepath.Join(s3TestDirIdxc, appFileName[0])
-			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName[0]))
+			//Delete the file from az
+			azFilepath := filepath.Join(azTestDirIdxc, appFileName[0])
+			azureBlobClient := &testenv.AzureBlobClient{}
+			err = azureBlobClient.DeleteFileOnAzure(ctx, azFilepath, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on Azure test directory", appFileName[0]))
 
-			// Verify repo state is set  to 2 (i.e app deleted from S3 bucket)
+			// Verify repo state is set  to 2 (i.e app deleted from Azure bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 
 		})
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   * While app download is completed, upload new versions of the apps
@@ -2714,25 +2737,26 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download all apps from S3
+			// Download all apps from Azure
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			// Upload V1 apps to Azure for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2740,8 +2764,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, s3TestDirIdxc, 120)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, s3TestDirShc, 120)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeLocal, appSourceNameIdxc, azTestDirIdxc, 120)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeLocal, appSourceNameShc, azTestDirShc, 120)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2753,19 +2777,19 @@ var _ = Describe("c3appfw test", func() {
 			// Verify App Download is in progress on Cluster Manager
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to Azure for Indexer Cluster
 			appVersion = "V2"
 			appListV2 := []string{appListV2[0]}
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Get Pod age to check for pod resets later
@@ -2812,7 +2836,7 @@ var _ = Describe("c3appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Create a file on operator to utilize over 1G of space
-			   * Upload files to S3 for Indexer Cluster and Search Head Cluster for cluster scope
+			   * Upload files to Azure for Indexer Cluster and Search Head Cluster for cluster scope
 			   * Create app sources for Cluster Manager and Deployer with cluster scope
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -2832,20 +2856,20 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
-			// Upload apps to S3 for Indexer Cluster
+			// Upload apps to Azure for Indexer Cluster
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc := "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc := "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search head Cluster", appVersion))
-			s3TestDirShc := "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search head Cluster", appVersion))
+			azTestDirShc := "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -2856,9 +2880,9 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc := "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
 			appFrameworkSpecIdxc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 			appFrameworkSpecShc.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 
 			// Deploy C3 CRD
@@ -2898,11 +2922,11 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to Azure for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
 			   * When app download is complete, delete apps from app directory
@@ -2917,25 +2941,26 @@ var _ = Describe("c3appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Download big size apps from S3
+			// Download big size apps from Azure
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
+			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload big size app to S3 for Indexer Cluster
+			// Upload big size app to Azure for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info("Upload big size app to S3 for Indexer Cluster")
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Indexer Cluster")
+			testcaseEnvInst.Log.Info("Upload big size app to Azure for Indexer Cluster")
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload big size to Azure test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload big size app to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info("Upload big size app to S3 for Search Head Cluster")
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Search Head Cluster")
+			// Upload big size app to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big size app to Azure for Search Head Cluster")
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), "Unable to upload big size to Azure test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -2943,8 +2968,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
@@ -2995,12 +3020,12 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3, appframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
+		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
 
 			/*
 			   Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to Azure for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy C3 CRD with app framework
 			   * Verify IsDeploymentInProgress is set
 			   * Wait for the pods to be ready
@@ -3010,18 +3035,18 @@ var _ = Describe("c3appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			// Upload V1 apps to Azure for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Search Head Cluster", appVersion))
+			azTestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for C3
@@ -3029,8 +3054,8 @@ var _ = Describe("c3appfw test", func() {
 			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
 			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, azTestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, azTestDirShc, 60)
 
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")

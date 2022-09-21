@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package m4appfw
+package c3appfw
 
 import (
 	"os"
@@ -37,20 +37,18 @@ const (
 )
 
 var (
-	testenvInstance       *testenv.TestEnv
-	testSuiteName         = "m4appfw-" + testenv.RandomDNSName(3)
-	appListV1             []string
-	appListV2             []string
-	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
-	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	s3AppDirV1            = testenv.AppLocationV1
-	s3AppDirV2            = testenv.AppLocationV2
-	s3AppDirDisabled      = testenv.AppLocationDisabledApps
-	s3PVTestApps          = testenv.PVTestAppsLocation
-	currDir, _            = os.Getwd()
-	downloadDirV1         = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2         = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
-	downloadDirPVTestApps = filepath.Join(currDir, "m4appfwPVTestApps-"+testenv.RandomDNSName(4))
+	testenvInstance  *testenv.TestEnv
+	testSuiteName    = "c3appfw-" + testenv.RandomDNSName(3)
+	appListV1        []string
+	appListV2        []string
+	testDataS3Bucket = os.Getenv("TEST_BUCKET")
+	testS3Bucket     = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	s3AppDirV1       = testenv.AppLocationV1
+	s3AppDirV2       = testenv.AppLocationV2
+	s3AppDirDisabled = testenv.AppLocationDisabledApps
+	currDir, _       = os.Getwd()
+	downloadDirV1    = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2    = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
 )
 
 // TestBasic is the main entry point

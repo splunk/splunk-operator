@@ -62,7 +62,7 @@ if [  "${CLUSTER_WIDE}" != "true" ]; then
   make kustomize
   bin/kustomize build config/crd | kubectl apply -f -
 else
-  echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 
@@ -106,33 +106,68 @@ else
   echo "Running following test :: ${TEST_TO_RUN}"
 fi
 
-# Set env variable for LM
-if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
-  echo "License path not set. Changing to default"
-  export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_PATH}"
-fi
+# Set variables
+export CLUSTER_PROVIDER="${CLUSTER_PROVIDER}"
+case ${CLUSTER_PROVIDER} in
+    "eks")
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
+        fi
 
-# Set env s3 env variables
-if [[ -z "${TEST_BUCKET}" ]]; then
-  echo "Data bucket not set. Changing to default"
-  export TEST_BUCKET="${TEST_S3_BUCKET}"
-fi
+        if [[ -z "${TEST_BUCKET}" ]]; then
+          echo "Data bucket not set. Changing to default"
+          export TEST_BUCKET="${TEST_S3_BUCKET}"
+        fi
 
-if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
-  echo "Test bucket not set. Changing to default"
-  export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
-fi
+        if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+          echo "Test bucket not set. Changing to default"
+          export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
+        fi
+
+        if [[ -z "${S3_REGION}" ]]; then
+          echo "S3 Region not set. Changing to default"
+          export S3_REGION="${AWS_S3_REGION}"
+        fi
+        ;;
+    "azure")
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${AZURE_ENTERPRISE_LICENSE_PATH}"
+        fi
+
+        if [[ -z "${TEST_CONTAINER}" ]]; then
+          echo "Data container not set. Changing to default"
+          export TEST_CONTAINER="${AZURE_TEST_CONTAINER}"
+        fi
+
+        if [[ -z "${INDEXES_CONTAINER}" ]]; then
+          echo "Test container not set. Changing to default"
+          export INDEXES_CONTAINER="${AZURE_INDEXES_CONTAINER}"
+        fi
+
+        if [[ -z "${REGION}" ]]; then
+          echo "Azure Region not set. Changing to default"
+          export REGION="${AZURE_REGION}"
+        fi
+
+        if [[ -z "${STORAGE_ACCOUNT}" ]]; then
+          echo "Azure Storage account not set. Changing to default"
+          export STORAGE_ACCOUNT="${AZURE_STORAGE_ACCOUNT}"
+        fi
+
+        if [[ -z "${STORAGE_ACCOUNT_KEY}" ]]; then
+          echo "Azure Storage account key not set. Changing to default"
+          export STORAGE_ACCOUNT_KEY="${AZURE_STORAGE_ACCOUNT_KEY}"
+        fi
+        ;;
+esac
+
 
 if [[ -z "${CLUSTER_NODES}" ]]; then
-  echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
-  export CLUSTER_NODES="${NUM_NODES}"
+    echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
+    export CLUSTER_NODES="${NUM_NODES}"
 fi
-
-if [[ -z "${S3_REGION}" ]]; then
-  echo "S3 Region not set. Changing to default"
-  export S3_REGION="${AWS_S3_REGION}"
-fi
-
 if [[ -z "${TEST_TO_SKIP}" ]]; then
   echo "TEST_TO_SKIP not set. Changing to default"
   export TEST_TO_SKIP="${SKIP_REGEX}"
