@@ -2067,3 +2067,43 @@ func ReadFile(ctx context.Context, fileLocation string) (string, error) {
 	}
 	return string(byteString), nil
 }
+
+// setProbeLevelOnSplunkPod  set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on splunk pod. Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
+func setProbeLevelOnSplunkPod(ctx context.Context, podName string, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
+	var err error
+	var stdOut string
+	var command string
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ReadFile").WithValues("podName", podName, "probeLevel", probeLevel)
+	switch probeLevel {
+	case 0:
+		command = "echo \"\" >> /opt/splunk/etc/k8_liveness_driver.sh"
+	default:
+		command = fmt.Sprintf("echo \"export %s=%d\" >> %s", livenessProbeLevelName, probeLevel, GetLivenessDriverLocation())
+	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	podExecClient.SetTargetPodName(ctx, podName)
+	splutil.ResetStringReader(streamOptions, command)
+	stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	if err != nil {
+		err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
+		scopedLog.Error(err, "Failed to set probe level", "Command", command)
+		return err
+	}
+	scopedLog.Info("Successfully Set Probe Level on Pod", "Command", command)
+	return err
+}
+
+// setProbeLevelOnCRPods set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on all pods of CR,  Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
+func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
+	var err error
+	// Run the command on each replica pod
+	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
+		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
+		err = setProbeLevelOnSplunkPod(ctx, podName, podExecClient, probeLevel)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}

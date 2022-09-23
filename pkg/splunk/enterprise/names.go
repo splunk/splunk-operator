@@ -57,6 +57,12 @@ const (
 	// livenessScriptLocation
 	livenessScriptLocation = "tools/k8_probes/" + livenessScriptName
 
+	// livenessDriverLocation
+	livenessDriverLocation = "/opt/splunk/etc/k8_liveness_driver.sh"
+
+	// livenessProbeLevelName
+	livenessProbeLevelName = "K8_OPERATOR_LIVENESS_LEVEL"
+
 	// probeMountDirectory
 	probeMountDirectory = "/mnt/probes"
 
@@ -305,4 +311,9 @@ var GetProbeMountDirectory = func() string {
 // GetProbeVolumePermission returns the permission for probe config map volume mount
 var GetProbeVolumePermission = func() int32 {
 	return probeVolumePermission
+}
+
+// GetLivenessDriverLocation returns the location of k8_liveness_driver.sh
+var GetLivenessDriverLocation = func() string {
+	return livenessDriverLocation
 }
