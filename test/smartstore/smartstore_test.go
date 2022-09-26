@@ -8,8 +8,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Smartstore test", func() {
@@ -20,7 +21,7 @@ var _ = Describe("Smartstore test", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -41,7 +42,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone Deployment (S1)", func() {
-		It("smartstore, integration: Can configure multiple indexes through app", func() {
+		It("mastersmartstore, integration: Can configure multiple indexes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
 				"test-index-" + testenv.RandomDNSName(3): volName,
@@ -92,7 +93,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone Deployment (S1)", func() {
-		It("smartstore, integration: Can configure indexes which use default volumes through app", func() {
+		It("mastersmartstore, integration: Can configure indexes which use default volumes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
 
@@ -158,7 +159,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
-		It("smartstore, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+		It("mastersmartstore, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
@@ -171,11 +172,11 @@ var _ = Describe("Smartstore test", func() {
 			}
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
+			err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
@@ -217,6 +218,79 @@ var _ = Describe("Smartstore test", func() {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 			}
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, smartstore: can deploy a Standalone instance with Epehemeral Etc storage", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Create spec for Standalone
+			   * Prepare and deploy Standalone and wait for the pod to be ready
+			   ############ VERIFICATION FOR STANDALONE ###########
+			   * verify Standalone comes up with Ephemeral for Etc and pvc for Var volume
+			*/
+
+			// Create App framework spec for Standalone
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+					EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+						StorageClassName: "TestStorageEtcEph",
+						StorageCapacity:  "1Gi",
+						EphemeralStorage: true,
+					},
+				},
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+		})
+	})
+
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integration, s1, smartstore: can deploy a Standalone instance with Epehemeral Var storage", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Create spec for Standalone
+			   * Prepare and deploy Standalone and wait for the pod to be ready
+			   ############ VERIFICATION FOR STANDALONE ###########
+			   * verify Standalone comes up with Ephemeral for Var and pvc for Etc volume
+			*/
+
+			// Create App framework spec for Standalone
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+					VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+						StorageClassName: "TestStorageVarEph",
+						StorageCapacity:  "1Gi",
+						EphemeralStorage: true,
+					},
+				},
+			}
+
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
 		})
 	})
 })

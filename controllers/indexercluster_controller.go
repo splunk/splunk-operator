@@ -18,10 +18,11 @@ package controllers
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -111,6 +112,10 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // ApplyIndexerCluster adding to handle unit test case
 var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+	// IdxCluster can be supported by two CRD types for CM
+	if len(instance.Spec.ClusterManagerRef.Name) > 0 {
+		return enterprise.ApplyIndexerClusterManager(ctx, client, instance)
+	}
 	return enterprise.ApplyIndexerCluster(ctx, client, instance)
 }
 
@@ -127,6 +132,7 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
 			common.ClusterManagerChangedPredicate(),
+			common.ClusterMasterChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
@@ -148,7 +154,12 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				IsController: false,
 				OwnerType:    &enterpriseApi.IndexerCluster{},
 			}).
-		Watches(&source.Kind{Type: &enterpriseApi.ClusterMaster{}},
+		Watches(&source.Kind{Type: &enterpriseApi.ClusterManager{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: false,
+				OwnerType:    &enterpriseApi.IndexerCluster{},
+			}).
+		Watches(&source.Kind{Type: &enterpriseApiV3.ClusterMaster{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
 				OwnerType:    &enterpriseApi.IndexerCluster{},

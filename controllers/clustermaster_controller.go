@@ -18,10 +18,11 @@ package controllers
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -78,7 +79,7 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
 
 	// Fetch the ClusterMaster
-	instance := &enterpriseApi.ClusterMaster{}
+	instance := &enterpriseApiV3.ClusterMaster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -102,7 +103,7 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyClusterManager(ctx, r.Client, instance)
+	result, err := ApplyClusterMaster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -110,15 +111,15 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return result, err
 }
 
-// ApplyClusterManager adding to handle unit test case
-var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterMaster) (reconcile.Result, error) {
-	return enterprise.ApplyClusterManager(ctx, client, instance)
+// ApplyClusterMaster adding to handle unit test case
+var ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
+	return enterprise.ApplyClusterMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.ClusterMaster{}).
+		For(&enterpriseApiV3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
@@ -132,34 +133,25 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.ClusterMaster{},
+				OwnerType:    &enterpriseApiV3.ClusterMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.ClusterMaster{},
+				OwnerType:    &enterpriseApiV3.ClusterMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.ClusterMaster{},
+				OwnerType:    &enterpriseApiV3.ClusterMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.ClusterMaster{},
+				OwnerType:    &enterpriseApiV3.ClusterMaster{},
 			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
-}
-
-// recordInstrumentionData Record api profiling information to prometheus
-func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
-	metricLabels := getPrometheusLabels(req, name)
-	metricLabels[labelModuleName] = module
-	metricLabels[labelMethodName] = name
-	value := float64(time.Since(start) / time.Millisecond)
-	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
 }

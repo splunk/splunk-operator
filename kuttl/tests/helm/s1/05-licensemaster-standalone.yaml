@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: helm upgrade splunk-stdl ../../../../helm-chart/splunk-enterprise --set splunk-operator.enabled=false --set standalone.enabled=true --set monitoringConsole.enabled=true --set licenseMaster.enabled=true
+    namespaced: true
+spec:
+  serviceAccount: helm-service-account

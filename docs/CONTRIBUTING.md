@@ -4,17 +4,19 @@ This document is the single source of truth on contributing towards this codebas
 
 ## Navigation
 
-* [Prerequisites](#prerequisites)
-    * [Contributor License Agreement](#contributor-license-agreement)
-    * [Code of Conduct](#code-of-conduct)
-* [Contribution Workflow](#contribution-workflow)
-    * [Bug reports and feature requests](#bug-reports-and-feature-requests)
-    * [Fixing issues](#fixing-issues)
-    * [Pull requests](#pull-requests)
-    * [Code Review](#code-review)
-    * [Testing](#testing)
-    * [Documentation](#documentation)
-* [Maintainers](#maintainers)
+- [Contributing to the Project](#contributing-to-the-project)
+  - [Navigation](#navigation)
+  - [Prerequisites](#prerequisites)
+      - [Contributor License Agreement](#contributor-license-agreement)
+      - [Code of Conduct](#code-of-conduct)
+  - [Contribution Workflow](#contribution-workflow)
+      - [Bug reports and feature requests](#bug-reports-and-feature-requests)
+      - [Fixing issues](#fixing-issues)
+      - [Pull requests](#pull-requests)
+      - [Code Review](#code-review)
+      - [Testing](#testing)
+      - [Documentation](#documentation)
+  - [Maintainers](#maintainers)
 
 ## Prerequisites
 When contributing to this repository, first discuss the issue with a [repository maintainer](#maintainers) via GitHub issue, Slack message, or email.
@@ -129,6 +131,7 @@ If you need help, tag one of the active maintainers of this project in a post or
 (*) Arjun Kondur
 (*) Kriti Ashok
 (*) Param Dhanoya
+(*) Vivek Reddy
 () Victor Ebken
 () Ajeet Kumar
 () Marcus Galdino

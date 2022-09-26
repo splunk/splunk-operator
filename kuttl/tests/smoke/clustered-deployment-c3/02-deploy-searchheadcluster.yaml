@@ -7,5 +7,5 @@ metadata:
 spec: 
   volumes: []
   imagePullPolicy: "IfNotPresent"
-  clusterMasterRef: 
+  clusterManagerRef: 
     name: test

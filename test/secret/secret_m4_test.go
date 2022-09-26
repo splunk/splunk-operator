@@ -17,11 +17,10 @@ package secret
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -34,7 +33,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		// SpecifiedTestTimeout override default timeout for m4 test cases as we have seen
 		// it takes more than 3000 seconds for one of the test case
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
@@ -58,7 +57,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("secret, integration, m4: secret update on multisite indexers and search head cluster", func() {
+		It("mastersecret, integration, m4: secret update on multisite indexers and search head cluster", func() {
 
 			// Test Scenario
 			// 1. Update Secrets Data
@@ -76,14 +75,14 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			siteCount := 3
 			mcName := deployment.GetName()
-			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
+			err = deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
@@ -129,14 +128,14 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
-			// Ensure that Cluster Manager goes to update phase
-			testenv.VerifyClusterManagerPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
+			// Ensure that Cluster Master goes to update phase
+			testenv.VerifyClusterMasterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
 
-			// Ensure that the cluster-manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
-			// Wait for License Manager to be in READY status
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// Wait for License Master to be in READY status
+			testenv.LicenseMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure the indexers of all sites go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)

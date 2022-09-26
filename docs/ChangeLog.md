@@ -1,9 +1,20 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.1.0 (TODO)
+
+* This is the 2.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.0 image with it
+
+* Azure blob support  (FIXME)
+ 
+
 ## 2.0.0 (2022-07-26)
 
 * This is the 2.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.0 image with it
+  
 * CSPL-935: Operator App Management Framework Phase 3
 
 * Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
@@ -34,6 +45,8 @@
 
 * This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.6 image with it
+  
 * Operator SDK upgraded to version 1.15.0. Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
 
 * Introducing Monitoring Console CRD
