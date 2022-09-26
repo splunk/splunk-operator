@@ -34,6 +34,11 @@ spec:
       displayName: Indexer Cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
+      version: v4
+    - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+      displayName: Indexer Cluster
+      kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
       version: v3
     - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
       displayName: License Manager
@@ -49,13 +54,29 @@ spec:
       displayName: Monitoring Console
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
+      version: v4
+    - description: MonitoringConsole is the Schema for the monitoringconsole API
+      displayName: Monitoring Console
+      kind: MonitoringConsole
+      name: monitoringconsoles.enterprise.splunk.com
       version: v3
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
       displayName: Search Head Cluster
       kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
+      version: v4
+    - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
+      displayName: Search Head Cluster
+      kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
       version: v3
+    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      displayName: Standalone
+      kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v4
     - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
       displayName: Standalone
       kind: Standalone
