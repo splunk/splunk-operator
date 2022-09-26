@@ -2069,12 +2069,12 @@ func ReadFile(ctx context.Context, fileLocation string) (string, error) {
 }
 
 // setProbeLevelOnSplunkPod  set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on splunk pod. Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
-func setProbeLevelOnSplunkPod(ctx context.Context, podName string, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
+func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
 	var err error
 	var stdOut string
 	var command string
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ReadFile").WithValues("podName", podName, "probeLevel", probeLevel)
+	scopedLog := reqLogger.WithName("ReadFile").WithValues("podName", podExecClient.GetTargetPodName(), "probeLevel", probeLevel)
 	switch probeLevel {
 	case 0:
 		command = "echo \"\" >> /opt/splunk/etc/k8_liveness_driver.sh"
@@ -2082,7 +2082,7 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podName string, podExecClient
 		command = fmt.Sprintf("echo \"export %s=%d\" >> %s", livenessProbeLevelName, probeLevel, GetLivenessDriverLocation())
 	}
 	streamOptions := splutil.NewStreamOptionsObject(command)
-	podExecClient.SetTargetPodName(ctx, podName)
+	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
 	splutil.ResetStringReader(streamOptions, command)
 	stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err != nil {
@@ -2100,7 +2100,8 @@ func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replica
 	// Run the command on each replica pod
 	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
 		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
-		err = setProbeLevelOnSplunkPod(ctx, podName, podExecClient, probeLevel)
+		podExecClient.SetTargetPodName(ctx, podName)
+		err = setProbeLevelOnSplunkPod(ctx, podExecClient, probeLevel)
 		if err != nil {
 			return err
 		}
