@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: license-confmap
+data:
+  enterprise.lic: '<?xml version="1.0" encoding="UTF-8"?>
+    <license>
+    <signature>k3cI1sa9uAVC46xVyYrEUequuE5/y+InGqFkLo+IGgYgMi8HCO6amidLiVTxXnblKQAmmEiZXremY1EG01PseV/R5s4ibQYrDLkOOhOLEG4SrDOBw5M28pm5AjhaUkVVuN8TS8LYF8lo1Q9LMUF4j9jGI81jPFQ/1f+Ys4fveiEz2yQVecA3a2pt6fImqitFVEcz7DeFkFdB5fKTW0xOY2gh1YWAZ7m0D1nFrVDBwQZDLDeixnBp9r9ATw1ztabhZiHaC6fouM+qIziKk2tekvQEMfRON7DTq6BXc7sc1tSAtHG65Yx/IeqhguOcTtA1IXfWuMo2wlZhcrboE3f8LA==</signature>
+    <payload>
+    <type>enterprise</type>
+    <group_id>Enterprise</group_id>
+    <quota>53687091200</quota>
+    <max_violations>5</max_violations>
+    <window_period>30</window_period>
+    <creation_time>1649401200</creation_time>
+    <label>Splunk Internal License DO NOT DISTRIBUTE</label>
+    <expiration_time>1672559999</expiration_time>
+    <features>
+    <feature>Auth</feature>
+    <feature>FwdData</feature>
+    <feature>RcvData</feature>
+    <feature>LocalSearch</feature>
+    <feature>DistSearch</feature>
+    <feature>RcvSearch</feature>
+    <feature>ScheduledSearch</feature>
+    <feature>Alerting</feature>
+    <feature>DeployClient</feature>
+    <feature>DeployServer</feature>
+    <feature>SplunkWeb</feature>
+    <feature>SigningProcessor</feature>
+    <feature>SyslogOutputProcessor</feature>
+    <feature>CanBeRemoteMaster</feature>
+    <feature>AllowDuplicateKeys</feature>
+    </features>
+    <sourcetypes/>
+    <guid>30A82F32-837B-4190-9B23-6185F9782255</guid>
+    </payload>
+    </license>'

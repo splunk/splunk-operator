@@ -1,0 +1,577 @@
+# Image to use for Splunk pod containers 
+# Overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variable in Splunk Operator manager container
+image:
+  repository: ""
+  imagePullPolicy: ""
+  imagePullSecrets: []
+
+# Deploy Splunk Operator chart
+# Disable if the Splunk Operator is already deployed
+splunk-operator:
+  enabled: true
+
+sva:
+
+  # Single Server Deployment (S1) 
+  # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=9
+  s1:
+
+    enabled: false
+
+    standalones: 1
+
+  # Distributed Clustered Deployment + SHC - Single Site (C3)
+  # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=14
+  c3:
+
+    enabled: false
+
+    indexerClusters: []
+      # - name: idx1
+      # - name: idx2
+
+    searchHeadClusters: []
+      # - name: shc1
+      # - name: shc2
+
+  # Distributed Clustered Deployment + SHC - Multi-Site (M4)
+  # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=20
+  m4:
+
+    enabled: false
+
+    clusterManager: {}
+      # allSites: "site1,site2"
+      # site: site1
+      # zone: us-west-1a
+
+    indexerClusters: []
+      # - name: idx1
+      #   site: site1
+      #   zone: us-west-1a
+      # - name: idx2
+      #   site: site2
+      #   zone: us-west-1c
+        
+    searchHeadClusters: []
+      # - name: shc1
+      #   site: site2
+      #   zone: us-west-1c
+
+# Set name reference if ClusterManager is already deployed
+# Namespace is optional, set if the resource exists outside of the release namespace
+existingClusterManager: {}
+  # name:
+  # namespace: 
+
+# Set name reference if MonitoringConsole is already deployed
+# Namespace is optional, set if the resource exists outside of the release namespace
+existingMonitoringConsole: {}
+  # name: 
+  # namespace: 
+
+# Set name reference if LicenseManager is already deployed
+# Namespace is optional, set if the resource exists outside of the release namespace
+existingLicenseManager: {}
+  # name: 
+  # namespace: 
+
+# Configure a Splunk Cluster Manager instance
+clusterManager:
+
+  # Deploy a cluster manager instance
+  enabled: false
+
+  # Specify the custom resource name
+  name: "cm"
+
+  # Override the custom resource namespace
+  # Default deploys to the release namespace
+  namespaceOverride: ""
+
+  # Specify additional labels
+  additionalLabels: {}
+
+  # Splunk Enterprise App repository
+  # Specifies remote App location and scope for Splunk App management
+  # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/AppFramework.md
+  appRepo: {}
+    ## Example: Deploy apps on cluster manager instance for local use
+    # appsRepoPollIntervalSeconds: 900
+    # appSources:
+    #   - name: networkApps
+    #     location: networkAppsLoc/
+    #   - name: clusterBase
+    #     location: clusterBaseLoc/
+    #   - name: adminApps
+    #     location: adminAppsLoc/
+    #     scope: local
+    # volumes:
+    #   - name: volume_app_repo_us
+    #     storageType: s3
+    #     provider: aws
+    #     path: bucket-app-framework-us-west-2/idxcAndCmApps/
+    #     endpoint: https://s3-us-west-2.amazonaws.com
+    #     region: us-west-2
+    #     secretRef: s3-secret
+    
+  # Splunk Smartstore configuration
+  # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/SmartStore.md
+  smartstore: {}
+    ## Example: Deploy smartstore to a clustermanager, distributes config to indexer peers
+    # volumes:
+    #   - name: <remote_volume_name>
+    #     path: <remote_volume_path>
+    #     endpoint: https://s3-<region>.amazonaws.com
+    #     secretRef: <secret_store_obj>
+    # indexes:
+    #   - name: <index_name_1>
+    #     remotePath: $_index_name
+    #     volumeName: <remote_volume_name>
+    #   - name: <index_name_2>
+    #     remotePath: $_index_name
+    #     volumeName: <remote_volume_name>
+    #   - name: <index_name_3>
+    #     remotePath: $_index_name
+    #     volumeName: <remote_volume_name>
+  
+  # List volumes to be mounted in all pod containers
+  # reference: https://kubernetes.io/docs/concepts/storage/volumes/
+  volumes: []
+
+  # Full path or URL for a Splunk Enterprise license file
+  # Ignore if deploying a license manager instance
+  licenseUrl: ""
+
+  # Full path or URL for one or more default.yml files, separated by commas
+  defaultsUrl: ""
+  
+  # Specify Splunk default.yaml to override intial environment config
+  defaults: {}
+    ## Example: Deploy a multi-site cluster manager
+    # splunk:
+    #   site: site1
+    #   multisite_manager: localhost
+    #   all_sites: site1,site2,site3
+    #   multisite_replication_factor_origin: 1
+    #   multisite_replication_factor_total: 2
+    #   multisite_search_factor_origin: 1
+    #   multisite_search_factor_total: 2
+    #   idxc:
+    #     search_factor: 2
+    #     replication_factor: 2
+
+  # Full path or URL for one or more defaults.yml files specific to App install, separated by commas
+  defaultsUrlApps: ""
+
+  # List additional environment variables to passed to the Splunk instance container
+  extraEnv: []
+  # - name: 
+  #   value: 
+
+  # Delay in seconds before probing liveness
+  # refernece: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+  livenessInitialDelaySeconds: 300
+
+  # Delay in seconds before probing readiness
+  # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+  readinessInitialDelaySeconds: 10
+
+  # Storage configuration for /opt/splunk/etc volume
+  # To use a StorageClass other than your default StorageClass, specify the storageClassName
+  # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/StorageClass.md
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  # Storage configuration for /opt/splunk/var volume
+  # To use a StorageClass other than your default StorageClass, specify the storageClassName
+  # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/StorageClass.md
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  # Set resource requests and limits for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/CustomResources.md#examples-of-guaranteed-and-burstable-qos
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"  
+
+  # Specify a service account used by the Splunk instance pods
+  # Default uses the Default Service Account to access the API server
+  # reference: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+  serviceAccount: ""
+
+  # Specify Splunk instance pod tolerations
+  # reference: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  tolerations: []
+
+  # Define affinity scheduling rules
+  # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#affinity-v1-core
+  affinity: {}
+    ## Example: schedule Splunk instance pod on a node in zone-1a 
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchExpressions:
+    #       - key: failure-domain.beta.kubernetes.io/zone
+    #         operator: In
+    #         values:
+    #         - zone-1a
+
+indexerCluster:
+
+  enabled: false
+
+  name: "idxc"
+
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  replicaCount: 1
+  
+  volumes: []
+
+  licenseUrl: ""
+
+  defaultsUrl: ""
+
+  defaults: {}
+
+  extraEnv: []
+  # - name: 
+  #   value: 
+
+  livenessInitialDelaySeconds: 300
+
+  readinessInitialDelaySeconds: 10
+
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"  
+
+  serviceAccount: ""
+
+  tolerations: []
+  
+  affinity: {}
+
+searchHeadCluster:
+
+  enabled: false
+
+  name: "shc"
+
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  replicaCount: 1
+
+  appRepo: {}
+    # appsRepoPollIntervalSeconds:
+    # defaults:
+    #   volumeName:
+    #   scope:
+    # appSources:
+    #   - name:
+    #     location:
+    # volumes:
+    #   - name:
+    #     storageType:
+    #     provider:
+    #     path:
+    #     endpoint:
+    #     region:
+    #     secretRef:
+  
+  volumes: []
+  
+  licenseUrl: ""
+
+  defaultsUrl: ""
+
+  defaults: {}
+
+  defaultsUrlApps: ""
+
+  extraEnv: []
+  # - name: 
+  #   value: 
+
+  livenessInitialDelaySeconds: 300
+
+  readinessInitialDelaySeconds: 10
+
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"  
+
+  serviceAccount: ""
+
+  tolerations: []
+  
+  affinity: {}
+
+monitoringConsole:
+
+  enabled: false
+
+  name: "mc"
+
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  appRepo: {}
+    # appsRepoPollIntervalSeconds:
+    # defaults:
+    #   volumeName:
+    #   scope:
+    # appSources:
+    #   - name:
+    #     location:
+    # volumes:
+    #   - name:
+    #     storageType:
+    #     provider:
+    #     path:
+    #     endpoint:
+    #     region:
+    #     secretRef:
+  
+  volumes: []
+
+  licenseUrl: ""
+
+  defaultsUrl: ""
+
+  defaults: {}
+
+  defaultsUrlApps: ""
+
+  extraEnv: []
+  # - name: 
+  #   value: 
+
+  livenessInitialDelaySeconds: 300
+
+  readinessInitialDelaySeconds: 10
+
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"  
+
+  serviceAccount: ""
+
+  tolerations: []
+  
+  affinity: {}
+
+licenseManager:
+
+  enabled: false
+
+  name: "lm"
+
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  appRepo: {}
+    # appsRepoPollIntervalSeconds:
+    # defaults:
+    #   volumeName:
+    #   scope:
+    # appSources:
+    #   - name:
+    #     location:
+    # volumes:
+    #   - name:
+    #     storageType:
+    #     provider:
+    #     path:
+    #     endpoint:
+    #     region:
+    #     secretRef:
+  
+  volumes: []
+  ## Example: mounting volume containing license in Splunk instance pod container
+  # - name: licenses
+  #   configMap:
+  #     name: splunk-licenses
+
+  licenseUrl: ""
+  ## Example: using mounted volume to specify license file path
+  # licenseUrl: /mnt/licenses/enterprise.lic
+
+  defaultsUrl: ""
+
+  defaults: {}
+
+  defaultsUrlApps: ""
+
+  extraEnv: []
+  # - name: 
+  #   value: 
+
+  livenessInitialDelaySeconds: 300
+
+  readinessInitialDelaySeconds: 10
+
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"  
+
+  serviceAccount: ""
+
+  tolerations: []
+  
+  affinity: {}
+
+standalone:
+
+  enabled: false
+
+  name: "stdln"
+
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  replicaCount: 1
+
+  appRepo: {}
+    # appsRepoPollIntervalSeconds:
+    # defaults:
+    #   volumeName:
+    #   scope:
+    # appSources:
+    #   - name:
+    #     location:
+    # volumes:
+    #   - name:
+    #     storageType:
+    #     provider:
+    #     path:
+    #     endpoint:
+    #     region:
+    #     secretRef:
+    
+  smartstore: {}
+    # defaults:
+    #   volumeName:
+    # indexes:
+    #   - name:
+    #     volumeName:
+    #     remotePath:
+    # volumes:
+    #   - name:
+    #     path:
+    #     endpoint:
+    #     secretRef:
+  
+  volumes: []
+
+  licenseUrl: ""
+
+  defaultsUrl: ""
+
+  defaults: {}
+
+  defaultsUrlApps: ""
+
+  extraEnv: []
+  # - name: 
+  #   value: 
+
+  livenessInitialDelaySeconds: 300
+
+  readinessInitialDelaySeconds: 10
+
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"
+
+  serviceAccount: ""
+
+  tolerations: []
+  
+  affinity: {}

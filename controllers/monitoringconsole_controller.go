@@ -18,10 +18,11 @@ package controllers
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
@@ -149,13 +150,17 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}).
 		Watches(&source.Kind{Type: &enterpriseApi.Standalone{}},
 			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterpriseApi.LicenseMaster{}},
+		Watches(&source.Kind{Type: &enterpriseApiV3.LicenseMaster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApi.LicenseManager{}},
 			&handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &enterpriseApi.IndexerCluster{}},
 			&handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &enterpriseApi.SearchHeadCluster{}},
 			&handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &enterpriseApi.ClusterMaster{}},
+		Watches(&source.Kind{Type: &enterpriseApiV3.ClusterMaster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApi.ClusterManager{}},
 			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,

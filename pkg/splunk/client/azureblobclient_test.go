@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -494,17 +494,6 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 
 	// Test error for http request to download
 	azureBlobClient.Endpoint = "dummy"
-	_, err = azureBlobClient.DownloadApp(ctx, downloadRequest)
-	if err == nil {
-		t.Errorf("Expected error for incorrect http request")
-	}
-
-	// Test invalid oauth request
-	// Test Download App package with secret
-	azureBlobClient.StorageAccountName = ""
-	azureBlobClient.SecretAccessKey = ""
-	mclient.RemoveHandlers()
-	azureBlobClient.Endpoint = vol.Endpoint
 	_, err = azureBlobClient.DownloadApp(ctx, downloadRequest)
 	if err == nil {
 		t.Errorf("Expected error for incorrect oauth request")

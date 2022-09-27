@@ -8,6 +8,6 @@ metadata:
 spec: 
   volumes: []
   imagePullPolicy: IfNotPresent
-  clusterMasterRef:
+  clusterManagerRef:
     name: test
   replicas: 3

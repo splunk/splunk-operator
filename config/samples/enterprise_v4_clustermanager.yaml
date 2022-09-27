@@ -1,0 +1,6 @@
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: clustermanager-sample
+spec:
+  # Add fields here

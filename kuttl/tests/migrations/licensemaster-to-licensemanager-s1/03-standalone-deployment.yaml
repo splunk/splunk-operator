@@ -1,0 +1,11 @@
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+  name: st-test
+spec:
+  licenseMasterRef:
+    name: lc-test
+  monitoringConsoleRef:
+    name: mc-test

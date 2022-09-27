@@ -96,55 +96,6 @@ type enumerationResults struct {
 	Blobs   blobs    `xml:"Blobs"`
 }
 
-// RemoteDataClientsMap is a map of remote storage provider name to
-// their respective initialization procedures
-// Currently supported remote data clients are:
-// aws
-// minio
-// azure
-// in future we may have
-// googlestorage
-var RemoteDataClientsMap = make(map[string]GetRemoteDataClientWrapper)
-
-// RemoteObject struct contains contents returned as part of remote data client response
-// for example, it can be a blob in azure or s3 object in aws/minio
-type RemoteObject struct {
-	Etag         *string
-	Key          *string
-	LastModified *time.Time
-	Size         *int64
-	StorageClass *string
-}
-
-// RemoteDataListResponse struct contains list of RemoteObject objects
-type RemoteDataListResponse struct {
-	Objects []*RemoteObject
-}
-
-// RemoteDataClient is an interface to provide
-// listing and downloading of app packages from remote data storage
-type RemoteDataClient interface {
-
-	// Get the list of App packages
-	GetAppsList(context.Context) (RemoteDataListResponse, error)
-
-	// Download a given app package as per the inputs provided in the `RemoteDataClientRequest`
-	DownloadApp(context.Context, RemoteDataDownloadRequest) (bool /* return pass/fail */, error)
-}
-
-// GetInitFunc gets the init function pointer which returns the new RemoteDataClient session client object
-type GetInitFunc func(context.Context, string, string, string) interface{}
-
-//GetRemoteDataClient gets the required RemoteDataClient based on the storageType and provider
-type GetRemoteDataClient func(context.Context, string /* bucket */, string, /* Access key ID */
-	string /* Secret access key */, string /* Prefix */, string /* StartAfter */, string /* Region */, string /* Endpoint */, GetInitFunc) (RemoteDataClient, error)
-
-// GetRemoteDataClientWrapper is a wrapper around init function pointers
-type GetRemoteDataClientWrapper struct {
-	GetRemoteDataClient
-	GetInitFunc
-}
-
 // Constants ensuring that header names are correctly spelled and consistently cased.
 const (
 	headerAuthorization             = "Authorization"
@@ -289,8 +240,7 @@ func setUploadHeaders(ctx context.Context, fileName string, request *http.Reques
 	x := info.Size()
 	contentDispositionHeader := fmt.Sprintf("attachment; filename=%s", fileName)
 	request.Header[headerContentDisposition] = []string{contentDispositionHeader}
-	request.Header[headerContentType] = []string{"application/octet-stream"}
-	request.Header[headerContentEncoding] = []string{"gzip"}
+	request.Header[headerContentType] = []string{"application/gzip"}
 	request.Header[headerXmsBlobType] = []string{"BlockBlob"}
 	request.Header[headerXmsMetaM1] = []string{"v1"}
 	request.Header[headerXmsMetaM2] = []string{"v2"}
@@ -326,11 +276,6 @@ func getSecretAuthHeader(ctx context.Context, accountName, accountKey string, re
 	authHeader := strings.Join([]string{"SharedKey ", accountName, ":", signature}, "")
 
 	return authHeader
-}
-
-// GetRemoteDataClientFuncPtr gets the GetRemoteDataClient function pointer member of GetRemoteDataClientWrapper struct
-func (c *GetRemoteDataClientWrapper) GetRemoteDataClientFuncPtr(ctx context.Context) GetRemoteDataClient {
-	return c.GetRemoteDataClient
 }
 
 // GetDefaultAzureRegion returns default Azure Region

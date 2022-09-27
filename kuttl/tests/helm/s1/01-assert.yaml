@@ -1,0 +1,7 @@
+# check for standalone to be in ready state
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  phase: Ready

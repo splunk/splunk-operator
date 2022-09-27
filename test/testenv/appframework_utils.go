@@ -11,7 +11,8 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -86,7 +87,7 @@ var BigSingleApp = []string{"test_app"}
 var ExtraApps = []string{"test_app2", "test_app3"}
 
 // PVTestApps is a group of 100MB-size apps used to test Operator PV
-var PVTestApps = []string{"100mb-app-1", "100mb-app-2", "100mb-app-3", "100mb-app-4", "100mb-app-5", "100mb-app-6", "100mb-app-7", "100mb-app-8", "100mb-app-9", "100mb-app-10", "100mb-app-11", "100mb-app-12", "100mb-app-13", "100mb-app-14", "100mb-app-15"}
+var PVTestApps = []string{"100mb-app-1", "100mb-app-2"}
 
 // AppLocationV1 Location of apps on S3 for V1 Apps
 var AppLocationV1 = "appframework/v1apps/"
@@ -118,7 +119,7 @@ func GenerateAppSourceSpec(appSourceName string, appSourceLocation string, appSo
 // GetPodAppStatus Get the app install status and version number
 func GetPodAppStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string, clusterWideInstall bool) (string, string, error) {
 	// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-	if clusterWideInstall && (strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, splcommon.TestDeployerDashed)) {
+	if clusterWideInstall && (strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed) || strings.Contains(podName, "-deployer-")) {
 		logf.Log.Info("Pod skipped as install is Cluter-wide", "PodName", podName)
 		return "", "", nil
 	}
@@ -139,9 +140,11 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 	if clusterWideInstall {
 		if strings.Contains(podName, "-indexer-") {
 			path = splcommon.PeerAppsLoc
-		} else if strings.Contains(podName, splcommon.ClusterManager) {
+		} else if strings.Contains(podName, "cluster-manager") {
 			path = splcommon.ManagerAppsLoc
-		} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+		} else if strings.Contains(podName, "cluster-master") {
+			path = splcommon.ManagerAppsLoc
+		} else if strings.Contains(podName, "-deployer-") {
 			path = splcommon.SHClusterAppsLoc
 		}
 	}
@@ -258,9 +261,31 @@ func GetAppDeploymentInfoMonitoringConsole(ctx context.Context, deployment *Depl
 	return appDeploymentInfo, err
 }
 
-// GetAppDeploymentInfoClusterMaster returns AppDeploymentInfo for given Cluster Master, appSourceName and appName
+// GetAppDeploymentInfoClusterManager returns AppDeploymentInfo for given Cluster Manager, appSourceName and appName
+func GetAppDeploymentInfoClusterManager(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+	cm := &enterpriseApi.ClusterManager{}
+	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
+	err := deployment.GetInstance(ctx, name, cm)
+	if err != nil {
+		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		return appDeploymentInfo, err
+	}
+	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	for _, appInfo := range appInfoList {
+		testenvInstance.Log.Info("Checking Cluster Manager AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "AppDeploymentInfo", appInfo)
+		if strings.Contains(appName, appInfo.AppName) {
+			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "AppDeploymentInfo", appInfo)
+			appDeploymentInfo = appInfo
+			return appDeploymentInfo, nil
+		}
+	}
+	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Cluster Manager Name", name, "App Info List", appInfoList)
+	return appDeploymentInfo, err
+}
+
+// GetAppDeploymentInfoClusterMaster returns AppDeploymentInfo for given Cluster Manager, appSourceName and appName
 func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApiV3.ClusterMaster{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, cm)
 	if err != nil {
@@ -313,6 +338,8 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 		appDeploymentInfo, err = GetAppDeploymentInfoMonitoringConsole(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "SearchHeadCluster":
 		appDeploymentInfo, err = GetAppDeploymentInfoSearchHeadCluster(ctx, deployment, testenvInstance, name, appSourceName, appName)
+	case "ClusterManager":
+		appDeploymentInfo, err = GetAppDeploymentInfoClusterManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterMaster":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterMaster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	default:
@@ -331,7 +358,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 	case "eks":
 		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "aws", "s3", GetDefaultS3Region())}
 	case "azure":
-		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzure(volumeName, GetAzureEndpoint(ctx), testenvInstance.GetIndexSecretName(), "azure", "blob", GetDefaultAzureRegion(ctx))}
+		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzure(volumeName, GetAzureEndpoint(ctx), testenvInstance.GetIndexSecretName(), "azure", "blob")}
 	default:
 		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' ")
 	}
@@ -418,11 +445,11 @@ func AppFrameWorkVerifications(ctx context.Context, deployment *Deployment, test
 
 	// Verify bundle push status
 	for _, appSource := range appSource {
-		if appSource.CrKind == "ClusterMaster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
+		if (appSource.CrKind == "ClusterManager" || appSource.CrKind == "ClusterMaster") && appSource.CrAppScope == enterpriseApi.ScopeCluster {
 			testenvInstance.Log.Info(fmt.Sprintf("Verify Cluster Manager bundle push status (%s apps) and compare bundle hash with previous bundle hash", appSource.CrAppVersion))
 			VerifyClusterManagerBundlePush(ctx, deployment, testenvInstance, testenvInstance.GetName(), appSource.CrReplicas, clusterManagerBundleHash)
 			if clusterManagerBundleHash == "" {
-				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment)
+				clusterManagerBundleHash = GetClusterManagerBundleHash(ctx, deployment, appSource.CrKind)
 			}
 		}
 		if appSource.CrKind == "SearchHeadCluster" && appSource.CrAppScope == enterpriseApi.ScopeCluster {
@@ -490,7 +517,15 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
 	case "ClusterMaster":
-		cr := &enterpriseApi.ClusterMaster{}
+		cr := &enterpriseApiV3.ClusterMaster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "ClusterManager":
+		cr := &enterpriseApi.ClusterManager{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
@@ -498,7 +533,15 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
 	case "LicenseMaster":
-		cr := &enterpriseApi.LicenseMaster{}
+		cr := &enterpriseApiV3.LicenseMaster{}
+		err := deployment.GetInstance(ctx, name, cr)
+		if err != nil {
+			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)
+			return isDeploymentInProgress, err
+		}
+		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
+	case "LicenseManager":
+		cr := &enterpriseApi.LicenseManager{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)

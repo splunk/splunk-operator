@@ -20,7 +20,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 
 # Splunk Operator Upgrade
 
-## Steps to upgrade from version greater than 1.0.5 to 2.0.0
+## Steps to upgrade from version greater than 1.0.5 to 2.1.0
 
 1. Download the latest Splunk Operator installation yaml file.
 ​
@@ -62,20 +62,20 @@ Upgrading the Splunk Operator from 1.0.5 or older version to latest is a new ins
 1. Download the upgrade script.
 
 ```
-wget -O operator-upgarde.sh https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh
+wget -O operator-upgarde.sh https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh
 ```
 
 2. Download the latest Splunk Operator installation yaml file.
 
 ```
-wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-install.yaml
+wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/2.1.0/splunk-operator-install.yaml
 ```
 
 3. (Optional) Review the file and update it with your specific customizations used during your install. 
 
 4. Upgrade the Splunk Operator.
 
-Set KUBECONFIG and run [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) script with the following mandatory arguments
+Set KUBECONFIG and run [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh) script with the following mandatory arguments
 
 * `current_namespace` current namespace where operator is installed
 * `manifest_file`: path to 2.0.0 Splunk Operator manifest file
@@ -142,8 +142,8 @@ imagePullPolicy: IfNotPresent
 This is an example of the process followed by the Splunk Operator if the operator version is upgraded and a later Splunk Enterprise Docker image is available:
 ​
 1. A new Splunk Operator pod will be created, and the existing operator pod will be terminated.
-2. Any existing License Manager, Search Head, Deployer, ClusterMaster, Standalone pods will be terminated to be redeployed with the upgraded spec.
-3. After a ClusterMaster pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
+2. Any existing License Manager, Search Head, Deployer, ClusterManager, Standalone pods will be terminated to be redeployed with the upgraded spec.
+3. After a ClusterManager pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
 4. After all pods in the Indexer cluster and Search head cluster are redeployed, the Monitoring Console pod is terminated and redeployed.
 
 * Note: If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first

@@ -23,7 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +32,6 @@ import (
 var _ = Describe("c3appfw test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
-
 	var deployment *testenv.Deployment
 	var azTestDir string
 	var azTestDirShc string
@@ -49,9 +48,8 @@ var _ = Describe("c3appfw test", func() {
 	ctx := context.TODO()
 
 	BeforeEach(func() {
-
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -86,7 +84,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -154,6 +152,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Upload V1 apps to Azure for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Indexer Cluster", appVersion))
+			testcaseEnvInst.Log.Info("Upload %s apps to Azure for Indexer Cluster", appVersion)
 			azTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileList)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Indexer Cluster", appVersion))
@@ -296,7 +295,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -504,7 +503,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -717,7 +716,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It("smoke, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -857,7 +856,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -961,7 +960,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
+		It("c3, integration, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1041,7 +1040,7 @@ var _ = Describe("c3appfw test", func() {
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 60)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
@@ -1053,7 +1052,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 60)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
@@ -1173,7 +1172,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
+		It("c3, integration, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1253,7 +1252,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 60)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -1264,7 +1263,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 60)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
@@ -1295,7 +1294,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
-
 			//############ INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
 			idxcPodNames = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
@@ -1385,7 +1383,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1478,7 +1476,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled for manual update", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled for manual update", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure for Monitoring Console
@@ -1723,7 +1721,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1907,7 +1905,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
+		It("c3, integration, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1984,7 +1982,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, azTestDirIdxcLocal, 0)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameIdxcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -1995,7 +1993,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, azTestDirShcLocal, 0)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "aws", "az", testenv.GetDefaultAzureRegion(ctx))}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(appSourceVolumeNameShcCluster, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameShcCluster,
@@ -2132,7 +2130,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2261,7 +2259,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2397,7 +2395,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2492,7 +2490,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2587,7 +2585,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2710,7 +2708,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2831,7 +2829,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration, appframeworkc3, appframework: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", func() {
+		It("c3, integration, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2922,7 +2920,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -3020,7 +3018,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3azure, appframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
+		It("smoke, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
 
 			/*
 			   Test Steps
@@ -3086,7 +3084,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
+		It("integration, c3azure, masterappframeworkc3azure, appframeworkazure: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
 
 			/* Test Steps
 			   ################## SETUP ###################

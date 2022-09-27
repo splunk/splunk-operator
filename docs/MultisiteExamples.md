@@ -34,7 +34,7 @@ multiple indexer pods scheduled on the same host.
 
 ## Multipart IndexerCluster
 
-Description: connect multiple IndexerCluster resources to ClusterMaster resource, each constrained to run within a dedicated zone and
+Description: connect multiple IndexerCluster resources to ClusterManager resource, each constrained to run within a dedicated zone and
 configured with a hardcoded site.
 
 Advantages:
@@ -50,8 +50,8 @@ Note: the image version is defined in these resources as this allows to control 
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
 ---
-apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
 metadata:
   name: example
   finalizers:
@@ -89,7 +89,7 @@ EOF
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: example-site1
@@ -97,11 +97,11 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 2
-  clusterMasterRef:
+  clusterManagerRef:
     name: example
   defaults: |-
     splunk:
-      multisite_master: splunk-example-cluster-master-service
+      multisite_master: splunk-example-cluster-manager-service
       site: site1
   affinity:
     nodeAffinity:
@@ -127,7 +127,7 @@ https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/DeploymultisiteSH
 for artifact replication, so mapping Splunk sites to Kubernetes zones is not relevant in that context.
 
 SearchHeadCluster resources can be connected to a multisite indexer cluster the same way as for single site.
-The name of the IndexerCluster part containing the cluster manager must be referenced in parameter `clusterMasterRef`.
+The name of the IndexerCluster part containing the cluster manager must be referenced in parameter `clusterManagerRef`.
 
 Additional ansible default parameters must be set to activate multisite:
 * `multisite_master`: which should reference the cluster-manager service of the target indexer cluster
@@ -137,7 +137,7 @@ Additional ansible default parameters must be set to activate multisite:
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -146,11 +146,11 @@ metadata:
 spec:
   replicas: 3
   image: "splunk/splunk:9.0.0"
-  clusterMasterRef:
+  clusterManagerRef:
     name: example
   defaults: |-
     splunk:
-      multisite_master: splunk-example-cluster-master-service
+      multisite_master: splunk-example-cluster-manager-service
       site: site0
 EOF
 ```

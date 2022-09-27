@@ -17,11 +17,11 @@ package client
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"testing"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 

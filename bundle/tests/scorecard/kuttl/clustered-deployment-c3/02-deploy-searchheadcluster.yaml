@@ -8,8 +8,8 @@ spec:
   volumes: []
   spec: 
     imagePullPolicy: "IfNotPresent"
-  clusterMasterRef: 
+  clusterManagerRef: 
     name: test
-  licenseMasterRef: 
+  licenseManagerRef: 
     name: ""
   defaults: ""

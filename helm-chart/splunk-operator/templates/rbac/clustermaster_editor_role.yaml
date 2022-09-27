@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-clustermaster-editor-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - clustermasters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - clustermasters/status
+  verbs:
+  - get
