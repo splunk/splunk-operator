@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -32,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -68,7 +68,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
-		{MetaName: "*v3.MonitoringConsole-test-stack1"},
+		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
 
 	updateFuncCalls := []spltest.MockFuncCall{
@@ -86,7 +86,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
-		{MetaName: "*v3.MonitoringConsole-test-stack1"},
+		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
 
 	labels := map[string]string{
@@ -366,7 +366,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
 
-	cr.Spec.ClusterMasterRef.Name = "stack2"
+	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.SchedulerName = "custom-scheduler"
@@ -854,7 +854,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
-	// simulate create clustermaster instance before reconcilation
+	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, monitoringconsole)
 
 	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)

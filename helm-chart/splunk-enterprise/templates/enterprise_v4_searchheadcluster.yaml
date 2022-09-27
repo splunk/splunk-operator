@@ -1,0 +1,148 @@
+{{- if or .Values.searchHeadCluster.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+apiVersion: v1
+kind: List
+items:
+{{- range default (default (until 1) .Values.sva.c3.searchHeadClusters) .Values.sva.m4.searchHeadClusters }}
+- apiVersion:  enterprise.splunk.com/v4
+  kind: SearchHeadCluster
+  metadata:
+  {{- if or $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
+    name: {{ .name }}
+  {{- else if $.Values.searchHeadCluster.enabled }}
+    name: {{ $.Values.searchHeadCluster.name }}
+  {{- end }}
+    namespace: {{ default $.Release.Namespace $.Values.searchHeadCluster.namespaceOverride }}
+  {{- with $.Values.searchHeadCluster.additionalLabels }}
+    labels:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  spec:
+  {{- if $.Values.searchHeadCluster.replicaCount }}
+    replicas: {{ $.Values.searchHeadCluster.replicaCount }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.appRepo }}
+    appRepo: 
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- if $.Values.existingClusterManager }}
+    clusterManagerRef:
+      name: {{ $.Values.existingClusterManager.name }}
+    {{- if $.Values.existingClusterManager.namespace }}
+      namespace: {{ $.Values.existingClusterManager.namespace }}
+    {{- end }}
+  {{- else if or $.Values.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
+    clusterManagerRef:
+      name: {{ $.Values.clusterManager.name }}
+    {{- if $.Values.clusterManager.namespaceOverride }}
+      namespace: {{ $.Values.clusterManager.namespaceOverride }}
+    {{- end }}
+  {{- end }}
+  {{- if $.Values.existingLicenseManager }}
+    licenseManagerRef:
+      name: {{ $.Values.existingLicenseManager.name }}
+    {{- if $.Values.existingLicenseManager.namespace }}
+      namespace: {{ $.Values.existingLicenseManager.namespace }}
+    {{- end }}
+  {{- else if or $.Values.licenseManager.enabled }}
+    licenseManagerRef:
+      name: {{ $.Values.licenseManager.name }}
+    {{- if $.Values.licenseManager.namespaceOverride }}
+      namespace: {{ $.Values.licenseManager.namespaceOverride }}
+    {{- end }}
+  {{- end }}
+  {{- if $.Values.existingMonitoringConsole }}
+    monitoringConsoleRef:
+      name: {{ $.Values.existingMonitoringConsole.name }}
+    {{- if $.Values.existingMonitoringConsole.namespace }}
+      namespace: {{ $.Values.existingMonitoringConsole.namespace }}
+    {{- end }}
+  {{- else if $.Values.monitoringConsole.enabled }}
+    monitoringConsoleRef:
+      name: {{ $.Values.monitoringConsole.name }}
+    {{- if $.Values.monitoringConsole.namespaceOverride }}
+      namespace: {{ $.Values.monitoringConsole.namespaceOverride }}
+    {{- end }}
+  {{- end }}
+  {{- if $.Values.image.repository }}
+    image: {{ $.Values.image.repository }}
+  {{- end }}
+  {{- if $.Values.image.imagePullPolicy }}
+    imagePullPolicy: {{ $.Values.image.imagePullPolicy }}
+  {{- end }}
+  {{- with $.Values.image.imagePullSecrets }}
+    imagePullSecrets:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.volumes }}      
+    volumes:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.licenseUrl }}
+    licenseUrl: {{ $.Values.searchHeadCluster.licenseUrl }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.defaultsUrl }}
+    defaultsUrl: {{ $.Values.searchHeadCluster.defaultsUrl }}
+  {{- end }}
+  {{- if $.Values.sva.m4.enabled }}
+    {{- $cm_name := $.Values.clusterManager.name -}}
+    {{- if $.Values.existingClusterManager }}
+      {{- $cm_name = $.Values.existingClusterManager.name -}}
+    {{- end }}
+    defaults: |-
+      splunk:
+        multisite_manager: splunk-{{ $cm_name }}-cluster-manager-service
+        site: {{ .site }}
+  {{- else if $.Values.searchHeadCluster.defaults }}
+    defaults: |-
+{{ toYaml $.Values.searchHeadCluster.defaults | indent 6 }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.defaultsUrlApps }}
+    defaultsUrlApps: {{ $.Values.searchHeadCluster.defaultsUrlApps }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.extraEnv }}
+    extraEnv:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.livenessInitialDelaySeconds }}
+    livenessInitialDelaySeconds: {{ $.Values.searchHeadCluster.livenessInitialDelaySeconds }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
+    readinessInitialDelaySeconds: {{ $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.etcVolumeStorageConfig }}
+    etcVolumeStorageConfig:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.varVolumeStorageConfig }}
+    varVolumeStorageConfig:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.resources }}
+    resources:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.serviceAccount }}
+    serviceAccount: {{ $.Values.searchHeadCluster.serviceAccount }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.tolerations }}
+    tolerations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- if $.Values.sva.m4.enabled }}
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - {{ .zone }}
+  {{- else }}
+    {{- with $.Values.searchHeadCluster.affinity }}
+    affinity:
+{{ toYaml . | indent 6 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

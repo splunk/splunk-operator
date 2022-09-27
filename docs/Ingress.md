@@ -8,11 +8,11 @@ The Splunk Operator will automatically create and manage Kubernetes Services for
 
 ```
 $ kubectl get services -o name
-service/splunk-cluster-cluster-master-service
+service/splunk-cluster-cluster-manager-service
 service/splunk-cluster-deployer-service
 service/splunk-cluster-indexer-headless
 service/splunk-cluster-indexer-service
-service/splunk-cluster-license-master-service
+service/splunk-cluster-license-manager-service
 service/splunk-cluster-search-head-headless
 service/splunk-cluster-search-head-service
 service/splunk-standalone-standalone-headless
@@ -134,8 +134,8 @@ spec:
     hosts:
     - "splunk.example.com"
     - "deployer.splunk.example.com"
-    - "cluster-master.splunk.example.com"
-    - "license-master.splunk.example.com"
+    - "cluster-manager.splunk.example.com"
+    - "license-manager.splunk.example.com"
 ```
 
 2. Create a VirtualService for each of the components that you want to expose outside of Kubernetes:
@@ -184,10 +184,10 @@ spec:
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-cluster-master
+  name: splunk-cluster-manager
 spec:
   hosts:
-  - "cluster-master.splunk.example.com"
+  - "cluster-manager.splunk.example.com"
   gateways:
   - "splunk-web"
   http:
@@ -195,15 +195,15 @@ spec:
     - destination:
         port:
           number: 8000
-        host: splunk-example-cluster-master-service
+        host: splunk-example-cluster-manager-service
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-license-master
+  name: splunk-license-manager
 spec:
   hosts:
-  - "license-master.splunk.example.com"
+  - "license-manager.splunk.example.com"
   gateways:
   - "splunk-web"
   http:
@@ -211,7 +211,7 @@ spec:
     - destination:
         port:
           number: 8000
-        host: splunk-example-license-master-service
+        host: splunk-example-license-manager-service
 ```
 
 3. Create a DestinationRule to ensure user sessions are sticky to specific search heads:
@@ -543,11 +543,11 @@ spec:
       - backend:
           serviceName: splunk-example-deployer-service
           servicePort: 8000
-  - host: cluster-master.splunk.example.com
+  - host: cluster-manager.splunk.example.com
     http:
       paths:
       - backend:
-          serviceName: splunk-example-cluster-master-service
+          serviceName: splunk-example-cluster-manager-service
           servicePort: 8000
 ```
 
@@ -897,24 +897,24 @@ spec:
       - backend:
           serviceName: splunk-example-deployer-service
           servicePort: 8000
-  - host: cluster-master.splunk.example.com
+  - host: cluster-manager.splunk.example.com
     http:
       paths:
       - backend:
-          serviceName: splunk-example-cluster-master-service
+          serviceName: splunk-example-cluster-manager-service
           servicePort: 8000
-  - host: license-master.splunk.example.com
+  - host: license-manager.splunk.example.com
     http:
       paths:
       - backend:
-          serviceName: splunk-example-license-master-service
+          serviceName: splunk-example-license-manager-service
           servicePort: 8000
   tls:
   - hosts:
     - splunk.example.com
     - deployer.splunk.example.com
-    - cluster-master.splunk.example.com
-    - license-master.splunk.example.com
+    - cluster-manager.splunk.example.com
+    - license-manager.splunk.example.com
     secretName: splunk.example.com-tls
 ```
 
@@ -931,8 +931,8 @@ tls:
     - deployer.splunk.example.com
     secretName: deployer.splunk.example.com-tls
   - hosts:
-    - cluster-master.splunk.example.com
-    secretName: cluster-master.splunk.example.com-tls
+    - cluster-manager.splunk.example.com
+    secretName: cluster-manager.splunk.example.com-tls
 …
 ```
 
@@ -954,8 +954,8 @@ spec:
   dnsNames:
     - splunk.example.com
     - deployer.splunk.example.com
-    - cluster-master.splunk.example.com
-    - license-master.splunk.example.com
+    - cluster-manager.splunk.example.com
+    - license-manager.splunk.example.com
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
@@ -979,8 +979,8 @@ spec:
     hosts:
     - "splunk.example.com"
     - "deployer.splunk.example.com"
-    - "cluster-master.splunk.example.com"
-    - "license-master.splunk.example.com"
+    - "cluster-manager.splunk.example.com"
+    - "license-manager.splunk.example.com"
     tls:
       httpsRedirect: true
   - port:
@@ -993,8 +993,8 @@ spec:
     hosts:
     - "splunk.example.com"
     - "deployer.splunk.example.com"
-    - "cluster-master.splunk.example.com"
-    - "license-master.splunk.example.com"
+    - "cluster-manager.splunk.example.com"
+    - "license-manager.splunk.example.com"
 ```
 
 Note that the `credentialName` references the same `secretName` created and managed by the Certificate object. 
@@ -1069,10 +1069,10 @@ spec:
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-cluster-master
+  name: splunk-cluster-manager
 spec:
   hosts:
-  - "cluster-master.splunk.example.com"
+  - "cluster-manager.splunk.example.com"
   gateways:
   - "splunk-gw"
   http:
@@ -1080,15 +1080,15 @@ spec:
     - destination:
         port:
           number: 8000
-        host: splunk-example-cluster-master-service
+        host: splunk-example-cluster-manager-service
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: splunk-license-master
+  name: splunk-license-manager
 spec:
   hosts:
-  - "license-master.splunk.example.com"
+  - "license-manager.splunk.example.com"
   gateways:
   - "splunk-gw"
   http:
@@ -1096,7 +1096,7 @@ spec:
     - destination:
         port:
           number: 8000
-        host: splunk-example-license-master-service
+        host: splunk-example-license-manager-service
 ```
 
 5. Create a DestinationRule to ensure user sessions are sticky to specific search heads:

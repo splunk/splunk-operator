@@ -1,0 +1,10 @@
+# check IDXC was updated to use clusterManagerRef
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: test-idxc
+status:
+  phase: Ready
+spec:
+  clusterManagerRef:
+    name: test

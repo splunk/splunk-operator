@@ -8,7 +8,7 @@ metadata:
 spec: 
   volumes: []
   imagePullPolicy: IfNotPresent
-  clusterMasterRef:
+  clusterManagerRef:
     name: test
   replicas: 3
   serviceAccount: test-svc-account-2

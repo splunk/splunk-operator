@@ -1,0 +1,94 @@
+{{- if .Values.licenseManager.enabled }}
+apiVersion:  enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: {{ .Values.licenseManager.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.licenseManager.namespaceOverride }}
+{{- with .Values.licenseManager.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- with .Values.licenseManager.appRepo }}
+  appRepo: 
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.existingClusterManager }}
+  clusterManagerRef:
+    name: {{ .Values.existingClusterManager.name }}
+  {{- if .Values.existingClusterManager.namespace }}
+    namespace: {{ .Values.existingClusterManager.namespace }}
+  {{- end }}
+{{- else if or .Values.clusterManager.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+  clusterManagerRef:
+    name: {{ .Values.clusterManager.name }}
+  {{- if .Values.clusterManager.namespaceOverride }}
+    namespace: {{ .Values.clusterManager.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingMonitoringConsole }}
+  monitoringConsoleRef:
+    name: {{ .Values.existingMonitoringConsole.name }}
+  {{- if .Values.existingMonitoringConsole.namespace }}
+    namespace: {{ .Values.existingMonitoringConsole.namespace }}
+  {{- end }}
+{{- else if .Values.monitoringConsole.enabled }}
+  monitoringConsoleRef:
+    name: {{ .Values.monitoringConsole.name }}
+  {{- if .Values.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.licenseManager.volumes }}      
+  volumes:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.licenseManager.licenseUrl }}
+  licenseUrl: {{ .Values.licenseManager.licenseUrl }}
+{{- end }}
+{{- if .Values.licenseManager.defaultsUrl }}
+  defaultsUrl: {{ .Values.licenseManager.defaultsUrl }}
+{{- end }}
+{{- if .Values.licenseManager.defaults }}
+  defaults: |-
+{{ toYaml .Values.licenseManager.defaults | indent 4 }}
+{{- end }}
+{{- if .Values.licenseManager.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.licenseManager.defaultsUrlApps }}
+{{- end }}
+{{- with .Values.licenseManager.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.licenseManager.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.licenseManager.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.licenseManager.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.licenseManager.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.licenseManager.resources }}
+  resources:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.licenseManager.serviceAccount }}
+  serviceAccount: {{ .Values.licenseManager.serviceAccount }}
+{{- end }}
+{{- with .Values.licenseManager.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.licenseManager.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}

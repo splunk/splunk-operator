@@ -11,7 +11,7 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: clustermasters.enterprise.splunk.com
+  name: clustermanagers.enterprise.splunk.com
 spec:
   preserveUnknownFields: false
 
@@ -20,6 +20,14 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: licensemasters.enterprise.splunk.com
+spec:
+  preserveUnknownFields: false
+
+---    
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: licensemanagers.enterprise.splunk.com
 spec:
   preserveUnknownFields: false
 

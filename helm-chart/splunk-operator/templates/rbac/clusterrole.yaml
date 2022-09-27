@@ -173,6 +173,32 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+    - clustermanagers
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+    - clustermanagers/finalizers
+  verbs:
+    - update
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+    - clustermanagers/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
   - indexerclusters
   verbs:
   - create
@@ -224,6 +250,32 @@ rules:
   - update
 - apiGroups:
   - enterprise.splunk.com
+  resources:
+    - licensemanagers
+  verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+    - licensemanagers/finalizers
+  verbs:
+    - update
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+    - licensemanagers/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
+    - enterprise.splunk.com
   resources:
   - monitoringconsoles
   verbs:
