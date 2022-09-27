@@ -20,6 +20,7 @@ import (
 	"fmt"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -2105,4 +2106,16 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 	}
 
 	return nil, fmt.Errorf("Invalid CR Kind")
+}
+
+// ReadFile reads the contents of the given file name passed as string
+func ReadFile(ctx context.Context, fileLocation string) (string, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ReadFile").WithValues("FileLocation", fileLocation)
+	byteString, err := ioutil.ReadFile(fileLocation)
+	if err != nil {
+		scopedLog.Error(err, "Failed to read file")
+		return "", err
+	}
+	return string(byteString), nil
 }

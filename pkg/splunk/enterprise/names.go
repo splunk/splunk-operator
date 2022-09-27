@@ -42,6 +42,27 @@ const (
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
 
+	// identifier
+	probeConfigMapTemplateStr = "splunk-%s-probe-configmap"
+
+	// livenessScriptName
+	livenessScriptName = "livenessProbe.sh"
+
+	// readinessScriptName
+	readinessScriptName = "readinessProbe.sh"
+
+	// readinessScriptLocation
+	readinessScriptLocation = "tools/k8_probes/" + readinessScriptName
+
+	// livenessScriptLocation
+	livenessScriptLocation = "tools/k8_probes/" + livenessScriptName
+
+	// probeMountDirectory
+	probeMountDirectory = "/mnt/probes"
+
+	// probeVolumePermission
+	probeVolumePermission = int32(0555)
+
 	// init container name
 	initContainerTemplate = "%s-init-%d-%s"
 
@@ -249,4 +270,39 @@ func GetSplunkImage(specImage string) string {
 // GetPortName uses a template to enrich a port name with protocol information for usage with mesh services
 func GetPortName(port string, protocol string) string {
 	return fmt.Sprintf(portNameTemplateStr, protocol, port)
+}
+
+// GetProbeConfigMapName uses a template to name a Kubernetes ConfigMap for a Liveness/Readiness Probe.
+func GetProbeConfigMapName(identifier string) string {
+	return fmt.Sprintf(probeConfigMapTemplateStr, identifier)
+}
+
+// GetReadinessScriptLocation return the location of readiness script
+var GetReadinessScriptLocation = func() string {
+	return readinessScriptLocation
+}
+
+// GetLivenessScriptLocation return the location of liveness script
+var GetLivenessScriptLocation = func() string {
+	return livenessScriptLocation
+}
+
+// GetReadinessScriptName returns the name of liveness script on pod
+var GetReadinessScriptName = func() string {
+	return readinessScriptName
+}
+
+// GetLivenessScriptName returns the name of liveness script on pod
+var GetLivenessScriptName = func() string {
+	return livenessScriptName
+}
+
+// GetProbeMountDirectory returns the name of mount location for probe config map
+var GetProbeMountDirectory = func() string {
+	return probeMountDirectory
+}
+
+// GetProbeVolumePermission returns the permission for probe config map volume mount
+var GetProbeVolumePermission = func() int32 {
+	return probeVolumePermission
 }
