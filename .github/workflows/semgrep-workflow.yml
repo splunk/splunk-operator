@@ -5,7 +5,7 @@ on:
     - main
     - master
     - develop
-name: Semgrep
+name: Semgrep Workflow
 jobs:
   semgrep:
     name: Scan
