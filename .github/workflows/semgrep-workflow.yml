@@ -4,7 +4,7 @@ on:
     branches:
     - main
     - master
-    - CSPL-2077-semgrep
+    - develop
 name: Semgrep
 jobs:
   semgrep:
