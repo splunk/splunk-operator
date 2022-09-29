@@ -1,9 +1,8 @@
-name: Integration Test WorkFlow
+name: Helm Test WorkFlow
 on:
   push:
     branches:
       - develop
-      - master
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -19,12 +18,6 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
-    - name: Install Helm
-      run: |
-        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-        chmod 700 get_helm.sh
-        ./get_helm.sh
-        DESIRED_VERSION=v3.8.2 bash get_helm.sh
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -52,39 +45,13 @@ jobs:
   int-tests:
     strategy:
       fail-fast: false
-      matrix:
-        test:
-          [
-            appframeworks1,
-            managerappframeworkc3,
-            managerappframeworkm4,
-            managersecret,
-            managersmartstore,
-            managermc,
-            managerscaling,
-            managercrcrud,
-            licensemanager,
-            masterappframeworkc3,
-            masterappframeworkm4,
-            mastersecret,
-            mastersmartstore,
-            mastermc,
-            masterscaling,
-            mastercrcrud,
-            licensemaster,
-          ]
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
-      CLUSTER_NODES: 1
-      CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
-      TEST_FOCUS: "${{ matrix.test }}"
-      # This regex matches any string not containing integration keyword
-      TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: eks
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
@@ -95,6 +62,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
+      DEPLOYMENT_TYPE: "helm"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -109,7 +77,7 @@ jobs:
         if: github.ref == 'ref/head/master'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
-      - name: Checkcout code
+      - name: Checkout code
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
@@ -118,6 +86,12 @@ jobs:
         uses: Azure/setup-kubectl@v1
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
+      - name: Install kuttl
+        run: |
+          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.12.0/kuttl_0.12.0_linux_x86_64.tar.gz
+          sudo tar -xvzf kuttl_0.12.0_linux_x86_64.tar.gz 
+          sudo chmod +x  kubectl-kuttl
+          sudo mv kubectl-kuttl /usr/local/bin/kubectl-kuttl
       - name: Install Python
         uses: actions/setup-python@v2
       - name: Install AWS CLI
@@ -133,9 +107,6 @@ jobs:
       - name: Install Go Lint
         run: |
           make setup/golint
-      - name: Install Ginkgo 
-        run: |
-          make setup/ginkgo
       - name: Install Helm
         run: |
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
@@ -188,20 +159,15 @@ jobs:
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
-      - name: Run Integration test
+      - name: Run helm test
         run: |
-          make int-test
-      - name: Collect Test Logs
-        if: ${{ always() }}
-        run: |
-          mkdir -p /tmp/pod_logs
-          find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-      - name: Archive Pod Logs
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+          kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
+      - name: Publish Results
+        uses: mikepenz/action-junit-report@v3
+        if: always()
         with:
-          name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
-          path: "/tmp/pod_logs/**"
+          report_paths: '*/kuttl-artifacts/.xml'
+          detailed_summary: true
       - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
