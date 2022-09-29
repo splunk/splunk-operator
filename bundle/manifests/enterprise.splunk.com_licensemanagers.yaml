@@ -27,7 +27,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    name: v4
     schema:
       openAPIV3Schema:
         description: LicenseManager is the Schema for a Splunk Enterprise license

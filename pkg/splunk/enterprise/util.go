@@ -17,8 +17,8 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"path"
@@ -30,6 +30,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -456,7 +458,7 @@ func createAppDownloadDir(ctx context.Context, path string) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("createAppDownloadDir").WithValues("path", path)
 	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		errDir := os.MkdirAll(path, 0755)
 		if errDir != nil {
 			scopedLog.Error(errDir, "Unable to create directory at path")
@@ -652,7 +654,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// the object has been modified; please apply your changes to the latest version and try again"
 		// now the problem here is if configmap data has changed we need to update configtoken, only way we can do that
 		// is try at least few times before failing, I took random number of 10 times to try
-		// FIXME ideally retryCnt should come from global const
+		// ideally retryCnt should come from global const
 		// Apply the configMap with a fresh token
 		retryCnt := 10
 		for i := 0; i < retryCnt; i++ {
@@ -775,10 +777,7 @@ func (s3mgr *S3ClientManager) GetAppsList(ctx context.Context) (splclient.S3Resp
 	}
 
 	s3Response, err = c.Client.GetAppsList(ctx)
-	if err != nil {
-		return s3Response, err
-	}
-	return s3Response, nil
+	return s3Response, err
 }
 
 // DownloadApp downloads the app from remote storage
@@ -790,9 +789,6 @@ func (s3mgr *S3ClientManager) DownloadApp(ctx context.Context, remoteFile string
 	}
 
 	_, err = c.Client.DownloadApp(ctx, remoteFile, localFile, etag)
-	if err != nil {
-		return err
-	}
 	return err
 }
 
@@ -1215,7 +1211,7 @@ func isAppAlreadyDownloaded(ctx context.Context, downloadWorker *PipelineWorker)
 	// check if the app is present on operator pod
 	fileInfo, err := os.Stat(localAppFileName)
 
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		scopedLog.Info("App not present on operator pod")
 		return false
 	}

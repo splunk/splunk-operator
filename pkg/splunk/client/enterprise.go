@@ -754,9 +754,6 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 		return err
 	}
 	err = c.UpdateMonitoringConsoleApp()
-	if err != nil {
-		return err
-	}
 	return err
 }
 
