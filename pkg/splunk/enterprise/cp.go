@@ -18,7 +18,6 @@ package enterprise
 import (
 	"archive/tar"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -43,7 +42,7 @@ func recursiveTar(srcDir, srcFile localPath, destDir, destFile remotePath, tw *t
 			return err
 		}
 		if stat.IsDir() {
-			files, err := ioutil.ReadDir(fpath)
+			files, err := os.ReadDir(fpath)
 			if err != nil {
 				return err
 			}
