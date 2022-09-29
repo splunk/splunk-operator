@@ -6,34 +6,12 @@ metadata:
       [
         {
           "apiVersion": "enterprise.splunk.com/v3",
-          "kind": "ClusterManager",
-          "metadata": {
-            "finalizers": [
-              "enterprise.splunk.com/delete-pvc"
-            ],
-            "name": "clustermanager-sample"
-          },
-          "spec": {}
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v3",
           "kind": "IndexerCluster",
           "metadata": {
             "finalizers": [
               "enterprise.splunk.com/delete-pvc"
             ],
             "name": "indexercluster-sample"
-          },
-          "spec": {}
-        },
-        {
-          "apiVersion": "enterprise.splunk.com/v3",
-          "kind": "LicenseManager",
-          "metadata": {
-            "finalizers": [
-              "enterprise.splunk.com/delete-pvc"
-            ],
-            "name": "licensemanager-sample"
           },
           "spec": {}
         },
@@ -80,6 +58,54 @@ metadata:
             "name": "standalone-sample"
           },
           "spec": {}
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "ClusterManager",
+          "metadata": {
+            "name": "clustermanager-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "IndexerCluster",
+          "metadata": {
+            "name": "indexercluster-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "LicenseManager",
+          "metadata": {
+            "name": "licensemanager-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "MonitoringConsole",
+          "metadata": {
+            "name": "monitoringconsole-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "SearchHeadCluster",
+          "metadata": {
+            "name": "searchheadcluster-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "Standalone",
+          "metadata": {
+            "name": "standalone-sample"
+          },
+          "spec": null
         }
       ]
     capabilities: Seamless Upgrades
@@ -116,39 +142,20 @@ spec:
       version: v1
     - kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
-      version: v1alpha1
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
-      version: v1beta1
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
-      version: v1beta2
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
-      version: v1beta3
-    - kind: ClusterMaster
-      name: clustermasters.enterprise.splunk.com
       version: v2
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       displayName: Indexer Cluster
       kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v3
+    - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
+      displayName: Indexer Cluster
+      kind: IndexerCluster
+      name: indexerclusters.enterprise.splunk.com
+      version: v4
     - kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v1
-    - kind: IndexerCluster
-      name: indexerclusters.enterprise.splunk.com
-      version: v1alpha1
-    - kind: IndexerCluster
-      name: indexerclusters.enterprise.splunk.com
-      version: v1beta1
-    - kind: IndexerCluster
-      name: indexerclusters.enterprise.splunk.com
-      version: v1beta2
-    - kind: IndexerCluster
-      name: indexerclusters.enterprise.splunk.com
-      version: v1beta3
     - kind: IndexerCluster
       name: indexerclusters.enterprise.splunk.com
       version: v2
@@ -167,45 +174,32 @@ spec:
       version: v1
     - kind: LicenseMaster
       name: licensemasters.enterprise.splunk.com
-      version: v1alpha1
-    - kind: LicenseMaster
-      name: licensemasters.enterprise.splunk.com
-      version: v1beta1
-    - kind: LicenseMaster
-      name: licensemasters.enterprise.splunk.com
-      version: v1beta2
-    - kind: LicenseMaster
-      name: licensemasters.enterprise.splunk.com
-      version: v1beta3
-    - kind: LicenseMaster
-      name: licensemasters.enterprise.splunk.com
       version: v2
     - description: MonitoringConsole is the Schema for the monitoringconsole API
       displayName: Monitoring Console
       kind: MonitoringConsole
       name: monitoringconsoles.enterprise.splunk.com
       version: v3
+    - description: MonitoringConsole is the Schema for the monitoringconsole API
+      displayName: Monitoring Console
+      kind: MonitoringConsole
+      name: monitoringconsoles.enterprise.splunk.com
+      version: v4
     - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
         head cluster
       displayName: Search Head Cluster
       kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v3
+    - description: SearchHeadCluster is the Schema for a Splunk Enterprise search
+        head cluster
+      displayName: Search Head Cluster
+      kind: SearchHeadCluster
+      name: searchheadclusters.enterprise.splunk.com
+      version: v4
     - kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v1
-    - kind: SearchHeadCluster
-      name: searchheadclusters.enterprise.splunk.com
-      version: v1alpha1
-    - kind: SearchHeadCluster
-      name: searchheadclusters.enterprise.splunk.com
-      version: v1beta1
-    - kind: SearchHeadCluster
-      name: searchheadclusters.enterprise.splunk.com
-      version: v1beta2
-    - kind: SearchHeadCluster
-      name: searchheadclusters.enterprise.splunk.com
-      version: v1beta3
     - kind: SearchHeadCluster
       name: searchheadclusters.enterprise.splunk.com
       version: v2
@@ -214,21 +208,14 @@ spec:
       kind: Standalone
       name: standalones.enterprise.splunk.com
       version: v3
+    - description: Standalone is the Schema for a Splunk Enterprise standalone instances.
+      displayName: Standalone
+      kind: Standalone
+      name: standalones.enterprise.splunk.com
+      version: v4
     - kind: Standalone
       name: standalones.enterprise.splunk.com
       version: v1
-    - kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v1alpha1
-    - kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v1beta1
-    - kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v1beta2
-    - kind: Standalone
-      name: standalones.enterprise.splunk.com
-      version: v1beta3
     - kind: Standalone
       name: standalones.enterprise.splunk.com
       version: v2
