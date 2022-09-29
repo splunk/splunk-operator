@@ -562,6 +562,12 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 
 	switch mgr.cr.Status.Peers[n].Status {
 	case "Up":
+		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
+		err := setProbeLevelOnSplunkPod(ctx, podExecClient.GetTargetPodName(), podExecClient, livenessProbeLevel_1)
+		if err != nil {
+			return false, err
+		}
+
 		mgr.log.Info("Decommissioning indexer cluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
 		c := mgr.getClient(ctx, n)
 		return false, c.DecommissionIndexerClusterPeer(enforceCounts)

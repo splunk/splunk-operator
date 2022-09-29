@@ -481,6 +481,12 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		// Detain search head
 		mgr.log.Info("Detaining search head cluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
+		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
+		err := setProbeLevelOnSplunkPod(ctx, podExecClient.GetTargetPodName(), podExecClient, livenessProbeLevel_1)
+		if err != nil {
+			return false, err
+		}
+
 		return false, c.SetSearchHeadDetention(true)
 
 	case "ManualDetention":

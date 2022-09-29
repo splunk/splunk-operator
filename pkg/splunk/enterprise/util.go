@@ -2060,11 +2060,13 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 func ReadFile(ctx context.Context, fileLocation string) (string, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReadFile").WithValues("FileLocation", fileLocation)
+
 	byteString, err := ioutil.ReadFile(fileLocation)
 	if err != nil {
 		scopedLog.Error(err, "Failed to read file")
 		return "", err
 	}
+
 	return string(byteString), nil
 }
 
@@ -2074,13 +2076,19 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podName string, podExecClient
 	var stdOut string
 	var command string
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ReadFile").WithValues("podName", podName, "probeLevel", probeLevel)
+	scopedLog := reqLogger.WithName("setProbeLevelOnSplunkPod").WithValues("podName", podName, "probeLevel", probeLevel)
+
 	switch probeLevel {
-	case 0:
-		command = "echo \"\" >> /opt/splunk/etc/k8_liveness_driver.sh"
+	case livenessProbeLevel_default:
+		command = fmt.Sprintf("[[ -f %s ]] && > %s", GetLivenessDriverFilePath(), GetLivenessDriverFilePath())
+
+	case livenessProbeLevel_1:
+		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
+
 	default:
-		command = fmt.Sprintf("echo \"export %s=%d\" >> %s", livenessProbeLevelName, probeLevel, GetLivenessDriverLocation())
+		return fmt.Errorf("Invalid probe Level %d", probeLevel)
 	}
+
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	podExecClient.SetTargetPodName(ctx, podName)
 	splutil.ResetStringReader(streamOptions, command)
@@ -2090,7 +2098,8 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podName string, podExecClient
 		scopedLog.Error(err, "Failed to set probe level", "Command", command)
 		return err
 	}
-	scopedLog.Info("Successfully Set Probe Level on Pod", "Command", command)
+
+	scopedLog.Info("Successfully set probe level on pod", "Command", command)
 	return err
 }
 
@@ -2099,11 +2108,33 @@ func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replica
 	var err error
 	// Run the command on each replica pod
 	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
-		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
+		podName := getApplicablePodNameForK8Probes(cr, int32(replicaIndex))
 		err = setProbeLevelOnSplunkPod(ctx, podName, podExecClient, probeLevel)
 		if err != nil {
 			return err
 		}
 	}
 	return err
+}
+
+// getApplicablePodNameForK8Probes gets the Pod name relevant for the CR under work
+func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) string {
+	var podType string
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		podType = "standalone"
+	case "LicenseMaster":
+		podType = "license-master"
+	case "SearchHeadCluster":
+		podType = "search-head"
+	case "IndexerCluster":
+		podType = "indexer"
+	case "ClusterMaster":
+		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
+	case "MonitoringConsole":
+		podType = "monitoring-console"
+	}
+	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }
