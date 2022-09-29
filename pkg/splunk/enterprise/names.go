@@ -51,6 +51,12 @@ const (
 	// readinessScriptName
 	readinessScriptName = "readinessProbe.sh"
 
+	// startupScriptName
+	startupScriptName = "startupProbe.sh"
+
+	// startupScriptLocation
+	startupScriptLocation = "tools/k8_probes/" + readinessScriptName
+
 	// readinessScriptLocation
 	readinessScriptLocation = "tools/k8_probes/" + readinessScriptName
 
@@ -151,6 +157,11 @@ const (
 	livenessProbeDefaultDelaySec = 300
 	livenessProbeTimeoutSec      = 30
 	livenessProbePeriodSec       = 30
+
+	// Startup probe time values
+	startupProbeDefaultDelaySec = 10
+	startupProbeTimeoutSec      = 5
+	startupProbePeriodSec       = 5
 
 	// Number of ClusterMasterReplicas
 	numberOfClusterMasterReplicas = 1
@@ -316,4 +327,14 @@ var GetProbeVolumePermission = func() int32 {
 // GetLivenessDriverLocation returns the location of k8_liveness_driver.sh
 var GetLivenessDriverLocation = func() string {
 	return livenessDriverLocation
+}
+
+// GetStartupScriptLocation return the location of startup probe script
+var GetStartupScriptLocation = func() string {
+	return startupScriptLocation
+}
+
+// GetStartupScriptName returns the name of startup probe script on pod
+var GetStartupScriptName = func() string {
+	return startupScriptName
 }

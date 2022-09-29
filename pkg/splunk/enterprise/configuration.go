@@ -67,6 +67,19 @@ var defaultReadinessProbe corev1.Probe = corev1.Probe{
 	},
 }
 
+var defaultStartupProbe corev1.Probe = corev1.Probe{
+	InitialDelaySeconds: readinessProbeDefaultDelaySec,
+	TimeoutSeconds:      readinessProbeTimeoutSec,
+	PeriodSeconds:       readinessProbePeriodSec,
+	ProbeHandler: corev1.ProbeHandler{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				GetProbeMountDirectory() + "/" + GetStartupScriptName(),
+			},
+		},
+	},
+}
+
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -342,6 +355,11 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return err
 	}
 
+	err = validateStartupProbe(ctx, cr, spec.StartupProbe)
+	if err != nil {
+		return err
+	}
+
 	if spec.LivenessInitialDelaySeconds < 0 {
 		return fmt.Errorf("negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
 	}
@@ -565,6 +583,15 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		return &configMap, err
 	}
 	configMap.Data[GetLivenessScriptName()] = data
+	// Add startup script to config map
+	startupScriptLocation, _ := filepath.Abs(GetStartupScriptLocation())
+	data, err = ReadFile(ctx, startupScriptLocation)
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data[GetStartupScriptName()] = data
+
+	// Apply the configured config map
 	_, err = controller.ApplyConfigMap(ctx, client, &configMap)
 	if err != nil {
 		return &configMap, err
@@ -810,6 +837,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
 	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec)
+	startupProbe := getStartupProbe(ctx, cr, instanceType, spec)
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -974,12 +1002,12 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
+		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
 	}
 }
 
 // getLivenessProbe the probe for checking the liveness of the Pod
-// uses script provided by enterprise container to check if pod is alive
 func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -989,13 +1017,21 @@ func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType
 }
 
 // getReadinessProbe the probe for checking the readiness of the Pod
-// uses script provided by enterprise container to check if pod is ready
 func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	readinessProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
 	scopedLog.Info("ReadinessProbe", "Configured", readinessProbe)
 	return readinessProbe
+}
+
+// getStartupProbe the probe for checking the first start of splunk on the Pod
+func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
+	scopedLog.Info("ReadinessProbe", "Configured", startupProbe)
+	return startupProbe
 }
 
 // getProbeWithConfigUpdates Validates probe values and updates them
@@ -1772,19 +1808,19 @@ func validateProbe(probe *corev1.Probe) error {
 	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.SuccessThreshold < 0 || probe.FailureThreshold < 0 {
 		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, SuccessThreshold = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.SuccessThreshold, probe.FailureThreshold)
 	}
-
 	return nil
 }
 
 // validateLivenessProbe validates the liveness probe config
 func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *corev1.Probe) error {
 	var err error
-	if livenessProbe == nil {
-		return err
-	}
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if livenessProbe == nil {
+		scopedLog.Info("empty startup probe.")
+		return err
+	}
 
 	err = validateProbe(livenessProbe)
 	if err != nil {
@@ -1809,11 +1845,13 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 // validateReadinessProbe validates the Readiness probe config
 func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *corev1.Probe) error {
 	var err error
-	if readinessProbe == nil {
-		return err
-	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if readinessProbe == nil {
+		scopedLog.Info("empty startup probe.")
+		return err
+	}
 
 	err = validateProbe(readinessProbe)
 	if err != nil {
@@ -1830,6 +1868,37 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 
 	if readinessProbe.PeriodSeconds < readinessProbePeriodSec {
 		scopedLog.Error(err, "PeriodSeconds is too small", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
+	}
+
+	return err
+}
+
+// validateStartupProbe validates the liveness startup config
+func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *corev1.Probe) error {
+	var err error
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validateStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if startupProbe == nil {
+		scopedLog.Info("empty startup probe.")
+		return err
+	}
+
+	err = validateProbe(startupProbe)
+	if err != nil {
+		return fmt.Errorf("invalid Startup Probe config. Reason: %s", err)
+	}
+
+	if startupProbe.InitialDelaySeconds < startupProbeDefaultDelaySec {
+		scopedLog.Error(err, "InitialDelaySeconds is too small", "configured", startupProbe.InitialDelaySeconds, "recommended minimum", startupProbeDefaultDelaySec)
+	}
+
+	if startupProbe.TimeoutSeconds < startupProbeTimeoutSec {
+		scopedLog.Error(err, "TimeoutSeconds is too small", "configured", startupProbe.TimeoutSeconds, "recommended minimum", startupProbeTimeoutSec)
+	}
+
+	if startupProbe.PeriodSeconds < startupProbePeriodSec {
+		scopedLog.Error(err, "PeriodSeconds is too small", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
 
 	return err
