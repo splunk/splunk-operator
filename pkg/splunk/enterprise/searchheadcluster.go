@@ -482,9 +482,12 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		mgr.log.Info("Detaining search head cluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
-		err := setProbeLevelOnSplunkPod(ctx, podExecClient.GetTargetPodName(), podExecClient, livenessProbeLevel_1)
+		err := setProbeLevelOnSplunkPod(ctx, podExecClient.GetTargetPodName(), podExecClient, livenessProbeLevelOne)
 		if err != nil {
-			return false, err
+			// During the Recycle, our reconcile loop is entered multiple times. If the Pod is already down,
+			// there is a chance of readiness probe failing, in which case, even the podExec will not be successful.
+			// So, just log the message, and ignore the error.
+			mgr.log.Info("Setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
 		}
 
 		return false, c.SetSearchHeadDetention(true)

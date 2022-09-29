@@ -2079,10 +2079,10 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podName string, podExecClient
 	scopedLog := reqLogger.WithName("setProbeLevelOnSplunkPod").WithValues("podName", podName, "probeLevel", probeLevel)
 
 	switch probeLevel {
-	case livenessProbeLevel_default:
+	case livenessProbeLevelDefault:
 		command = fmt.Sprintf("[[ -f %s ]] && > %s", GetLivenessDriverFilePath(), GetLivenessDriverFilePath())
 
-	case livenessProbeLevel_1:
+	case livenessProbeLevelOne:
 		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
 
 	default:

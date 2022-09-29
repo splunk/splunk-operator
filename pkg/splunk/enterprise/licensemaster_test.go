@@ -167,7 +167,6 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 		},
 	}
 	test(splcommon.TestGetLMStatefulSetT5)
-
 }
 
 func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {

@@ -2522,3 +2522,64 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("Failed to fetch the CR")
 	}
 }
+
+//func getApplicablePodNameForK8Probes(t *testing.T) {
+func TestGetApplicablePodNameForK8Probes(t *testing.T) {
+	cr := enterpriseApi.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterMasterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	podID := int32(0)
+
+	expectedPodName := "splunk-stack1-cluster-master-0"
+	returnedPodName := getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "Standalone"
+	expectedPodName = "splunk-stack1-standalone-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "IndexerCluster"
+	expectedPodName = "splunk-stack1-indexer-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "SearchHeadCluster"
+	expectedPodName = "splunk-stack1-search-head-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "MonitoringConsole"
+	expectedPodName = "splunk-stack1-monitoring-console-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", getApplicablePodNameForK8Probes(&cr, 0))
+	}
+
+	cr.TypeMeta.Kind = "LicenseMaster"
+	expectedPodName = "splunk-stack1-license-master-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+}

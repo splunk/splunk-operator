@@ -196,8 +196,8 @@ version = 1.0.0
 )
 
 const (
-	livenessProbeLevel_default int = iota
-	livenessProbeLevel_1
+	livenessProbeLevelDefault int = iota
+	livenessProbeLevelOne
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.

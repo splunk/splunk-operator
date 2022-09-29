@@ -1405,7 +1405,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Context) error {
 	// Reduce the liveness probe level
-	shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevel_1)
+	shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
@@ -1497,7 +1497,7 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
 
 			// set the liveness probe to default
-			shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevel_default)
+			shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else if err != nil {
 			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again")
 		} else {
@@ -1558,7 +1558,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 	scopedLog := reqLogger.WithName("idxcPlaybookContext.triggerBundlePush()")
 
 	// Reduce the liveness probe level
-	idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevel_1)
+	idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 	streamOptions := splutil.NewStreamOptionsObject(applyIdxcBundleCmdStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
@@ -1639,7 +1639,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
-			idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevel_default)
+			idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else {
 			scopedLog.Info("IndexerCluster Bundle Push is still in progress, will check back again in next reconcile..")
 		}
