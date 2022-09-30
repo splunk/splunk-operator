@@ -148,7 +148,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
    * The apps are split across 3 folders named `networkApps`, `clusterBase`, and `adminApps` . The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
-   * In this example, the Splunk apps for the cluster peers are located at `bucket-app-framework/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework/idxcAndCmApps/adminAppsLoc/`. They are all accessible athrough the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
+   * In this example, the Splunk apps for the cluster peers are located at `bucket-app-framework/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
 
 5. Update the ClusterManager CR specification and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will deploy the apps to cluster peers, set the `scope:  cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes.
