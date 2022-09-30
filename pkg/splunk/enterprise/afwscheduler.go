@@ -1417,7 +1417,7 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 }
 
 // setLivenessProbeLevel sets the liveness probe level across all the Search Head Pods.
-func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) {
+func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("shcPlaybookContext.setLivenessProbeLevel()")
 
@@ -1426,14 +1426,16 @@ func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.
 	shcSts, err := splctrl.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get the stateful set")
-		return
+		return err
 	}
 
-	podExecClient := splutil.GetPodExecClient(shcPlaybookContext.client, shcPlaybookContext.cr, "")
-	err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, podExecClient, probeLevel)
+	err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
 	if err != nil {
 		scopedLog.Error(err, "Unable to set the Liveness probe level")
+		return err
 	}
+
+	return err
 }
 
 // getClusterScopedAppsLocOnPod returns the cluster apps directory
@@ -1575,16 +1577,17 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 }
 
 // setLivenessProbeLevel sets the liveness probe level across all the indexer pods
-func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) {
+func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("idxcPlaybookContext.setLivenessProbeLevel()")
+	var err error
 
 	managerSts := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
 	if managerSts == nil {
-		return
+		return fmt.Errorf("Not able to retrieve Cluster Manager STS")
 	}
-	managerOwnerRefs := managerSts.GetOwnerReferences()
 
+	managerOwnerRefs := managerSts.GetOwnerReferences()
 	for i := 0; i < len(managerOwnerRefs); i++ {
 		// We are only interested for Indexer pods, skip all other references
 		if managerOwnerRefs[i].Kind != "IndexerCluster" {
@@ -1593,8 +1596,9 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 
 		idxcNameSpaceName := types.NamespacedName{Namespace: idxcPlaybookContext.cr.GetNamespace(), Name: managerOwnerRefs[i].Name}
 		var idxcCR enterpriseApi.IndexerCluster
-		err := idxcPlaybookContext.client.Get(ctx, idxcNameSpaceName, &idxcCR)
+		err = idxcPlaybookContext.client.Get(ctx, idxcNameSpaceName, &idxcCR)
 		if err != nil {
+			// Probably a dangling owner reference, just ignore and continue
 			scopedLog.Error(err, "Unable to fetch the CR", "Name", managerOwnerRefs[i].Name, "Namespace", idxcPlaybookContext.cr.GetNamespace())
 			continue
 		}
@@ -1604,15 +1608,18 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 		idxcSts, err := splctrl.GetStatefulSetByName(ctx, idxcPlaybookContext.client, idxcStsNamespaceName)
 		if err != nil {
 			scopedLog.Error(err, "Unable to get the stateful set")
+			// Probably a dangling owner reference, just ignore and continue
 			continue
 		}
 
-		podExecClient := splutil.GetPodExecClient(idxcPlaybookContext.client, &idxcCR, "")
-		err = setProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, podExecClient, probeLevel)
+		err = setProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, idxcPlaybookContext.podExecClient, probeLevel)
 		if err != nil {
 			scopedLog.Error(err, "Unable to set the Liveness probe level")
+			return err
 		}
 	}
+
+	return err
 }
 
 // runPlaybook will implement the following logic(and set the bundle push state accordingly)  -
