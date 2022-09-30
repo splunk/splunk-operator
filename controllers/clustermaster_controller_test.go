@@ -33,7 +33,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 
 	Context("ClusterMaster Management failed", func() {
 
-		It("Get ClusterMaster custom resource should failed", func() {
+		It("Get ClusterMaster custom resource should fail", func() {
 			namespace := "ns-splunk-cmaster-1"
 			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
