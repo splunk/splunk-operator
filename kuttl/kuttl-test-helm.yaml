@@ -10,4 +10,4 @@ artifactsDir: kuttl-artifacts
 kindNodeCache: false
 commands:
   - command: bash -c "helm upgrade --install splunk-operator helm-chart/splunk-operator --namespace splunk-operator --create-namespace --set splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMG}"
-     background: false
+    background: false
