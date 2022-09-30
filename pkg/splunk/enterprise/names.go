@@ -55,7 +55,7 @@ const (
 	startupScriptName = "startupProbe.sh"
 
 	// startupScriptLocation
-	startupScriptLocation = "tools/k8_probes/" + readinessScriptName
+	startupScriptLocation = "tools/k8_probes/" + startupScriptName
 
 	// readinessScriptLocation
 	readinessScriptLocation = "tools/k8_probes/" + readinessScriptName
@@ -159,9 +159,10 @@ const (
 	livenessProbePeriodSec       = 30
 
 	// Startup probe time values
-	startupProbeDefaultDelaySec = 10
-	startupProbeTimeoutSec      = 5
-	startupProbePeriodSec       = 5
+	startupProbeDefaultDelaySec  = 10
+	startupProbeTimeoutSec       = 5
+	startupProbePeriodSec        = 5
+	startupProbeFailureThreshold = 16
 
 	// Number of ClusterMasterReplicas
 	numberOfClusterMasterReplicas = 1

@@ -1350,7 +1350,7 @@ func TestGetStartupProbe(t *testing.T) {
 	// Test if default delay works always
 	startupProbe := getStartupProbe(ctx, cr, SplunkClusterManager, spec)
 	if startupProbe.InitialDelaySeconds != startupProbeDefaultDelaySec {
-		t.Errorf("Failed to set Readiness probe default delay")
+		t.Errorf("Failed to set Startup probe default delay")
 	}
 }
 
@@ -1540,7 +1540,7 @@ func TestValidateReadinessProbe(t *testing.T) {
 	}
 
 	// Test Empty probe
-	err := validateStartupProbe(ctx, cr, nil)
+	err := validateReadinessProbe(ctx, cr, nil)
 	if err != nil {
 		t.Errorf("Error returned on passing empty probe. Error: %s", err)
 	}
@@ -1574,7 +1574,7 @@ func TestValidateLivenessProbe(t *testing.T) {
 	}
 
 	// Test Empty probe
-	err := validateStartupProbe(ctx, cr, nil)
+	err := validateLivenessProbe(ctx, cr, nil)
 	if err != nil {
 		t.Errorf("Error returned on passing empty probe. Error: %s", err)
 	}

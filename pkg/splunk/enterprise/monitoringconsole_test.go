@@ -46,7 +46,7 @@ func init() {
 		return fileLocation
 	}
 	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
 		return fileLocation
 	}
 	GetStartupScriptLocation = func() string {

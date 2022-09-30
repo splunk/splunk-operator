@@ -68,9 +68,10 @@ var defaultReadinessProbe corev1.Probe = corev1.Probe{
 }
 
 var defaultStartupProbe corev1.Probe = corev1.Probe{
-	InitialDelaySeconds: readinessProbeDefaultDelaySec,
-	TimeoutSeconds:      readinessProbeTimeoutSec,
-	PeriodSeconds:       readinessProbePeriodSec,
+	InitialDelaySeconds: startupProbeDefaultDelaySec,
+	TimeoutSeconds:      startupProbeTimeoutSec,
+	PeriodSeconds:       startupProbePeriodSec,
+	FailureThreshold:    startupProbeFailureThreshold,
 	ProbeHandler: corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
 			Command: []string{
@@ -1030,7 +1031,7 @@ func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
-	scopedLog.Info("ReadinessProbe", "Configured", startupProbe)
+	scopedLog.Info("StartupProbe", "Configured", startupProbe)
 	return startupProbe
 }
 
@@ -1818,7 +1819,7 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if livenessProbe == nil {
-		scopedLog.Info("empty startup probe.")
+		scopedLog.Info("empty liveness probe.")
 		return err
 	}
 
@@ -1849,7 +1850,7 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	if readinessProbe == nil {
-		scopedLog.Info("empty startup probe.")
+		scopedLog.Info("empty readiness probe.")
 		return err
 	}
 
@@ -1873,7 +1874,7 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 	return err
 }
 
-// validateStartupProbe validates the liveness startup config
+// validateStartupProbe validates the startup probe config
 func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *corev1.Probe) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
