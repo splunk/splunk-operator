@@ -157,8 +157,3 @@ echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
 ginkgo -v --trace --failFast -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
-
-# Cleanup namespace and pvc after test run is finished
-if [[ "${DEBUG}" != "True" ]]; then
-  tools/cleanup.sh
-fi
