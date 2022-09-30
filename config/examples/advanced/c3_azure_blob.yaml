@@ -30,22 +30,11 @@ spec:
         location: <apps-location>
     volumes:
       - name: volume_app_repo
-        storageType: s3
-        provider: aws
+        storageType: blob
+        provider: azure
         path: <apps-path>
         endpoint: https://<apps-endpoint>
-        secretRef: s3-secret
-  smartstore:
-    defaults:
-        volumeName: volume_smartstore
-    indexes:
-      - name: main
-        volumeName: volume_smartstore
-    volumes:
-        - name: volume_smartstore
-        path: <smartstore-path>
-        endpoint: https://<smartstore-endpoint>
-        secretRef: s3-secret
+        secretRef: azure-blob-secret
 ---
 apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
@@ -61,9 +50,9 @@ spec:
     name: lm-example
 ---
 apiVersion: enterprise.splunk.com/v4
-kind: Standalone
+kind: SearchHeadCluster
 metadata:
-  name: sh-example
+  name: shc-example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -75,14 +64,14 @@ spec:
     appsRepoPollIntervalSeconds: 600
     defaults:
       volumeName: volume_app_repo
-      scope: local
+      scope: cluster
     appSources:
       - name: shApps
         location: <apps-location>
     volumes:
       - name: volume_app_repo
-        storageType: s3
-        provider: aws
+        storageType: blob
+        provider: azure
         path: <apps-path>
         endpoint: https://<apps-endpoint>
-        secretRef: s3-secret 
+        secretRef: azure-blob-secret

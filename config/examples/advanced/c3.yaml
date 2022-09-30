@@ -1,4 +1,4 @@
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: LicenseManager
 metadata:
   name: lm-example
@@ -11,7 +11,7 @@ spec:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: cm-example
@@ -47,7 +47,7 @@ spec:
         endpoint: https://<smartstore-endpoint>
         secretRef: s3-secret
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idxc-example
@@ -60,7 +60,7 @@ spec:
   licenseManagerRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: shc-example
