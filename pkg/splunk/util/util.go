@@ -18,6 +18,7 @@ package util
 import (
 	"bytes"
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"os"
 	"strings"
@@ -36,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 

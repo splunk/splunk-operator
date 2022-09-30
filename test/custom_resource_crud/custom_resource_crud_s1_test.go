@@ -17,10 +17,10 @@ package crcrud
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -60,7 +60,7 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("crcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
+		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone
 			mcRef := deployment.GetName()

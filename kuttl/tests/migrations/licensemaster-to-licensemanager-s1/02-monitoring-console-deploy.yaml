@@ -1,0 +1,10 @@
+apiVersion: enterprise.splunk.com/v3
+kind: MonitoringConsole
+metadata:
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+  name: mc-test
+spec:
+  imagePullPolicy: IfNotPresent
+  licenseMasterRef:
+    name: lc-test

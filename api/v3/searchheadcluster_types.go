@@ -18,6 +18,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -37,13 +38,13 @@ const (
 
 // SearchHeadClusterSpec defines the desired state of a Splunk Enterprise search head cluster
 type SearchHeadClusterSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
-	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -70,10 +71,10 @@ type SearchHeadClusterMemberStatus struct {
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster
 type SearchHeadClusterStatus struct {
 	// current phase of the search head cluster
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
 
 	// current phase of the deployer
-	DeployerPhase Phase `json:"deployerPhase"`
+	DeployerPhase enterpriseApi.Phase `json:"deployerPhase"`
 
 	// desired number of search head cluster members
 	Replicas int32 `json:"replicas"`
@@ -115,7 +116,10 @@ type SearchHeadClusterStatus struct {
 	Members []SearchHeadClusterMemberStatus `json:"members"`
 
 	// App Framework Context
-	AppContext AppDeploymentContext `json:"appContext"`
+	AppContext enterpriseApi.AppDeploymentContext `json:"appContext"`
+
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster
@@ -129,7 +133,6 @@ type SearchHeadClusterStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of search head cluster members"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head cluster members"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of search head cluster"
-// +kubebuilder:storageversion
 type SearchHeadCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

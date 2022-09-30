@@ -34,13 +34,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	"github.com/splunk/splunk-operator/pkg/config"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -81,7 +83,7 @@ var _ = BeforeSuite(func() {
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApiV3.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
@@ -90,7 +92,7 @@ var _ = BeforeSuite(func() {
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApiV3.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApi.AddToScheme(scheme.Scheme)
@@ -103,6 +105,12 @@ var _ = BeforeSuite(func() {
 		Scheme: clientgoscheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
+	if err := (&ClusterManagerReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
 	if err := (&ClusterMasterReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
@@ -110,6 +118,12 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	if err := (&IndexerClusterReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	if err := (&LicenseManagerReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {
@@ -189,11 +203,11 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 		return nil, fmt.Errorf("unable to start manager")
 	}
 
-	if err = (&ClusterMasterReconciler{
+	if err = (&ClusterManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
 		return nil, fmt.Errorf("unable to start manager")
 	}
 	if err = (&IndexerClusterReconciler{
@@ -203,11 +217,11 @@ func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		return nil, fmt.Errorf("unable to start manager")
 	}
-	if err = (&LicenseMasterReconciler{
+	if err = (&LicenseManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
+		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		return nil, fmt.Errorf("unable to start manager")
 	}
 	if err = (&MonitoringConsoleReconciler{

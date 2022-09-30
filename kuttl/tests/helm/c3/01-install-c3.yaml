@@ -1,0 +1,5 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: helm install splunk-c3 ../../../../helm-chart/splunk-enterprise --set splunk-operator.enabled=false --set clusterManager.enabled=true --set indexerCluster.enabled=true --set searchHeadCluster.enabled=true
+    namespaced: true

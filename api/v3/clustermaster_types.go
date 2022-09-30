@@ -17,6 +17,7 @@ limitations under the License.
 package v3
 
 import (
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -29,47 +30,44 @@ import (
 // see also https://book.kubebuilder.io/reference/markers/crd.html
 
 const (
-	// ClusterManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// ClusterMasterPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	ClusterManagerPausedAnnotation = "clustermanager.enterprise.splunk.com/paused"
+	ClusterMasterPausedAnnotation = "clustermaster.enterprise.splunk.com/paused"
 )
 
 // ClusterMasterSpec defines the desired state of ClusterMaster
 type ClusterMasterSpec struct {
-	CommonSplunkSpec `json:",inline"`
+	enterpriseApi.CommonSplunkSpec `json:",inline"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
-	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+	AppFrameworkConfig enterpriseApi.AppFrameworkSpec `json:"appRepo,omitempty"`
 }
 
 // ClusterMasterStatus defines the observed state of ClusterMaster
 type ClusterMasterStatus struct {
 	// current phase of the cluster manager
-	Phase Phase `json:"phase"`
+	Phase enterpriseApi.Phase `json:"phase"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
 	// Splunk Smartstore configuration. Refer to indexes.conf.spec and server.conf.spec on docs.splunk.com
-	SmartStore SmartStoreSpec `json:"smartstore,omitempty"`
+	SmartStore enterpriseApi.SmartStoreSpec `json:"smartstore,omitempty"`
 
 	// Bundle push status tracker
-	BundlePushTracker BundlePushInfo `json:"bundlePushInfo"`
+	BundlePushTracker enterpriseApi.BundlePushInfo `json:"bundlePushInfo"`
 
 	// Resource Revision tracker
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 
 	// App Framework status
-	AppContext AppDeploymentContext `json:"appContext"`
-}
+	AppContext enterpriseApi.AppDeploymentContext `json:"appContext"`
 
-// BundlePushInfo Indicates if bundle push required
-type BundlePushInfo struct {
-	NeedToPushMasterApps bool  `json:"needToPushMasterApps"`
-	LastCheckInterval    int64 `json:"lastCheckInterval"`
+	// Telemetry App installation flag
+	TelAppInstalled bool `json:"telAppInstalled"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -78,8 +76,8 @@ type BundlePushInfo struct {
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=clustermasters,scope=Namespaced,shortName=cm-idxc
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of cluster manager"
-// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster manager"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Phase of the cluster master"
+// +kubebuilder:printcolumn:name="Master",type="string",JSONPath=".status.clusterMasterPhase",description="Status of cluster master"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of cluster manager"

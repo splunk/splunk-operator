@@ -14,58 +14,6 @@
 - op: add
   path: "/spec/versions/-"
   value:
-    name: v1alpha1
-    served: true
-    storage: false
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-        properties:
-          apiVersion:
-            type: string
-- op: add
-  path: "/spec/versions/-"
-  value:
-    name: v1beta1
-    served: true
-    storage: false
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-        properties:
-          apiVersion:
-            type: string
-- op: add
-  path: "/spec/versions/-"
-  value:
-    name: v1beta2
-    served: true
-    storage: false
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-        properties:
-          apiVersion:
-            type: string
-- op: add
-  path: "/spec/versions/-"
-  value:
-    name: v1beta3
-    served: true
-    storage: false
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-        properties:
-          apiVersion:
-            type: string
-- op: add
-  path: "/spec/versions/-"
-  value:
     name: v2
     served: true
     storage: false

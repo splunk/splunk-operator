@@ -75,7 +75,7 @@ status:
   phase: Running
 
 ---
-# assert for clustre master custom resource to be ready
+# assert for clustre manager custom resource to be ready
 apiVersion: enterprise.splunk.com/v3
 kind:  MonitoringConsole
 metadata:

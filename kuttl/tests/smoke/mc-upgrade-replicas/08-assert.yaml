@@ -45,7 +45,7 @@ metadata:
   name: splunk-example-idxc-site1-indexer-2
 
 ---
-# assert for clustre master custom resource to be ready
+# assert for clustre manager custom resource to be ready
 apiVersion: enterprise.splunk.com/v3
 kind:  MonitoringConsole
 metadata:

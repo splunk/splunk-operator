@@ -16,16 +16,21 @@
 package enterprise
 
 import (
-	"fmt"
 	"os"
 	"testing"
-
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 func TestGetSplunkDeploymentName(t *testing.T) {
+	got := GetSplunkDeploymentName(SplunkClusterMaster, "t1")
+	want := "splunk-t1-cluster-master"
+	if got != want {
+		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SplunkIndexer.ToString(), "t1", got, want)
+	}
+}
+
+func TestGetSplunkDeploymentNameManager(t *testing.T) {
 	got := GetSplunkDeploymentName(SplunkClusterManager, "t1")
-	want := fmt.Sprintf(splcommon.TestClusterManager, "t1")
+	want := "splunk-t1-cluster-manager"
 	if got != want {
 		t.Errorf("GetSplunkDeploymentName(\"%s\",\"%s\") = %s; want %s", SplunkIndexer.ToString(), "t1", got, want)
 	}
@@ -58,10 +63,10 @@ func TestGetSplunkServiceName(t *testing.T) {
 
 	test("splunk-t1-deployer-headless", SplunkDeployer, "t1", true)
 	test("splunk-t2-search-head-service", SplunkSearchHead, "t2", false)
-	test(splcommon.TestT3LicenseManagerService, SplunkLicenseManager, "t3", false)
+	test("splunk-t3-license-manager-service", SplunkLicenseManager, "t3", false)
 
-	LicenseMasterRefName := "stack1"
-	test(splcommon.TestStack1LicenseManagerService, SplunkLicenseManager, LicenseMasterRefName, false)
+	LicenseManagerRefName := "stack1"
+	test("splunk-stack1-license-manager-service", SplunkLicenseManager, LicenseManagerRefName, false)
 }
 
 func TestGetSplunkDefaultsName(t *testing.T) {

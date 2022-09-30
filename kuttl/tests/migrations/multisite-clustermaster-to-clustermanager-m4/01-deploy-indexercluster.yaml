@@ -1,0 +1,47 @@
+  apiVersion: enterprise.splunk.com/v3
+  kind: IndexerCluster
+  metadata:
+    name: test-idxc-site1
+    finalizers:
+      - enterprise.splunk.com/delete-pvc
+  spec:
+    replicas: 3
+    clusterMasterRef:
+      name: test
+    defaults: |-
+      splunk:
+        multisite_master: splunk-test-cluster-master-service
+        site: site1
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: topology.kubernetes.io/zone
+                  operator: In
+                  values:
+                    - us-west-2c
+---
+  apiVersion: enterprise.splunk.com/v3
+  kind: IndexerCluster
+  metadata:
+    name: test-idxc-site2
+    finalizers:
+      - enterprise.splunk.com/delete-pvc
+  spec:
+    replicas: 3
+    clusterMasterRef:
+      name: test
+    defaults: |-
+      splunk:
+        multisite_master: splunk-test-cluster-master-service
+        site: site2
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: topology.kubernetes.io/zone
+                  operator: In
+                  values:
+                    - us-west-2b

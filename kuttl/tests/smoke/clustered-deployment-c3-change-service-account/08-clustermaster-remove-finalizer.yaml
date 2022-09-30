@@ -1,9 +1,0 @@
-apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
-metadata:
-  name: test
-  finalizers: []
-spec: 
-  volumes: []
-  imagePullPolicy: "IfNotPresent"
-  serviceAccount: test-svc-account-2

@@ -5,6 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/splunk/splunk-operator)](https://goreportcard.com/report/github.com/splunk/splunk-operator)
 [![CircleCI](https://circleci.com/gh/splunk/splunk-operator/tree/master.svg?style=shield)](https://circleci.com/gh/splunk/splunk-operator/tree/master)
 [![Coverage Status](https://coveralls.io/repos/github/splunk/splunk-operator/badge.svg?branch=master)](https://coveralls.io/github/splunk/splunk-operator?branch=master)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator?ref=badge_shield)
 
 The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
 Administrators to deploy and operate Enterprise deployments in a Kubernetes
@@ -144,3 +145,7 @@ resources in your current namespace.
 Please see the [Getting Started Documentation](docs/README.md) for more
 information, including instructions on how to install the operator in your
 cluster.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator?ref=badge_large)
