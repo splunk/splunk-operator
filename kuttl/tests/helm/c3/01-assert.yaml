@@ -1,7 +1,7 @@
 ---
 # assert for cluster manager custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
-kind: clusterManager
+kind: ClusterManager
 metadata:
   name: cm
 status:
