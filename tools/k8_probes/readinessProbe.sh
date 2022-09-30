@@ -23,6 +23,13 @@
 # health results
 
 if [[ "" == "$NO_HEALTHCHECK" ]]; then
+    # If liveness level level degraded, use the container state for the readiness probe(legacy logic)
+    [[ -f $SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH ]] && source $SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH
+    if [[ "1" == "$K8_OPERATOR_LIVENESS_LEVEL" ]]; then
+       /bin/grep started /opt/container_artifact/splunk-container.state
+       exit $?
+    fi
+
     if [[ "false" == "$SPLUNKD_SSL_ENABLE" || "false" == "$(/opt/splunk/bin/splunk btool server list | grep enableSplunkdSSL | cut -d\  -f 3)" ]]; then
       SCHEME="http"
         else
