@@ -14,4 +14,4 @@ kind: StatefulSet
 metadata: 
   name: splunk-idxc-indexer
 status:
-  replicas: 4
+  replicas: 3
