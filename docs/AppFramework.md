@@ -164,7 +164,6 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
@@ -198,7 +197,6 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
