@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"encoding/json"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -86,7 +87,7 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values
-func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string, region string) enterpriseApi.VolumeSpec {
+func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterpriseApi.VolumeSpec {
 	return enterpriseApi.VolumeSpec{
 		Name:      volumeName,
 		Endpoint:  endpoint,
@@ -95,6 +96,17 @@ func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef strin
 		Provider:  provider,
 		Type:      storageType,
 		Region:    region,
+	}
+}
+
+// GenerateIndexVolumeSpecAzureManagedID return VolumeSpec struct with given values for Azure using Managed Identities
+func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, provider string, storageType string) enterpriseApi.VolumeSpec {
+	return enterpriseApi.VolumeSpec{
+		Name:     volumeName,
+		Endpoint: endpoint,
+		Path:     azureIndexesContainer,
+		Provider: provider,
+		Type:     storageType,
 	}
 }
 

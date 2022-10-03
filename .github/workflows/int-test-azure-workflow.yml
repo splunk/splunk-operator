@@ -1,0 +1,191 @@
+name: Integration Test on Azure WorkFlow
+on:
+  push:
+    branches:
+      - develop
+      - master
+      - CSPL-1946
+jobs:
+  build-operator-image:
+    runs-on: ubuntu-latest
+    env:
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: setup-docker
+      uses: docker-practice/actions-setup-docker@v1
+    - name: Install Helm
+      run: |
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        ./get_helm.sh
+        DESIRED_VERSION=v3.8.2 bash get_helm.sh
+    - name: Install Operator SDK
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+    - name: Connect to Azure Container Registry (ACR)
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.CONTAINER_REGISTRY }}.azurecr.io
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN}}
+    - name: Make Splunk Operator Image
+      run: |
+        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+    - name: Push Splunk Operator Image to the Container Registry
+      run: |
+        echo "Uploading Image to the Container Registry :: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
+        make docker-push  IMG=${{ env.CONTAINER_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+  int-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          [
+            appframeworks1azure,
+            managerappframeworkc3azure,
+            managerappframeworkm4azure,
+            managersecret,
+            managersmartstore,
+            managermc,
+            managerscaling,
+            managercrcrud,
+            licensemanager,
+          ]
+        auth_method_managed_id: 
+          [
+            "false",
+            "true",
+          ]
+    runs-on: ubuntu-latest
+    needs: build-operator-image
+    env:
+      CLUSTER_NODES: 1
+      CLUSTER_WORKERS: 3
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      TEST_FOCUS: "${{ matrix.test }}"
+      # This regex matches any string not containing integration keyword
+      TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
+      TEST_CLUSTER_PLATFORM: azure
+      CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
+      CLUSTER_NAME: ${{secrets.CLUSTER_NAME}}
+      RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_SA_SECRET_KEY }}
+      STORAGE_ACCOUNT_CONTAINER: ${{ secrets.AZURE_STORAGE_ACCOUNT_CONTAINER}}
+      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      REGION: ${{ secrets.AZURE_REGION }}
+      CLUSTER_WIDE: "true"
+      AZURE_MANAGED_ID_ENABLED: "${{ matrix.auth_method_managed_id }}"
+    steps:
+      - name: Set Test Cluster Name
+        run: |
+          echo "TEST_CLUSTER_NAME=aks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+      - name: Set Test Cluster Nodes and Parallel Runs
+        run: >-
+          if grep -q "appframework" <<< "${{ matrix.test }}"; then
+            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
+            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
+          fi
+      - name: Change splunk enterprise to release on master branches
+        if: github.ref == 'ref/head/master'
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Install Kubectl
+        uses: Azure/setup-kubectl@v1
+        with:
+          version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
+      - name: Install Python
+        uses: actions/setup-python@v2
+      - name: Install Azure CLI
+        run:  curl -L https://aka.ms/InstallAzureCli | bash
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+      - name: Install Go Lint
+        run: |
+          go version
+          go get -u golang.org/x/lint/golint
+      - name: Install Ginkgo 
+        run: |
+          make setup/ginkgo
+      - name: Install Helm
+        run: |
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+          DESIRED_VERSION=v3.8.2 bash get_helm.sh
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@v1
+      - name: Configure Docker Hub credentials
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN}}
+      - name: Pull Splunk Enterprise Image
+        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+      - name: Pull Splunk Operator Image Locally
+        run: |
+          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      - name: Connect to Azure Container Registry (ACR)
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.CONTAINER_REGISTRY }}.azurecr.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN}}
+      - name: Tag and Push Splunk Enterprise Image to the Container Registry
+        run: |
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+      - name: Create AKS cluster
+        run: |
+          make cluster-up
+      - name: install metric server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      - name: install k8s dashboard
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+      - name: Run Integration test
+        run: |
+          make int-test
+      - name: Collect Test Logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p /tmp/pod_logs
+          find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
+      - name: Archive Pod Logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
+          path: "/tmp/pod_logs/**"
+      - name: Cleanup Test Case artifacts
+        if: ${{ always() }}
+        run: |
+          make cleanup
+          make clean
+      - name: Cleanup up AKS cluster
+        if: ${{ always() }}
+        run: |
+          make cluster-down
