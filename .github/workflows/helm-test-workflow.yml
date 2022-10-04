@@ -161,10 +161,6 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
-      # - name: Install operator using helm
-      #   run: |
-      #     helm upgrade --install splunk-operator helm-chart/splunk-operator --namespace splunk-operator --create-namespace --set splunkOperator.image.repository=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA --set image.repository=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Run helm test
         env:
           KUTTL_SPLUNK_ENT_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }} 
