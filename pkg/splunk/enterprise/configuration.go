@@ -45,6 +45,7 @@ var defaultLivenessProbe corev1.Probe = corev1.Probe{
 	InitialDelaySeconds: livenessProbeDefaultDelaySec,
 	TimeoutSeconds:      livenessProbeTimeoutSec,
 	PeriodSeconds:       livenessProbePeriodSec,
+	FailureThreshold:    livenessProbeFailureThreshold,
 	ProbeHandler: corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
 			Command: []string{
@@ -58,6 +59,7 @@ var defaultReadinessProbe corev1.Probe = corev1.Probe{
 	InitialDelaySeconds: readinessProbeDefaultDelaySec,
 	TimeoutSeconds:      readinessProbeTimeoutSec,
 	PeriodSeconds:       readinessProbePeriodSec,
+	FailureThreshold:    readinessProbeFailureThreshold,
 	ProbeHandler: corev1.ProbeHandler{
 		Exec: &corev1.ExecAction{
 			Command: []string{
@@ -1057,9 +1059,8 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *core
 		if derivedProbe.PeriodSeconds == 0 {
 			derivedProbe.PeriodSeconds = defaultProbe.PeriodSeconds
 		}
-		if derivedProbe.Exec == nil {
-			derivedProbe.Exec = defaultProbe.Exec
-		}
+		// Always use defaultProbe Exec. At this time customer supported scripts are not supported.
+		derivedProbe.Exec = defaultProbe.Exec
 		return &derivedProbe
 	} else if configuredProbe == nil && configuredDelay != 0 {
 		var derivedProbe = *defaultProbe
@@ -1841,6 +1842,10 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 		scopedLog.Error(err, "PeriodSeconds is too small", "configured", livenessProbe.PeriodSeconds, "recommended minimum", livenessProbePeriodSec)
 	}
 
+	if livenessProbe.FailureThreshold < livenessProbeFailureThreshold {
+		scopedLog.Error(err, "FailureThreshold is too small", "configured", livenessProbe.FailureThreshold, "recommended minimum", livenessProbeFailureThreshold)
+	}
+
 	return err
 }
 
@@ -1872,6 +1877,9 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 		scopedLog.Error(err, "PeriodSeconds is too small", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
 	}
 
+	if readinessProbe.FailureThreshold < readinessProbeFailureThreshold {
+		scopedLog.Error(err, "FailureThreshold is too small", "configured", readinessProbe.FailureThreshold, "recommended minimum", readinessProbeFailureThreshold)
+	}
 	return err
 }
 
@@ -1902,6 +1910,5 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 	if startupProbe.PeriodSeconds < startupProbePeriodSec {
 		scopedLog.Error(err, "PeriodSeconds is too small", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
-
 	return err
 }

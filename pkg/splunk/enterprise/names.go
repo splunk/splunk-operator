@@ -160,14 +160,16 @@ const (
 	maxSplunkAppsInstallationDelaySecs = 1500
 
 	// Readiness probe time values
-	readinessProbeDefaultDelaySec = 10
-	readinessProbeTimeoutSec      = 5
-	readinessProbePeriodSec       = 5
+	readinessProbeDefaultDelaySec  = 10
+	readinessProbeTimeoutSec       = 5
+	readinessProbePeriodSec        = 5
+	readinessProbeFailureThreshold = 3
 
 	// Liveness probe time values
-	livenessProbeDefaultDelaySec = 300
-	livenessProbeTimeoutSec      = 30
-	livenessProbePeriodSec       = 30
+	livenessProbeDefaultDelaySec  = 300
+	livenessProbeTimeoutSec       = 30
+	livenessProbePeriodSec        = 30
+	livenessProbeFailureThreshold = 3
 
 	// Startup probe time values
 	startupProbeDefaultDelaySec  = 10
