@@ -51,8 +51,6 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	a := string(got)
-	fmt.Println(a)
 	if string(got) != want {
 		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
 	}

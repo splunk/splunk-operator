@@ -166,16 +166,16 @@ const (
 	readinessProbeFailureThreshold = 3
 
 	// Liveness probe time values
-	livenessProbeDefaultDelaySec  = 300
+	livenessProbeDefaultDelaySec  = 30
 	livenessProbeTimeoutSec       = 30
 	livenessProbePeriodSec        = 30
 	livenessProbeFailureThreshold = 3
 
 	// Startup probe time values
-	startupProbeDefaultDelaySec  = 10
-	startupProbeTimeoutSec       = 5
-	startupProbePeriodSec        = 5
-	startupProbeFailureThreshold = 16
+	startupProbeDefaultDelaySec  = 40
+	startupProbeTimeoutSec       = 30
+	startupProbePeriodSec        = 30
+	startupProbeFailureThreshold = 12
 
 	// Number of ClusterMasterReplicas
 	numberOfClusterMasterReplicas = 1
@@ -189,7 +189,7 @@ const (
 	// Telemetry app.conf string
 	telAppConfString = `[install]
 is_configured = 1
-	
+
 [ui]
 is_visible = 0
 label = Splunk Operator for K8s
