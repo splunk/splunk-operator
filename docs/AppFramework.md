@@ -27,7 +27,7 @@ Splunk apps and add-ons deployed or installed outside of the App Framework are n
 Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
 ## Examples of App Framework usage
-Following section shows examples of using App Frameowork for both remote data storages. First, the examples for S3 based remote object storage are given and then  same examples are covered for Azure blob. The examples in both the cases have lot of commanalities and the places they differ are mainly in the values for `storageType`, `provider` and `endpoint`. There are also some differences in the authoriziation setup for using IAM /Managed Identity in both remote data storages. 
+Following section shows examples of using App Framework for both remote data storages. First, the examples for S3 based remote object storage are given and then  same examples are covered for Azure blob. The examples in both the cases have lot of commonalities and the places they differ are mainly in the values for `storageType`, `provider` and `endpoint`. There are also some differences in the authoriziation setup for using IAM /Managed Identity in both remote data storages.
 
 ### Examples of App Framework usage
 
@@ -251,17 +251,15 @@ This example describes the installation of apps on the Deployer and the Search H
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the Deployer, and select apps that will be distributed to all cluster search heads by the Deployer. 
-   * The apps are split across 3 folders named `searchApps`, `machineLearningApps`, `adminApps` and `ESapps`. The apps placed into  `searchApps`, `machineLearningApps` and `ESapps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
+   * The apps are split across 3 folders named `searchApps`, `machineLearningApps` and `adminApps`. The apps placed into  `searchApps` and `machineLearningApps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
-   * In this example, the Splunk apps for the search heads are located at `bucket-app-framework/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework/shcLoc-us/adminAppsLoc/`. Apps that need pre-configuration by the deployer before installing to the search heads (for example, Splunk Enterprise Security
-  ) are located at `bucket-app-framework/shcLoc-us/SecurityAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
+   * In this example, the Splunk apps for the search heads are located at `bucket-app-framework/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework/shcLoc-us/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
 
 5. Update the SearchHeadCluster CR specification, and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. 
-      * For CRs where the Splunk Enterprise instance will pre-configure an app before deploying it to the search heads (for example, Splunk Enterprise Security,) set the `scope: clusterWithPreConfig`. The ClusterManager and SearchHeadCluster CRs support the clusterWithPreConfig scope. 
-      * For CRs where the Splunk Enterprise instance will deploy the apps without pre-configuration to search heads, set the `scope:  cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes. 
-   * In this example, the Deployer will run some apps locally, and deploy other apps to the clustered search heads. The App Source folder `adminApps` contains Splunk apps that are installed and run on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope. For the apps in the App Source folder `ESappsLoc`, the Deployer will run a pre-configuration step before deploying those apps to the search heads.
+      * For CRs where the Splunk Enterprise instance will deploy the apps to search heads, set the `scope:cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes. 
+   * In this example, the Deployer will run some apps locally, and deploy other apps to the clustered search heads. The App Source folder `adminApps` contains Splunk apps that are installed and run on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope.
 
 Example using S3: SearchHeadCluster.yaml
 
@@ -287,9 +285,6 @@ spec:
       - name: adminApps
         location: adminAppsLoc/
         scope: local
-      - name: ESapps
-        location: SecurityAppsLoc/
-        scope: clusterWithPreConfig
     volumes:
       - name: volume_app_repo_us
         storageType: s3
@@ -324,9 +319,6 @@ spec:
       - name: adminApps
         location: adminAppsLoc/
         scope: local
-      - name: ESapps
-        location: ESappsLoc/
-        scope: clusterWithPreConfig
     volumes:
       - name: volume_app_repo_us
         storageType: blob
@@ -458,13 +450,12 @@ Here is a typical App framework configuration in a Custom Resource definition:
 * `scope` defines the scope of the app to be installed. 
   * If the scope is `local`, the apps will be installed and run locally on the pod referred to by the CR. 
   * If the scope is `cluster`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) for deployment across the cluster referred to by the CR.
-  * If the scope is `clusterWithPreConfig`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) and run through a pre-configuration step before being installing across the cluster referred to by the CR.
   * The cluster scope is only supported on CRs that manage cluster-wide app deployment.
   
     | CRD Type          | Scope support                          | App Framework support |
     | :---------------- | :------------------------------------- | :-------------------- |
-    | ClusterManager    | cluster, clusterWithPreConfig,  local  | Yes                   |
-    | SearchHeadCluster | cluster, clusterWithPreConfig, local   | Yes                   |
+    | ClusterManager    | cluster, local                         | Yes                   |
+    | SearchHeadCluster | cluster, local                         | Yes                   |
     | Standalone        | local                                  | Yes                   |
     | LicenceManager    | local                                  | Yes                   |
     | MonitoringConsole | local                                  | Yes                   |
@@ -640,7 +631,7 @@ Here are the steps showing an example of assiging managed identity:
 
 Familiarize yourself with [AKS managed identity concepts](https://learn.microsoft.com/en-us/azure/aks/use-managed-identity)
 
-The names used for resource group etc below are for examples purpose, please change them to the values as per your setup.
+The names used below, such as resource-group name and AKS cluster name, are for examples purpose, please change them to the values as per your setup.
 
 These steps cover creating resource group and AKS cluster also but you can skip them if you already have them created.
 
