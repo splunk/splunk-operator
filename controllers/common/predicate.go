@@ -42,11 +42,11 @@ func SecretChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*corev1.Secret)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*corev1.Secret)
-			if ok {
+			if !ok {
 				return false
 			}
 			return !cmp.Equal(newObj.Data, oldObj.Data)
@@ -74,11 +74,11 @@ func ConfigMapChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*corev1.ConfigMap)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*corev1.ConfigMap)
-			if ok {
+			if !ok {
 				return false
 			}
 			return !cmp.Equal(newObj.Data, oldObj.Data)
@@ -106,11 +106,11 @@ func StatefulsetChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*appsv1.StatefulSet)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*appsv1.StatefulSet)
-			if ok {
+			if !ok {
 				return false
 			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
@@ -138,11 +138,11 @@ func PodChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*corev1.Pod)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
-			if ok {
+			if !ok {
 				return false
 			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
@@ -170,7 +170,7 @@ func ResourceFailedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*enterpriseApi.Standalone)
-			if ok {
+			if !ok {
 				return false
 			}
 			return newObj.Status.Phase == "Error"
@@ -198,11 +198,11 @@ func CrdChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*crdv1.CustomResourceDefinition)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*crdv1.CustomResourceDefinition)
-			if ok {
+			if !ok {
 				return false
 			}
 			if !stringInSlice(newObj.Name, []string{"clustermasters.enterprise.splunk.com",
@@ -239,11 +239,11 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*enterpriseApi.ClusterManager)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*enterpriseApi.ClusterManager)
-			if ok {
+			if !ok {
 				return false
 			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
@@ -271,11 +271,11 @@ func ClusterMasterChangedPredicate() predicate.Predicate {
 
 			// if old and new data is the same, don't reconcile
 			newObj, ok := e.ObjectNew.DeepCopyObject().(*enterpriseApiV3.ClusterMaster)
-			if ok {
+			if !ok {
 				return false
 			}
 			oldObj, ok := e.ObjectOld.DeepCopyObject().(*enterpriseApiV3.ClusterMaster)
-			if ok {
+			if !ok {
 				return false
 			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
