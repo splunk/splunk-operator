@@ -18,10 +18,11 @@ package util
 import (
 	"bytes"
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"os"
 	"strings"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -210,6 +211,7 @@ type PodExecClientImpl interface {
 	SetTargetPodName(context.Context, string)
 	GetTargetPodName() string
 	GetCR() splcommon.MetaObject
+	SetCR(splcommon.MetaObject)
 }
 
 // blank assignment to implement PodExecClientImpl
@@ -264,6 +266,11 @@ func (podExecClient *PodExecClient) GetTargetPodName() string {
 // GetCR returns the CR from the PodExecClient
 func (podExecClient *PodExecClient) GetCR() splcommon.MetaObject {
 	return podExecClient.cr
+}
+
+// SetCR sets the PodExecClient CR
+func (podExecClient *PodExecClient) SetCR(cr splcommon.MetaObject) {
+	podExecClient.cr = cr
 }
 
 // NewStreamOptionsObject return a new streamoptions object for the given command

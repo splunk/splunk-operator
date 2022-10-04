@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 
+	"path/filepath"
+
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -64,10 +66,19 @@ const (
 	livenessScriptLocation = "tools/k8_probes/" + livenessScriptName
 
 	// livenessDriverLocation
-	livenessDriverLocation = "/opt/splunk/etc/k8_liveness_driver.sh"
+	//livenessDriverLocation = "/opt/splunk/etc/k8_liveness_driver.sh"
+	livenessDriverLocation = "/tmp/splunk_operator_k8s/probes/"
+
+	// livenessDriverFile
+	livenessDriverFile = "k8_liveness_driver.sh"
 
 	// livenessProbeLevelName
+	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
 	livenessProbeLevelName = "K8_OPERATOR_LIVENESS_LEVEL"
+
+	// livenessProbeDriverPath
+	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
+	livenessProbeDriverPathEnv = "SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH"
 
 	// probeMountDirectory
 	probeMountDirectory = "/mnt/probes"
@@ -194,6 +205,11 @@ version = 1.0.0
 
 	// Command to reload app configuration
 	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+)
+
+const (
+	livenessProbeLevelDefault int = iota
+	livenessProbeLevelOne
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -325,8 +341,13 @@ var GetProbeVolumePermission = func() int32 {
 	return probeVolumePermission
 }
 
-// GetLivenessDriverLocation returns the location of k8_liveness_driver.sh
-var GetLivenessDriverLocation = func() string {
+// GetLivenessDriverFilePath returns the location of liveness level drive file path
+var GetLivenessDriverFilePath = func() string {
+	return filepath.Join(livenessDriverLocation, livenessDriverFile)
+}
+
+// GetLivenessDriverFileDir returns directory location for liveness drive file
+var GetLivenessDriverFileDir = func() string {
 	return livenessDriverLocation
 }
 

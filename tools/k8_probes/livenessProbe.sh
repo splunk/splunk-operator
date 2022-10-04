@@ -23,7 +23,8 @@
 # health results
 
 # If exists, Source the liveness level
-[[ -f /opt/splunk/etc/k8_liveness_driver.sh ]] && source /opt/splunk/etc/k8_liveness_driver.sh
+#[[ -f /opt/splunk/etc/k8_liveness_driver.sh ]] && source /opt/splunk/etc/k8_liveness_driver.sh
+[[ -f $SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH ]] && source $SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH
 
 # Get the HTTP proto type
 get_http_proto_type() {

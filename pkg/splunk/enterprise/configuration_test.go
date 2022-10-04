@@ -19,13 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -52,10 +51,10 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	//if string(got) != want {
-	//	t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	//}
-	require.JSONEq(t, string(got), want)
+	if string(got) != want {
+		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
+	}
+	//require.JSONEq(t, string(got), want)
 }
 
 func TestGetSplunkService(t *testing.T) {
@@ -1206,7 +1205,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
