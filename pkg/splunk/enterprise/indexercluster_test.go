@@ -630,6 +630,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
 	}
 	wantDecomPodCalls := map[string][]spltest.MockFuncCall{"Get": decommisonFuncCalls, "Create": {funcCalls[1]}}
 	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantDecomPodCalls, nil, statefulSet, pod)

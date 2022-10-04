@@ -18,13 +18,14 @@ package enterprise
 import (
 	"context"
 	"encoding/json"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"testing"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

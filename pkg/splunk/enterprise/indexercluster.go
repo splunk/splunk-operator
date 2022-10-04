@@ -19,10 +19,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"regexp"
 	"strconv"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -810,6 +811,15 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 
 	switch mgr.cr.Status.Peers[n].Status {
 	case "Up":
+		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
+		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
+		if err != nil {
+			// Don't return error here. We may be reconciling several times, and the actual Pod status is down, but
+			// not yet reflecting on the Cluster Master, in which case, the podExec fails, though the decommission is
+			// going fine.
+			mgr.log.Info("Unable to lower the liveness probe level", "peerName", peerName, "enforceCounts", enforceCounts)
+		}
+
 		mgr.log.Info("Decommissioning indexer cluster peer", "peerName", peerName, "enforceCounts", enforceCounts)
 		c := mgr.getClient(ctx, n)
 		return false, c.DecommissionIndexerClusterPeer(enforceCounts)
