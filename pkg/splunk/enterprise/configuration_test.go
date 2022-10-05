@@ -1467,11 +1467,11 @@ func TestGetProbeWithConfigUpdates(t *testing.T) {
 
 	// Test when configured probe has 0 initialdelay and configured delay is non-zero
 	// TimoutSeconds, PeriodSeconds is 0. Exec is empty
-	configuredProbe := defaultReadinessProbe
+	var configuredProbe enterpriseApi.Probe
 	configuredProbe.InitialDelaySeconds = 0
 	configuredProbe.TimeoutSeconds = 0
 	configuredProbe.PeriodSeconds = 0
-	configuredProbe.Exec = nil
+
 	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, defaultInitialDelay)
 	if returnedProbe.InitialDelaySeconds != defaultInitialDelay {
 		t.Errorf("Failed to set InitialDelaySeconds to default delay when default initialDelay is zero.")
@@ -1487,7 +1487,6 @@ func TestGetProbeWithConfigUpdates(t *testing.T) {
 	}
 
 	// Test when configured probe has 0 initialDelay and defaultDelay is 0
-	configuredProbe = defaultReadinessProbe
 	configuredProbe.InitialDelaySeconds = 0
 	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, 0)
 	if returnedProbe.InitialDelaySeconds != defaultReadinessProbe.InitialDelaySeconds {
@@ -1511,7 +1510,7 @@ func TestValidateStartupProbe(t *testing.T) {
 	}
 
 	// Test Negative values in probe
-	startupProbe := defaultStartupProbe
+	var startupProbe enterpriseApi.Probe
 	startupProbe.InitialDelaySeconds = -1
 	err = validateStartupProbe(ctx, cr, &startupProbe)
 	if !strings.Contains(err.Error(), "negative values are not allowed") {
@@ -1519,7 +1518,6 @@ func TestValidateStartupProbe(t *testing.T) {
 	}
 
 	// Test probe parameters less than default values dont throw error
-	startupProbe = defaultStartupProbe
 	startupProbe.InitialDelaySeconds = 5
 	startupProbe.TimeoutSeconds = 4
 	startupProbe.PeriodSeconds = 4
@@ -1545,7 +1543,7 @@ func TestValidateReadinessProbe(t *testing.T) {
 	}
 
 	// Test Negative values in probe
-	readinessProbe := defaultReadinessProbe
+	var readinessProbe enterpriseApi.Probe
 	readinessProbe.InitialDelaySeconds = -1
 	err = validateReadinessProbe(ctx, cr, &readinessProbe)
 	if !strings.Contains(err.Error(), "negative values are not allowed") {
@@ -1553,7 +1551,6 @@ func TestValidateReadinessProbe(t *testing.T) {
 	}
 
 	// Test probe parameters less than default values dont throw error
-	readinessProbe = defaultReadinessProbe
 	readinessProbe.InitialDelaySeconds = 5
 	readinessProbe.TimeoutSeconds = 4
 	readinessProbe.PeriodSeconds = 4
@@ -1579,7 +1576,7 @@ func TestValidateLivenessProbe(t *testing.T) {
 	}
 
 	// Test Negative values in probe
-	livenessProbe := defaultLivenessProbe
+	var livenessProbe enterpriseApi.Probe
 	livenessProbe.InitialDelaySeconds = -1
 	err = validateLivenessProbe(ctx, cr, &livenessProbe)
 	if !strings.Contains(err.Error(), "negative values are not allowed") {
@@ -1587,7 +1584,6 @@ func TestValidateLivenessProbe(t *testing.T) {
 	}
 
 	// Test probe parameters less than default values dont throw error
-	livenessProbe = defaultLivenessProbe
 	livenessProbe.InitialDelaySeconds = 5
 	livenessProbe.TimeoutSeconds = 4
 	livenessProbe.PeriodSeconds = 4

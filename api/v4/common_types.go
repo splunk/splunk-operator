@@ -125,6 +125,24 @@ const (
 	PhaseError Phase = "Error"
 )
 
+// Probe defines set of configurable values for Startup, Readiness, and Liveness probes
+type Probe struct {
+	// Number of seconds after the container has started before liveness probes are initiated.
+	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+	// +optional
+	InitialDelaySeconds int32 `json:"initialDelaySeconds,omitempty"`
+	// Number of seconds after which the probe times out.
+	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+	// +optional
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+	// How often (in seconds) to perform the probe.
+	// +optional
+	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
+	// Minimum consecutive failures for the probe to be considered failed after having succeeded.
+	// +optional
+	FailureThreshold int32 `json:"failureThreshold,omitempty"`
+}
+
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
 	Spec `json:",inline"`
@@ -193,13 +211,13 @@ type CommonSplunkSpec struct {
 	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
 
 	// LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
-	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
 
 	// ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
-	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
 
 	// StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
-	StartupProbe *corev1.Probe `json:"startupProbe,omitempty"`
+	StartupProbe *Probe `json:"startupProbe,omitempty"`
 
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/

@@ -1039,13 +1039,20 @@ func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType 
 }
 
 // getProbeWithConfigUpdates Validates probe values and updates them
-func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *corev1.Probe, configuredDelay int32) *corev1.Probe {
+func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *enterpriseApi.Probe, configuredDelay int32) *corev1.Probe {
 	if configuredProbe != nil {
 		// Always take a separate probe, instead of referring the memory address from spec.
 		// (Referring the configured Probe memory is kind of OK as we are not writing to the DB, however
 		// updating any values(if the Application needs to do) can cause confusion when referring the CR
 		// while handling a reconcile event)
-		var derivedProbe = *configuredProbe
+		//var derivedProbe = *configuredProbe
+		derivedProbe := corev1.Probe{
+			InitialDelaySeconds: configuredProbe.InitialDelaySeconds,
+			TimeoutSeconds:      configuredProbe.TimeoutSeconds,
+			PeriodSeconds:       configuredProbe.PeriodSeconds,
+			FailureThreshold:    configuredProbe.FailureThreshold,
+		}
+
 		if derivedProbe.InitialDelaySeconds == 0 {
 			if configuredDelay != 0 {
 				derivedProbe.InitialDelaySeconds = configuredDelay
@@ -1807,15 +1814,15 @@ maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
 }
 
 // validateProbe validates a generic probe values
-func validateProbe(probe *corev1.Probe) error {
-	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.SuccessThreshold < 0 || probe.FailureThreshold < 0 {
-		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, SuccessThreshold = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.SuccessThreshold, probe.FailureThreshold)
+func validateProbe(probe *enterpriseApi.Probe) error {
+	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.FailureThreshold < 0 {
+		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold)
 	}
 	return nil
 }
 
 // validateLivenessProbe validates the liveness probe config
-func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *corev1.Probe) error {
+func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *enterpriseApi.Probe) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1850,7 +1857,7 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 }
 
 // validateReadinessProbe validates the Readiness probe config
-func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *corev1.Probe) error {
+func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *enterpriseApi.Probe) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1884,7 +1891,7 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 }
 
 // validateStartupProbe validates the startup probe config
-func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *corev1.Probe) error {
+func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *enterpriseApi.Probe) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("validateStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
