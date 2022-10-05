@@ -18,6 +18,9 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,10 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	wait "k8s.io/apimachinery/pkg/util/wait"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"time"
 )
 
 // TestCaseEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run test cases against
@@ -141,8 +142,15 @@ func (testenv *TestCaseEnv) setup() error {
 		}
 	}
 
-	// Create s3 secret object for index test
-	testenv.createIndexSecret()
+	// Create secret object for index test
+	switch ClusterProvider {
+	case "eks":
+		testenv.createIndexSecret()
+	case "azure":
+		testenv.createIndexSecretAzure()
+	default:
+		testenv.Log.Info("Failed to create secret object")
+	}
 
 	if testenv.licenseFilePath != "" {
 		err = testenv.createLicenseConfigMap()
@@ -510,6 +518,29 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete s3 index secret object")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+// createIndexSecretAzure create secret object for Azure
+func (testenv *TestCaseEnv) createIndexSecretAzure() error {
+	secretName := testenv.s3IndexSecret
+	ns := testenv.namespace
+	data := map[string][]byte{"azure_sa_name": []byte(os.Getenv("STORAGE_ACCOUNT")),
+		"azure_sa_secret_key": []byte(os.Getenv("STORAGE_ACCOUNT_KEY"))}
+	secret := newSecretSpec(ns, secretName, data)
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create Azure index secret object")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete Azure index secret object")
 			return err
 		}
 		return nil

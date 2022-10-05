@@ -64,15 +64,21 @@ Note: To run a specific test, you can
 1. cd ./test/{specific-test} folder
 2. ginkgo -v -progress --operator-image=localhost:5000/splunk/splunk-operator:latest --splunk-image=localhost:5000/splunk/splunk:latest
 
-### Circleci pipeline
+### Github actions
 
-The circleci config.xml file will also run the integration tests when merging to manager branch. By default, the pipeline workflow will
-deploy a KIND cluster and run the tests against it. To run the test againsts the EKS cluster, you will
-need to define the following project environment variables in the circleci console
+Smoke and integration tests will run on Github actions. This tests can be triggered on schedule or after a certain event occur depending of the content of the workflow files.
+To run the tests on different clusters platforms, you will need to define the following project environment variables.
+For AWS:
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
-CLUSTER_PROVIDER=[eks|kind]
+CLUSTER_PROVIDER=[eks]
 ECR_REGISTRY
+
+For Azure:
+STORAGE_ACCOUNT
+STORAGE_ACCOUNT_KEY
+CLUSTER_PROVIDER=[azure]
+
 
 ## Writing tests
 

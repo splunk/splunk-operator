@@ -17,6 +17,7 @@ package secret
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
@@ -64,14 +65,25 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			// 5. Verify New Secrets via api access (password)
 
 			// Download License File
-			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to download license file")
-
-			// Create License Config Map
-			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			downloadDir := "licenseFolder"
+			switch testenv.ClusterProvider {
+			case "eks":
+				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "azure":
+				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
+				Expect(err).To(Succeed(), "Unable to download license file from Azure")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			default:
+				fmt.Printf("Unable to download license file")
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+			}
 
 			mcRef := deployment.GetName()
-			err = deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status

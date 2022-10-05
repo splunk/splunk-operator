@@ -17,6 +17,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// Set Global Variables
+var (
+	ClusterProvider = os.Getenv("CLUSTER_PROVIDER")
+)
+
 // Set S3 Variables
 var (
 	s3Region                  = os.Getenv("S3_REGION")
