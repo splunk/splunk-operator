@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - develop
-      - CSPL-2033
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -64,12 +63,10 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: "helm"
-      SPLUNK_OPERATOR_IMAGE: splunk/splunk-operator:$GITHUB_SHA
     steps:
       - name: Set Test Cluster Name
         run: |
-          #echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-123456789" >> $GITHUB_ENV
+          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
@@ -161,6 +158,7 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run helm test
         env:
           KUTTL_SPLUNK_ENT_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }} 
@@ -178,7 +176,7 @@ jobs:
         run: |
           make cleanup
           make clean
-      #- name: Cleanup up EKS cluster
-      #  if: ${{ always() }}
-      #  run: |
-      #    make cluster-down
+      - name: Cleanup up EKS cluster
+        if: ${{ always() }}
+        run: |
+          make cluster-down
