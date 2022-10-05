@@ -5,7 +5,6 @@ on:
     - main
     - master
     - develop
-    - CSPL-2078
 name: Semgrep Workflow
 jobs:
   semgrep:
