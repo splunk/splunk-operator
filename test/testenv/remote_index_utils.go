@@ -87,7 +87,7 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values
-func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterpriseApi.VolumeSpec {
+func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef string, provider string, storageType string, region string) enterpriseApi.VolumeSpec {
 	return enterpriseApi.VolumeSpec{
 		Name:      volumeName,
 		Endpoint:  endpoint,
@@ -96,6 +96,18 @@ func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef strin
 		Provider:  provider,
 		Type:      storageType,
 		Region:    region,
+	}
+}
+
+// GenerateIndexVolumeSpecAzure return VolumeSpec struct with given values for Azure
+func GenerateIndexVolumeSpecAzure(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterpriseApi.VolumeSpec {
+	return enterpriseApi.VolumeSpec{
+		Name:      volumeName,
+		Endpoint:  endpoint,
+		Path:      azureIndexesContainer,
+		SecretRef: secretRef,
+		Provider:  provider,
+		Type:      storageType,
 	}
 }
 
