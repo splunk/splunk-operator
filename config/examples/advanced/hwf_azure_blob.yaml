@@ -20,11 +20,11 @@ spec:
         location: <apps-location>
     volumes:
       - name: volume_app_repo
-        storageType: s3
-        provider: aws
+        storageType: blob
+        provider: azure
         path: <apps-path>
         endpoint: https://<apps-endpoint>
-        secretRef: s3-secret
+        secretRef: azure-blob-secret
   defaults: |-
     splunk:
       set_search_peers: false 
