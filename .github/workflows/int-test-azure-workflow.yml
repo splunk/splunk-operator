@@ -149,9 +149,16 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Create AKS cluster
-        run: |
-          make cluster-up
+      - name: AZ AKS Create
+        run: az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RG_NAME }} --generate-ssh-keys -l westus --service-principal ${{ secrets.AZURE_CRED_CLIENTID }} --client-secret ${{ secrets.AZURE_CLIENT_SECRET }}
+      - name: Az ACR attach to AKS
+        run: az aks update -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RG_NAME }} --attach-acr ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+      - name: Azure Kubernetes set context
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          resource-group: ${{ secrets.AZURE_RG_NAME }}
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -177,7 +184,7 @@ jobs:
         run: |
           make cleanup
           make clean
-      - name: Cleanup up AKS cluster
-        if: ${{ always() }}
-        run: |
-          make cluster-down
+      #- name: Cleanup up AKS cluster
+      #  if: ${{ always() }}
+      #  #run: az group list --query "[?starts_with(name,'MC')].[name]" --output tsv | xargs -L1 bash -c 'az group delete --name $0 --no-wait --yes'
+      #  run: az group list --query "[?starts_with(name, 'MC_${{ secrets.AZURE_RG_NAME }}_${{ env.TEST_CLUSTER_NAME }}_westus')].[name]" --output tsv | xargs -L1 bash -c 'az group delete --name $0 --no-wait --yes'
