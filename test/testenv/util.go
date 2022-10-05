@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io/ioutil"
 	"math/rand"
 	"os/exec"
@@ -28,6 +27,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/onsi/ginkgo"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -1138,6 +1139,17 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 	_, err := ExecuteCommandOnOperatorPod(ctx, deployment, podName, cmd)
 	if err != nil {
 		logf.Log.Error(err, "Failed to create file on the pod", "Pod Name", podName)
+		return err
+	}
+	return nil
+}
+
+// DeleteConfigMap Delete configMap in the namespace
+func DeleteConfigMap(ns string, ConfigMapName string) error {
+	logf.Log.Info("Delete configMap", "configMap Name", ConfigMapName)
+	_, err := exec.Command("kubectl", "delete", "configmap", "-n", ns, ConfigMapName).Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete config Map", "ConfigMap Name", ConfigMapName, "Namespace", ns)
 		return err
 	}
 	return nil

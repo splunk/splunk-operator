@@ -1162,3 +1162,22 @@ func VerifyIsDeploymentInProgressFlagIsSet(ctx context.Context, deployment *Depl
 		return isDeploymentInProgress
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
+
+// VerifyFilesInDirectoryOnPod verify that files are present in folder.
+func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podNames []string, files []string, path string, checkDirectory bool, checkPresent bool) {
+	for _, podName := range podNames {
+		gomega.Eventually(func() bool {
+			// Using checkDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkDirecotry is FALSE
+			filelist, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, checkDirectory)
+			gomega.Expect(err).To(gomega.Succeed(), "Unable to get files on pod", "Pod", podName)
+			for _, file := range files {
+				found := CheckStringInSlice(filelist, file)
+				logf.Log.Info("File check", "On pod", podName, "Filename", file, "is in path", path, "Status", found)
+				if found != checkPresent {
+					return false
+				}
+			}
+			return true
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}
+}
