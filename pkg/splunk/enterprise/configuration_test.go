@@ -1336,6 +1336,23 @@ func TestGetReadinessProbe(t *testing.T) {
 	}
 }
 
+func TestGetStartupProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+
+	// Test if default delay works always
+	startupProbe := getStartupProbe(ctx, cr, SplunkClusterManager, spec)
+	if startupProbe.InitialDelaySeconds != startupProbeDefaultDelaySec {
+		t.Errorf("Failed to set Startup probe default delay")
+	}
+}
+
 func TestGetProbe(t *testing.T) {
 
 	command := []string{
@@ -1475,5 +1492,107 @@ func TestGetProbeWithConfigUpdates(t *testing.T) {
 	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, 0)
 	if returnedProbe.InitialDelaySeconds != defaultReadinessProbe.InitialDelaySeconds {
 		t.Errorf("Failed to set InitialDelaySeconds to default when default initialDelay is zero.")
+	}
+}
+
+func TestValidateStartupProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// Test Empty probe
+	err := validateStartupProbe(ctx, cr, nil)
+	if err != nil {
+		t.Errorf("Error returned on passing empty probe. Error: %s", err)
+	}
+
+	// Test Negative values in probe
+	startupProbe := defaultStartupProbe
+	startupProbe.InitialDelaySeconds = -1
+	err = validateStartupProbe(ctx, cr, &startupProbe)
+	if !strings.Contains(err.Error(), "negative values are not allowed") {
+		t.Errorf("Correct error not returned on passing negative value for InitialDelaySeconds. Error: %s", err)
+	}
+
+	// Test probe parameters less than default values dont throw error
+	startupProbe = defaultStartupProbe
+	startupProbe.InitialDelaySeconds = 5
+	startupProbe.TimeoutSeconds = 4
+	startupProbe.PeriodSeconds = 4
+	err = validateStartupProbe(ctx, cr, &startupProbe)
+	if err != nil {
+		t.Errorf("Unexpected error when less than deault values passed for startupProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", startupProbe.InitialDelaySeconds, startupProbe.TimeoutSeconds, startupProbe.PeriodSeconds, err.Error())
+	}
+}
+
+func TestValidateReadinessProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// Test Empty probe
+	err := validateReadinessProbe(ctx, cr, nil)
+	if err != nil {
+		t.Errorf("Error returned on passing empty probe. Error: %s", err)
+	}
+
+	// Test Negative values in probe
+	readinessProbe := defaultReadinessProbe
+	readinessProbe.InitialDelaySeconds = -1
+	err = validateReadinessProbe(ctx, cr, &readinessProbe)
+	if !strings.Contains(err.Error(), "negative values are not allowed") {
+		t.Errorf("Correct error not returned on passing negative value for InitialDelaySeconds. Error: %s", err)
+	}
+
+	// Test probe parameters less than default values dont throw error
+	readinessProbe = defaultReadinessProbe
+	readinessProbe.InitialDelaySeconds = 5
+	readinessProbe.TimeoutSeconds = 4
+	readinessProbe.PeriodSeconds = 4
+	err = validateReadinessProbe(ctx, cr, &readinessProbe)
+	if err != nil {
+		t.Errorf("Unexpected error when less than deault values passed for readinessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", readinessProbe.InitialDelaySeconds, readinessProbe.TimeoutSeconds, readinessProbe.PeriodSeconds, err.Error())
+	}
+}
+
+func TestValidateLivenessProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// Test Empty probe
+	err := validateLivenessProbe(ctx, cr, nil)
+	if err != nil {
+		t.Errorf("Error returned on passing empty probe. Error: %s", err)
+	}
+
+	// Test Negative values in probe
+	livenessProbe := defaultLivenessProbe
+	livenessProbe.InitialDelaySeconds = -1
+	err = validateLivenessProbe(ctx, cr, &livenessProbe)
+	if !strings.Contains(err.Error(), "negative values are not allowed") {
+		t.Errorf("Correct error not returned on passing negative value for InitialDelaySeconds. Error: %s", err)
+	}
+
+	// Test probe parameters less than default values dont throw error
+	livenessProbe = defaultLivenessProbe
+	livenessProbe.InitialDelaySeconds = 5
+	livenessProbe.TimeoutSeconds = 4
+	livenessProbe.PeriodSeconds = 4
+	err = validateLivenessProbe(ctx, cr, &livenessProbe)
+	if err != nil {
+		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
 }

@@ -10,9 +10,9 @@ Please refer to [Kubernetes documentation](https://kubernetes.io/docs/tasks/conf
 
 | Probe Type | initialDelaySeconds | timeoutSeconds | periodSeconds | failureThreshold | 
 | :--- | :--- | :--- | :--- | :--- | 
-| Startup Probe | 10 | 5 | 5 | 16 |
+| Startup Probe | 40 | 30 | 30 | 12 |
 | Readiness Probe | 10 | 5 | 5 | 3 | 
-| Liveness Probe | 300 | 30 | 30 | 3 | 
+| Liveness Probe | 30 | 30 | 30 | 3 | 
 
 These defaults serve for most of the use cases. If any tuning is needed, following is an example on how to modify the defaults.
 ### Example to configure Probes for Startup, Liveness and Readiness

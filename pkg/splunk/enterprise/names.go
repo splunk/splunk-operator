@@ -53,6 +53,12 @@ const (
 	// readinessScriptName
 	readinessScriptName = "readinessProbe.sh"
 
+	// startupScriptName
+	startupScriptName = "startupProbe.sh"
+
+	// startupScriptLocation
+	startupScriptLocation = "tools/k8_probes/" + startupScriptName
+
 	// readinessScriptLocation
 	readinessScriptLocation = "tools/k8_probes/" + readinessScriptName
 
@@ -154,14 +160,22 @@ const (
 	maxSplunkAppsInstallationDelaySecs = 1500
 
 	// Readiness probe time values
-	readinessProbeDefaultDelaySec = 10
-	readinessProbeTimeoutSec      = 5
-	readinessProbePeriodSec       = 5
+	readinessProbeDefaultDelaySec  = 10
+	readinessProbeTimeoutSec       = 5
+	readinessProbePeriodSec        = 5
+	readinessProbeFailureThreshold = 3
 
 	// Liveness probe time values
-	livenessProbeDefaultDelaySec = 300
-	livenessProbeTimeoutSec      = 30
-	livenessProbePeriodSec       = 30
+	livenessProbeDefaultDelaySec  = 30
+	livenessProbeTimeoutSec       = 30
+	livenessProbePeriodSec        = 30
+	livenessProbeFailureThreshold = 3
+
+	// Startup probe time values
+	startupProbeDefaultDelaySec  = 40
+	startupProbeTimeoutSec       = 30
+	startupProbePeriodSec        = 30
+	startupProbeFailureThreshold = 12
 
 	// Number of ClusterMasterReplicas
 	numberOfClusterMasterReplicas = 1
@@ -175,7 +189,7 @@ const (
 	// Telemetry app.conf string
 	telAppConfString = `[install]
 is_configured = 1
-	
+
 [ui]
 is_visible = 0
 label = Splunk Operator for K8s
@@ -337,4 +351,14 @@ var GetLivenessDriverFilePath = func() string {
 // GetLivenessDriverFileDir returns directory location for liveness drive file
 var GetLivenessDriverFileDir = func() string {
 	return livenessDriverLocation
+}
+
+// GetStartupScriptLocation return the location of startup probe script
+var GetStartupScriptLocation = func() string {
+	return startupScriptLocation
+}
+
+// GetStartupScriptName returns the name of startup probe script on pod
+var GetStartupScriptName = func() string {
+	return startupScriptName
 }
