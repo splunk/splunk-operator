@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -1363,7 +1364,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 	_, err = os.Stat(appDownloadVolume)
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
-	if _, err := os.Stat(appDownloadVolume); os.IsNotExist(err) {
+	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
 		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", appDownloadVolume)
 		return err
 	}

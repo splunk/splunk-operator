@@ -275,11 +275,7 @@ func SetStatefulSetOwnerRef(ctx context.Context, client splcommon.ControllerClie
 
 	// Update owner reference if needed
 	err = splutil.UpdateResource(ctx, client, statefulset)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // GetStatefulSetByName retrieves current statefulset

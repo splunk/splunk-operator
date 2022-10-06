@@ -895,7 +895,10 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 	re := regexp.MustCompile(".*origin:(?P<rf>.*),.*")
 	match := re.FindStringSubmatch(siteRepFactor)
-	siteRF, _ := strconv.Atoi(match[1])
+	siteRF, err := strconv.ParseInt(match[1], 10, 32)
+	if err != nil {
+		return 0
+	}
 	return int32(siteRF)
 }
 
