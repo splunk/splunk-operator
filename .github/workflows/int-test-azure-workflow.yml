@@ -122,12 +122,6 @@ jobs:
       - name: Install Ginkgo 
         run: |
           make setup/ginkgo
-      - name: 'Login to ACR'
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
-          username: ${{ secrets.AZURE_ACR_USERNAME }}
-          password: ${{ secrets.AZURE_ACR_PASSWORD }}
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@v1
       - name: Configure Docker Hub credentials
@@ -137,6 +131,12 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN}}
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+      - name: 'Login to ACR'
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+          username: ${{ secrets.AZURE_ACR_USERNAME }}
+          password: ${{ secrets.AZURE_ACR_PASSWORD }}
       - name: Pull Splunk Operator Image Locally
         run: |
           docker pull ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
