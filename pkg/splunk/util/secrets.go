@@ -131,11 +131,7 @@ func SetSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient, s
 
 	// Update secret if needed
 	err = UpdateResource(ctx, client, secret)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // RemoveSecretOwnerRef removes the owner references for an object

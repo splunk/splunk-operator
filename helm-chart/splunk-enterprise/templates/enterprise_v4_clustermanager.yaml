@@ -67,7 +67,7 @@ spec:
   defaults: |-
     splunk:
       site: {{ .Values.sva.m4.clusterManager.site }}
-      multisite_manager: localhost
+      multisite_master: localhost
       all_sites: {{ .Values.sva.m4.clusterManager.allSites }}
       multisite_replication_factor_origin: 1
       multisite_replication_factor_total: 2

@@ -19,7 +19,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -89,7 +89,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 	}
 
 	// unmarshall response if obj != nil
-	data, _ := ioutil.ReadAll(response.Body)
+	data, _ := io.ReadAll(response.Body)
 	if len(data) == 0 {
 		return fmt.Errorf("received empty response body from %s", request.URL)
 	}
@@ -334,7 +334,7 @@ func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 			Text string `json:"text"`
 		} `json:"messages"`
 	}{}
-	data, _ := ioutil.ReadAll(response.Body)
+	data, _ := io.ReadAll(response.Body)
 	if len(data) == 0 {
 		return fmt.Errorf("received 503 response with empty body from %s", request.URL)
 	}
@@ -754,9 +754,6 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 		return err
 	}
 	err = c.UpdateMonitoringConsoleApp()
-	if err != nil {
-		return err
-	}
 	return err
 }
 
