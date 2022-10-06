@@ -110,7 +110,7 @@ jobs:
       - name: Install Python
         uses: actions/setup-python@v2
       #- name: Install Azure CLI
-      #  run:  curl -L https://aka.ms/InstallAzureCli | bash
+      #t p  run:  curl -L https://aka.ms/InstallAzureCli | bash
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -168,12 +168,27 @@ jobs:
           resource-group: ${{ secrets.AZURE_RG_NAME }}
           cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
       - name: install metric server
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          resource-group: ${{ secrets.AZURE_RG_NAME }}
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          resource-group: ${{ secrets.AZURE_RG_NAME }}
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          resource-group: ${{ secrets.AZURE_RG_NAME }}
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
         run: |
           make int-test
       - name: Collect Test Logs
