@@ -1,9 +1,10 @@
 from __future__ import print_function
 import os
 import sys, getopt
+import subprocess
 
 def executeShellCommand(command):
-   stream = os.popen(command)
+   stream = subprocess.popen(command).wait()
    output = stream.read()
    return output
 

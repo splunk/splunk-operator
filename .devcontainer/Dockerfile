@@ -70,4 +70,3 @@ COPY --from=builder /manager  manager
 
 USER $USERNAME
 ENTRYPOINT [ "/dlv" , "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "manager"]
-#ENTRYPOINT ["/manager"]

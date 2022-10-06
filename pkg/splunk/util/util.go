@@ -283,8 +283,10 @@ func NewStreamOptionsObject(command string) *remotecommand.StreamOptions {
 // ResetStringReader resets the Stdin (of strings.Reader type) of the remotecommand.StreamOptions
 func ResetStringReader(streamOptions *remotecommand.StreamOptions, command string) {
 	// convert Stdin of type io.Reader to strings.Reader type
-	stdInReader := streamOptions.Stdin.(*strings.Reader)
-
+	stdInReader, ok := streamOptions.Stdin.(*strings.Reader)
+	if !ok {
+		return
+	}
 	// reset the offset of the Reader
 	stdInReader.Reset(command)
 }
