@@ -1143,3 +1143,14 @@ func CreateDummyFileOnOperator(ctx context.Context, deployment *Deployment, podN
 	}
 	return nil
 }
+
+// DeleteConfigMap Delete configMap in the namespace
+func DeleteConfigMap(ns string, ConfigMapName string) error {
+	logf.Log.Info("Delete configMap", "configMap Name", ConfigMapName)
+	_, err := exec.Command("kubectl", "delete", "configmap", "-n", ns, ConfigMapName).Output()
+	if err != nil {
+		logf.Log.Error(err, "Failed to delete config Map", "ConfigMap Name", ConfigMapName, "Namespace", ns)
+		return err
+	}
+	return nil
+}

@@ -155,7 +155,7 @@ metadata:
 EOF
 ```
 
-**The `enterprise.splunk.com/delete-pvc` finalizer is optional, and tells the Splunk Operator to remove any Kubernetes [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) associated with the instance if you delete the pod.**
+**The `enterprise.splunk.com/delete-pvc` finalizer is optional, and tells the Splunk Operator to remove any Kubernetes [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) associated with the instance if you delete the custom resource(CR).**
 
 Within a few minutes, you'll see new pods running in your namespace:
 

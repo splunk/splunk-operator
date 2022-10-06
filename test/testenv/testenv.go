@@ -18,10 +18,11 @@ package testenv
 import (
 	"flag"
 	"fmt"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"time"
+
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo"

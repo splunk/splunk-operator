@@ -27,6 +27,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -204,6 +205,15 @@ var _ = Describe("m4appfw test", func() {
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			//########## INITIAL VERIFICATIONS ##########
 			var idxcPodNames, shcPodNames []string
@@ -582,6 +592,12 @@ var _ = Describe("m4appfw test", func() {
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+
 			//########### INITIAL VERIFICATIONS #########
 			var idxcPodNames, shcPodNames []string
 			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
@@ -595,6 +611,10 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify no pods reset by checking the pod age
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+
+			//Delete configMap Object
+			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to delete ConfigMao", "ConfigMap name", ConfigMapName)
 
 			//############### SCALING UP ################
 			// Get instance of current Search Head Cluster CR with latest config
@@ -643,6 +663,14 @@ var _ = Describe("m4appfw test", func() {
 
 			//######### SCALING UP VERIFICATIONS ########
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			// Listing the Search Head cluster pods to exclude them from the 'no pod reset' test as they are expected to be reset after scaling
 			shcPodNames = []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
