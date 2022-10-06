@@ -35,11 +35,11 @@ jobs:
         password: ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }}
     - name: Make Splunk Operator Image
       run: |
-        make docker-build IMG=${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-build IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Push Splunk Operator Image to the Container Registry
       run: |
         echo "Uploading Image to the Container Registry :: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push  IMG=${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-push  IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
     strategy:
       fail-fast: false
@@ -78,6 +78,7 @@ jobs:
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: azure
+      CLUSTER_PROVIDER: azure
       CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
       CLUSTER_NAME: ${{secrets.CLUSTER_NAME}}
       RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
@@ -85,6 +86,7 @@ jobs:
       STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_SA_SECRET_KEY }}
       STORAGE_ACCOUNT_CONTAINER: ${{ secrets.AZURE_STORAGE_ACCOUNT_CONTAINER}}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       REGION: ${{ secrets.AZURE_REGION }}
       CLUSTER_WIDE: "true"
       # AZURE_MANAGED_ID_ENABLED: "${{ matrix.auth_method_managed_id }}"
@@ -108,14 +110,22 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: 'Login via Azure CLI'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: AZ AKS Create
+        uses: azure/CLI@v1
+        with:
+          azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
+          inlineScript: |
+            az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --generate-ssh-keys -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }}
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
         uses: actions/setup-python@v2
-      #- name: Install Azure CLI
-      #t p  run:  curl -L https://aka.ms/InstallAzureCli | bash
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
@@ -139,37 +149,28 @@ jobs:
       - name: 'Login to ACR'
         uses: azure/docker-login@v1
         with:
-          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.AZURE_ACR_USERNAME }}
-          password: ${{ secrets.AZURE_ACR_PASSWORD }}
+          login-server: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+          username: ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }}
+          password: ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }}
       - name: Pull Splunk Operator Image Locally
         run: |
-          docker pull ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-          docker tag ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker pull ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker tag ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
       - name: Tag and Push Splunk Enterprise Image to the Container Registry
         run: |
-          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          docker push ${{ secrets.AZURE_CONTAINER_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: 'Login via Azure CLI'
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: AZ AKS Create
-        uses: azure/CLI@v1
-        with:
-          azcliversion: 2.30.0
-          inlineScript: |
-            az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --generate-ssh-keys -l westus --service-principal ${{ secrets.AZURE_CRED_CLIENTID }} --client-secret ${{ secrets.AZURE_CLIENT_SECRET }}
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: AZ Wait for AKS Cluster to be Ready
         uses: azure/CLI@v1
         with:
-          azcliversion: 2.30.0
+          azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
           inlineScript: |
             az aks wait -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} -n ${{ env.TEST_CLUSTER_NAME }} --created --interval 60 --timeout 1800
       - name: Az ACR attach to AKS
         uses: azure/CLI@v1
         with:
-          azcliversion: 2.30.0
+          azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
           inlineScript: |
             az aks update -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --attach-acr ${{ secrets.AZURE_CONTAINER_REGISTRY }}
       - name: Azure Kubernetes set context
@@ -195,12 +196,7 @@ jobs:
           inlineScript: |
             kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
-        uses: Azure/aks-set-context@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
-          inlineScript: |
+        run: |
             make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
@@ -218,12 +214,10 @@ jobs:
         run: |
           make cleanup
           make clean
-      - name: install metric server
+      - name: Delete AKS Cluster
         if: ${{ always() }}
-        uses: Azure/aks-set-context@v1
+        uses: azure/CLI@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
+          azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
           inlineScript: |
-            az aks delete --name  ${{ env.TEST_CLUSTER_NAME }}  --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+            az aks delete --name  ${{ env.TEST_CLUSTER_NAME }}  --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} -y
