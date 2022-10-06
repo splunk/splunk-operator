@@ -1,6 +1,6 @@
 ---
 # assert for indexer cluster custom resource to be ready
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idxc

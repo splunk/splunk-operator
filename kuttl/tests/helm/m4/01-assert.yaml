@@ -1,7 +1,7 @@
 ---
-# assert for cluster Master custom resource to be ready
-apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+# assert for cluster manager custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
 metadata:
   name: cm
 status:
@@ -12,7 +12,7 @@ status:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata: 
-  name: splunk-cm-cluster-master
+  name: splunk-cm-cluster-manager
 status:
   replicas: 1
 
@@ -21,11 +21,11 @@ status:
 apiVersion: v1
 kind: Secret
 metadata: 
-  name: splunk-cm-cluster-master-secret-v1
+  name: splunk-cm-cluster-manager-secret-v1
 
 ---
 # assert for indexer cluster custom resource to be ready
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idx1
@@ -34,7 +34,7 @@ status:
 
 ---
 # assert for indexer cluster custom resource to be ready
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idx2
@@ -43,7 +43,7 @@ status:
 
 ---
 # assert for SearchHeadCluster custom resource to be ready
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: shc1
