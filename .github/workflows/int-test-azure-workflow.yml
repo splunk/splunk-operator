@@ -160,7 +160,7 @@ jobs:
         with:
           azcliversion: 2.30.0
           inlineScript: |
-        run: az aks update -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RG_NAME }} --attach-acr ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+            az aks update -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RG_NAME }} --attach-acr ${{ secrets.AZURE_CONTAINER_REGISTRY }}
       - name: Azure Kubernetes set context
         uses: Azure/aks-set-context@v1
         with:
@@ -173,16 +173,16 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: ${{ secrets.AZURE_RG_NAME }}
           cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
-        run: |
-          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+          inlineScript: |
+            kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         uses: Azure/aks-set-context@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: ${{ secrets.AZURE_RG_NAME }}
           cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
-        run: |
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+          inlineScript: |
+            kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run Integration test
         uses: Azure/aks-set-context@v1
         with:
@@ -209,8 +209,8 @@ jobs:
           REGION: ${{ secrets.AZURE_REGION }}
           CLUSTER_WIDE: "true"
           AZURE_MANAGED_ID_ENABLED: "${{ matrix.auth_method_managed_id }}"
-        run: |
-          make int-test
+          inlineScript: |
+            make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
         run: |
