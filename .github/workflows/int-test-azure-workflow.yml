@@ -46,7 +46,7 @@ jobs:
       matrix:
         test:
           [
-            az_appfw,
+            appframeworks1azure,
           ]
         # test:
         #  [
@@ -79,20 +79,22 @@ jobs:
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: azure
       CLUSTER_PROVIDER: azure
-      CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
+      AZURE_CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
       CLUSTER_NAME: ${{secrets.CLUSTER_NAME}}
-      RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-      STORAGE_ACCOUNT: ${{ secrets.AZURE_SA_NAME }}
-      STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_SA_SECRET_KEY }}
-      STORAGE_ACCOUNT_CONTAINER: ${{ secrets.AZURE_STORAGE_ACCOUNT_CONTAINER}}
+      AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+      AZURE_TEST_CONTAINER: ${{ secrets.AZURE_TEST_CONTAINER}}
+      AZURE_INDEXES_CONTAINER: ${{ secrets.AZURE_INDEXES_CONTAINER}}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       ECR_REPOSITORY: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-      REGION: ${{ secrets.AZURE_REGION }}
+      AZURE_REGION: ${{ secrets.AZURE_REGION }}
       CLUSTER_WIDE: "true"
       # AZURE_MANAGED_ID_ENABLED: "${{ matrix.auth_method_managed_id }}"
       AZURE_MANAGED_ID_ENABLED: "false"
     steps:
+      # Need this because apps are downloaded from S3. 
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=az${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV

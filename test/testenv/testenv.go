@@ -172,6 +172,7 @@ type TestEnv struct {
 	Log                logr.Logger
 	cleanupFuncs       []cleanupFunc
 	debug              string
+	clusterProvider    string
 }
 
 func init() {
@@ -230,6 +231,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 		licenseFilePath:    licenseFilePath,
 		s3IndexSecret:      "splunk-s3-index-" + envName,
 		debug:              os.Getenv("DEBUG"),
+		clusterProvider:    os.Getenv("CLUSTER_PROVIDER"),
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)
@@ -335,4 +337,9 @@ func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAcco
 	}
 
 	return &new
+}
+
+// GetClusterProvider returns cluster provider for the test run
+func (testenv *TestEnv) GetClusterProvider() string {
+	return testenv.clusterProvider
 }

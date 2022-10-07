@@ -52,6 +52,7 @@ type TestCaseEnv struct {
 	cleanupFuncs        []cleanupFunc
 	debug               string
 	clusterWideOperator string
+	clusterProvider     string
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
@@ -89,6 +90,7 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 		s3IndexSecret:       "splunk-s3-index-" + name,
 		debug:               os.Getenv("DEBUG"),
 		clusterWideOperator: installOperatorClusterWide,
+		clusterProvider:     os.Getenv("CLUSTER_PROVIDER"),
 	}
 
 	testenv.Log = logf.Log.WithValues("testcaseenv", testenv.name)

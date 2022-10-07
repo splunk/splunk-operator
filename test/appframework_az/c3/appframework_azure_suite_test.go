@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package azurem4appfw
+package azurec3appfw
 
 import (
 	"context"
@@ -39,7 +39,7 @@ const (
 
 var (
 	testenvInstance     *testenv.TestEnv
-	testSuiteName       = "m4appfw-" + testenv.RandomDNSName(3)
+	testSuiteName       = "c3appfw-" + testenv.RandomDNSName(3)
 	appListV1           []string
 	appListV2           []string
 	AzureDataContainer  = os.Getenv("TEST_CONTAINER")
@@ -49,8 +49,8 @@ var (
 	AzureAppDirV2       = testenv.AppLocationV2
 	AzureAppDirDisabled = testenv.AppLocationDisabledApps
 	currDir, _          = os.Getwd()
-	downloadDirV1       = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
-	downloadDirV2       = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
+	downloadDirV1       = filepath.Join(currDir, "c3appfwV1-"+testenv.RandomDNSName(4))
+	downloadDirV2       = filepath.Join(currDir, "c3appfwV2-"+testenv.RandomDNSName(4))
 )
 
 // TestBasic is the main entry point
@@ -68,31 +68,31 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Create a list of apps to upload to Azure
-	appListV1 = testenv.BasicApps
-	appFileList := testenv.GetAppFileList(appListV1)
+	if testenvInstance.GetClusterProvider() == "azure" {
+		// Create a list of apps to upload to S3
+		appListV1 = testenv.BasicApps
+		appFileList := testenv.GetAppFileList(appListV1)
 
-	// Download V1 Apps from Azure
-	containerName := "/test-data/appframework/v1apps/"
-	err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
-	Expect(err).To(Succeed(), "Unable to download V1 app files")
+		// Download V1 Apps from Azure
+		containerName := "/test-data/appframework/v1apps/"
+		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-	// Create a list of apps to upload to Azure after poll period
-	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-	appFileList = testenv.GetAppFileList(appListV2)
+		// Create a list of apps to upload to Azure after poll period
+		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+		appFileList = testenv.GetAppFileList(appListV2)
 
-	// Download V2 Apps from Azure
-	containerName = "/test-data/appframework/v2apps/"
-	err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
-	Expect(err).To(Succeed(), "Unable to download V2 app files")
+		// Download V2 Apps from Azure
+		containerName = "/test-data/appframework/v2apps/"
+		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
+	} else {
+		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenvInstance.GetClusterProvider())
+	}
 
 })
 
 var _ = AfterSuite(func() {
-	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
-	}
-
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}
