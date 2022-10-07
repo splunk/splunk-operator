@@ -46,7 +46,7 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1azure,
+            az_appfw,
           ]
         # test:
         #  [
