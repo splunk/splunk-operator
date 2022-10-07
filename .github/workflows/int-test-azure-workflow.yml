@@ -78,6 +78,7 @@ jobs:
       # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: azure
+      CLUSTER_PROVIDER: azure
       CONTAINER_REGISTRY: ${{secrets.AZURE_CONTAINER_REGISTRY}}
       CLUSTER_NAME: ${{secrets.CLUSTER_NAME}}
       RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
@@ -86,6 +87,7 @@ jobs:
       STORAGE_ACCOUNT_CONTAINER: ${{ secrets.AZURE_STORAGE_ACCOUNT_CONTAINER}}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       ECR_REPOSITORY: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+      AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       REGION: ${{ secrets.AZURE_REGION }}
       CLUSTER_WIDE: "true"
       # AZURE_MANAGED_ID_ENABLED: "${{ matrix.auth_method_managed_id }}"
