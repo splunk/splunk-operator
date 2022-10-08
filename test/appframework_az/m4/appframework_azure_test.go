@@ -228,9 +228,6 @@ var _ = Describe("m4appfw test", func() {
 			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
-			// get revision number of the resource
-			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
-
 			// Upload V2 apps to Azure for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
@@ -2044,26 +2041,14 @@ var _ = Describe("m4appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// ############ Upload Disabled App ###########
 			// Verify repo state on App to be disabled to be 1 (i.e app present on Azure bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
-			// Download disabled version of app from Azure
+			// Disable the app
 			testcaseEnvInst.Log.Info("Download disabled version of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			var AzureAppDirectoryDisabled []string
-			AzureAppDirectoryDisabled[0] = AzureAppDirDisabled
-			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, AzureAppDirectoryDisabled)
-			Expect(err).To(Succeed(), "Unable to download apps files")
-
-			// Upload disabled version of app to Azure
-			testcaseEnvInst.Log.Info("Upload disabled version of app to Azure for this test")
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileName)
-
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
-			uploadedApps = append(uploadedApps, uploadedFiles...)
+			testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDirIdxc)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
@@ -2080,13 +2065,13 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for App state to update after config file change
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
-			//Delete the file from az
-			azFilepath := filepath.Join(azTestDirIdxc, appFileName[0])
+			// Delete the file from Azure
+			azFilepath := "/" + AzureContainer + "/" + filepath.Join(azTestDirIdxc, appFileName[0])
 			azureBlobClient := &testenv.AzureBlobClient{}
 			err = azureBlobClient.DeleteFileOnAzure(ctx, azFilepath, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on Azure test directory", appFileName))
 
-			// Verify repo state is set  to 2 (i.e app deleted from Azure bucket)
+			// Verify repo state is set to 2 (i.e app deleted from Azure bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 		})
 	})

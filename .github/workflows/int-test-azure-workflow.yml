@@ -47,6 +47,8 @@ jobs:
         test:
           [
             appframeworks1azure,
+            managerappframeworkc3azure,
+            managerappframeworkm4azure,
           ]
         # test:
         #  [

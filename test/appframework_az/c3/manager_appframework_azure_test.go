@@ -84,7 +84,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -294,7 +294,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("smoke, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -502,7 +502,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -715,7 +715,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It("smoke, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -855,7 +855,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -958,8 +958,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("c3, integration,managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1170,8 +1170,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("c3, integration,managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1382,8 +1382,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA instance with App Framework enabled and install above 200MB of apps at once", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1475,8 +1475,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled for manual update", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled for manual update", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure for Monitoring Console
@@ -1656,7 +1656,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1699,7 +1699,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############## UPGRADE VERIFICATIONS ############
 			appVersion = "V2"
@@ -1720,8 +1720,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA and have apps installed and updated locally on Cluster Manager and Deployer for manual polling", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1854,7 +1854,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
@@ -1887,7 +1887,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########### UPGRADE VERIFICATIONS ###########
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -1904,8 +1904,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("c3, integration,managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2078,7 +2078,7 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
+			config.Data["ClusterManager"] = strings.Replace(config.Data["ClusterManager"], "off", "on", 1)
 			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
@@ -2106,7 +2106,7 @@ var _ = Describe("c3appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterManager"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
 			cmAppSourceInfoLocal.CrAppVersion = appVersion
@@ -2129,8 +2129,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2258,8 +2258,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2394,8 +2394,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2489,8 +2489,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2584,8 +2584,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2663,25 +2663,14 @@ var _ = Describe("c3appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// ############ Upload Disabled App ###########
 			// Verify repo state on App to be disabled to be 1 (i.e app present on Azure bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
-			// Download disabled version of app from Azure
+			// Disable the app
 			testcaseEnvInst.Log.Info("Download disabled version of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			var AzureAppDirectoryDisabled []string
-			AzureAppDirectoryDisabled[0] = AzureAppDirDisabled
-			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, AzureAppDirectoryDisabled)
-			Expect(err).To(Succeed(), "Unable to download apps files")
-
-			// Upload disabled version of app to Azure
-			testcaseEnvInst.Log.Info("Upload disabled version of app to Azure for this test")
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirIdxc, appFileName)
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
-			uploadedApps = append(uploadedApps, uploadedFiles...)
+			testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDirIdxc)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
@@ -2696,19 +2685,19 @@ var _ = Describe("c3appfw test", func() {
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
 			//Delete the file from az
-			azFilepath := filepath.Join(azTestDirIdxc, appFileName[0])
+			azFilepath := "/" + AzureContainer + "/" + filepath.Join(azTestDirIdxc, appFileName[0])
 			azureBlobClient := &testenv.AzureBlobClient{}
 			err = azureBlobClient.DeleteFileOnAzure(ctx, azFilepath, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on Azure test directory", appFileName[0]))
 
-			// Verify repo state is set  to 2 (i.e app deleted from Azure bucket)
+			// Verify repo state is set to 2 (i.e app deleted from Azure bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2828,8 +2817,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("c3, integration,managerappframeworkc3azure, az_appfw: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+		It("c3, integration,managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2919,8 +2908,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("integration, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("integration, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -3017,8 +3006,8 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, c3azure, managerappframeworkc3azure, az_appfw: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+		It("smoke, c3azure, managerappframeworkc3azure, appframeworkc3azure: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
 
 			/*
 			   Test Steps
@@ -3083,7 +3072,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
 
 			/* Test Steps
