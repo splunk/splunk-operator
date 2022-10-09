@@ -506,3 +506,521 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 		t.Errorf("Expected error for incorrect oauth request")
 	}
 }
+
+func TestAzureBlobGetAppsListShouldFailBadSecret(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "azure_vol1",
+				Endpoint:  "https://mystorageaccount.blob.core.windows.net",
+				Path:      "appscontainer1",
+				SecretRef: "blob-secret",
+				Type:      "blob",
+				Provider:  "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	// Add handler for mock client(handles secrets case initially)
+	wantRequest, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
+
+	mclient.AddHandler(wantRequest, 403, "unauthorized", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	// Test Listing apps with secrets
+	azureBlobClient.StorageAccountName = vol.Path
+	azureBlobClient.SecretAccessKey = "abcd"
+
+	respList, err := azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should return err")
+	}
+
+	if err.Error() != "error authorizing the rest call. check your IAM/secret configuration" {
+		t.Errorf("GetAppsList should return authorization error")
+	}
+
+	// authorizing the rest call. check your IAM/secret configuration
+
+	if len(respList.Objects) != 0 {
+		t.Errorf("GetAppsList should not return any response objects")
+	}
+}
+
+func TestAzureBlobGetAppsListShouldFailNoIdentity(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:     "azure_vol1",
+				Endpoint: "https://mystorageaccount.blob.core.windows.net",
+				Path:     "appscontainer1",
+				Type:     "blob",
+				Provider: "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	// mock IAM token fetch call to a failed response
+	// no valid managed identity found
+	wantRequestIAMTokenFetch, _ := http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-10-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
+
+	mclient.AddHandler(wantRequestIAMTokenFetch, 400, "No managed identity", nil)
+
+	// Add mock for the azure rest call for list apps
+	wantRequest, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
+
+	mclient.AddHandler(wantRequest, 403, "unauthorized", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	// Test Listing apps with secrets
+	azureBlobClient.StorageAccountName = vol.Path
+	azureBlobClient.SecretAccessKey = "abcd"
+
+	respList, err := azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should return err")
+	}
+
+	if err.Error() != "error authorizing the rest call. check your IAM/secret configuration" {
+		t.Errorf("GetAppsList should return authorization error")
+	}
+
+	// authorizing the rest call. check your IAM/secret configuration
+
+	if len(respList.Objects) != 0 {
+		t.Errorf("GetAppsList should not return any response objects")
+	}
+
+	mclient.RemoveHandlers()
+}
+
+// check identity is assigned to AKS but it is not authorized
+// to access the buckets
+func TestAzureBlobGetAppsListShouldFailInvalidIdentity(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:     "azure_vol1",
+				Endpoint: "https://mystorageaccount.blob.core.windows.net",
+				Path:     "appscontainer1",
+				Type:     "blob",
+				Provider: "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	// Identity call return a token - that means AKS cluster has an identity configured.
+	wantRequest, _ := http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-10-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
+	respTokenData := &TokenResponse{
+		AccessToken: "acctoken",
+		ClientID:    "ClientId",
+	}
+	mrespdata, _ := json.Marshal(respTokenData)
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
+
+	// Add mock for the azure rest call for list apps
+	wantRequest, _ = http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
+
+	// Expect the identity does not have authorization to access the buckets
+	mclient.AddHandler(wantRequest, 403, "identity not authorized", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	respList, err := azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should return err")
+	}
+
+	if err.Error() != "error authorizing the rest call. check your IAM/secret configuration" {
+		t.Errorf("GetAppsList should return authorization error")
+	}
+
+	// authorizing the rest call. check your IAM/secret configuration
+
+	if len(respList.Objects) != 0 {
+		t.Errorf("GetAppsList should not return any response objects")
+	}
+	mclient.RemoveHandlers()
+}
+
+func TestAzureBlobDownloadFailBadSecret(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "azure_vol1",
+				Endpoint:  "https://mystorageaccount.blob.core.windows.net",
+				Path:      "appscontainer1",
+				SecretRef: "blob-secret",
+				Type:      "blob",
+				Provider:  "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	// Add handler for mock client(handles secrets case initially)
+	wantRequest, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1/adminAppsRepo/app1.tgz", nil)
+
+	mclient.AddHandler(wantRequest, 403, "auth failed dummy response", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	// Test Download App package with secret
+	azureBlobClient.StorageAccountName = "mystorageaccount"
+	azureBlobClient.SecretAccessKey = "abcd"
+
+	// Create RemoteDownload request
+	downloadRequest := RemoteDataDownloadRequest{
+		LocalFile:  "app1.tgz",
+		RemoteFile: "adminAppsRepo/app1.tgz",
+	}
+	resp, err := azureBlobClient.DownloadApp(ctx, downloadRequest)
+	if err == nil {
+		t.Errorf("DownloadApps should return error")
+	}
+	if resp == true {
+		t.Errorf("DownloadApps should return false")
+	}
+	if err.Error() != "error authorizing the rest call. check your IAM/secret configuration" {
+		t.Errorf("DownloadApp should return authorization error")
+	}
+	mclient.RemoveHandlers()
+}
+
+func TestAzureBlobDownloadAppShouldFailNoIdentity(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:     "azure_vol1",
+				Endpoint: "https://mystorageaccount.blob.core.windows.net",
+				Path:     "appscontainer1",
+				Type:     "blob",
+				Provider: "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	//mock IAM token fetch call to a failed response
+	//no valid managed identity found
+	wantRequestIAMTokenFetch, _ := http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-10-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
+
+	mclient.AddHandler(wantRequestIAMTokenFetch, 400, "No managed identity", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	// Create RemoteDownload request
+	downloadRequest := RemoteDataDownloadRequest{
+		LocalFile:  "app1.tgz",
+		RemoteFile: "adminAppsRepo/app1.tgz",
+	}
+
+	resp, err := azureBlobClient.DownloadApp(ctx, downloadRequest)
+	if err == nil {
+		t.Errorf("DownloadApps should return error")
+	}
+	if resp == true {
+		t.Errorf("DownloadApps should return false")
+	}
+	if err.Error() != "please validate that your cluster is configured to use managed identity" {
+		t.Errorf("DownloadApp should return authorization error")
+	}
+	mclient.RemoveHandlers()
+}
+
+func TestAzureBlobDownloadAppShouldFailInvalidIdentity(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:     "azure_vol1",
+				Endpoint: "https://mystorageaccount.blob.core.windows.net",
+				Path:     "appscontainer1",
+				Type:     "blob",
+				Provider: "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	// mock for IAM token fetch is successful
+	// but later we see that the token does not give
+	// permission to access the bucket for downloading app package
+	wantRequest, _ := http.NewRequest("GET", "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-10-01&resource=https%3A%2F%2Fstorage.azure.com%2F", nil)
+	respTokenData := &TokenResponse{
+		AccessToken: "acctoken",
+		ClientID:    "ClientId",
+	}
+	mrespdata, _ := json.Marshal(respTokenData)
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
+
+	// Mock the download rest call to return 403 unauthorized emulating that
+	// the token did not give permission to read the bucket/app_package
+	wantRequestDownload, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1/adminAppsRepo/app1.tgz", nil)
+
+	mclient.AddHandler(wantRequestDownload, 403, "auth failed dummy response", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	// Create RemoteDownload request
+	downloadRequest := RemoteDataDownloadRequest{
+		LocalFile:  "app1.tgz",
+		RemoteFile: "adminAppsRepo/app1.tgz",
+	}
+
+	resp, err := azureBlobClient.DownloadApp(ctx, downloadRequest)
+	if err == nil {
+		t.Errorf("DownloadApps should return error")
+	}
+	if resp == true {
+		t.Errorf("DownloadApps should return false")
+	}
+	if err.Error() != "error authorizing the rest call. check your IAM/secret configuration" {
+		t.Errorf("DownloadApp should return authorization error")
+	}
+	mclient.RemoveHandlers()
+}

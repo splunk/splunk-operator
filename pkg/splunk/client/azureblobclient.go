@@ -306,7 +306,14 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 		scopedLog.Error(err, "Azure blob,Errored when sending request to the server")
 		return err
 	}
+
 	defer resp.Body.Close()
+
+	// A response code other than 200 usually means that no managed indentity is
+	// configured with the aks cluster.
+	if resp.StatusCode != 200 {
+		return errors.New("please validate that your cluster is configured to use managed identity")
+	}
 
 	// Read http response
 	responseBody, err := ioutil.ReadAll(resp.Body)
@@ -319,7 +326,7 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 	var azureOauthTokenResponse TokenResponse
 	err = json.Unmarshal(responseBody, &azureOauthTokenResponse)
 	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal response to token")
+		scopedLog.Error(err, "Unable to unmarshal response to token", "Response is:", string(responseBody))
 		return err
 	}
 
@@ -333,7 +340,7 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 // GetAppsList gets the list of apps from remote storage
 func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList").WithValues("Endpoint", client.Endpoint, "Storage Account", client.BucketName,
+	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList").WithValues("Endpoint", client.Endpoint, "Bucket", client.BucketName,
 		"Prefix", client.Prefix)
 
 	scopedLog.Info("Getting Apps list")
@@ -367,7 +374,14 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 		scopedLog.Error(err, "Azure blob, unable to execute list apps http request")
 		return RemoteDataListResponse{}, err
 	}
+
 	defer httpResponse.Body.Close()
+
+	// Authorization unsuccessul
+	if httpResponse.StatusCode != 200 {
+		err = errors.New("error authorizing the rest call. check your IAM/secret configuration")
+		return RemoteDataListResponse{}, err
+	}
 
 	// Extract response
 	azureRemoteDataResponse, err := extractResponse(ctx, httpResponse)
@@ -402,7 +416,7 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	// Unmarshal http response
 	err = xml.Unmarshal([]byte(responseDownloadBody), data)
 	if err != nil {
-		scopedLog.Error(err, "Errored  unmarshalling app packages list")
+		scopedLog.Error(err, "Errored  unmarshalling app packages list", "rest call response is:", responseDownloadBody)
 		return azureAppsRemoteData, err
 	}
 
@@ -441,7 +455,7 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 // DownloadApp downloads an app package from remote storage
 func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AzureBlob:DownloadApp").WithValues("Endpoint", client.Endpoint, "Storage Account", client.BucketName,
+	scopedLog := reqLogger.WithName("AzureBlob:DownloadApp").WithValues("Endpoint", client.Endpoint, "Bucket", client.BucketName,
 		"Prefix", client.Prefix, "downloadRequest", downloadRequest)
 
 	scopedLog.Info("Download App package")
@@ -477,7 +491,14 @@ func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest 
 		scopedLog.Error(err, "Azure blob, unable to execute download apps http request")
 		return false, err
 	}
+
 	defer httpResponse.Body.Close()
+
+	// Authorization unsuccessul for download rest call
+	if httpResponse.StatusCode != 200 {
+		err = errors.New("error authorizing the rest call. check your IAM/secret configuration")
+		return false, err
+	}
 
 	// Create local file on operator
 	localFile, err := os.Create(downloadRequest.LocalFile)
