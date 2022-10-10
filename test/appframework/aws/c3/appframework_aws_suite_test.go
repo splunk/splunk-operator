@@ -67,21 +67,25 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Create a list of apps to upload to S3
-	appListV1 = testenv.BasicApps
-	appFileList := testenv.GetAppFileList(appListV1)
+	if testenv.ClusterProvider == "eks" {
+		// Create a list of apps to upload to S3
+		appListV1 = testenv.BasicApps
+		appFileList := testenv.GetAppFileList(appListV1)
 
-	// Download V1 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
-	Expect(err).To(Succeed(), "Unable to download V1 app files")
+		// Download V1 Apps from S3
+		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-	// Create a list of apps to upload to S3 after poll period
-	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-	appFileList = testenv.GetAppFileList(appListV2)
+		// Create a list of apps to upload to S3 after poll period
+		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+		appFileList = testenv.GetAppFileList(appListV2)
 
-	// Download V2 Apps from S3
-	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
-	Expect(err).To(Succeed(), "Unable to download V2 app files")
+		// Download V2 Apps from S3
+		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
+	} else {
+		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
+	}
 
 })
 
