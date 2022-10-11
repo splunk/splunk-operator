@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - appframework_azureblob
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest

@@ -68,24 +68,27 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	// Create a list of apps to upload to Azure
-	appListV1 = testenv.BasicApps
-	appFileList := testenv.GetAppFileList(appListV1)
+	if testenv.ClusterProvider == "azure" {
+		// Create a list of apps to upload to Azure
+		appListV1 = testenv.BasicApps
+		appFileList := testenv.GetAppFileList(appListV1)
 
-	// Download V1 Apps from Azure
-	containerName := "/test-data/appframework/v1apps/"
-	err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
-	Expect(err).To(Succeed(), "Unable to download V1 app files")
+		// Download V1 Apps from Azure
+		containerName := "/test-data/appframework/v1apps/"
+		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-	// Create a list of apps to upload to Azure after poll period
-	appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
-	appFileList = testenv.GetAppFileList(appListV2)
+		// Create a list of apps to upload to Azure after poll period
+		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
+		appFileList = testenv.GetAppFileList(appListV2)
 
-	// Download V2 Apps from Azure
-	containerName = "/test-data/appframework/v2apps/"
-	err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
-	Expect(err).To(Succeed(), "Unable to download V2 app files")
-
+		// Download V2 Apps from Azure
+		containerName = "/test-data/appframework/v2apps/"
+		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
+		Expect(err).To(Succeed(), "Unable to download V2 app files")
+	} else {
+		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
+	}
 })
 
 var _ = AfterSuite(func() {
