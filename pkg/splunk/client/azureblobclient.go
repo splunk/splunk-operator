@@ -326,7 +326,7 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 	var azureOauthTokenResponse TokenResponse
 	err = json.Unmarshal(responseBody, &azureOauthTokenResponse)
 	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal response to token", "Response is:", string(responseBody))
+		scopedLog.Error(err, "Unable to unmarshal response to token", "Response:", string(responseBody))
 		return err
 	}
 
@@ -386,7 +386,7 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	// Extract response
 	azureRemoteDataResponse, err := extractResponse(ctx, httpResponse)
 	if err != nil {
-		scopedLog.Error(err, "Azure blob, unable to extract blob from httpResponse")
+		scopedLog.Error(err, "unable to extract app packages list from http response")
 		return azureRemoteDataResponse, err
 	}
 
@@ -404,9 +404,9 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	azureAppsRemoteData := RemoteDataListResponse{}
 
 	// Read response body
-	responseDownloadBody, err := ioutil.ReadAll(httpResponse.Body)
+	responseBody, err := ioutil.ReadAll(httpResponse.Body)
 	if err != nil {
-		scopedLog.Error(err, "Azure blob,Errored when reading resp body for app download")
+		scopedLog.Error(err, "Errored when reading resp body for app packages list rest call")
 		return azureAppsRemoteData, err
 	}
 
@@ -414,9 +414,9 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	data := &EnumerationResults{}
 
 	// Unmarshal http response
-	err = xml.Unmarshal([]byte(responseDownloadBody), data)
+	err = xml.Unmarshal(responseBody, data)
 	if err != nil {
-		scopedLog.Error(err, "Errored  unmarshalling app packages list", "rest call response is:", responseDownloadBody)
+		scopedLog.Error(err, "Errored  unmarshalling app packages list", "rest call response:", string(responseBody))
 		return azureAppsRemoteData, err
 	}
 

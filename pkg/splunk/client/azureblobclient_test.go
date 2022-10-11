@@ -589,6 +589,89 @@ func TestAzureBlobGetAppsListShouldFailBadSecret(t *testing.T) {
 	}
 }
 
+// Test that although the rest call returned 200 response code
+// but the response body was not as expected (unmarshelled failed)
+func TestAzureBlobGetAppsListShouldFailBadXmlResponse(t *testing.T) {
+	ctx := context.TODO()
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "azure_vol1",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "azure_vol1",
+				Endpoint:  "https://mystorageaccount.blob.core.windows.net",
+				Path:      "appscontainer1",
+				SecretRef: "blob-secret",
+				Type:      "blob",
+				Provider:  "azure",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{
+				Name:     "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "azure_vol1",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+			},
+		},
+	}
+
+	// Initialize clients
+	azureBlobClient := &AzureBlobClient{}
+	mclient := spltest.MockHTTPClient{}
+
+	// Add handler for mock client(handles secrets case initially)
+	wantRequest, _ := http.NewRequest("GET", "https://mystorageaccount.blob.core.windows.net/appscontainer1?prefix=adminAppsRepo&restype=container&comp=list&include=snapshots&include=metadata", nil)
+
+	mclient.AddHandler(wantRequest, 200, "<error>I am not a valid app list response</error>", nil)
+
+	// Get App source and volume from spec
+	appSource := appFrameworkRef.AppSources[0]
+	vol, err := GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+	if err != nil {
+		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
+	}
+
+	// Update the GetRemoteDataClient function pointer
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
+
+	// Update the GetRemoteDataClientInit function pointer
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return &mclient
+	}
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+
+	// Init azure blob client
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.BucketName = vol.Path
+	azureBlobClient.Prefix = appSource.Location
+	azureBlobClient.Endpoint = vol.Endpoint
+
+	// Test Listing apps with secrets
+	azureBlobClient.StorageAccountName = vol.Path
+	azureBlobClient.SecretAccessKey = "abcd"
+
+	respList, err := azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should return err")
+	}
+
+	// Expecting error : "expected element type <EnumerationResults> but have ..."
+	if !strings.Contains(err.Error(), "expected element type <EnumerationResults> but have") {
+		t.Errorf("GetAppsList should return that it could not extract the app packages list")
+	}
+
+	if len(respList.Objects) != 0 {
+		t.Errorf("GetAppsList should not return any response objects")
+	}
+}
+
 func TestAzureBlobGetAppsListShouldFailNoIdentity(t *testing.T) {
 	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
