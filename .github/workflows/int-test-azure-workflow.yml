@@ -46,27 +46,10 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1azure,
-            managerappframeworkc3azure,
-            managerappframeworkm4azure,
+            appframeworkazures1,
+            managerappframeworkazurec3,
+            managerappframeworkazurem4,
           ]
-        # test:
-        #  [
-        #    appframeworks1azure,
-        #    managerappframeworkc3azure,
-        #    managerappframeworkm4azure,
-        #    managersecret,
-        #    managersmartstore,
-        #    managermc,
-        #    managerscaling,
-        #    managercrcrud,
-        #    licensemanager,
-        #  ]
-        #auth_method_managed_id: 
-        #  [
-        #    "false",
-        #    "true",
-        #  ]
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
@@ -124,7 +107,7 @@ jobs:
         with:
           azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
           inlineScript: |
-            az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --generate-ssh-keys -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }}
+            az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --generate-ssh-keys -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }} --node-count ${{ env.CLUSTER_WORKERS }} --node-vm-size standard_d8_v3
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:

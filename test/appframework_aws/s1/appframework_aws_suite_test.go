@@ -67,7 +67,7 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenvInstance.GetClusterProvider() == "eks" {
+	if testenv.ClusterProvider == "eks" {
 		// Create a list of apps to upload to S3
 		appListV1 = testenv.BasicApps
 		appFileList := testenv.GetAppFileList(appListV1)
@@ -84,7 +84,7 @@ var _ = BeforeSuite(func() {
 		err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
 		Expect(err).To(Succeed(), "Unable to download V2 app files")
 	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenvInstance.GetClusterProvider())
+		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
 	}
 
 })

@@ -68,7 +68,7 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 
-	if testenvInstance.GetClusterProvider() == "azure" {
+	if testenv.ClusterProvider == "azure" {
 		// Create a list of apps to upload to Azure
 		appListV1 = testenv.BasicApps
 		appFileList := testenv.GetAppFileList(appListV1)
@@ -87,9 +87,8 @@ var _ = BeforeSuite(func() {
 		err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 		Expect(err).To(Succeed(), "Unable to download V2 app files")
 	} else {
-		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenvInstance.GetClusterProvider())
+		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
 	}
-
 })
 
 var _ = AfterSuite(func() {

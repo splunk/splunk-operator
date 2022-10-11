@@ -5,18 +5,6 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  smartstore:
-    defaults:
-        volumeName: volume_smartstore
-    indexes:
-      - name: main
-        remotePath: $_index_name
-        volumeName: volume_smartstore
-    volumes:
-      - name: volume_smartstore
-        path: <s3-path>
-        endpoint: https://<s3-endpoint>
-        secretRef: s3-secret
   appRepo:
     appsRepoPollIntervalSeconds: 600
     defaults:
@@ -27,8 +15,8 @@ spec:
         location: <apps-location>
     volumes:
       - name: volume_app_repo
-        storageType: s3
-        provider: aws
+        storageType: blob
+        provider: azure
         path: <s3-path>
         endpoint: https://<s3-endpoint>
-        secretRef: s3-secret
+        secretRef: azure-blob-secret

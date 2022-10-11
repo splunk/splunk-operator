@@ -88,7 +88,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("smoke, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
+		It("smoke, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -295,7 +295,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -494,7 +494,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -702,7 +702,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -836,7 +836,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Upload V1 apps to Azure for Monitoring Console
@@ -1090,7 +1090,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1274,7 +1274,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("m4azure, integration, masterappframeworkm4azure, az_appfw: can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
+		It("m4azure, integration, masterappframeworkazurem4, appframeworkazure: can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1506,7 +1506,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1639,7 +1639,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
-		It("smoke, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
+		It("smoke, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1777,7 +1777,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1870,7 +1870,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1963,7 +1963,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2077,7 +2077,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA, install apps via manual polling, switch to periodic polling, verify apps are not updated before the end of AppsRepoPollInterval, then updated after", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA, install apps via manual polling, switch to periodic polling, verify apps are not updated before the end of AppsRepoPollInterval, then updated after", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2259,7 +2259,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2379,7 +2379,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("m4azure, integration, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", func() {
+		It("m4azure, integration, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2467,7 +2467,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2563,7 +2563,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("smoke, m4azure, masterappframeworkm4azure, az_appfw: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", func() {
+		It("smoke, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
