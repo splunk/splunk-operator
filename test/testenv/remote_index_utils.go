@@ -111,6 +111,17 @@ func GenerateIndexVolumeSpecAzure(volumeName string, endpoint string, secretRef 
 	}
 }
 
+// GenerateIndexVolumeSpecAzureManagedID return VolumeSpec struct with given values for Azure using Managed Identities
+func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, provider string, storageType string) enterpriseApi.VolumeSpec {
+	return enterpriseApi.VolumeSpec{
+		Name:     volumeName,
+		Endpoint: endpoint,
+		Path:     azureIndexesContainer,
+		Provider: provider,
+		Type:     storageType,
+	}
+}
+
 // GenerateIndexSpec return VolumeSpec struct with given values
 func GenerateIndexSpec(indexName string, volName string) enterpriseApi.IndexSpec {
 	return enterpriseApi.IndexSpec{
