@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io/ioutil"
 	"math/rand"
 	"os/exec"
@@ -28,6 +27,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/onsi/ginkgo"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -85,7 +86,7 @@ func newStandalone(name, ns string) *enterpriseApi.Standalone {
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -141,7 +142,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 			},
 		},
@@ -178,7 +179,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApiV3.Li
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 			},
 		},
@@ -224,7 +225,7 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -259,7 +260,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -295,7 +296,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -331,7 +332,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -367,7 +368,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -409,7 +410,7 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -564,7 +565,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 						{
 							Name:            name,
 							Image:           operatorImageAndTag,
-							ImagePullPolicy: "IfNotPresent",
+							ImagePullPolicy: "Always",
 							Env: []corev1.EnvVar{
 								{
 									Name: "WATCH_NAMESPACE",
@@ -616,7 +617,7 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -685,7 +686,7 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) 
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
+					ImagePullPolicy: "Always",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
