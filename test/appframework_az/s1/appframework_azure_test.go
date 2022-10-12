@@ -1401,8 +1401,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	// CSPL-2068: This test needs to be updated to pass on Azure
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
@@ -1499,8 +1498,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	// CSPL-2068: This test needs to be updated to pass on Azure
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect Azure credentials", func() {
 
 			/* Test Steps
@@ -1571,7 +1569,7 @@ var _ = Describe("s1appfw test", func() {
 
 			secretStruct, _ := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
 			secretData := secretStruct.Data
-			modifiedSecretData := map[string][]byte{"Azure_access_key": []byte(testenv.RandomDNSName(5)), "Azure_secret_key": []byte(testenv.RandomDNSName(5))}
+			modifiedSecretData := map[string][]byte{"azure_sa_name": []byte(testenv.RandomDNSName(5)), "azure_sa_secret_key": []byte(testenv.RandomDNSName(5))}
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
