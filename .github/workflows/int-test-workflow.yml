@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - fix-int-test-on-develop
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
