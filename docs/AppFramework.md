@@ -701,7 +701,7 @@ $  az role assignment create --assignee "f0f04120-6a36-49bc--**************" --r
 ```
 After this command, you can use App framework for Azure blob without secrets.
 
-Azure Blob Authorizaton Recommendations:
+Azure Blob Authorization Recommendations:
 
 Azure allows "Managed Identities" assignment at the "storage accounts" level as well as at specific buckets levels. A managed identity that is assigned read permissions at a storage account level will have read access for all the buckets within that storage account. If you want to restrict the Splunk operator to having access to Splunk apps only from a specific bucket, you can assign the managed identity to that specific bucket only (and not to the whole parent storage account).
 
