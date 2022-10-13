@@ -1719,17 +1719,17 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 // DeployMultisiteClusterMasterWithMonitoringConsole deploys cluster-master, indexers in multiple sites (SHC LM Optional) with monitoring console
 func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx context.Context, name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
 
-	licenseManager := ""
+	licenseMaster := ""
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, name)
+		_, err := d.DeployLicenseMaster(ctx, name)
 		if err != nil {
 			return err
 		}
 
-		licenseManager = name
+		licenseMaster = name
 	}
 
 	// Deploy the cluster-manager
@@ -1754,7 +1754,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: licenseManager,
+				Name: licenseMaster,
 			},
 			Defaults: defaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
@@ -1775,7 +1775,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-master", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}
@@ -1796,7 +1796,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
-				Name: licenseManager,
+				Name: licenseMaster,
 			},
 			Defaults: siteDefaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
