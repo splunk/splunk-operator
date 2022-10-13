@@ -151,7 +151,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default | kubectl apply -f -
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default | kubectl create -f -
 	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/default/kustomization.yaml
 	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/default/kustomization.yaml
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/default/kustomization.yaml
@@ -186,8 +186,10 @@ rm -rf $$TMP_DIR ;\
 }
 endef
 
+## Generate bundle manifests and metadata, then validate generated files.
+## In addition, copy the newly generated crd files to helm crds.
 .PHONY: bundle
-bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
+bundle: manifests kustomize
 	operator-sdk generate kustomize manifests -q
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
 	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
@@ -195,6 +197,7 @@ bundle: manifests kustomize ## Generate bundle manifests and metadata, then vali
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle $(BUNDLE_GEN_FLAGS)
 	operator-sdk bundle validate ./bundle
+	cp bundle/manifests/enterprise.splunk.com* helm-chart/splunk-operator/crds
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.

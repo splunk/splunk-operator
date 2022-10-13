@@ -3,8 +3,9 @@ package smartstore
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

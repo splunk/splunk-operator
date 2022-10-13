@@ -19,7 +19,6 @@ import (
 	"context"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
@@ -61,26 +60,6 @@ func TestNewAWSS3Client(t *testing.T) {
 	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
 		t.Errorf("NewAWSS3Client should have returned error.")
-	}
-}
-
-func TestGetInitContainerImage(t *testing.T) {
-	ctx := context.TODO()
-	awsClient := &AWSS3Client{}
-
-	if awsClient.GetInitContainerImage(ctx) != "amazon/aws-cli" {
-		t.Errorf("Got invalid init container image for AWS client.")
-	}
-}
-
-func TestGetAWSInitContainerCmd(t *testing.T) {
-	ctx := context.TODO()
-	wantCmd := []string{"--endpoint-url=https://s3.us-west-2.amazonaws.com", "s3", "sync", "s3://sample_bucket/admin/", "/mnt/apps-local/admin/"}
-
-	awsClient := &AWSS3Client{}
-	gotCmd := awsClient.GetInitContainerCmd(ctx, "https://s3.us-west-2.amazonaws.com", "sample_bucket", "admin/", "admin", "/mnt/apps-local/")
-	if !reflect.DeepEqual(wantCmd, gotCmd) {
-		t.Errorf("Got incorrect Init container cmd")
 	}
 }
 
@@ -141,7 +120,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -152,7 +131,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -163,7 +142,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -188,9 +167,9 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+		getClientWrapper := RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
@@ -198,19 +177,19 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			return cl
 		}
 
-		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
+		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
-		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
-		awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		s3Response, err := awsClient.GetAppsList(ctx)
+		RemoteDataListResponse, err := awsClient.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
-		var mockResponse spltest.MockS3Client
-		mockResponse, err = ConvertS3Response(ctx, s3Response)
+		var mockResponse spltest.MockRemoteDataClient
+		mockResponse, err = ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -227,7 +206,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to get apps list for all the app sources")
 	}
 	method := "GetAppsList"
-	mockAwsHandler.CheckAWSS3Response(t, method)
+	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
 }
 
 func TestAWSGetAppsListShouldFail(t *testing.T) {
@@ -264,7 +243,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etag,
 					Key:          &Key,
@@ -288,9 +267,9 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
@@ -298,16 +277,16 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		return cl
 	}
 
-	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
-	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
-	awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	s3Resp, err := awsClient.GetAppsList(ctx)
+	remoteDataClientResponse, err := awsClient.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed")
 	}
-	if len(s3Resp.Objects) != 0 {
+	if len(remoteDataClientResponse.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty list in response")
 	}
 
@@ -365,9 +344,9 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
-	mockAwsDownloadHandler := spltest.MockS3DownloadHandler{}
+	mockAwsDownloadHandler := spltest.MockRemoteDataClientDownloadHandler{}
 
-	mockAwsDownloadObjects := []spltest.MockS3DownloadClient{
+	mockAwsDownloadObjects := []spltest.MockRemoteDataClientDownloadClient{
 		{
 			RemoteFile:      RemoteFiles[0],
 			DownloadSuccess: true,
@@ -396,40 +375,45 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+		getClientWrapper := RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 			cl := spltest.MockAWSS3Client{}
 			return cl
 		}
 
-		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
+		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
-		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-		awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-		downloadSuccess, err := awsClient.DownloadApp(ctx, RemoteFiles[index], LocalFiles[index], Etags[index])
+		downloadRequest := RemoteDataDownloadRequest{
+			LocalFile:  LocalFiles[index],
+			RemoteFile: RemoteFiles[index],
+			Etag:       Etags[index],
+		}
+		downloadSuccess, err := awsClient.DownloadApp(ctx, downloadRequest)
 		if err != nil {
 			t.Errorf("Unable to download app: %s", RemoteFiles[index])
 		}
 
-		mockDownloadObject := spltest.MockS3DownloadClient{
+		mockDownloadObject := spltest.MockRemoteDataClientDownloadClient{
 			RemoteFile:      RemoteFiles[index],
 			DownloadSuccess: downloadSuccess,
 		}
 
 		if mockAwsDownloadHandler.GotLocalToRemoteFileMap == nil {
-			mockAwsDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockS3DownloadClient)
+			mockAwsDownloadHandler.GotLocalToRemoteFileMap = make(map[string]spltest.MockRemoteDataClientDownloadClient)
 		}
 
 		mockAwsDownloadHandler.GotLocalToRemoteFileMap[LocalFiles[index]] = mockDownloadObject
 	}
 
 	method := "DownloadApp"
-	mockAwsDownloadHandler.CheckS3DownloadResponse(t, method)
+	mockAwsDownloadHandler.CheckRemDataClntDownloadResponse(t, method)
 }
 
 func TestAWSDownloadAppShouldFail(t *testing.T) {
@@ -485,30 +469,39 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 		t.Errorf("Unable to get volume for app source : %s", appSource.Name)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper := RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
 	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
-	getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-	awsClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
 
-	_, err = awsClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
+	downloadRequest := RemoteDataDownloadRequest{
+		LocalFile:  LocalFile[0],
+		RemoteFile: RemoteFile,
+		Etag:       Etag,
+	}
+	_, err = awsClient.DownloadApp(ctx, downloadRequest)
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since both remoteFile and localFile names are empty")
 	}
 
 	// Now make the localFile name non-empty string
 	LocalFile[0] = "randomFile"
-
-	_, err = awsClient.DownloadApp(ctx, RemoteFile, LocalFile[0], Etag)
+	downloadRequest = RemoteDataDownloadRequest{
+		LocalFile:  LocalFile[0],
+		RemoteFile: RemoteFile,
+		Etag:       Etag,
+	}
+	_, err = awsClient.DownloadApp(ctx, downloadRequest)
 	os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")

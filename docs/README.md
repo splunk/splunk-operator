@@ -113,7 +113,7 @@ kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.0
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-cluster.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.1.0/splunk-operator-cluster.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
@@ -146,7 +146,7 @@ The `Standalone` custom resource is used to create a single instance deployment 
 
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: s1

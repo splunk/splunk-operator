@@ -309,7 +309,7 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client(ctx, "aws")
+	splclient.RegisterRemoteDataClient(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -321,7 +321,7 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -332,7 +332,7 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -343,7 +343,7 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -369,11 +369,11 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
-		s3ClientMgr := &S3ClientManager{client: client,
+		remoteDataClientMgr := &RemoteDataClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
 			location: appSource.Location,
@@ -382,20 +382,20 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
 				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
 
-		s3Response, err := s3ClientMgr.GetAppsList(ctx)
+		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
-		var mockResponse spltest.MockS3Client
-		mockResponse, err = splclient.ConvertS3Response(ctx, s3Response)
+		var mockResponse spltest.MockRemoteDataClient
+		mockResponse, err = splclient.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -412,7 +412,7 @@ func TestLicensemasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to get apps list for all the app sources")
 	}
 	method := "GetAppsList"
-	mockAwsHandler.CheckAWSS3Response(t, method)
+	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
 }
 
 func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
@@ -453,7 +453,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client(ctx, "aws")
+	splclient.RegisterRemoteDataClient(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
@@ -465,7 +465,7 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -489,11 +489,11 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
-	s3ClientMgr := &S3ClientManager{
+	remoteDataClientMgr := &RemoteDataClientManager{
 		client:          client,
 		cr:              &lm,
 		appFrameworkRef: &lm.Spec.AppFrameworkConfig,
@@ -503,16 +503,16 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}
 
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
@@ -528,21 +528,21 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
@@ -550,24 +550,24 @@ func TestLicenseMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create S3 secret
 	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
 
-	// This should return an error as we have initialized initFn for s3ClientMgr
+	// This should return an error as we have initialized initFn for remoteDataClientMgr
 	// to return a nil client.
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	s3ClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	s3Resp, err := s3ClientMgr.GetAppsList(ctx)
+	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
 	}
-	if len(s3Resp.Objects) != 0 {
+	if len(remoteDataClientResponse.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
 	}
 }
@@ -769,9 +769,9 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	err = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
-		s3Response := splclient.S3Response{}
-		return s3Response, nil
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
+		RemoteDataListResponse := splclient.RemoteDataListResponse{}
+		return RemoteDataListResponse, nil
 	}
 
 	builder := fake.NewClientBuilder()

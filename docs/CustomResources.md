@@ -8,7 +8,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [Metadata Parameters](#metadata-parameters)
   - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
   - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
-  - [LicenseManager Resource Spec Parameters](#LicenseManager-resource-spec-parameters)
+  - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
@@ -38,7 +38,7 @@ you would like the resource to reside within:
 If you do not provide a `namespace`, you current context will be used.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: s1
@@ -56,7 +56,7 @@ associated with the instance when you delete it.
 ## Common Spec Parameters for All Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -97,7 +97,7 @@ configuration parameters:
 ## Common Spec Parameters for Splunk Enterprise Resources
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -143,7 +143,7 @@ Enterprise resources, including: `Standalone`, `LicenseManager`,
 ## LicenseManager Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: LicenseManager
 metadata:
   name: example
@@ -163,7 +163,7 @@ The `LicenseManager` resource does not provide any additional configuration para
 ## Standalone Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: standalone
@@ -186,7 +186,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 ## SearchHeadCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -205,7 +205,7 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 ## ClusterManager Resource Spec Parameters
 ClusterManager resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: example-cm
@@ -233,7 +233,7 @@ spec:
 ## IndexerCluster Resource Spec Parameters
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: example
@@ -289,7 +289,7 @@ Set equal ```requests``` and ```limits``` values for CPU and memory to establish
 Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM. 
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -310,7 +310,7 @@ Set the ```requests``` value for CPU and memory lower than the ```limits``` valu
 Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the ```limits``` values.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example

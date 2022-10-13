@@ -1,0 +1,30 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: hwf-example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  clusterManagerRef:
+    name: cm-example
+  licenseManagerRef:
+    name: lm-example
+    replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: hwfApps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: blob
+        provider: azure
+        path: <apps-path>
+        endpoint: https://<apps-endpoint>
+        secretRef: azure-blob-secret
+  defaults: |-
+    splunk:
+      set_search_peers: false 
