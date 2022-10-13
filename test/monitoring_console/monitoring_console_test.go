@@ -471,7 +471,7 @@ var _ = Describe("Monitoring Console test", func() {
 			siteCount := 3
 			mcName := deployment.GetName()
 			err := deployment.DeployMultisiteClusterMasterWithMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, mcName, true)
-			Expect(err).To(Succeed(), "Unable to deploy Indexer Clsuter with SHC")
+			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with SHC")
 
 			// Ensure that the cluster-master goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
