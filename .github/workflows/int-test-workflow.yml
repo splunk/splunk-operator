@@ -89,7 +89,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
-      DEPLOYMENT_TYPE: "helm"
+      DEPLOYMENT_TYPE: ""
     steps:
       - name: Set Test Cluster Name
         run: |
