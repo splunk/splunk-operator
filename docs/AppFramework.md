@@ -43,7 +43,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for the your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
 
@@ -139,7 +139,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for the your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
 
@@ -244,7 +244,7 @@ This example describes the installation of apps on the Deployer and the Search H
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for the your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
 
