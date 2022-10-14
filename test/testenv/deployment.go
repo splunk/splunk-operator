@@ -1199,7 +1199,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 }
 
 // DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApiV3.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) (*enterpriseApiV3.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
 	cm := &enterpriseApiV3.ClusterMaster{}
 	idxc := &enterpriseApi.IndexerCluster{}
@@ -1208,7 +1208,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, name)
+		_, err := d.DeployLicenseMaster(ctx, name)
 		if err != nil {
 			return cm, idxc, sh, err
 		}
@@ -1221,8 +1221,8 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			LicenseManagerRef: corev1.ObjectReference{
-				Name: licenseManager,
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
@@ -1236,7 +1236,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 	}
 
 	// Deploy the indexer cluster
-	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
 	if err != nil {
 		return cm, idxc, sh, err
 	}
@@ -1250,8 +1250,8 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
-			LicenseManagerRef: corev1.ObjectReference{
-				Name: licenseManager,
+			LicenseMasterRef: corev1.ObjectReference{
+				Name: licenseMaster,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
