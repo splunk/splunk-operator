@@ -67,15 +67,26 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			// 5. Verify New Secrets via api access (password)
 
 			// Download License File
-			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to download license file")
-
-			// Create License Config Map
-			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			downloadDir := "licenseFolder"
+			switch testenv.ClusterProvider {
+			case "eks":
+				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "azure":
+				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
+				Expect(err).To(Succeed(), "Unable to download license file from Azure")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			default:
+				fmt.Printf("Unable to download license file")
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+			}
 
 			siteCount := 3
 			mcName := deployment.GetName()
-			err = deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
+			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Manager to be in READY status

@@ -972,17 +972,20 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
+                            values: aws, minio, azure.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: 'Remote Storage type. Supported values: s3'
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob. s3 works with aws or minio providers, whereas blob
+                            works with azure provider.'
                           type: string
                       type: object
                     type: array
@@ -2022,17 +2025,20 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
+                            values: aws, minio, azure.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: 'Remote Storage type. Supported values: s3'
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob. s3 works with aws or minio providers, whereas blob
+                            works with azure provider.'
                           type: string
                       type: object
                     type: array
@@ -3689,18 +3695,20 @@ spec:
                               type: string
                             provider:
                               description: 'App Package Remote Store provider. Supported
-                                values: aws, minio'
+                                values: aws, minio, azure.'
                               type: string
                             region:
                               description: Region of the remote storage volume where
-                                apps reside
+                                apps reside. Used for aws, if provided. Not used for
+                                minio and azure.
                               type: string
                             secretRef:
                               description: Secret object name
                               type: string
                             storageType:
                               description: 'Remote Storage type. Supported values:
-                                s3'
+                                s3, blob. s3 works with aws or minio providers, whereas
+                                blob works with azure provider.'
                               type: string
                           type: object
                         type: array
@@ -3941,17 +3949,20 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
+                            values: aws, minio, azure.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: 'Remote Storage type. Supported values: s3'
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob. s3 works with aws or minio providers, whereas blob
+                            works with azure provider.'
                           type: string
                       type: object
                     type: array
@@ -4923,17 +4934,20 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
+                            values: aws, minio, azure.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: 'Remote Storage type. Supported values: s3'
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob. s3 works with aws or minio providers, whereas blob
+                            works with azure provider.'
                           type: string
                       type: object
                     type: array
@@ -5973,17 +5987,20 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
+                            values: aws, minio, azure.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: 'Remote Storage type. Supported values: s3'
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob. s3 works with aws or minio providers, whereas blob
+                            works with azure provider.'
                           type: string
                       type: object
                     type: array
@@ -7640,18 +7657,20 @@ spec:
                               type: string
                             provider:
                               description: 'App Package Remote Store provider. Supported
-                                values: aws, minio'
+                                values: aws, minio, azure.'
                               type: string
                             region:
                               description: Region of the remote storage volume where
-                                apps reside
+                                apps reside. Used for aws, if provided. Not used for
+                                minio and azure.
                               type: string
                             secretRef:
                               description: Secret object name
                               type: string
                             storageType:
                               description: 'Remote Storage type. Supported values:
-                                s3'
+                                s3, blob. s3 works with aws or minio providers, whereas
+                                blob works with azure provider.'
                               type: string
                           type: object
                         type: array
@@ -7892,17 +7911,20 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio'
+                            values: aws, minio, azure.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
-                            reside
+                            reside. Used for aws, if provided. Not used for minio
+                            and azure.
                           type: string
                         secretRef:
                           description: Secret object name
                           type: string
                         storageType:
-                          description: 'Remote Storage type. Supported values: s3'
+                          description: 'Remote Storage type. Supported values: s3,
+                            blob. s3 works with aws or minio providers, whereas blob
+                            works with azure provider.'
                           type: string
                       type: object
                     type: array

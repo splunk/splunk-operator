@@ -37,7 +37,7 @@ The two basic building blocks of Splunk Enterprise infrastructure are search hea
 that can perform either, or both of these roles.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: single
@@ -55,7 +55,7 @@ The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterMana
 #### Cluster Manager
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: cm
@@ -75,7 +75,7 @@ This example includes the `monitoringConsoleRef` parameter used to define a moni
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: MonitoringConsole
 metadata:
   name: example-mc
@@ -92,7 +92,7 @@ The passwords for the instance are generated automatically. To review the passwo
 #### Indexer cluster peers
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: example
@@ -127,7 +127,7 @@ If you want to add more indexers as cluster peers, update your `IndexerCluster` 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: example
@@ -208,7 +208,7 @@ To create a standalone search head that is preconfigured to search your indexer 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: single
@@ -242,7 +242,7 @@ Having a separate CR for cluster manager allows you to define parameters differe
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: cm
@@ -281,7 +281,7 @@ The Monitoring Console provides detailed topology and performance information ab
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: MonitoringConsole
 metadata:
   name: example-mc
@@ -303,7 +303,7 @@ and adding the `clusterManagerRef` parameter.
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: example
@@ -322,7 +322,7 @@ This will automatically create a deployer with 3 search heads clustered together
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: MonitoringConsole
 metadata:
   name: example-mc
@@ -422,7 +422,7 @@ configuration spec to have the Splunk Operator initialize
 your deployment using these settings.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -437,8 +437,7 @@ spec:
   defaultsUrl: /mnt/defaults/default.yml
 ```
 
-In the above example, `volumes` will mount the `splunk-defaults` ConfigMap
-with `default.yml` file under the `/mnt/defaults` directory on all pods of
+In the above example, `volumes` will mount the `splunk-defaults` ConfigMap with `default.yml` file under the `/mnt/defaults` directory on all pods of
 the Custom Resource `Standalone`.
 
 `defaultsUrl` represents the full path to the `default.yml` configuration
@@ -494,7 +493,7 @@ like the following:
 In the standalone example, app1 and app2 are installed on Splunk Standalone instances.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -518,7 +517,7 @@ spec:
 In this example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterManager instance.
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: cmexample
@@ -653,7 +652,7 @@ You can create a `LicenseManager` that references this license by
 using the `volumes` and `licenseUrl` configuration parameters:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: LicenseManager
 metadata:
   name: example
@@ -687,7 +686,7 @@ Once a LicenseManager is created, you can configure your `Standalone` to use
 the `LicenseManager` by adding `licenseManagerRef` to its spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -705,7 +704,7 @@ While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the 
 
 ```yaml
 cat <<EOF | kubectl apply -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
   name: example-cm
@@ -732,7 +731,7 @@ EOF
 In order to forward `LicenseManager` logs to the above `Indexer Cluster`, you need to add `clusterManagerRef` to the `LicenseManager` spec as follows:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: LicenseManager
 metadata:
   name: example
@@ -806,7 +805,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret objec
 Enterprise custom resource to use your External LM:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: example
@@ -876,7 +875,7 @@ You can then use the `defaultsUrl` parameter and a reference to the secret creat
 Enterprise custom resource to use your external indexer cluster:
 
 ```yaml
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
   name: example

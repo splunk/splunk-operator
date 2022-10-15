@@ -1303,9 +1303,9 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	err = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
-		s3Response := splclient.S3Response{}
-		return s3Response, nil
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
+		RemoteDataListResponse := splclient.RemoteDataListResponse{}
+		return RemoteDataListResponse, nil
 	}
 
 	builder := fake.NewClientBuilder()
