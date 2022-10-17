@@ -19,12 +19,6 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
-    - name: Install Helm
-      run: |
-        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-        chmod 700 get_helm.sh
-        ./get_helm.sh
-        DESIRED_VERSION=v3.8.2 bash get_helm.sh
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -95,6 +89,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
+      DEPLOYMENT_TYPE: ""
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -144,7 +139,7 @@ jobs:
           DESIRED_VERSION=v3.8.2 bash get_helm.sh
       - name: Install EKS CTL
         run: |
-          curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+          curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: setup-docker

@@ -20,12 +20,12 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 
 # Splunk Operator Upgrade
 
-## Steps to upgrade from version greater than 1.0.5 to 2.0.0
+## Steps to upgrade from version greater than 1.0.5 to 2.1.0
 
 1. Download the latest Splunk Operator installation yaml file.
 ​
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.1.0/splunk-operator-namespace.yaml
 ```
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install. 
@@ -62,23 +62,23 @@ Upgrading the Splunk Operator from 1.0.5 or older version to latest is a new ins
 1. Download the upgrade script.
 
 ```
-wget -O operator-upgarde.sh https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh
+wget -O operator-upgarde.sh https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh
 ```
 
 2. Download the latest Splunk Operator installation yaml file.
 
 ```
-wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-install.yaml
+wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/2.1.0/splunk-operator-install.yaml
 ```
 
 3. (Optional) Review the file and update it with your specific customizations used during your install. 
 
 4. Upgrade the Splunk Operator.
 
-Set KUBECONFIG and run [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) script with the following mandatory arguments
+Set KUBECONFIG and run [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh) script with the following mandatory arguments
 
 * `current_namespace` current namespace where operator is installed
-* `manifest_file`: path to 2.0.0 Splunk Operator manifest file
+* `manifest_file`: path to 2.1.0 Splunk Operator manifest file
 
 ### Example
 
@@ -99,7 +99,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: WATCH_NAMESPACE
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.0
+          value: splunk/splunk:9.0.1
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -134,7 +134,7 @@ To verify that a new Splunk Enterprise Docker image was applied to a pod, you ca
 ​
 ```bash
 kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
-image: splunk/splunk:9.0.0
+image: splunk/splunk:9.0.1
 imagePullPolicy: IfNotPresent
 ```
 ## Splunk Enterprise Cluster upgrade example

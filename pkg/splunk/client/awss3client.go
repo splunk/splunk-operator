@@ -23,7 +23,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -34,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// blank assignment to verify that AWSS3Client implements S3Client
-var _ S3Client = &AWSS3Client{}
+// blank assignment to verify that AWSS3Client implements RemoteDataClient
+var _ RemoteDataClient = &AWSS3Client{}
 
 // SplunkAWSS3Client is an interface to AWS S3 client
 type SplunkAWSS3Client interface {
@@ -130,7 +129,7 @@ func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccess
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (S3Client, error) {
+func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 
@@ -169,8 +168,8 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 
 // RegisterAWSS3Client will add the corresponding function pointer to the map
 func RegisterAWSS3Client() {
-	wrapperObject := GetS3ClientWrapper{GetS3Client: NewAWSS3Client, GetInitFunc: InitAWSClientWrapper}
-	S3Clients["aws"] = wrapperObject
+	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewAWSS3Client, GetInitFunc: InitAWSClientWrapper}
+	RemoteDataClientsMap["aws"] = wrapperObject
 }
 
 func getTLSVersion(tr *http.Transport) string {
@@ -189,12 +188,12 @@ func getTLSVersion(tr *http.Transport) string {
 }
 
 // GetAppsList get the list of apps from remote storage
-func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (S3Response, error) {
+func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetAppsList")
 
 	scopedLog.Info("Getting Apps list", "AWS S3 Bucket", awsclient.BucketName)
-	s3Resp := S3Response{}
+	remoteDataClientResponse := RemoteDataListResponse{}
 
 	options := &s3.ListObjectsV2Input{
 		Bucket:     aws.String(awsclient.BucketName),
@@ -208,36 +207,37 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (S3Response, erro
 	resp, err := client.ListObjectsV2(options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
+		return remoteDataClientResponse, err
 	}
 
 	if resp.Contents == nil {
 		scopedLog.Info("empty objects list in bucket. No apps to install", "bucketName", awsclient.BucketName)
-		return s3Resp, nil
+		return remoteDataClientResponse, nil
 	}
 
 	tmp, err := json.Marshal(resp.Contents)
 	if err != nil {
 		scopedLog.Error(err, "Failed to marshal s3 response", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
+		return remoteDataClientResponse, err
 	}
 
-	err = json.Unmarshal(tmp, &(s3Resp.Objects))
+	err = json.Unmarshal(tmp, &(remoteDataClientResponse.Objects))
 	if err != nil {
 		scopedLog.Error(err, "Failed to unmarshal s3 response", "AWS S3 Bucket", awsclient.BucketName)
-		return s3Resp, err
+		return remoteDataClientResponse, err
 	}
 
-	return s3Resp, nil
+	return remoteDataClientResponse, nil
 }
 
 // DownloadApp downloads the app from remote storage to local file system
-func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, remoteFile, localFile, etag string) (bool, error) {
+func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", remoteFile, "localFile", localFile)
+	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", downloadRequest.RemoteFile, "localFile",
+		downloadRequest.LocalFile, "etag", downloadRequest.Etag)
 
 	var numBytes int64
-	file, err := os.Create(localFile)
+	file, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
 		scopedLog.Error(err, "Unable to open local file")
 		return false, err
@@ -248,29 +248,16 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, remoteFile, local
 	numBytes, err = downloader.Download(file,
 		&s3.GetObjectInput{
 			Bucket:  aws.String(awsclient.BucketName),
-			Key:     aws.String(remoteFile),
-			IfMatch: aws.String(etag),
+			Key:     aws.String(downloadRequest.RemoteFile),
+			IfMatch: aws.String(downloadRequest.Etag),
 		})
 	if err != nil {
-		scopedLog.Error(err, "Unable to download item %s", remoteFile)
-		os.Remove(localFile)
+		scopedLog.Error(err, "Unable to download item %s", downloadRequest.RemoteFile)
+		os.Remove(downloadRequest.RemoteFile)
 		return false, err
 	}
 
 	scopedLog.Info("File downloaded", "numBytes: ", numBytes)
 
 	return true, err
-}
-
-// GetInitContainerImage returns the initContainer image to be used with this s3 client
-func (awsclient *AWSS3Client) GetInitContainerImage(ctx context.Context) string {
-	return ("amazon/aws-cli")
-}
-
-// GetInitContainerCmd returns the init container command on a per app source basis to be used by the initContainer
-func (awsclient *AWSS3Client) GetInitContainerCmd(ctx context.Context, endpoint string, bucket string, path string, appSrcName string, appMnt string) []string {
-	s3AppSrcPath := filepath.Join(bucket, path) + "/"
-	podSyncPath := filepath.Join(appMnt, appSrcName) + "/"
-
-	return ([]string{fmt.Sprintf("--endpoint-url=%s", endpoint), "s3", "sync", fmt.Sprintf("s3://%s", s3AppSrcPath), podSyncPath})
 }

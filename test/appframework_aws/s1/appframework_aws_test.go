@@ -126,7 +126,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -158,7 +158,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -304,7 +304,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -326,7 +326,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -473,7 +473,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -501,7 +501,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -658,7 +658,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -770,7 +770,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -854,7 +854,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -934,7 +934,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -961,7 +961,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 0)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 0)
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1111,7 +1111,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1125,7 +1125,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework Spec
 			appSourceNameStandalone2 := "appframework-2-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameStandalone2 := "appframework-test-volume-2-" + testenv.RandomDNSName(3)
-			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
+			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1194,7 +1194,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1231,7 +1231,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1307,7 +1307,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1393,7 +1393,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1465,7 +1465,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1574,7 +1574,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1696,7 +1696,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1802,7 +1802,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1865,7 +1865,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1936,7 +1936,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1972,7 +1972,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{

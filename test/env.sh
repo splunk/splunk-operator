@@ -11,20 +11,25 @@
 : "${ECR_REGISTRY:=}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
+# Below env variables required to run license master test cases
+: "${ENTERPRISE_LICENSE_S3_PATH:=}"
+: "${TEST_S3_BUCKET:=}"
+# Below env variables required to run remote indexes test cases
+: "${INDEXES_S3_BUCKET:=}"
+: "${AWS_S3_REGION:=}"
 # Azure specific variables
+: "${AZURE_REGION:=}"
+: "${AZURE_TEST_CONTAINER:=}"
+: "${AZURE_INDEXES_CONTAINER:=}"
+: "${AZURE_ENTERPRISE_LICENSE_PATH:=}"
 : "${AZURE_RESOURCE_GROUP:=}"
 : "${AZURE_CONTAINER_REGISTRY:=}"
 : "${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER:=}"
 : "${AZURE_CLUSTER_AGENTPOOL:=}"
 : "${AZURE_CLUSTER_AGENTPOOL_RG:=}"
 : "${AZURE_STORAGE_ACCOUNT:=}"
+: "${AZURE_STORAGE_ACCOUNT_KEY:=}"
 : "${AZURE_MANAGED_ID_ENABLED:=}"
-# Below env variables required to run license master test cases
-: "${ENTERPRISE_LICENSE_PATH:=}"
-: "${TEST_S3_BUCKET:=}"
-# Below env variables required to run remote indexes test cases
-: "${INDEXES_S3_BUCKET:=}"
-: "${AWS_S3_REGION:=}"
 # set when operator need to be installed clusterwide
 : "${CLUSTER_WIDE:=false}"
 # Below env variable can be used to set the test cases to be run. Defaults to smoke test

@@ -17,4 +17,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: splunk/splunk-operator
-  newTag: 1.1.0
+  newTag: 2.1.0

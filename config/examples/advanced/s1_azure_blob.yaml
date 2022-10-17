@@ -1,0 +1,22 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: s1
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: s1Apps
+        location: <apps-location>
+    volumes:
+      - name: volume_app_repo
+        storageType: blob
+        provider: azure
+        path: <s3-path>
+        endpoint: https://<s3-endpoint>
+        secretRef: azure-blob-secret
