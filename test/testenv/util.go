@@ -19,8 +19,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
+	"os"
 	"os/exec"
 	"path"
 	"reflect"
@@ -491,7 +491,7 @@ func newRoleBinding(name, subject, ns, role string) *rbacv1.RoleBinding {
 
 func newLicenseConfigMap(name, ns, localLicenseFilePath string) (*corev1.ConfigMap, error) {
 
-	data, err := ioutil.ReadFile(localLicenseFilePath)
+	data, err := os.ReadFile(localLicenseFilePath)
 	if err != nil {
 		return nil, err
 	}
