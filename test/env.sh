@@ -11,6 +11,7 @@
 : "${ECR_REGISTRY:=}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
+: "${EKS_CLUSTER_K8_VERSION:=1.22}"
 # Below env variables required to run license master test cases
 : "${ENTERPRISE_LICENSE_S3_PATH:=}"
 : "${TEST_S3_BUCKET:=}"
