@@ -1778,7 +1778,7 @@ var _ = Describe("m4appfw test", func() {
 
 	// CSPL-2068
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1872,7 +1872,7 @@ var _ = Describe("m4appfw test", func() {
 
 	// CSPL-2068
 	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
