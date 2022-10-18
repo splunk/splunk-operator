@@ -1,5 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - command: helm install splunk-m4 ../../../../helm-chart/splunk-enterprise -f new_values.yaml
+  - command: helm install splunk-m4 ../../../../helm-chart/splunk-enterprise -f m4_config.yaml
     namespaced: true

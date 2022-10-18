@@ -17,9 +17,10 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,6 +31,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -461,7 +464,7 @@ func createAppDownloadDir(ctx context.Context, path string) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("createAppDownloadDir").WithValues("path", path)
 	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		errDir := os.MkdirAll(path, 0755)
 		if errDir != nil {
 			scopedLog.Error(errDir, "Unable to create directory at path")
@@ -657,7 +660,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		// the object has been modified; please apply your changes to the latest version and try again"
 		// now the problem here is if configmap data has changed we need to update configtoken, only way we can do that
 		// is try at least few times before failing, I took random number of 10 times to try
-		// FIXME ideally retryCnt should come from global const
+		// ideally retryCnt should come from global const
 		// Apply the configMap with a fresh token
 		retryCnt := 10
 		for i := 0; i < retryCnt; i++ {
@@ -1225,7 +1228,7 @@ func isAppAlreadyDownloaded(ctx context.Context, downloadWorker *PipelineWorker)
 	// check if the app is present on operator pod
 	fileInfo, err := os.Stat(localAppFileName)
 
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		scopedLog.Info("App not present on operator pod")
 		return false
 	}
@@ -2115,4 +2118,86 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 	}
 
 	return nil, fmt.Errorf("Invalid CR Kind")
+}
+
+// ReadFile reads the contents of the given file name passed as string
+func ReadFile(ctx context.Context, fileLocation string) (string, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ReadFile").WithValues("FileLocation", fileLocation)
+
+	byteString, err := ioutil.ReadFile(fileLocation)
+	if err != nil {
+		scopedLog.Error(err, "Failed to read file")
+		return "", err
+	}
+
+	return string(byteString), nil
+}
+
+// setProbeLevelOnSplunkPod  set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on splunk pod. Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
+func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
+	var err error
+	var stdOut string
+	var command string
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("setProbeLevelOnSplunkPod").WithValues("podName", podExecClient.GetTargetPodName(), "probeLevel", probeLevel)
+	switch probeLevel {
+	case livenessProbeLevelDefault:
+		command = fmt.Sprintf("[[ -f %s ]] && > %s", GetLivenessDriverFilePath(), GetLivenessDriverFilePath())
+
+	case livenessProbeLevelOne:
+		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
+
+	default:
+		return fmt.Errorf("Invalid probe Level %d", probeLevel)
+	}
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
+	splutil.ResetStringReader(streamOptions, command)
+	stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+	if err != nil {
+		err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
+		scopedLog.Error(err, "Failed to set probe level", "Command", command)
+		return err
+	}
+
+	scopedLog.Info("Successfully set probe level on pod", "Command", command)
+	return err
+}
+
+// setProbeLevelOnCRPods set K8_OPERATOR_LIVENESS_LEVEL in k8_liveness_driver.sh script on all pods of CR,  Set probeLevel to 0 to unset K8_OPERATOR_LIVENESS_LEVEL.
+func setProbeLevelOnCRPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl, probeLevel int) error {
+	var err error
+	// Run the command on each replica pod
+	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
+		podName := getApplicablePodNameForK8Probes(cr, int32(replicaIndex))
+		podExecClient.SetTargetPodName(ctx, podName)
+		err = setProbeLevelOnSplunkPod(ctx, podExecClient, probeLevel)
+		if err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// getApplicablePodNameForK8Probes gets the Pod name relevant for the CR under work
+func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) string {
+	var podType string
+	switch cr.GetObjectKind().GroupVersionKind().Kind {
+	case "Standalone":
+		podType = "standalone"
+	case "LicenseMaster":
+		podType = "license-master"
+	case "SearchHeadCluster":
+		podType = "search-head"
+	case "IndexerCluster":
+		podType = "indexer"
+	case "ClusterMaster":
+		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
+	case "MonitoringConsole":
+		podType = "monitoring-console"
+	}
+	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }

@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - master
-      - appframework_azureblob
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -90,7 +89,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
-      DEPLOYMENT_TYPE: "helm"
+      DEPLOYMENT_TYPE: ""
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -140,7 +139,7 @@ jobs:
           DESIRED_VERSION=v3.8.2 bash get_helm.sh
       - name: Install EKS CTL
         run: |
-          curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+          curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: setup-docker
@@ -177,6 +176,7 @@ jobs:
           docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
       - name: Create EKS cluster
         run: |
+          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           make cluster-up
       - name: install metric server
         run: |

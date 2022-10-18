@@ -2,7 +2,6 @@ package testenv
 
 import (
 	"errors"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -269,7 +268,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 
 		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
-		input, err := ioutil.ReadFile(appConfFile)
+		input, err := os.ReadFile(appConfFile)
 		if err != nil {
 			log.Fatalln(err)
 			return nil, err
@@ -284,7 +283,7 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 			}
 		}
 		output := strings.Join(lines, "\n")
-		err = ioutil.WriteFile(appConfFile, []byte(output), 0644)
+		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
 			log.Fatalln(err)
 		}

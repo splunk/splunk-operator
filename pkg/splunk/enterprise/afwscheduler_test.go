@@ -17,7 +17,6 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,6 +24,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -35,6 +36,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestIsFanOutApplicableToCR(t *testing.T) {
@@ -2271,6 +2273,201 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	}
 
 	mockPodExecClient.CheckPodExecCommands(t, "idxcPlayBookContext")
+}
+
+func TestSetLivenessProbeLevelForSHC(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	targetPodName := getApplicablePodNameForK8Probes(cr, 0)
+
+	podExecCommands := []string{
+		"mkdir -p /tmp/splunk_operator_k8s/probes/; echo \"export K8_OPERATOR_LIVENESS_LEVEL=1\" > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
+		"[[ -f /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh ]] && > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
+	}
+
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		// this is for changing the file permissions
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr}
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	playbookContext := &SHCPlaybookContext{
+		client:               c,
+		cr:                   cr,
+		afwPipeline:          nil,
+		targetPodName:        targetPodName,
+		searchHeadCaptainURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
+		podExecClient:        mockPodExecClient,
+	}
+
+	// Test: If the sts is not available, should return an error
+	err := playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
+	if err == nil {
+		t.Errorf("Should fail, when the sts is not available")
+	}
+
+	var replicas int32 = 1
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-search-head",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	c.AddObject(sts)
+
+	// Test: Should not return an error, when tried with proper context
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
+	if err != nil {
+		t.Errorf("Should not fail when setting the proper probe level. error: %s", err.Error())
+	}
+
+	// Test: Invalid Liveness probe level should return an error
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne+1)
+	if err == nil {
+		t.Errorf("Should fail when invaid probe level is attempted")
+	}
+
+	// Test: Resetting the Probeleve to the default, should not cause an error
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
+	if err != nil {
+		t.Errorf("Should not fail when resetting the probe level to default: %s", err.Error())
+	}
+}
+
+func TestSetLivenessProbeLevelForIDXC(t *testing.T) {
+	ctx := context.TODO()
+	cmCr := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	targetPodName := getApplicablePodNameForK8Probes(cmCr, 0)
+
+	podExecCommands := []string{
+		"mkdir -p /tmp/splunk_operator_k8s/probes/; echo \"export K8_OPERATOR_LIVENESS_LEVEL=1\" > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
+		"[[ -f /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh ]] && > /tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh",
+	}
+
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		// this is for changing the file permissions
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+	}
+
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	playbookContext := &IdxcPlaybookContext{
+		client:        c,
+		cr:            cmCr,
+		afwPipeline:   nil,
+		targetPodName: targetPodName,
+		podExecClient: mockPodExecClient,
+	}
+
+	// Test: If the sts is not available, should return an error
+	err := playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
+	if err == nil {
+		t.Errorf("Should fail, when the sts is not available")
+	}
+
+	idxcCr := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc-site1",
+			Namespace: "test",
+		},
+	}
+
+	var replicas int32 = 1
+	cmSts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-cluster-manager",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	idxcSts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-idxc-site1-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	c.AddObject(cmCr)
+	c.AddObject(cmSts)
+	c.AddObject(idxcCr)
+	c.AddObject(idxcSts)
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-stack1-cluster-manager"}
+
+	//setownerReference
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, idxcCr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set owner ref for resource %s. Error: %s", cmSts.GetName(), err.Error())
+	}
+
+	// Test: Should not give an error, when tried with proper context
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
+	if err != nil {
+		t.Errorf("Should not fail when setting the proper probe level. error: %s", err.Error())
+	}
+
+	// Test: Invalid Liveness probe level should return an error
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne+1)
+	if err == nil {
+		t.Errorf("Should fail when invaid probe level is attempted")
+	}
+
+	// Test: Resetting the Probeleve to the default, should not cause an error
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
+	if err != nil {
+		t.Errorf("Should not fail when resetting the probe level to default: %s", err.Error())
+	}
 }
 
 func TestSHCRunPlaybook(t *testing.T) {

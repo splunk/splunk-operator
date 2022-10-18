@@ -1,5 +1,5 @@
 # check for standalone to be in ready state
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: stdln

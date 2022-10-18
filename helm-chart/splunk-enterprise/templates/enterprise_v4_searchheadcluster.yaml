@@ -90,7 +90,7 @@ items:
     {{- end }}
     defaults: |-
       splunk:
-        multisite_manager: splunk-{{ $cm_name }}-cluster-manager-service
+        multisite_master: splunk-{{ $cm_name }}-cluster-manager-service
         site: {{ .site }}
   {{- else if $.Values.searchHeadCluster.defaults }}
     defaults: |-

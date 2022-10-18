@@ -15,6 +15,11 @@ if [[ -z "${ECR_REPOSITORY}" ]]; then
   export ECR_REPOSITORY="${PRIVATE_REGISTRY}"
 fi
 
+if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
+  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.22"
+  export EKS_CLUSTER_K8_VERSION="1.22"
+fi
+
 function deleteCluster() {
   echo "Cleanup remaining PVC on the EKS Cluster ${TEST_CLUSTER_NAME}"
   tools/cleanup.sh
@@ -44,7 +49,7 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${TEST_CLUSTER_NAME}" -v 0)
   if [ -z "${found}" ]; then
-    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge
+    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge --version=${EKS_CLUSTER_K8_VERSION}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1

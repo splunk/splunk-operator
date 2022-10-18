@@ -17,13 +17,14 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -1416,6 +1417,8 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Context) error {
+	// Reduce the liveness probe level
+	shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
@@ -1424,6 +1427,43 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 		return err
 	}
 	return nil
+}
+
+// setLivenessProbeLevel sets the liveness probe level across all the Search Head Pods.
+func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("shcPlaybookContext.setLivenessProbeLevel()")
+
+	shcStsName := GetSplunkStatefulsetName(SplunkSearchHead, shcPlaybookContext.cr.GetName())
+	shcStsNamespaceName := types.NamespacedName{Namespace: shcPlaybookContext.cr.GetNamespace(), Name: shcStsName}
+	shcSts, err := splctrl.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the stateful set")
+		return err
+	}
+
+	err = func() error {
+		// playbook context uses fixed CR and target pod names, but, when it comes to the
+		// probes tuning, we are mostly dealing with different pods, and also CRs,
+		// so, backup and then restore
+		cr := shcPlaybookContext.podExecClient.GetCR()
+		targetPodname := shcPlaybookContext.podExecClient.GetTargetPodName()
+
+		defer func() {
+			shcPlaybookContext.podExecClient.SetCR(cr)
+			shcPlaybookContext.podExecClient.SetTargetPodName(ctx, targetPodname)
+		}()
+
+		err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
+		if err != nil {
+			scopedLog.Error(err, "Unable to set the Liveness probe level")
+			return err
+		}
+
+		return err
+	}()
+
+	return err
 }
 
 // getClusterScopedAppsLocOnPod returns the cluster apps directory
@@ -1462,7 +1502,10 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 
 	var err error
 	var ok bool
-	cr := shcPlaybookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	cr, ok := shcPlaybookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	if !ok {
+		return nil
+	}
 	if cr.Status.Phase != enterpriseApi.PhaseReady {
 		scopedLog.Info("SHC is not ready yet.")
 		return nil
@@ -1485,6 +1528,9 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
+
+			// set the liveness probe to default
+			shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else if err != nil {
 			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again")
 		} else {
@@ -1543,6 +1589,9 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Context) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("idxcPlaybookContext.triggerBundlePush()")
+
+	// Reduce the liveness probe level
+	idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 	streamOptions := splutil.NewStreamOptionsObject(applyIdxcBundleCmdStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
@@ -1556,6 +1605,66 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 	}
 
 	return nil
+}
+
+// setLivenessProbeLevel sets the liveness probe level across all the indexer pods
+func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("idxcPlaybookContext.setLivenessProbeLevel()")
+	var err error
+
+	managerSts := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
+	if managerSts == nil {
+		return fmt.Errorf("Not able to retrieve Cluster Manager STS")
+	}
+
+	err = func() error {
+		// playbook context uses fixed CR and target pod names, but, when it comes to the
+		// probes tuning, we are mostly dealing with different pods, and also CRs,
+		// so, backup and then restore
+		cr := idxcPlaybookContext.podExecClient.GetCR()
+		targetPodname := idxcPlaybookContext.podExecClient.GetTargetPodName()
+
+		defer func() {
+			idxcPlaybookContext.podExecClient.SetCR(cr)
+			idxcPlaybookContext.podExecClient.SetTargetPodName(ctx, targetPodname)
+		}()
+
+		managerOwnerRefs := managerSts.GetOwnerReferences()
+		for i := 0; i < len(managerOwnerRefs); i++ {
+			// We are only interested for Indexer pods, skip all other references
+			if managerOwnerRefs[i].Kind != "IndexerCluster" {
+				continue
+			}
+
+			idxcNameSpaceName := types.NamespacedName{Namespace: idxcPlaybookContext.cr.GetNamespace(), Name: managerOwnerRefs[i].Name}
+			var idxcCR enterpriseApi.IndexerCluster
+			err = idxcPlaybookContext.client.Get(ctx, idxcNameSpaceName, &idxcCR)
+			if err != nil {
+				// Probably a dangling owner reference, just ignore and continue
+				scopedLog.Error(err, "Unable to fetch the CR", "Name", managerOwnerRefs[i].Name, "Namespace", idxcPlaybookContext.cr.GetNamespace())
+				continue
+			}
+
+			idxcStsName := GetSplunkStatefulsetName(SplunkIndexer, idxcCR.GetName())
+			idxcStsNamespaceName := types.NamespacedName{Namespace: idxcCR.GetNamespace(), Name: idxcStsName}
+			idxcSts, err := splctrl.GetStatefulSetByName(ctx, idxcPlaybookContext.client, idxcStsNamespaceName)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get the stateful set")
+				// Probably a dangling owner reference, just ignore and continue
+				continue
+			}
+
+			err = setProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, idxcPlaybookContext.podExecClient, probeLevel)
+			if err != nil {
+				scopedLog.Error(err, "Unable to set the Liveness probe level")
+				return err
+			}
+		}
+		return err
+	}()
+
+	return err
 }
 
 // runPlaybook will implement the following logic(and set the bundle push state accordingly)  -
@@ -1582,6 +1691,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
+			idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else {
 			scopedLog.Info("IndexerCluster Bundle Push is still in progress, will check back again in next reconcile..")
 		}

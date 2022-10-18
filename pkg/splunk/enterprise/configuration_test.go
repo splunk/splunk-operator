@@ -19,13 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -52,10 +51,10 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	//if string(got) != want {
-	//	t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	//}
-	require.JSONEq(t, string(got), want)
+	if string(got) != want {
+		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
+	}
+	//require.JSONEq(t, string(got), want)
 }
 
 func TestGetSplunkService(t *testing.T) {
@@ -1233,7 +1232,9 @@ func TestAddStorageVolumes(t *testing.T) {
 
 	test := func(want string) {
 		ss := statefulSet.DeepCopy()
-		err := addStorageVolumes(&cr, spec, ss, labels)
+		ctx := context.TODO()
+		client := spltest.NewMockClient()
+		err := addStorageVolumes(ctx, &cr, client, spec, ss, labels)
 		if err != nil {
 			t.Errorf("Unable to add storage volumes, error: %s", err.Error())
 		}
@@ -1241,8 +1242,7 @@ func TestAddStorageVolumes(t *testing.T) {
 	}
 
 	// Test defaults - PVCs for etc & var with 10Gi and 100Gi storage capacity
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
-
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
 	// Define PVCs for etc & var with storage capacity and storage class name defined
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1254,8 +1254,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp3",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
-
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"storageClassName":"gp3"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
 	// Define PVCs for etc & ephemeral for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1266,8 +1265,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			EphemeralStorage: true,
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
-
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
 	// Define ephemeral for etc & PVCs for var
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1278,8 +1276,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
-
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
 	// Define ephemeral for etc & var(should ignore storage capacity & storage class name)
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -1291,15 +1288,16 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageClassName: "gp2",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"availableReplicas":0, "replicas":0}}`)
-
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"test-statefulset","namespace":"test","creationTimestamp":null},"spec":{"replicas":1,"selector":null,"template":{"metadata":{"creationTimestamp":null},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}}],"containers":[{"name":"splunk","image":"test","resources":{},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"}]}]}},"serviceName":"","updateStrategy":{}},"status":{"replicas":0,"availableReplicas":0}}`)
 	// Define invalid EtcVolumeStorageConfig
 	spec = &enterpriseApi.CommonSplunkSpec{
 		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
 			StorageCapacity: "----",
 		},
 	}
-	err := addStorageVolumes(&cr, spec, statefulSet, labels)
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	err := addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
 		t.Errorf("Unable to idenitfy incorrect EtcVolumeStorageConfig resource quantity")
 	}
@@ -1310,7 +1308,7 @@ func TestAddStorageVolumes(t *testing.T) {
 			StorageCapacity: "----",
 		},
 	}
-	err = addStorageVolumes(&cr, spec, statefulSet, labels)
+	err = addStorageVolumes(ctx, &cr, client, spec, statefulSet, labels)
 	if err == nil {
 		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
 	}
@@ -1350,22 +1348,16 @@ func TestGetLivenessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, SplunkClusterManager, spec)
 	if livenessProbe.InitialDelaySeconds != livenessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Liveness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.LivenessInitialDelaySeconds = livenessProbeDefaultDelaySec + 10
-	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec)
 	if livenessProbe.InitialDelaySeconds != spec.LivenessInitialDelaySeconds {
 		t.Errorf("Failed to set Liveness probe initial delay with configured value")
-	}
-
-	// Test if the additional Delay can override the default and the cofigured delay values
-	livenessProbe = getLivenessProbe(ctx, cr, SplunkClusterManager, spec, 20)
-	if livenessProbe.InitialDelaySeconds == livenessProbeDefaultDelaySec+20 {
-		t.Errorf("Failed to set the configured Liveness probe initial delay value")
 	}
 }
 
@@ -1380,22 +1372,33 @@ func TestGetReadinessProbe(t *testing.T) {
 	spec := &cr.Spec.CommonSplunkSpec
 
 	// Test if default delay works always
-	readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	readinessProbe := getReadinessProbe(ctx, cr, SplunkClusterManager, spec)
 	if readinessProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
 		t.Errorf("Failed to set Readiness probe default delay")
 	}
 
 	// Test if the default delay can be overwritten with configured delay
 	spec.ReadinessInitialDelaySeconds = readinessProbeDefaultDelaySec + 10
-	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 0)
+	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec)
 	if readinessProbe.InitialDelaySeconds != spec.ReadinessInitialDelaySeconds {
 		t.Errorf("Failed to set Readiness probe initial delay with configured value")
 	}
+}
 
-	// Test if the additional Delay can override the default and the cofigured delay values
-	readinessProbe = getReadinessProbe(ctx, cr, SplunkClusterManager, spec, 20)
-	if readinessProbe.InitialDelaySeconds == readinessProbeDefaultDelaySec+20 {
-		t.Errorf("Failed to set the configured Readiness probe initial delay value")
+func TestGetStartupProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+	spec := &cr.Spec.CommonSplunkSpec
+
+	// Test if default delay works always
+	startupProbe := getStartupProbe(ctx, cr, SplunkClusterManager, spec)
+	if startupProbe.InitialDelaySeconds != startupProbeDefaultDelaySec {
+		t.Errorf("Failed to set Startup probe default delay")
 	}
 }
 
@@ -1489,5 +1492,152 @@ func TestCreateOrUpdateAppUpdateConfigMapShouldNotFail(t *testing.T) {
 	status = getManualUpdateStatus(ctx, client, &revised, configMapName)
 	if refCount != 2 || status != "off" {
 		t.Errorf("Got wrong status or/and refCount. Expected status=off, Got=%s. Expected refCount=2, Got=%d", status, refCount)
+	}
+}
+
+func TestGetProbeWithConfigUpdates(t *testing.T) {
+
+	defaultInitialDelay := int32(10)
+
+	// Test when empty probe is passed with non-zero configuredDelay. InitialDelaySeconds is set to configuredDelay.
+	returnedProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, nil, defaultInitialDelay)
+	if returnedProbe.InitialDelaySeconds != defaultInitialDelay {
+		t.Errorf("Failed to set InitialDelaySeconds to configured default delay")
+	}
+
+	// Test when empty probe is passed with 0 configuredDelay. InitialDelaySeconds is set to configuredDelay.
+	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, nil, 0)
+	if returnedProbe.InitialDelaySeconds != readinessProbeDefaultDelaySec {
+		t.Errorf("Failed to set InitialDelay seconds when configuredDelay is 0")
+	}
+	if returnedProbe != &defaultReadinessProbe {
+		t.Errorf("Failed to set to defaultProbe when configured probe is nil")
+	}
+
+	// Test when configured probe has 0 initialdelay and configured delay is non-zero
+	// TimoutSeconds, PeriodSeconds is 0. Exec is empty
+	var configuredProbe enterpriseApi.Probe
+	configuredProbe.InitialDelaySeconds = 0
+	configuredProbe.TimeoutSeconds = 0
+	configuredProbe.PeriodSeconds = 0
+
+	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, defaultInitialDelay)
+	if returnedProbe.InitialDelaySeconds != defaultInitialDelay {
+		t.Errorf("Failed to set InitialDelaySeconds to default delay when default initialDelay is zero.")
+	}
+	if returnedProbe.TimeoutSeconds != defaultReadinessProbe.TimeoutSeconds {
+		t.Errorf("Failed to set TimeoutSeconds")
+	}
+	if returnedProbe.PeriodSeconds != defaultReadinessProbe.PeriodSeconds {
+		t.Errorf("Failed to set PeriodSeconds")
+	}
+	if returnedProbe.Exec != defaultReadinessProbe.Exec {
+		t.Errorf("Failed to set Exec")
+	}
+
+	// Test when configured probe has 0 initialDelay and defaultDelay is 0
+	configuredProbe.InitialDelaySeconds = 0
+	returnedProbe = getProbeWithConfigUpdates(&defaultReadinessProbe, &configuredProbe, 0)
+	if returnedProbe.InitialDelaySeconds != defaultReadinessProbe.InitialDelaySeconds {
+		t.Errorf("Failed to set InitialDelaySeconds to default when default initialDelay is zero.")
+	}
+}
+
+func TestValidateStartupProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// Test Empty probe
+	err := validateStartupProbe(ctx, cr, nil)
+	if err != nil {
+		t.Errorf("Error returned on passing empty probe. Error: %s", err)
+	}
+
+	// Test Negative values in probe
+	var startupProbe enterpriseApi.Probe
+	startupProbe.InitialDelaySeconds = -1
+	err = validateStartupProbe(ctx, cr, &startupProbe)
+	if !strings.Contains(err.Error(), "negative values are not allowed") {
+		t.Errorf("Correct error not returned on passing negative value for InitialDelaySeconds. Error: %s", err)
+	}
+
+	// Test probe parameters less than default values dont throw error
+	startupProbe.InitialDelaySeconds = 5
+	startupProbe.TimeoutSeconds = 4
+	startupProbe.PeriodSeconds = 4
+	err = validateStartupProbe(ctx, cr, &startupProbe)
+	if err != nil {
+		t.Errorf("Unexpected error when less than deault values passed for startupProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", startupProbe.InitialDelaySeconds, startupProbe.TimeoutSeconds, startupProbe.PeriodSeconds, err.Error())
+	}
+}
+
+func TestValidateReadinessProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// Test Empty probe
+	err := validateReadinessProbe(ctx, cr, nil)
+	if err != nil {
+		t.Errorf("Error returned on passing empty probe. Error: %s", err)
+	}
+
+	// Test Negative values in probe
+	var readinessProbe enterpriseApi.Probe
+	readinessProbe.InitialDelaySeconds = -1
+	err = validateReadinessProbe(ctx, cr, &readinessProbe)
+	if !strings.Contains(err.Error(), "negative values are not allowed") {
+		t.Errorf("Correct error not returned on passing negative value for InitialDelaySeconds. Error: %s", err)
+	}
+
+	// Test probe parameters less than default values dont throw error
+	readinessProbe.InitialDelaySeconds = 5
+	readinessProbe.TimeoutSeconds = 4
+	readinessProbe.PeriodSeconds = 4
+	err = validateReadinessProbe(ctx, cr, &readinessProbe)
+	if err != nil {
+		t.Errorf("Unexpected error when less than deault values passed for readinessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", readinessProbe.InitialDelaySeconds, readinessProbe.TimeoutSeconds, readinessProbe.PeriodSeconds, err.Error())
+	}
+}
+
+func TestValidateLivenessProbe(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+		},
+	}
+
+	// Test Empty probe
+	err := validateLivenessProbe(ctx, cr, nil)
+	if err != nil {
+		t.Errorf("Error returned on passing empty probe. Error: %s", err)
+	}
+
+	// Test Negative values in probe
+	var livenessProbe enterpriseApi.Probe
+	livenessProbe.InitialDelaySeconds = -1
+	err = validateLivenessProbe(ctx, cr, &livenessProbe)
+	if !strings.Contains(err.Error(), "negative values are not allowed") {
+		t.Errorf("Correct error not returned on passing negative value for InitialDelaySeconds. Error: %s", err)
+	}
+
+	// Test probe parameters less than default values dont throw error
+	livenessProbe.InitialDelaySeconds = 5
+	livenessProbe.TimeoutSeconds = 4
+	livenessProbe.PeriodSeconds = 4
+	err = validateLivenessProbe(ctx, cr, &livenessProbe)
+	if err != nil {
+		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
 }

@@ -18,7 +18,7 @@ package test
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -60,7 +60,7 @@ func (c *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}
 	httpResponse := http.Response{
 		StatusCode: rsp.Status,
-		Body:       ioutil.NopCloser(strings.NewReader(rsp.Body)),
+		Body:       io.NopCloser(strings.NewReader(rsp.Body)),
 	}
 	return &httpResponse, rsp.Err
 }

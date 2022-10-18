@@ -118,7 +118,7 @@ metadata:
     marketplace.openshift.io/remote-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/pricing?utm_source=openshift_console
     marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.15.0
+    operators.operatorframework.io/builder: operator-sdk-v1.18.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
   name: splunk-operator.v2.0.0
@@ -747,7 +747,10 @@ spec:
           - create
         serviceAccountName: splunk-operator-controller-manager
       deployments:
-      - name: splunk-operator-controller-manager
+      - label:
+          control-plane: controller-manager
+          name: splunk-operator
+        name: splunk-operator-controller-manager
         spec:
           replicas: 1
           selector:
@@ -784,6 +787,10 @@ spec:
                   requests:
                     cpu: 5m
                     memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
               - args:
                 - --leader-elect
                 - --pprof
@@ -795,14 +802,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:edge
+                  value: splunk/splunk:9.0
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: controller:latest
+                image: splunk/splunk-operator:2.0.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -826,6 +833,8 @@ spec:
                     memory: 2000Mi
                 securityContext:
                   allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
                 volumeMounts:
                 - mountPath: /opt/splunk/appframework/
                   name: app-staging
@@ -904,5 +913,8 @@ spec:
   provider:
     name: Splunk Inc.
     url: www.splunk.com
+  relatedImages:
+  - image: splunk/splunk:9.0
+    name: splunk-enterprise
   replaces: splunk-operator.v0.1.0
   version: 2.0.0

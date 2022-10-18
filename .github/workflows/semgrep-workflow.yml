@@ -5,7 +5,6 @@ on:
     - main
     - master
     - develop
-    - appframework_azureblob
 name: Semgrep Workflow
 jobs:
   semgrep:

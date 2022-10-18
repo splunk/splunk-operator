@@ -17,11 +17,13 @@ package enterprise
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"testing"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,6 +40,22 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
+func init() {
+	// Re-Assigning GetReadinessScriptLocation, GetLivenessScriptLocation, GetStartupScriptLocation to use absolute path for readinessScriptLocation, readinessScriptLocation
+	GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+		return fileLocation
+	}
+	GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+		return fileLocation
+	}
+	GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+		return fileLocation
+	}
+}
+
 func TestApplyMonitoringConsole(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -46,6 +64,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
@@ -62,6 +82,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
@@ -84,7 +105,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[9]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[10]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.MonitoringConsole{

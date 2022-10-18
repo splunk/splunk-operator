@@ -148,7 +148,10 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 		return nil, err
 	}
 
-	s3SplunkClient = cl.(*s3.S3)
+	s3SplunkClient, ok := cl.(*s3.S3)
+	if !ok {
+		return nil, fmt.Errorf("unable to get s3 client")
+	}
 	downloader := s3manager.NewDownloaderWithClient(cl.(*s3.S3))
 
 	return &AWSS3Client{

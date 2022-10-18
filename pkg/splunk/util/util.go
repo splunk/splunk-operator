@@ -18,10 +18,11 @@ package util
 import (
 	"bytes"
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"os"
 	"strings"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -210,6 +211,7 @@ type PodExecClientImpl interface {
 	SetTargetPodName(context.Context, string)
 	GetTargetPodName() string
 	GetCR() splcommon.MetaObject
+	SetCR(splcommon.MetaObject)
 }
 
 // blank assignment to implement PodExecClientImpl
@@ -266,6 +268,11 @@ func (podExecClient *PodExecClient) GetCR() splcommon.MetaObject {
 	return podExecClient.cr
 }
 
+// SetCR sets the PodExecClient CR
+func (podExecClient *PodExecClient) SetCR(cr splcommon.MetaObject) {
+	podExecClient.cr = cr
+}
+
 // NewStreamOptionsObject return a new streamoptions object for the given command
 func NewStreamOptionsObject(command string) *remotecommand.StreamOptions {
 	return &remotecommand.StreamOptions{
@@ -276,8 +283,10 @@ func NewStreamOptionsObject(command string) *remotecommand.StreamOptions {
 // ResetStringReader resets the Stdin (of strings.Reader type) of the remotecommand.StreamOptions
 func ResetStringReader(streamOptions *remotecommand.StreamOptions, command string) {
 	// convert Stdin of type io.Reader to strings.Reader type
-	stdInReader := streamOptions.Stdin.(*strings.Reader)
-
+	stdInReader, ok := streamOptions.Stdin.(*strings.Reader)
+	if !ok {
+		return
+	}
 	// reset the offset of the Reader
 	stdInReader.Reset(command)
 }
