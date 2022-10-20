@@ -124,7 +124,7 @@ patches:
       - name: WATCH_NAMESPACE
         value: WATCH_NAMESPACE_VALUE
       - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        value: splunk/splunk:9.0.1-a1
+        value: SPLUNK_ENTERPRISE_IMAGE
       - name: OPERATOR_NAME
         value: splunk-operator
       - name: POD_NAME
