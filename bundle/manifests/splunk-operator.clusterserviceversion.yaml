@@ -802,14 +802,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: splunk/splunk:9.0
+                  value: splunk/splunk:9.1
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: splunk/splunk-operator:2.0.0
+                image: splunk/splunk-operator:2.1.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -914,7 +914,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: splunk/splunk:9.0
+  - image: splunk/splunk:9.1
     name: splunk-enterprise
   replaces: splunk-operator.v0.1.0
   version: 2.0.0
