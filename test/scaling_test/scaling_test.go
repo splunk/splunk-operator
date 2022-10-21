@@ -18,9 +18,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"strings"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -57,53 +58,6 @@ var _ = Describe("Scaling test", func() {
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
 		}
-	})
-
-	Context("Standalone deployment (S1)", func() {
-		It("masterscaling, integration: Can Scale Up and Scale Down Standalone CR", func() {
-
-			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Scale Standalone instance
-			testcaseEnvInst.Log.Info("Scaling Up Standalone CR")
-			scaledReplicaCount := 2
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-
-			standalone.Spec.Replicas = int32(scaledReplicaCount)
-
-			err = deployment.UpdateCR(ctx, standalone)
-			Expect(err).To(Succeed(), "Failed to scale up Standalone")
-
-			// Ensure standalone is scaling up
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingUp)
-
-			// Wait for Standalone to be in READY status
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
-
-			// Scale Down Standalone
-			testcaseEnvInst.Log.Info("Scaling Down Standalone CR")
-			scaledReplicaCount = scaledReplicaCount - 1
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone")
-
-			standalone.Spec.Replicas = int32(scaledReplicaCount)
-
-			err = deployment.UpdateCR(ctx, standalone)
-			Expect(err).To(Succeed(), "Failed to scale down Standalone")
-
-			// Ensure standalone is scaling down
-			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingDown)
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-		})
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
