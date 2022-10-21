@@ -51,7 +51,7 @@ If a Splunk Operator release includes an updated Splunk Enterprise Docker image,
 
 ## Steps to Upgrade from 1.0.5 or older version to latest
 
-Upgrading the Splunk Operator from 1.0.5 or older version to latest is a new installation rather than an upgrade from the current operator. The older Splunk Operator must be cleaned up before installing the new version. Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the latest operator deployment manifest file. The script performs the following steps
+Upgrading the Splunk Operator from 1.0.5 or older version to latest is a new installation rather than an upgrade from the current operator. The older Splunk Operator must be cleaned up before installing the new version. Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh) helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path to the latest operator deployment manifest file. The script performs the following steps
 
 * Backup of all the operator resources within the namespace like
 ** service-account, deployment, role, role-binding, cluster-role, cluster-role-binding
@@ -99,7 +99,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: WATCH_NAMESPACE
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.1
+          value: splunk/splunk:9.0.1-a1
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME

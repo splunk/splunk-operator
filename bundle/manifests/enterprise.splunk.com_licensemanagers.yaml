@@ -1304,6 +1304,29 @@ spec:
                 format: int32
                 minimum: 0
                 type: integer
+              livenessProbe:
+                description: LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+                properties:
+                  failureThreshold:
+                    description: Minimum consecutive failures for the probe to be
+                      considered failed after having succeeded.
+                    format: int32
+                    type: integer
+                  initialDelaySeconds:
+                    description: 'Number of seconds after the container has started
+                      before liveness probes are initiated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                    format: int32
+                    type: integer
+                  periodSeconds:
+                    description: How often (in seconds) to perform the probe.
+                    format: int32
+                    type: integer
+                  timeoutSeconds:
+                    description: 'Number of seconds after which the probe times out.
+                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                    format: int32
+                    type: integer
+                type: object
               monitoringConsoleRef:
                 description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
                   console managed by the operator within Kubernetes
@@ -1349,6 +1372,29 @@ spec:
                 format: int32
                 minimum: 0
                 type: integer
+              readinessProbe:
+                description: ReadinessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
+                properties:
+                  failureThreshold:
+                    description: Minimum consecutive failures for the probe to be
+                      considered failed after having succeeded.
+                    format: int32
+                    type: integer
+                  initialDelaySeconds:
+                    description: 'Number of seconds after the container has started
+                      before liveness probes are initiated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                    format: int32
+                    type: integer
+                  periodSeconds:
+                    description: How often (in seconds) to perform the probe.
+                    format: int32
+                    type: integer
+                  timeoutSeconds:
+                    description: 'Number of seconds after which the probe times out.
+                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                    format: int32
+                    type: integer
+                type: object
               resources:
                 description: resource requirements for the pod containers
                 properties:
@@ -1868,6 +1914,29 @@ spec:
                             type: array
                         type: object
                     type: object
+                type: object
+              startupProbe:
+                description: StartupProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes
+                properties:
+                  failureThreshold:
+                    description: Minimum consecutive failures for the probe to be
+                      considered failed after having succeeded.
+                    format: int32
+                    type: integer
+                  initialDelaySeconds:
+                    description: 'Number of seconds after the container has started
+                      before liveness probes are initiated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                    format: int32
+                    type: integer
+                  periodSeconds:
+                    description: How often (in seconds) to perform the probe.
+                    format: int32
+                    type: integer
+                  timeoutSeconds:
+                    description: 'Number of seconds after which the probe times out.
+                      More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes'
+                    format: int32
+                    type: integer
                 type: object
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
