@@ -134,7 +134,6 @@ If you need help, tag one of the active maintainers of this project in a post or
 (*) Vivek Reddy
 () Victor Ebken
 () Ajeet Kumar
-() Marcus Galdino
 () Jeff Rybczynski
 () Patrick Ogdin
 
