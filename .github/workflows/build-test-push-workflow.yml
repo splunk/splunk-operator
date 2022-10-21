@@ -278,7 +278,7 @@ jobs:
           make cluster-down
   push-latest:
     needs: smoke-tests
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
