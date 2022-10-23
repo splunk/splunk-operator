@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - master
+      - fix-prodsec-issues
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
