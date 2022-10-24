@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - develop
-      - master
+      - main
       - fix-prodsec-issues
 jobs:
   build-operator-image:
@@ -125,8 +125,8 @@ jobs:
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
-      - name: Change splunk enterprise to release on master branches
-        if: github.ref == 'ref/head/master'
+      - name: Change splunk enterprise to release image on main branches
+        if: github.ref == 'ref/head/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Checkout code

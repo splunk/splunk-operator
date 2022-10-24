@@ -73,8 +73,8 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - name: Change splunk enterprise to release on master branches
-        if: github.ref == 'ref/head/master'
+      - name: Change splunk enterprise to release on main branches
+        if: github.ref == 'ref/head/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Checkout code
