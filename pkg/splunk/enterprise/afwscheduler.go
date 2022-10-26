@@ -594,7 +594,7 @@ func (ppln *AppInstallPipeline) shutdownPipelinePhase(ctx context.Context, phase
 	ppln.phaseWaiter.Done()
 }
 
-//downloadPhaseManager creates download phase manager for the install pipeline
+// downloadPhaseManager creates download phase manager for the install pipeline
 func (ppln *AppInstallPipeline) downloadPhaseManager(ctx context.Context) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("downloadPhaseManager")

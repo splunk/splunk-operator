@@ -1460,8 +1460,8 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	return nil
 }
 
-//  isAppFrameworkConfigured checks and returns true if App Framework is configured
-//  App Repo config without any App sources will not cause any App Framework activity
+// isAppFrameworkConfigured checks and returns true if App Framework is configured
+// App Repo config without any App sources will not cause any App Framework activity
 func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
 	return !(appFramework == nil || appFramework.AppSources == nil)
 }
@@ -1735,7 +1735,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 	return indexesConf
 }
 
-//GetServerConfigEntries prepares the server.conf entries, and returns as a string
+// GetServerConfigEntries prepares the server.conf entries, and returns as a string
 func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
 	if cacheManagerConf == nil {
 		return ""
