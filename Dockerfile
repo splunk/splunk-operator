@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.17 as builder
+FROM golang:1.19 as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -37,7 +37,7 @@ RUN yum -y update-minimal --security --sec-severity=Low
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
-      version="1.1.0" \
+      version="2.1.0" \
       release="1" \
       summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
       description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."

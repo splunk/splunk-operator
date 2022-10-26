@@ -144,7 +144,7 @@ var (
 // OperatorFSGroup is the fsGroup value for Splunk Operator
 var OperatorFSGroup int64 = 1001
 
-//HTTPCodes Response codes for http request
+// HTTPCodes Response codes for http request
 var HTTPCodes = map[string]string{
 	"Ok":           "HTTP/1.1 200 OK",
 	"Forbidden":    "HTTP/1.1 403 Forbidden",
@@ -275,7 +275,7 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	return testenv, nil
 }
 
-//GetName returns the name of the testenv
+// GetName returns the name of the testenv
 func (testenv *TestEnv) GetName() string {
 	return testenv.name
 }

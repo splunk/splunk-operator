@@ -61,10 +61,6 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     
-    - name: Install golint
-      run: |
-        make setup/golint
-    
     - name: Install goveralls
       run: |
         go get github.com/mattn/goveralls@latest

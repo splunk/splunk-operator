@@ -199,7 +199,7 @@ func validateMonitoringConsoleSpec(ctx context.Context, c splcommon.ControllerCl
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-//ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
+// ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
 func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
@@ -263,7 +263,7 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 	return &current, nil
 }
 
-//AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
+// AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
 func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
 	for _, url := range newURLs {
 		_, ok := revised.Data[url.Name]
@@ -302,7 +302,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 	}
 }
 
-//DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
+// DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
 func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
 	for _, url := range newURLs {
 		currentURLs := strings.Split(revised.Data[url.Name], ",")

@@ -16,6 +16,10 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Install Operator SDK
@@ -104,9 +108,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Go Lint
-        run: |
-          make setup/golint
       - name: Install Helm
         run: |
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3

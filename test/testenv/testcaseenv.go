@@ -101,12 +101,12 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 	return testenv, nil
 }
 
-//GetName returns the name of the testenv
+// GetName returns the name of the testenv
 func (testenv *TestCaseEnv) GetName() string {
 	return testenv.name
 }
 
-//IsOperatorInstalledClusterWide returns if operator is installed clusterwide
+// IsOperatorInstalledClusterWide returns if operator is installed clusterwide
 func (testenv *TestCaseEnv) IsOperatorInstalledClusterWide() string {
 	return testenv.clusterWideOperator
 }

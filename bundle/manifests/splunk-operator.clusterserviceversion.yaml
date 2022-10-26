@@ -118,7 +118,7 @@ metadata:
     marketplace.openshift.io/remote-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/pricing?utm_source=openshift_console
     marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.18.0
+    operators.operatorframework.io/builder: operator-sdk-v1.25.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
   name: splunk-operator.v2.0.0
@@ -747,7 +747,10 @@ spec:
           - create
         serviceAccountName: splunk-operator-controller-manager
       deployments:
-      - name: splunk-operator-controller-manager
+      - label:
+          control-plane: controller-manager
+          name: splunk-operator
+        name: splunk-operator-controller-manager
         spec:
           replicas: 1
           selector:
@@ -771,7 +774,7 @@ spec:
                 - --upstream=http://127.0.0.1:8080/
                 - --logtostderr=true
                 - --v=0
-                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0
                 name: kube-rbac-proxy
                 ports:
                 - containerPort: 8443
@@ -799,14 +802,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: splunk/splunk:9.0.1-a1
+                  value: docker.io/splunk/splunk:edge
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: splunk/splunk-operator:2.1.0
+                image: controller:latest
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -911,7 +914,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: splunk/splunk:9.0.1-a1
+  - image: docker.io/splunk/splunk:edge
     name: splunk-enterprise
   replaces: splunk-operator.v0.1.0
-  version: 2.1.0
+  version: 2.0.0

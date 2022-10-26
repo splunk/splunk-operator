@@ -83,9 +83,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Go Lint
-        run: |
-          make setup/golint
       - name: Install Ginkgo 
         run: |
           make setup/ginkgo

@@ -70,9 +70,9 @@ func (mockClient MockAzureBlobClient) ListApps(ctx context.Context, bucketName s
 	return tmp, nil
 }
 
-//DownloadApp is a mock call to download file/app from azure blob client.
-//It just does some error checking.
-//TODO : refine this method in next sprint as part of list and download azure rest apis
+// DownloadApp is a mock call to download file/app from azure blob client.
+// It just does some error checking.
+// TODO : refine this method in next sprint as part of list and download azure rest apis
 func (mockClient MockAzureBlobClient) DownloadApp(ctx context.Context, bucketName string, remoteFileName string, localFileName string, downloadOpts map[string]string) error {
 
 	var err error

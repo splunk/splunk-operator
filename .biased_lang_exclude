@@ -89,3 +89,4 @@ README.md
 build/make_bundle.sh
 helm-chart/
 kuttl/
+Makefile
