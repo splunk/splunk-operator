@@ -380,5 +380,5 @@ setup/ginkgo:
 .PHONY: setup/golint
 setup/golint:
 	@echo Installing golint
-	@go get -u golang.org/x/lint/golint
+	@go install golang.org/x/lint/golint
 	@go mod tidy
