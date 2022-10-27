@@ -103,6 +103,8 @@ jobs:
         run: |
            export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
            make cluster-up
+           cat ~/.kube/config
+           mv ~/.kube/config ~/.kube/config.bk
            aws eks update-kubeconfig --region ${{ secrets.AWS_DEFAULT_REGION }} --name ${{ env.TEST_CLUSTER_NAME }}
       - name: install metric server
         run: |
