@@ -103,6 +103,7 @@ jobs:
         run: |
            export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
            make cluster-up
+           aws eks update-kubeconfig --region ${{ secrets.AWS_DEFAULT_REGION }} --name ${{ env.TEST_CLUSTER_NAME }}
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
