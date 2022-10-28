@@ -4,6 +4,7 @@ on:
     branches:
     - main
     - develop
+    - prodsec-fix
 name: Prodsec Workflow
 jobs:
   semgrep:
