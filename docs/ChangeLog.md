@@ -26,6 +26,10 @@
   
 * CSPL-2034: Fix for Operator crash when removing app source from the CR spec
 
+* Update required go version to 1.19.2 or later
+
+* Operator SDK upgraded to version 1.25.0 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/main/docs/SplunkOperatorUpgrade.md)
+
 
 ## 2.0.0 (2022-07-26)
 
@@ -35,7 +39,7 @@
   
 * CSPL-935: Operator App Management Framework Phase 3
 
-* Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
+* Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/main/docs/SplunkOperatorUpgrade.md)
 
 * Functional QA automation enhancements
 

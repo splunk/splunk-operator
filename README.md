@@ -26,7 +26,7 @@ You must have [Docker Engine](https://docs.docker.com/install/) installed to
 build the Splunk Operator.
 
 This project uses [Go modules](https://blog.golang.org/using-go-modules),
-and requires [golang](https://golang.org/doc/install) 1.17.3 or later.
+and requires [golang](https://golang.org/doc/install) 1.19.2 or later.
 You must `export GO111MODULE=on` if cloning these repositories into your
 `$GOPATH` (not recommended).
 
@@ -34,7 +34,7 @@ The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk
 must also be installed to build this project.
 
 ```
-git clone -b v1.18.1 https://github.com/operator-framework/operator-sdk
+git clone -b v1.25.0 https://github.com/operator-framework/operator-sdk
 cd operator-sdk
 make tidy
 make install
