@@ -52,6 +52,19 @@ const (
 	ScopeLocal                = "local"
 	ScopeCluster              = "cluster"
 	ScopeClusterWithPreConfig = "clusterWithPreConfig"
+	ScopePremiumApps          = "premiumApps"
+)
+
+// Values to represent the properties for the scope premiumApps
+const (
+	PremiumAppsTypeEs = "enterpriseSecurity"
+)
+
+// Values to represent the defaults of enterprise security app
+const (
+	SslEnablementStrict = "strict"
+	SslEnablementAuto   = "auto"
+	SslEnablementIgnore = "ignore"
 )
 
 // AppDeploymentStatus represents the status of an App on the Pod
@@ -348,9 +361,37 @@ type AppSourceDefaultSpec struct {
 	// +optional
 	VolName string `json:"volumeName,omitempty"`
 
-	// Scope of the App deployment: cluster, clusterWithPreConfig, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
+	// Scope of the App deployment: cluster, clusterWithPreConfig, local, premiumApps. Scope determines whether the App(s) is/are installed locally, cluster-wide or its a premium app
 	// +optional
 	Scope string `json:"scope,omitempty"`
+
+	// Properties for premium apps, fill in when scope premiumApps is chosen
+	// +optional
+	PremiumAppsProps PremiumAppsProps `json:"premiumAppsProps,omitempty"`
+}
+
+// PremiumAppsProps represents properties for premium apps such as ES
+type PremiumAppsProps struct {
+	// Type: enterpriseSecurity for now, can accomodate itsi etc.. later
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Enterpreise Security App defaults
+	// +optional
+	EsDefaults EsDefaults `json:"esDefaults,omitempty"`
+}
+
+type EsDefaults struct {
+	// Sets the sslEnablement value for ES app installation
+	//     strict: Ensure that SSL is enabled
+	//             in the web.conf configuration file to use
+	//             this mode. Otherwise, the installer exists
+	//	     	   with an error.
+	//     auto: Enables SSL in the etc/system/local/web.conf
+	//           configuration file. This is the DEFAULT mode
+	//           used by the operator if left empty.
+	//     ignore: Ignores whether SSL is enabled or disabled.
+	SslEnablement string `json:"sslEnablement,omitempty"`
 }
 
 // AppSourceSpec defines list of App package (*.spl, *.tgz) locations on remote volumes
