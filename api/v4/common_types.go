@@ -381,6 +381,7 @@ type PremiumAppsProps struct {
 	EsDefaults EsDefaults `json:"esDefaults,omitempty"`
 }
 
+// EsDefaults captures defaults for the Enterprise Security App
 type EsDefaults struct {
 	// Sets the sslEnablement value for ES app installation
 	//     strict: Ensure that SSL is enabled
