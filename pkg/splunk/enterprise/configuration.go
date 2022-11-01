@@ -1372,7 +1372,7 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpe
 
 // isAppSourceScopeValid checks for valid app source
 func isAppSourceScopeValid(scope string) bool {
-	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopeClusterWithPreConfig
+	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopeClusterWithPreConfig || scope == enterpriseApi.ScopePremiumApps
 }
 
 // validateSplunkAppSources validates the App source config in App Framework spec
@@ -1383,6 +1383,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	if !localScope {
 		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
 		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
+		duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
 	}
 
 	duplicateAppSourceNameChecker := make(map[string]bool)
@@ -1424,7 +1425,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 			}
 
 			if !isAppSourceScopeValid(appSrc.Scope) {
-				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
+				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig or premiumApps", appSrc.Name)
 			}
 
 			scope = appSrc.Scope

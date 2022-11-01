@@ -916,10 +916,36 @@ spec:
                           description: Logical name for the set of apps placed in
                             this location. Logical name must be unique to the appRepo
                           type: string
+                        premiumAppsProps:
+                          description: Properties for premium apps, fill in when scope
+                            premiumApps is chosen
+                          properties:
+                            esDefaults:
+                              description: Enterpreise Security App defaults
+                              properties:
+                                sslEnablement:
+                                  description: "Sets the sslEnablement value for ES
+                                    app installation     strict: Ensure that SSL is
+                                    enabled             in the web.conf configuration
+                                    file to use             this mode. Otherwise,
+                                    the installer exists \t     \t   with an error.
+                                    \    auto: Enables SSL in the etc/system/local/web.conf
+                                    \          configuration file. This is the DEFAULT
+                                    mode           used by the operator if left empty.
+                                    \    ignore: Ignores whether SSL is enabled or
+                                    disabled."
+                                  type: string
+                              type: object
+                            type:
+                              description: 'Type: enterpriseSecurity for now, can
+                                accomodate itsi etc.. later'
+                              type: string
+                          type: object
                         scope:
                           description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                            local. Scope determines whether the App(s) is/are installed
-                            locally or cluster-wide'
+                            local, premiumApps. Scope determines whether the App(s)
+                            is/are installed locally, cluster-wide or its a premium
+                            app'
                           type: string
                         volumeName:
                           description: Remote Storage Volume name
@@ -941,10 +967,35 @@ spec:
                     description: Defines the default configuration settings for App
                       sources
                     properties:
+                      premiumAppsProps:
+                        description: Properties for premium apps, fill in when scope
+                          premiumApps is chosen
+                        properties:
+                          esDefaults:
+                            description: Enterpreise Security App defaults
+                            properties:
+                              sslEnablement:
+                                description: "Sets the sslEnablement value for ES
+                                  app installation     strict: Ensure that SSL is
+                                  enabled             in the web.conf configuration
+                                  file to use             this mode. Otherwise, the
+                                  installer exists \t     \t   with an error.     auto:
+                                  Enables SSL in the etc/system/local/web.conf           configuration
+                                  file. This is the DEFAULT mode           used by
+                                  the operator if left empty.     ignore: Ignores
+                                  whether SSL is enabled or disabled."
+                                type: string
+                            type: object
+                          type:
+                            description: 'Type: enterpriseSecurity for now, can accomodate
+                              itsi etc.. later'
+                            type: string
+                        type: object
                       scope:
                         description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                          local. Scope determines whether the App(s) is/are installed
-                          locally or cluster-wide'
+                          local, premiumApps. Scope determines whether the App(s)
+                          is/are installed locally, cluster-wide or its a premium
+                          app'
                         type: string
                       volumeName:
                         description: Remote Storage Volume name
@@ -3533,10 +3584,36 @@ spec:
                                 in this location. Logical name must be unique to the
                                 appRepo
                               type: string
+                            premiumAppsProps:
+                              description: Properties for premium apps, fill in when
+                                scope premiumApps is chosen
+                              properties:
+                                esDefaults:
+                                  description: Enterpreise Security App defaults
+                                  properties:
+                                    sslEnablement:
+                                      description: "Sets the sslEnablement value for
+                                        ES app installation     strict: Ensure that
+                                        SSL is enabled             in the web.conf
+                                        configuration file to use             this
+                                        mode. Otherwise, the installer exists \t     \t
+                                        \  with an error.     auto: Enables SSL in
+                                        the etc/system/local/web.conf           configuration
+                                        file. This is the DEFAULT mode           used
+                                        by the operator if left empty.     ignore:
+                                        Ignores whether SSL is enabled or disabled."
+                                      type: string
+                                  type: object
+                                type:
+                                  description: 'Type: enterpriseSecurity for now,
+                                    can accomodate itsi etc.. later'
+                                  type: string
+                              type: object
                             scope:
                               description: 'Scope of the App deployment: cluster,
-                                clusterWithPreConfig, local. Scope determines whether
-                                the App(s) is/are installed locally or cluster-wide'
+                                clusterWithPreConfig, local, premiumApps. Scope determines
+                                whether the App(s) is/are installed locally, cluster-wide
+                                or its a premium app'
                               type: string
                             volumeName:
                               description: Remote Storage Volume name
@@ -3559,10 +3636,36 @@ spec:
                         description: Defines the default configuration settings for
                           App sources
                         properties:
+                          premiumAppsProps:
+                            description: Properties for premium apps, fill in when
+                              scope premiumApps is chosen
+                            properties:
+                              esDefaults:
+                                description: Enterpreise Security App defaults
+                                properties:
+                                  sslEnablement:
+                                    description: "Sets the sslEnablement value for
+                                      ES app installation     strict: Ensure that
+                                      SSL is enabled             in the web.conf configuration
+                                      file to use             this mode. Otherwise,
+                                      the installer exists \t     \t   with an error.
+                                      \    auto: Enables SSL in the etc/system/local/web.conf
+                                      \          configuration file. This is the DEFAULT
+                                      mode           used by the operator if left
+                                      empty.     ignore: Ignores whether SSL is enabled
+                                      or disabled."
+                                    type: string
+                                type: object
+                              type:
+                                description: 'Type: enterpriseSecurity for now, can
+                                  accomodate itsi etc.. later'
+                                type: string
+                            type: object
                           scope:
                             description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                              local. Scope determines whether the App(s) is/are installed
-                              locally or cluster-wide'
+                              local, premiumApps. Scope determines whether the App(s)
+                              is/are installed locally, cluster-wide or its a premium
+                              app'
                             type: string
                           volumeName:
                             description: Remote Storage Volume name
@@ -4721,10 +4824,36 @@ spec:
                           description: Logical name for the set of apps placed in
                             this location. Logical name must be unique to the appRepo
                           type: string
+                        premiumAppsProps:
+                          description: Properties for premium apps, fill in when scope
+                            premiumApps is chosen
+                          properties:
+                            esDefaults:
+                              description: Enterpreise Security App defaults
+                              properties:
+                                sslEnablement:
+                                  description: "Sets the sslEnablement value for ES
+                                    app installation     strict: Ensure that SSL is
+                                    enabled             in the web.conf configuration
+                                    file to use             this mode. Otherwise,
+                                    the installer exists \t     \t   with an error.
+                                    \    auto: Enables SSL in the etc/system/local/web.conf
+                                    \          configuration file. This is the DEFAULT
+                                    mode           used by the operator if left empty.
+                                    \    ignore: Ignores whether SSL is enabled or
+                                    disabled."
+                                  type: string
+                              type: object
+                            type:
+                              description: 'Type: enterpriseSecurity for now, can
+                                accomodate itsi etc.. later'
+                              type: string
+                          type: object
                         scope:
                           description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                            local. Scope determines whether the App(s) is/are installed
-                            locally or cluster-wide'
+                            local, premiumApps. Scope determines whether the App(s)
+                            is/are installed locally, cluster-wide or its a premium
+                            app'
                           type: string
                         volumeName:
                           description: Remote Storage Volume name
@@ -4746,10 +4875,35 @@ spec:
                     description: Defines the default configuration settings for App
                       sources
                     properties:
+                      premiumAppsProps:
+                        description: Properties for premium apps, fill in when scope
+                          premiumApps is chosen
+                        properties:
+                          esDefaults:
+                            description: Enterpreise Security App defaults
+                            properties:
+                              sslEnablement:
+                                description: "Sets the sslEnablement value for ES
+                                  app installation     strict: Ensure that SSL is
+                                  enabled             in the web.conf configuration
+                                  file to use             this mode. Otherwise, the
+                                  installer exists \t     \t   with an error.     auto:
+                                  Enables SSL in the etc/system/local/web.conf           configuration
+                                  file. This is the DEFAULT mode           used by
+                                  the operator if left empty.     ignore: Ignores
+                                  whether SSL is enabled or disabled."
+                                type: string
+                            type: object
+                          type:
+                            description: 'Type: enterpriseSecurity for now, can accomodate
+                              itsi etc.. later'
+                            type: string
+                        type: object
                       scope:
                         description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                          local. Scope determines whether the App(s) is/are installed
-                          locally or cluster-wide'
+                          local, premiumApps. Scope determines whether the App(s)
+                          is/are installed locally, cluster-wide or its a premium
+                          app'
                         type: string
                       volumeName:
                         description: Remote Storage Volume name
@@ -7338,10 +7492,36 @@ spec:
                                 in this location. Logical name must be unique to the
                                 appRepo
                               type: string
+                            premiumAppsProps:
+                              description: Properties for premium apps, fill in when
+                                scope premiumApps is chosen
+                              properties:
+                                esDefaults:
+                                  description: Enterpreise Security App defaults
+                                  properties:
+                                    sslEnablement:
+                                      description: "Sets the sslEnablement value for
+                                        ES app installation     strict: Ensure that
+                                        SSL is enabled             in the web.conf
+                                        configuration file to use             this
+                                        mode. Otherwise, the installer exists \t     \t
+                                        \  with an error.     auto: Enables SSL in
+                                        the etc/system/local/web.conf           configuration
+                                        file. This is the DEFAULT mode           used
+                                        by the operator if left empty.     ignore:
+                                        Ignores whether SSL is enabled or disabled."
+                                      type: string
+                                  type: object
+                                type:
+                                  description: 'Type: enterpriseSecurity for now,
+                                    can accomodate itsi etc.. later'
+                                  type: string
+                              type: object
                             scope:
                               description: 'Scope of the App deployment: cluster,
-                                clusterWithPreConfig, local. Scope determines whether
-                                the App(s) is/are installed locally or cluster-wide'
+                                clusterWithPreConfig, local, premiumApps. Scope determines
+                                whether the App(s) is/are installed locally, cluster-wide
+                                or its a premium app'
                               type: string
                             volumeName:
                               description: Remote Storage Volume name
@@ -7364,10 +7544,36 @@ spec:
                         description: Defines the default configuration settings for
                           App sources
                         properties:
+                          premiumAppsProps:
+                            description: Properties for premium apps, fill in when
+                              scope premiumApps is chosen
+                            properties:
+                              esDefaults:
+                                description: Enterpreise Security App defaults
+                                properties:
+                                  sslEnablement:
+                                    description: "Sets the sslEnablement value for
+                                      ES app installation     strict: Ensure that
+                                      SSL is enabled             in the web.conf configuration
+                                      file to use             this mode. Otherwise,
+                                      the installer exists \t     \t   with an error.
+                                      \    auto: Enables SSL in the etc/system/local/web.conf
+                                      \          configuration file. This is the DEFAULT
+                                      mode           used by the operator if left
+                                      empty.     ignore: Ignores whether SSL is enabled
+                                      or disabled."
+                                    type: string
+                                type: object
+                              type:
+                                description: 'Type: enterpriseSecurity for now, can
+                                  accomodate itsi etc.. later'
+                                type: string
+                            type: object
                           scope:
                             description: 'Scope of the App deployment: cluster, clusterWithPreConfig,
-                              local. Scope determines whether the App(s) is/are installed
-                              locally or cluster-wide'
+                              local, premiumApps. Scope determines whether the App(s)
+                              is/are installed locally, cluster-wide or its a premium
+                              app'
                             type: string
                           volumeName:
                             description: Remote Storage Volume name
