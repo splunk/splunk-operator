@@ -360,7 +360,7 @@ setup/ginkgo:
 	@echo Installing ginkgo
 	@go get github.com/onsi/ginkgo/ginkgo
 	@echo Installing gomega
-	@go get github.com/onsi/gomega/...
+	@go get github.com/onsi/gomega@v1.22.1
 
 .PHONY: setup/golint
 setup/golint:
