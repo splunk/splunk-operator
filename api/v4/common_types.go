@@ -392,6 +392,7 @@ type EsDefaults struct {
 	//           configuration file. This is the DEFAULT mode
 	//           used by the operator if left empty.
 	//     ignore: Ignores whether SSL is enabled or disabled.
+	// +optional
 	SslEnablement string `json:"sslEnablement,omitempty"`
 }
 
