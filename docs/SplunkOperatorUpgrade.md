@@ -99,7 +99,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: WATCH_NAMESPACE
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.1-a1
+          value: splunk/splunk:9.0.2
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME

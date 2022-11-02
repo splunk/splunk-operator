@@ -145,7 +145,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 3
-  image: "splunk/splunk:9.0.1-a1"
+  image: "splunk/splunk:9.0.2"
   clusterManagerRef:
     name: example
   defaults: |-
