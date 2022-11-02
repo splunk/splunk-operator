@@ -211,15 +211,18 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 				result = true
 			}
 
-			if current.Containers[idx].LivenessProbe != nil && revised.Containers[idx].LivenessProbe != nil &&
-				current.Containers[idx].LivenessProbe.InitialDelaySeconds != revised.Containers[idx].LivenessProbe.InitialDelaySeconds {
-				current.Containers[idx].LivenessProbe.InitialDelaySeconds = revised.Containers[idx].LivenessProbe.InitialDelaySeconds
+			if hasProbeChanged(current.Containers[idx].LivenessProbe, revised.Containers[idx].LivenessProbe) {
+				current.Containers[idx].LivenessProbe = revised.Containers[idx].LivenessProbe
 				result = true
 			}
 
-			if current.Containers[idx].ReadinessProbe != nil && revised.Containers[idx].ReadinessProbe != nil &&
-				current.Containers[idx].ReadinessProbe.InitialDelaySeconds != revised.Containers[idx].ReadinessProbe.InitialDelaySeconds {
-				current.Containers[idx].ReadinessProbe.InitialDelaySeconds = revised.Containers[idx].ReadinessProbe.InitialDelaySeconds
+			if hasProbeChanged(current.Containers[idx].ReadinessProbe, revised.Containers[idx].ReadinessProbe) {
+				current.Containers[idx].ReadinessProbe = revised.Containers[idx].ReadinessProbe
+				result = true
+			}
+
+			if hasProbeChanged(current.Containers[idx].StartupProbe, revised.Containers[idx].StartupProbe) {
+				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
 				result = true
 			}
 		}
@@ -307,4 +310,27 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 	}
 
 	return result
+}
+
+// hasProbeChanged checks for changes in given current probe
+func hasProbeChanged(currentProbe *corev1.Probe, revisedProbe *corev1.Probe) bool {
+	if currentProbe == nil {
+		if revisedProbe == nil {
+			return false
+		}
+		return true
+	}
+	if currentProbe.InitialDelaySeconds != revisedProbe.InitialDelaySeconds {
+		return true
+	}
+	if currentProbe.TimeoutSeconds != revisedProbe.TimeoutSeconds {
+		return true
+	}
+	if currentProbe.PeriodSeconds != revisedProbe.PeriodSeconds {
+		return true
+	}
+	if currentProbe.FailureThreshold != revisedProbe.FailureThreshold {
+		return true
+	}
+	return false
 }
