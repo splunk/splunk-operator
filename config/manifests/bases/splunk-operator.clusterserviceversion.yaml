@@ -10,11 +10,9 @@ metadata:
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
-    marketplace.openshift.io/remote-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/pricing?utm_source=openshift_console
-    marketplace.openshift.io/support-workflow: https://marketplace.redhat.com/en-us/operators/splunk-operator/support?utm_source=openshift_console
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.0.0
+  name: splunk-operator.v2.1.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -276,5 +274,5 @@ spec:
   provider:
     name: Splunk Inc.
     url: www.splunk.com
-  replaces: splunk-operator.v0.1.0
-  version: 2.0.0
+  replaces: splunk-operator.v2.0.0
+  version: 2.1.0

@@ -678,7 +678,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	return SplunkOperatorAppConfigMap, configMapDataChanged, nil
 }
 
-//  setupInitContainer modifies the podTemplateSpec object
+// setupInitContainer modifies the podTemplateSpec object
 func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string, isEtcVolEph bool) {
 	var volMntName string
 
@@ -1707,7 +1707,7 @@ func CopyFileToPod(ctx context.Context, c splcommon.ControllerClient, namespace 
 //go:linkname cpMakeTar k8s.io/kubernetes/pkg/kubectl/cmd/cp.makeTar
 //func cpMakeTar(srcPath, destPath string, writer io.Writer) error
 
-//validateMonitoringConsoleRef validates the changes in monitoringConsoleRef
+// validateMonitoringConsoleRef validates the changes in monitoringConsoleRef
 func validateMonitoringConsoleRef(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet, serviceURLs []corev1.EnvVar) error {
 	var err error
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}

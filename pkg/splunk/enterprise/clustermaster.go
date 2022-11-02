@@ -403,7 +403,7 @@ func getClusterMasterList(ctx context.Context, c splcommon.ControllerClient, cr 
 	return numOfObjects, nil
 }
 
-//VerifyCMasterisMultisite checks if its a multisite
+// VerifyCMasterisMultisite checks if its a multisite
 func VerifyCMasterisMultisite(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
 	reqLogger := log.FromContext(ctx)

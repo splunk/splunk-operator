@@ -35,7 +35,7 @@ func TestCpMakeTar(t *testing.T) {
 	}
 }
 
-//TestRecursiveTarEmptySrcDir test recursively tar empty directory
+// TestRecursiveTarEmptySrcDir test recursively tar empty directory
 func TestRecursiveTarEmptySrcDir(t *testing.T) {
 
 	// prepare temporary files to tar operation
