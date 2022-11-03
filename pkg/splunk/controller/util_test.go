@@ -158,6 +158,14 @@ func TestMergePodUpdates(t *testing.T) {
 	}
 	podUpdateTester("Pod ReadinessProbe changed")
 
+	// Check if the startup probe initalDelay is updated
+	revised.Spec.Containers[0].StartupProbe = &corev1.Probe{InitialDelaySeconds: 200}
+	current.Spec.Containers[0].StartupProbe = &corev1.Probe{InitialDelaySeconds: 30}
+	matcher = func() bool {
+		return current.Spec.Containers[0].StartupProbe.InitialDelaySeconds == revised.Spec.Containers[0].StartupProbe.InitialDelaySeconds
+	}
+	podUpdateTester("Pod ReadinessProbe changed")
+
 	// check container removed
 	revised.Spec.Containers = []corev1.Container{}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
@@ -275,4 +283,58 @@ func TestSortStatefulSetSlices(t *testing.T) {
 		return reflect.DeepEqual(sorted.Containers[0].Env, unsorted.Containers[0].Env)
 	}
 	sortTester("Env variables")
+}
+
+func TestHasProbeChanged(t *testing.T) {
+	var current, revised corev1.PodTemplateSpec
+	revised.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
+	revised.Spec.Containers[0].LivenessProbe = &corev1.Probe{InitialDelaySeconds: 120}
+
+	current.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
+	current.Spec.Containers[0].LivenessProbe = &corev1.Probe{InitialDelaySeconds: 100}
+
+	// Check return is false when both probes are nil
+	result := hasProbeChanged(nil, nil)
+	if result {
+		t.Errorf("Both probes nil. hasProbeChanged() returned %t; want %t", true, false)
+	}
+
+	// Check return is true when currentProbe is true and revisedProbe is not nil
+	result = hasProbeChanged(nil, revised.Spec.Containers[0].LivenessProbe)
+	if !result {
+		t.Errorf("current Probe nil. hasProbeChanged() returned %t; want %t", false, true)
+	}
+
+	// Check return is true when current probe and revised probe InitialDelaySeconds is different
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
+	if !result {
+		t.Errorf("InitialDelaySeconds different. hasProbeChanged() returned %t; want %t", false, true)
+	}
+
+	// Check return is true when current probe and revised probe TimeoutSeconds is different
+	current.Spec.Containers[0].LivenessProbe.InitialDelaySeconds = revised.Spec.Containers[0].LivenessProbe.InitialDelaySeconds
+	current.Spec.Containers[0].LivenessProbe.TimeoutSeconds = 120
+	revised.Spec.Containers[0].LivenessProbe.TimeoutSeconds = 100
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
+	if !result {
+		t.Errorf("TimoutSeconds different. hasProbeChanged() returned %t; want %t", false, true)
+	}
+
+	// Check return is true when current probe and revised probe PeriodSeconds is different
+	current.Spec.Containers[0].LivenessProbe.TimeoutSeconds = revised.Spec.Containers[0].LivenessProbe.TimeoutSeconds
+	current.Spec.Containers[0].LivenessProbe.PeriodSeconds = 120
+	revised.Spec.Containers[0].LivenessProbe.PeriodSeconds = 100
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
+	if !result {
+		t.Errorf("PeriodSeconds different. hasProbeChanged() returned %t; want %t", false, true)
+	}
+
+	// Check return is true when current probe and revised probe FailureThreshold is different
+	current.Spec.Containers[0].LivenessProbe.PeriodSeconds = revised.Spec.Containers[0].LivenessProbe.PeriodSeconds
+	current.Spec.Containers[0].LivenessProbe.FailureThreshold = 120
+	revised.Spec.Containers[0].LivenessProbe.FailureThreshold = 100
+	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
+	if !result {
+		t.Errorf("FailureThreshold different. hasProbeChanged() returned %t; want %t", false, true)
+	}
 }
