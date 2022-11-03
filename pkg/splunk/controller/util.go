@@ -315,10 +315,7 @@ func MergeServiceSpecUpdates(ctx context.Context, current *corev1.ServiceSpec, r
 // hasProbeChanged checks for changes in given current probe
 func hasProbeChanged(currentProbe *corev1.Probe, revisedProbe *corev1.Probe) bool {
 	if currentProbe == nil {
-		if revisedProbe == nil {
-			return false
-		}
-		return true
+		return revisedProbe != nil
 	}
 	if currentProbe.InitialDelaySeconds != revisedProbe.InitialDelaySeconds {
 		return true
