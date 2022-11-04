@@ -87,15 +87,15 @@ jobs:
         
     - name: Generate Release Artifacts
       run: |    
-        make generate-artifacts  IMG=splunk/splunk-operator-rc:"${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}" VERSION="${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}"
+        make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
     
     - name: Push release RC Versioned Image
       run: |
-        make docker-push IMG=splunk/splunk-operator-rc:"${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}"
+        make docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
 
     - name: Tag default Release Candidate Image and Push
       run: |
-        docker tag splunk/splunk-operator-rc:"${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}" splunk/splunk-operator-rc:"${{ github.event.inputs.release_version }}-RC"
+        docker tag splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
         docker push splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
     
     - name: Upload Release Artifacts
