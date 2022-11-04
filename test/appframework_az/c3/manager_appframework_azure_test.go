@@ -887,7 +887,12 @@ var _ = Describe("c3appfw test", func() {
 			// Create App framework Spec
 			appSourceName := "appframework-shc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeClusterWithPreConfig, appSourceName, azTestDirShc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceName, azTestDirShc, 60)
+			appFrameworkSpecShc.Defaults.PremiumAppsProps = enterpriseApi.PremiumAppsProps{
+				EsDefaults: enterpriseApi.EsDefaults{
+					SslEnablement: "ignore",
+				},
+			}
 
 			// Deploy C3 SVA
 			// Deploy the Cluster Manager
@@ -907,11 +912,6 @@ var _ = Describe("c3appfw test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
-					},
-					ExtraEnv: []corev1.EnvVar{
-						{
-							Name:  "SPLUNK_ES_SSL_ENABLEMENT",
-							Value: "ignore"},
 					},
 					Volumes: []corev1.Volume{},
 					ClusterMasterRef: corev1.ObjectReference{
@@ -936,25 +936,21 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
-			//################## VERIFICATIONS #############
-			// Verify ES is downloaded
-			testcaseEnvInst.Log.Info("Verify ES app is downloaded on Deployer")
-			initContDownloadLocation := testenv.AppStagingLocOnPod + appSourceName
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			// Get instance of current Search Head Cluster CR with latest config\
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
+			Expect(err).To(Succeed(), "Unable to get Search Head Cluster Instance")
+
+			//######### INITIAL VERIFICATIONS #############
+			appVersion := "V1"
+			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), deployerPod, appFileList, initContDownloadLocation)
-
-			// Verify ES app is installed locally on Deployer
-			testcaseEnvInst.Log.Info("Verify ES app is installed locally on Deployer")
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), deployerPod, esApp, true, "disabled", false, false)
-
-			// Verify ES is installed on Search Heads
-			testcaseEnvInst.Log.Info("Verify ES app is installed on Search Heads")
-			podNames := []string{}
-			for i := 0; i < int(shSpec.Replicas); i++ {
-				sh := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
-				podNames = append(podNames, string(sh))
-			}
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), podNames, esApp, true, "enabled", false, true)
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: int(shc.Spec.Replicas), CrClusterPods: shcPodNames}
+			allAppSourceInfo := []testenv.AppSourceInfo{shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 
