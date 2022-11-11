@@ -603,7 +603,7 @@ func (ppln *AppInstallPipeline) shutdownPipelinePhase(ctx context.Context, phase
 	ppln.phaseWaiter.Done()
 }
 
-//downloadPhaseManager creates download phase manager for the install pipeline
+// downloadPhaseManager creates download phase manager for the install pipeline
 func (ppln *AppInstallPipeline) downloadPhaseManager(ctx context.Context) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("downloadPhaseManager")
@@ -1845,9 +1845,9 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 
 // runPlaybook implements installing the app for premiumApps
 // For ES app:
-//     1. Installs the app like any other app on standalone/SHC deployer
-//     2. Runs the post install command for the ES app
-//     3. Sets the bundle push flag for the deployer only
+//  1. Installs the app like any other app on standalone/SHC deployer
+//  2. Runs the post install command for the ES app
+//  3. Sets the bundle push flag for the deployer only
 func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) error {
 	cr := preCtx.cr
 	worker := preCtx.localCtx.worker

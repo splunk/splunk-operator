@@ -202,7 +202,7 @@ delete_operator() {
 deploy_operator() {
     echo "--------------------------------------------------------------"
     echo "installing Splunk Operator ....." 
-    kubectl apply -f ${manifest_file}
+    kubectl apply -f ${manifest_file} --server-side  --force-conflicts
     echo "--------------------------------------------------------------"
   echo "wait for operator pod to be ready..."
   # sleep before checking for deployment, in slow clusters deployment call may not even started

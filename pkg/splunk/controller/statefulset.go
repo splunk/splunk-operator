@@ -322,7 +322,7 @@ func DeleteReferencesToAutomatedMCIfExists(ctx context.Context, client splcommon
 	return nil
 }
 
-//isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
+// isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
 func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerReference) bool {
 	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID())
 }
