@@ -134,7 +134,7 @@ To verify that a new Splunk Enterprise Docker image was applied to a pod, you ca
 ​
 ```bash
 kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
-image: splunk/splunk:9.0.1
+image: splunk/splunk:9.0.2
 imagePullPolicy: IfNotPresent
 ```
 ## Splunk Enterprise Cluster upgrade example
