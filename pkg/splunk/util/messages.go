@@ -43,4 +43,7 @@ const (
 	// splunkSSHWarningMessage Note: splunk 9.0 throws warning message "warning: server certificate hostname validation is disabled. please see server.conf/[sslconfig]/cliverifyservername for details.\n"
 	// we are supressing the message
 	splunkSSHWarningMessage = "WARNING: Server Certificate Hostname Validation is disabled. Please see server.conf/[sslConfig]/cliVerifyServerName for details.\n"
+
+	// splunkEsAppSSLWarning Note: The ES app post install spews out a harmless ES app message which can be ignored
+	splunkEsAppSSLWarning = "INFO: Installation complete\nINFO: SSL enablement set to ignore, continuing...\n"
 )

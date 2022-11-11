@@ -1420,7 +1420,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 		var scope string
 		if appSrc.Scope != "" {
-			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal {
+			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal && appSrc.Scope != enterpriseApi.ScopePremiumApps {
 				return fmt.Errorf("invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
 			}
 
@@ -1441,10 +1441,6 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 			return fmt.Errorf("duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
 		}
 		duplicateAppSourceStorageChecker[scope][vol+appSrc.Location] = true
-	}
-
-	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal {
-		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
 	if appFramework.Defaults.Scope != "" && !isAppSourceScopeValid(appFramework.Defaults.Scope) {
@@ -1513,11 +1509,14 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		return err
 	}
 
-	err = validateSplunkAppSources(appFramework, localScope)
+	/*
+		err = validateSplunkAppSources(appFramework, localScope)
 
-	if err == nil {
-		scopedLog.Info("App framework configuration is valid")
-	}
+		if err == nil {
+			scopedLog.Info("App framework configuration is valid")
+		}
+	*/
+
 	return err
 }
 

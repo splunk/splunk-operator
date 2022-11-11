@@ -205,6 +205,15 @@ func getOrdinalValFromPodName(podName string) (int, error) {
 	return strconv.Atoi(tokens[len(tokens)-1])
 }
 
+// canAppScopeHaveInstallWorker tells us if the given scope can have an install worker
+// Only local and premium app scopes can have install workers in pipeline q
+func canAppScopeHaveInstallWorker(scope string) bool {
+	if scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopePremiumApps {
+		return true
+	}
+	return false
+}
+
 // addWorkersToPipelinePhase adds a worker to a given pipeline phase
 func (ppln *AppInstallPipeline) addWorkersToPipelinePhase(ctx context.Context, phaseID enterpriseApi.AppPhaseType, workers ...*PipelineWorker) {
 	reqLogger := log.FromContext(ctx)
@@ -648,18 +657,18 @@ downloadPhase:
 	}
 }
 
-// runPlaybook implements the playbook for local scoped app install
-func (ctx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
-	worker := ctx.worker
-	cr := worker.cr
-	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("localScopeInstallContext.runPlaybook").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+// markWorkerPhaseInstallationComplete marks the worker phase as app package installation complete
+func markWorkerPhaseInstallationComplete(phaseInfo *enterpriseApi.PhaseInfo) {
+	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+	phaseInfo.FailCount = 0
+}
 
-	defer func() {
-		<-ctx.sem
-		worker.isActive = false
-		worker.waiter.Done()
-	}()
+// installAppAndCleanup installs an app for an install worker and cleans up the package on operator and target pod
+func installAppAndCleanup(rctx context.Context, localCtx *localScopePlaybookContext, cr splcommon.MetaObject, phaseInfo *enterpriseApi.PhaseInfo) error {
+	worker := localCtx.worker
+
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("installAppAndCleanup").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
 
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
@@ -667,9 +676,7 @@ func (ctx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
 	// if appsrc is "appSrc1", then appPkgPathOnPod is /operator-staging/appframework/appSrc1/app1.tgz_abcd1234
 	appPkgPathOnPod := filepath.Join(appBktMnt, worker.appSrcName, appPkgFileName)
 
-	phaseInfo := getPhaseInfoByPhaseType(rctx, worker, enterpriseApi.PhaseInstall)
-
-	if !checkIfFileExistsOnPod(rctx, cr, appPkgPathOnPod, ctx.podExecClient) {
+	if !checkIfFileExistsOnPod(rctx, cr, appPkgPathOnPod, localCtx.podExecClient) {
 		scopedLog.Error(nil, "app pkg missing on Pod", "app pkg path", appPkgPathOnPod)
 		phaseInfo.Status = enterpriseApi.AppPkgMissingOnPodError
 
@@ -686,7 +693,7 @@ func (ctx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
-	stdOut, stdErr, err := ctx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 	// if the app was already installed previously, then just mark it for install complete
 	if stdErr != "" || err != nil {
 		phaseInfo.FailCount++
@@ -694,15 +701,10 @@ func (ctx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
 		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
 	}
 
-	// Mark the worker for install complete status
-	scopedLog.Info("App pkg installation complete")
-	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-	phaseInfo.FailCount = 0
-
 	// Delete the app package from the target pod /operator-staging/appframework/ location
 	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
 	streamOptions = splutil.NewStreamOptionsObject(command)
-	stdOut, stdErr, err = ctx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	stdOut, stdErr, err = localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
 		return fmt.Errorf("app pkg deletion failed.  stdOut: %s, stdErr: %s, app pkg path: %s", stdOut, stdErr, appPkgPathOnPod)
@@ -710,6 +712,35 @@ func (ctx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
 
 	// Try to remove the app package from the Operator Pod
 	tryAppPkgCleanupFromOperatorPod(rctx, worker)
+
+	return nil
+}
+
+// runPlaybook implements the playbook for local scoped app install
+func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) error {
+	worker := localCtx.worker
+	cr := worker.cr
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("localScopePlaybookContext.runPlaybook").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+
+	defer func() {
+		<-localCtx.sem
+		worker.isActive = false
+		worker.waiter.Done()
+	}()
+
+	// Get phase info
+	phaseInfo := getPhaseInfoByPhaseType(rctx, worker, enterpriseApi.PhaseInstall)
+
+	// Call the API to install an app and cleanup
+	err := installAppAndCleanup(rctx, localCtx, cr, phaseInfo)
+	if err != nil {
+		scopedLog.Error(err, "app package installation error")
+		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
+	}
+
+	// Mark the worker for install complete status
+	markWorkerPhaseInstallationComplete(phaseInfo)
 
 	return nil
 }
@@ -1013,17 +1044,36 @@ installHandler:
 				break installHandler
 			}
 
+			// Install workers can exist for local scope and premium app scopes
 			if installWorker != nil {
 				podExecClient := splutil.GetPodExecClient(installWorker.client, installWorker.cr, installWorker.targetPodName)
 				podID, _ := getOrdinalValFromPodName(installWorker.targetPodName)
 
-				ctxt := getLocalScopePlaybookContext(ctx, installWorker, installTracker[podID], podExecClient)
-				if ctxt != nil {
-					installWorker.waiter.Add(1)
-					go ctxt.runPlaybook(ctx)
-				} else {
+				// Get app source spec
+				appSrcSpec, err := getAppSrcSpec(installWorker.afwConfig.AppSources, installWorker.appSrcName)
+				if err != nil {
+					scopedLog.Error(err, "getting app source spec failed while installing app app src name %s", installWorker.appSrcName)
+				}
+
+				// Since local app context is needed for premiumAppContext we retrieve it for both cases
+				localCtx := getLocalScopePlaybookContext(ctx, installWorker, installTracker[podID], podExecClient)
+				if localCtx == nil {
 					<-installTracker[podID]
 					scopedLog.Error(nil, "unable to get the local scoped context. app name %s", installWorker.appDeployInfo.AppName)
+				} else if appSrcSpec.Scope == enterpriseApi.ScopeLocal {
+					// Handle local app scope
+					installWorker.waiter.Add(1)
+					go localCtx.runPlaybook(ctx)
+				} else if appSrcSpec.Scope == enterpriseApi.ScopePremiumApps {
+					// Handle premium app scope
+					preCtx := getPremiumAppScopePlaybookContext(ctx, localCtx, appSrcSpec, ppln.client, ppln.cr, ppln)
+					if preCtx != nil {
+						installWorker.waiter.Add(1)
+						go preCtx.runPlaybook(ctx)
+					} else {
+						<-installTracker[podID]
+						scopedLog.Error(nil, "unable to get the premium app scoped context. app name %s", installWorker.appDeployInfo.AppName)
+					}
 				}
 			} else {
 				// This should never happen
@@ -1106,15 +1156,16 @@ installPhase:
 
 		default:
 			for _, installWorker := range pplnPhase.q {
+				// Only local scope and premium apps scope can have install workers
+				// Cluster scope has only bundle push no workers to install
 				appScope := getAppSrcScope(ctx, installWorker.afwConfig, installWorker.appSrcName)
-				if enterpriseApi.ScopeLocal != appScope {
-					scopedLog.Error(nil, "Install worker with non-local scope", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "pod name", installWorker.targetPodName, "App name", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash, "scope", appScope)
+				if !canAppScopeHaveInstallWorker(appScope) {
+					scopedLog.Error(nil, "Install worker with incorrect scope", "name", installWorker.cr.GetName(), "namespace", installWorker.cr.GetNamespace(), "pod name", installWorker.targetPodName, "App name", installWorker.appDeployInfo.AppName, "digest", installWorker.appDeployInfo.ObjectHash, "scope", appScope)
 					continue
 				}
 
 				phaseInfo := getPhaseInfoByPhaseType(ctx, installWorker, enterpriseApi.PhaseInstall)
 				if isPhaseMaxRetriesReached(ctx, phaseInfo, installWorker.afwConfig) {
-
 					phaseInfo.Status = enterpriseApi.AppPkgInstallError
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
@@ -1296,6 +1347,17 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	return sts
 }
 
+// getPremiumAppScopePlaybookContext returns the idxc playbook context
+func getPremiumAppScopePlaybookContext(ctx context.Context, localCtx *localScopePlaybookContext, appSrcSpec *enterpriseApi.AppSourceSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline) *premiumAppScopePlaybookContext {
+	return &premiumAppScopePlaybookContext{
+		localCtx:    localCtx,
+		appSrcSpec:  appSrcSpec,
+		client:      client,
+		cr:          cr,
+		afwPipeline: afwPipeline,
+	}
+}
+
 // getIdxcPlaybookContext returns the idxc playbook context
 func getIdxcPlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, podExecClient splutil.PodExecClientImpl) *IdxcPlaybookContext {
 	return &IdxcPlaybookContext{
@@ -1320,7 +1382,7 @@ func getSHCPlaybookContext(ctx context.Context, client splcommon.ControllerClien
 }
 
 // getLocalScopePlaybookContext returns the local scoped app install playbook context
-func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWorker, sem chan struct{}, podExecClient splutil.PodExecClientImpl) PlaybookImpl {
+func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWorker, sem chan struct{}, podExecClient splutil.PodExecClientImpl) *localScopePlaybookContext {
 	return &localScopePlaybookContext{
 		worker:        installWorker,
 		sem:           sem,
@@ -1720,6 +1782,100 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 		return err
 	}
 
+	return nil
+}
+
+// getSslCliOption gets the ssl cli option for installing ES app.
+// Returns `ignore` if not configured. Note: Validation of spec done already
+func getSslCliOption(appSrcSpec *enterpriseApi.AppSourceSpec) string {
+	sslEn := appSrcSpec.PremiumAppsProps.EsDefaults.SslEnablement
+	if sslEn != "" {
+		return sslEn
+	}
+
+	return enterpriseApi.SslEnablementIgnore
+}
+
+// Handles ES app post install steps
+func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlaybookContext, phaseInfo *enterpriseApi.PhaseInfo) error {
+	worker := preCtx.localCtx.worker
+	cr := preCtx.cr
+	appSrcSpec := preCtx.appSrcSpec
+
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("handleEsappPostinstall").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+
+	scopedLog.Info("Arjun in runPlaybook checking for scope premium apps")
+
+	// For ES app, run post-install commands
+	var command string
+
+	// Create CLI command
+	sslEn := getSslCliOption(appSrcSpec)
+	if cr.GetObjectKind().GroupVersionKind().Kind != "SearchHeadCluster" {
+		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s' -auth admin:`cat /mnt/splunk-secrets/password`", sslEn)
+	} else {
+		// Pass an extra parameter for SHC deployer in post install command
+		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s --deployment_type shc_deployer' -auth admin:`cat /mnt/splunk-secrets/password`", sslEn)
+	}
+
+	scopedLog.Info("Arjun in runPlaybook found ES app running the post install work ", "command", command)
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	stdOut, stdErr, err := preCtx.localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	// if the app was already installed previously, then just mark it for install complete
+	if stdErr != "" || err != nil {
+		phaseInfo.FailCount++
+		scopedLog.Error(err, "premium scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "post install command", command, "failCount", phaseInfo.FailCount)
+		return fmt.Errorf("premium scoped app package install failed. stdOut: %s, stdErr: %s, post install command: %s, failCount: %d", stdOut, stdErr, command, phaseInfo.FailCount)
+	}
+
+	return nil
+}
+
+// runPlaybook implements installing the app for premiumApps
+// For ES app:
+//     1. Installs the app like any other app on standalone/SHC deployer
+//     2. Runs the post install command for the ES app
+//     3. Sets the bundle push flag for the deployer only
+func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) error {
+	cr := preCtx.cr
+	worker := preCtx.localCtx.worker
+	appSrcSpec := preCtx.appSrcSpec
+
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("premiumAppScopePlaybookContext.runPlaybook").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+
+	defer func() {
+		scopedLog.Info("Arjun here making worker inactive", "worker", worker)
+		<-preCtx.localCtx.sem
+		worker.isActive = false
+		worker.waiter.Done()
+	}()
+
+	// Get phase info
+	phaseInfo := getPhaseInfoByPhaseType(rctx, worker, enterpriseApi.PhaseInstall)
+
+	// Call the API to install an app and clean up
+	err := installAppAndCleanup(rctx, preCtx.localCtx, cr, phaseInfo)
+	if err != nil {
+		scopedLog.Error(err, "premium app package installation error")
+		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
+	}
+
+	// Handle post install for ES app
+	if appSrcSpec.PremiumAppsProps.Type == enterpriseApi.PremiumAppsTypeEs {
+		err = handleEsappPostinstall(rctx, preCtx, phaseInfo)
+		if err != nil {
+			scopedLog.Error(err, "app package post installation error")
+			return fmt.Errorf("app pkg post installation failed. error %s", err.Error())
+		}
+	}
+
+	// Mark app package installation complete
+	markWorkerPhaseInstallationComplete(phaseInfo)
+
+	// All good!
 	return nil
 }
 

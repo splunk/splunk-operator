@@ -244,11 +244,11 @@ func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, strea
 	reqLogger.Info("podexec call returned", "cmd", strings.Join(baseCmd, " "), "stdout", stdOut, "stderr", stdErr, "err", errmsg)
 	// Note: splunk 9.0 throws warning message "warning: server certificate hostname validation is disabled. please see server.conf/[sslconfig]/cliverifyservername for details.\n"
 	// we are supressing the message
-	if strings.Contains(stdErr, splunkSSHWarningMessage) {
-		stdErr = strings.ReplaceAll(stdErr, splunkSSHWarningMessage, "")
+	if strings.Contains(stdErr, splunkSSHWarningMessage) || strings.Contains(stdErr, splunkEsAppSSLWarning) {
+		stdErr = ""
 	}
-	if strings.Contains(stdOut, splunkSSHWarningMessage) {
-		stdOut = strings.ReplaceAll(stdOut, splunkSSHWarningMessage, "")
+	if strings.Contains(stdOut, splunkSSHWarningMessage) || strings.Contains(stdOut, splunkEsAppSSLWarning) {
+		stdOut = ""
 	}
 	return stdOut, stdErr, err
 }
