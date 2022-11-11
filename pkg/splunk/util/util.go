@@ -233,6 +233,21 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 	}
 }
 
+// suppressHarmlessErrorMessages suppresses harmless error messages
+func suppressHarmlessErrorMessages(values ...*string) {
+	for _, val := range values {
+		// Replace ssh warning message
+		if strings.Contains(*val, splunkSSHWarningMessage) {
+			*val = strings.ReplaceAll(*val, splunkSSHWarningMessage, "")
+		}
+
+		// Replace es app ssl warning
+		if strings.Contains(*val, splunkEsAppSSLWarning) {
+			*val = strings.ReplaceAll(*val, splunkEsAppSSLWarning, "")
+		}
+	}
+}
+
 // RunPodExecCommand runs the specific pod exec command
 func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
 	reqLogger := log.FromContext(ctx)
@@ -242,14 +257,10 @@ func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, strea
 		errmsg = err.Error()
 	}
 	reqLogger.Info("podexec call returned", "cmd", strings.Join(baseCmd, " "), "stdout", stdOut, "stderr", stdErr, "err", errmsg)
-	// Note: splunk 9.0 throws warning message "warning: server certificate hostname validation is disabled. please see server.conf/[sslconfig]/cliverifyservername for details.\n"
-	// we are supressing the message
-	if strings.Contains(stdErr, splunkSSHWarningMessage) || strings.Contains(stdErr, splunkEsAppSSLWarning) {
-		stdErr = ""
-	}
-	if strings.Contains(stdOut, splunkSSHWarningMessage) || strings.Contains(stdOut, splunkEsAppSSLWarning) {
-		stdOut = ""
-	}
+
+	// Note: splunk 9.0 throws a few harmless warning error messages, suppress it!
+	suppressHarmlessErrorMessages(&stdErr, &stdOut)
+
 	return stdOut, stdErr, err
 }
 

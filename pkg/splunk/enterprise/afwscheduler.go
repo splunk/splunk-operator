@@ -1479,9 +1479,17 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Context) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("shcPlaybookContext.triggerBundlePush()").WithValues(
+		"shcCaptainUrl", shcPlaybookContext.searchHeadCaptainURL,
+		"cr", shcPlaybookContext.cr.GetName())
+
 	// Reduce the liveness probe level
 	shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
+
+	// Trigger bundle push
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
+	scopedLog.Info("Triggering bundle push", "command", cmd)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 	if err != nil || stdErr != "" {
@@ -1582,6 +1590,8 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 		// check if the bundle push is complete
 		ok, err = shcPlaybookContext.isBundlePushComplete(ctx)
 		if ok {
+			scopedLog.Info("Bundle push complete, setting bundle push state in CR")
+
 			// set the bundle push status to complete
 			setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushComplete)
 
@@ -1874,6 +1884,11 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 
 	// Mark app package installation complete
 	markWorkerPhaseInstallationComplete(phaseInfo)
+
+	// Mark afw pipeline for bundle push on shc deployer
+	if cr.GetObjectKind().GroupVersionKind().Kind == "SearchHeadCluster" {
+		preCtx.afwPipeline.appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
+	}
 
 	// All good!
 	return nil
