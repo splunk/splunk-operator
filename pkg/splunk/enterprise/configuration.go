@@ -1372,18 +1372,19 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpe
 
 // isAppSourceScopeValid checks for valid app source
 func isAppSourceScopeValid(scope string) bool {
-	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopePremiumApps
+	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopePremiumApps || scope == enterpriseApi.ScopeClusterWithPreConfig
 }
 
 // validateSplunkAppSources validates the App source config in App Framework spec
-func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localScope bool) error {
+func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localOrPremScope bool) error {
 
 	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
-	if !localScope {
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
+
+	if !localOrPremScope {
 		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
 		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
-		duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
 	}
 
 	duplicateAppSourceNameChecker := make(map[string]bool)
@@ -1420,7 +1421,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 		var scope string
 		if appSrc.Scope != "" {
-			if localScope && !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopePremiumApps) {
+			if localOrPremScope && !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopePremiumApps) {
 				return fmt.Errorf("invalid scope for App Source: %s. Valid scopes are %s or %s for this kind of CR", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)
 			}
 
@@ -1428,12 +1429,13 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 				return fmt.Errorf("scope for App Source: %s should be either %s or %s or %s", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopeCluster, enterpriseApi.ScopePremiumApps)
 			}
 
-			err := validatePremiumAppsInputs(appSrc)
-
-			if err != nil {
-				return err
+			// Check for premium apps properties
+			if appSrc.Scope == enterpriseApi.ScopePremiumApps {
+				err := validatePremiumAppsInputs(appSrc)
+				if err != nil {
+					return err
+				}
 			}
-
 			scope = appSrc.Scope
 		} else {
 			if appFramework.Defaults.Scope == "" {
@@ -1447,6 +1449,11 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 			return fmt.Errorf("duplicate App Source configured for Volume: %s, and Location: %s combo. Remove the duplicate entry and reapply the configuration", vol, appSrc.Location)
 		}
 		duplicateAppSourceStorageChecker[scope][vol+appSrc.Location] = true
+	}
+
+	if localOrPremScope && appFramework.Defaults.Scope != "" &&
+		(appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopePremiumApps) {
+		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
 	if appFramework.Defaults.Scope != "" && !isAppSourceScopeValid(appFramework.Defaults.Scope) {
@@ -1469,8 +1476,8 @@ func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec) error {
 		return fmt.Errorf("invalid PremiumAppsProps. Valid value is %s", enterpriseApi.PremiumAppsTypeEs)
 	}
 
+	// Check sslEnablement in ES defaults
 	sslEnablementValue := appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement
-
 	if sslEnablementValue != "" && !(sslEnablementValue == enterpriseApi.SslEnablementAuto ||
 		sslEnablementValue == enterpriseApi.SslEnablementIgnore ||
 		sslEnablementValue == enterpriseApi.SslEnablementStrict) {
@@ -1534,7 +1541,6 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 	}
 
 	err = validateSplunkAppSources(appFramework, localScope)
-
 	if err == nil {
 		scopedLog.Info("App framework configuration is valid")
 	}

@@ -825,7 +825,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil || !strings.Contains(err.Error(), "should be either local or cluster or clusterWithPreConfig") {
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("scope for App Source: %s should be either %s or %s or %s", AppFramework.AppSources[0].Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopeCluster, enterpriseApi.ScopePremiumApps)) {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
 
