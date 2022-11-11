@@ -1372,7 +1372,7 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpe
 
 // isAppSourceScopeValid checks for valid app source
 func isAppSourceScopeValid(scope string) bool {
-	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopeClusterWithPreConfig || scope == enterpriseApi.ScopePremiumApps
+	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopePremiumApps
 }
 
 // validateSplunkAppSources validates the App source config in App Framework spec
@@ -1420,12 +1420,18 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 		var scope string
 		if appSrc.Scope != "" {
-			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal && appSrc.Scope != enterpriseApi.ScopePremiumApps {
-				return fmt.Errorf("invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
+			if localScope && !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopePremiumApps) {
+				return fmt.Errorf("invalid scope for App Source: %s. Valid scopes are %s or %s for this kind of CR", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)
 			}
 
 			if !isAppSourceScopeValid(appSrc.Scope) {
-				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig or premiumApps", appSrc.Name)
+				return fmt.Errorf("scope for App Source: %s should be either %s or %s or %s", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopeCluster, enterpriseApi.ScopePremiumApps)
+			}
+
+			err := validatePremiumAppsInputs(appSrc)
+
+			if err != nil {
+				return err
 			}
 
 			scope = appSrc.Scope
@@ -1457,8 +1463,26 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	return nil
 }
 
-//  isAppFrameworkConfigured checks and returns true if App Framework is configured
-//  App Repo config without any App sources will not cause any App Framework activity
+func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec) error {
+
+	if appSrc.AppSourceDefaultSpec.PremiumAppsProps.Type != enterpriseApi.PremiumAppsTypeEs {
+		return fmt.Errorf("invalid PremiumAppsProps. Valid value is %s", enterpriseApi.PremiumAppsTypeEs)
+	}
+
+	sslEnablementValue := appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement
+
+	if sslEnablementValue != "" && !(sslEnablementValue == enterpriseApi.SslEnablementAuto ||
+		sslEnablementValue == enterpriseApi.SslEnablementIgnore ||
+		sslEnablementValue == enterpriseApi.SslEnablementStrict) {
+		return fmt.Errorf("invalid sslEnablement. Valid values are %s or %s or %s", enterpriseApi.SslEnablementAuto,
+			enterpriseApi.SslEnablementIgnore, enterpriseApi.SslEnablementStrict)
+	}
+
+	return nil
+}
+
+// isAppFrameworkConfigured checks and returns true if App Framework is configured
+// App Repo config without any App sources will not cause any App Framework activity
 func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
 	return !(appFramework == nil || appFramework.AppSources == nil)
 }
@@ -1509,13 +1533,11 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		return err
 	}
 
-	/*
-		err = validateSplunkAppSources(appFramework, localScope)
+	err = validateSplunkAppSources(appFramework, localScope)
 
-		if err == nil {
-			scopedLog.Info("App framework configuration is valid")
-		}
-	*/
+	if err == nil {
+		scopedLog.Info("App framework configuration is valid")
+	}
 
 	return err
 }
@@ -1735,7 +1757,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 	return indexesConf
 }
 
-//GetServerConfigEntries prepares the server.conf entries, and returns as a string
+// GetServerConfigEntries prepares the server.conf entries, and returns as a string
 func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
 	if cacheManagerConf == nil {
 		return ""
