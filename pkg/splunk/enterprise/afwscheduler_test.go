@@ -2801,6 +2801,262 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	mockPodExecClient.CheckPodExecCommands(t, "localInstallCtxt.runPlayBook")
 }
 
+func TestCanAppScopeHaveInstallWorker(t *testing.T) {
+	scope := enterpriseApi.ScopeLocal
+	if !canAppScopeHaveInstallWorker(scope) {
+		t.Errorf("Shouldn't recieve error, local scope is valid")
+	}
+
+	scope = enterpriseApi.ScopePremiumApps
+	if !canAppScopeHaveInstallWorker(scope) {
+		t.Errorf("Shouldn't recieve error, premium apps scope is valid")
+	}
+
+	scope = "invalidScope"
+	if canAppScopeHaveInstallWorker(scope) {
+		t.Errorf("invalid scope")
+	}
+}
+
+func TestPremiumAppScopedPlaybook(t *testing.T) {
+	ctx := context.TODO()
+	// Test for each phase can send the worker to down stream
+	cr := enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+				PhaseMaxRetries:           3,
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   enterpriseApi.ScopePremiumApps,
+							PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+								Type: enterpriseApi.PremiumAppsTypeEs,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var replicas int32 = 1
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+	}
+
+	// Create client and add object
+	c := spltest.NewMockClient()
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermanager-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v0",
+			},
+		},
+	}
+
+	// Add object
+	c.AddObject(pod)
+
+	podExecCommands := []string{
+		"test -f",
+		"/opt/splunk/bin/splunk install app",
+		"rm -f",
+		"/opt/splunk/bin/splunk search",
+	}
+
+	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		// this is for testing if file is present on pod
+		{
+			StdOut: "",
+			StdErr: "",
+			Err:    fmt.Errorf("some dummy error"),
+		},
+		// this is for installing the app
+		{
+			StdOut: "",
+			StdErr: "Random Error",
+		},
+		// this is for removing the app package from pod
+		{
+			StdOut: "",
+			StdErr: "dummyError",
+		},
+		// this is for es post install pod exec error
+		{
+			StdOut: "",
+			StdErr: "dummyError2",
+		},
+	}
+
+	// now replace the pod exec client with our mock client
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
+
+	// Just make the lint conversion checks happy
+	var client splcommon.ControllerClient = getConvertedClient(c)
+
+	var waiter sync.WaitGroup
+	var localInstallCtxt *localScopePlaybookContext = &localScopePlaybookContext{
+		worker: &PipelineWorker{
+			appSrcName:    cr.Spec.AppFrameworkConfig.AppSources[0].Name,
+			targetPodName: "splunk-stack1-standalone-0",
+			sts:           sts,
+			cr:            &cr,
+			appDeployInfo: &enterpriseApi.AppDeploymentInfo{
+				AppName:    "app1.tgz",
+				ObjectHash: "abcdef12345abcdef",
+				PhaseInfo: enterpriseApi.PhaseInfo{
+					Phase:     enterpriseApi.PhaseDownload,
+					Status:    enterpriseApi.AppPkgDownloadPending,
+					FailCount: 2,
+				},
+				AuxPhaseInfo: make([]enterpriseApi.PhaseInfo, 1),
+			},
+			afwConfig: &cr.Spec.AppFrameworkConfig,
+			client:    client,
+			waiter:    &waiter,
+		},
+		sem:           make(chan struct{}, 1),
+		podExecClient: mockPodExecClient,
+	}
+
+	pCtx := premiumAppScopePlaybookContext{
+		localCtx:    localInstallCtxt,
+		client:      client,
+		appSrcSpec:  &cr.Spec.AppFrameworkConfig.AppSources[0],
+		cr:          &cr,
+		afwPipeline: &AppInstallPipeline{},
+	}
+
+	// Test1: checkIfFileExistsOnPod returns error
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err := pCtx.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+	}
+
+	// Test2: checkIfFileExistsOnPod passes but install command returns error
+	mockPodExecReturnContexts[0].Err = nil
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+	}
+
+	// Test3: install command passes but removing app package from pod returns error
+	mockPodExecReturnContexts[1].StdErr = ""
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+	}
+
+	// Test4: failure in es post install pod exec command
+	mockPodExecReturnContexts[2].StdErr = ""
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("runPlayBook should have returned error")
+	}
+
+	// Test5: everything passes
+	mockPodExecReturnContexts[3].StdErr = ""
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err != nil {
+		t.Errorf("runPlayBook should not have returned error")
+	}
+
+	// Test 6: run for SHC
+	pCtx.cr = &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+				PhaseMaxRetries:           3,
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   enterpriseApi.ScopePremiumApps,
+							PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+								Type: enterpriseApi.PremiumAppsTypeEs,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Create context for assisning bundle push state
+	pCtx.afwPipeline.appDeployContext = &enterpriseApi.AppDeploymentContext{
+		BundlePushStatus: enterpriseApi.BundlePushTracker{},
+	}
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err != nil {
+		t.Errorf("runPlayBook should not have returned error")
+	}
+
+	mockPodExecClient.CheckPodExecCommands(t, "localInstallCtxt.runPlayBook")
+}
+
 func TestDeleteAppPkgFromOperator(t *testing.T) {
 	ctx := context.TODO()
 	cr := enterpriseApi.ClusterManager{
@@ -3343,6 +3599,15 @@ func TestInstallWorkerHandler(t *testing.T) {
 	go ppln.pplnPhases[enterpriseApi.PhaseInstall].installWorkerHandler(ctx, ppln, &handlerWaiter, podInstallTracker)
 
 	// Send a worker to the install handler
+	podInstallTracker[0] <- struct{}{}
+	worker.waiter = &ppln.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter
+	ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- worker
+
+	time.Sleep(2 * time.Second)
+
+	// Test premium apps
+	worker.afwConfig.AppSources[0].AppSourceDefaultSpec.Scope = enterpriseApi.ScopePremiumApps
+	worker.afwConfig.AppSources[0].AppSourceDefaultSpec.PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
 	podInstallTracker[0] <- struct{}{}
 	worker.waiter = &ppln.pplnPhases[enterpriseApi.PhaseInstall].workerWaiter
 	ppln.pplnPhases[enterpriseApi.PhaseInstall].msgChannel <- worker
