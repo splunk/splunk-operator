@@ -1055,16 +1055,24 @@ installHandler:
 					scopedLog.Error(err, "getting app source spec failed while installing app app src name %s", installWorker.appSrcName)
 				}
 
+				// Get app source scope
+				var appSrcScope string
+				if appSrcSpec.Scope != "" {
+					appSrcScope = appSrcSpec.Scope
+				} else {
+					appSrcScope = installWorker.afwConfig.Defaults.Scope
+				}
+
 				// Since local app context is needed for premiumAppContext we retrieve it for both cases
 				localCtx := getLocalScopePlaybookContext(ctx, installWorker, installTracker[podID], podExecClient)
 				if localCtx == nil {
 					<-installTracker[podID]
 					scopedLog.Error(nil, "unable to get the local scoped context. app name %s", installWorker.appDeployInfo.AppName)
-				} else if appSrcSpec.Scope == enterpriseApi.ScopeLocal {
+				} else if appSrcScope == enterpriseApi.ScopeLocal {
 					// Handle local app scope
 					installWorker.waiter.Add(1)
 					go localCtx.runPlaybook(ctx)
-				} else if appSrcSpec.Scope == enterpriseApi.ScopePremiumApps {
+				} else if appSrcScope == enterpriseApi.ScopePremiumApps {
 					// Handle premium app scope
 					preCtx := getPremiumAppScopePlaybookContext(ctx, localCtx, appSrcSpec, ppln.client, ppln.cr, ppln)
 					if preCtx != nil {
@@ -1074,6 +1082,8 @@ installHandler:
 						<-installTracker[podID]
 						scopedLog.Error(nil, "unable to get the premium app scoped context. app name %s", installWorker.appDeployInfo.AppName)
 					}
+				} else {
+					scopedLog.Error(nil, "Only local or premiumApps scope can have install workers")
 				}
 			} else {
 				// This should never happen
@@ -1815,8 +1825,6 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 	reqLogger := log.FromContext(rctx)
 	scopedLog := reqLogger.WithName("handleEsappPostinstall").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
 
-	scopedLog.Info("Arjun in runPlaybook checking for scope premium apps")
-
 	// For ES app, run post-install commands
 	var command string
 
@@ -1828,8 +1836,6 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 		// Pass an extra parameter for SHC deployer in post install command
 		command = fmt.Sprintf("/opt/splunk/bin/splunk search '| essinstall --ssl_enablement %s --deployment_type shc_deployer' -auth admin:`cat /mnt/splunk-secrets/password`", sslEn)
 	}
-
-	scopedLog.Info("Arjun in runPlaybook found ES app running the post install work ", "command", command)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	stdOut, stdErr, err := preCtx.localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
@@ -1857,7 +1863,6 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	scopedLog := reqLogger.WithName("premiumAppScopePlaybookContext.runPlaybook").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
 
 	defer func() {
-		scopedLog.Info("Arjun here making worker inactive", "worker", worker)
 		<-preCtx.localCtx.sem
 		worker.isActive = false
 		worker.waiter.Done()
