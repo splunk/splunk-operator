@@ -340,10 +340,10 @@ create_job() {
                     }
                   }
                 ],
-				"nodeSelector":
-				{
-					"name": "biasLangMasterNode",
-				},
+                "nodeSelector":
+                {
+                    "name": "biasLangMasterNode"
+                },
                 "containers": [
                   {
                     "name": "alpine",
