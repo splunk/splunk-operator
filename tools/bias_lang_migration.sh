@@ -51,6 +51,7 @@ backup_configs() {
 label_Node() {
 	MSTR_NODE=$1
 	kubectl -n ${NS} label nodes ${MSTR_NODE} biasLangMasterNode=yes --overwrite >/dev/null 2>&1 # Long label(biasLangMasterNode) to avoid conflicts with possibly existing labels
+	kubectl -n ${NS} label nodes ${MSTR_NODE} name=biasLangMasterNode --overwrite >/dev/null 2>&1 # Long label(biasLangMasterNode) to avoid conflicts with possibly existing labels
 	if [[ "$?" -ne 0 ]]; then
 		err "Failed to label node ${MSTR_NODE}"
 	fi
@@ -59,6 +60,7 @@ label_Node() {
 unlabel_Nodes() {
 	for node in $(kubectl -n ${NS} get nodes -o json | jq ".items[].metadata.name" -r); do
 		kubectl -n ${NS} label node $node biasLangMasterNode-
+		kubectl -n ${NS} label node $node name-
 	done
 }
 
@@ -338,6 +340,10 @@ create_job() {
                     }
                   }
                 ],
+				"nodeSelector":
+				{
+					"name": "biasLangMasterNode",
+				},
                 "containers": [
                   {
                     "name": "alpine",
