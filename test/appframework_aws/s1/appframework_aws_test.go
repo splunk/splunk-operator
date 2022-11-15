@@ -770,7 +770,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -786,32 +786,18 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
-			// Verify App Downlaod State on CR
-			// testenv.VerifyAppListPhase(deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify Apps download on Operator Pod
-			// kind := standalone.Kind
-			// opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testcaseEnvInst.GetName(), kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
-			// opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			appVersion := "V1"
-			// testcaseEnvInst.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
-			// testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
 			// Ensure Standalone goes to Ready phase
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			//################## VERIFICATION #############
-			// Verify ES app is downloaded
-			testcaseEnvInst.Log.Info("Verify ES app is downloaded on Standalone")
-			initContDownloadLocation := testenv.AppStagingLocOnPod + appSourceName
-			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testcaseEnvInst.Log.Info("Verify Apps are downloaded on Pod", "version", appVersion, "Pod Name", podName)
-			testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{podName}, appFileList, initContDownloadLocation)
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
-			// Verify ES app is installed
-			testcaseEnvInst.Log.Info("Verify ES app is installed on Standalone")
+			// ############ INITIAL VERIFICATION ###########
+			appVersion := "V1"
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalonePod, esApp, false, "enabled", false, false)
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 
