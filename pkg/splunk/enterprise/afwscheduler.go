@@ -658,9 +658,26 @@ downloadPhase:
 }
 
 // markWorkerPhaseInstallationComplete marks the worker phase as app package installation complete
-func markWorkerPhaseInstallationComplete(phaseInfo *enterpriseApi.PhaseInfo) {
+func markWorkerPhaseInstallationComplete(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo, worker *PipelineWorker) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("markWorkerPhaseInstallationComplete")
+
+	// Set auxphase info status for fanout CRs and phaseinfo status for others
 	phaseInfo.Status = enterpriseApi.AppPkgInstallComplete
 	phaseInfo.FailCount = 0
+
+	// For fanout CRs, once all the replicas have the app installed, mark the main
+	// phaseinfo as install complete
+	if isFanOutApplicableToCR(worker.cr) {
+		if isAppInstallationCompleteOnAllReplicas(worker.appDeployInfo.AuxPhaseInfo) {
+			scopedLog.Info("app pkg installed on all the pods", "app pkg", worker.appDeployInfo.AppName)
+			worker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
+			worker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
+
+			//For now, set the deploy status as complete. Eventually, we can phase it out
+			worker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusComplete
+		}
+	}
 }
 
 // installAppAndCleanup installs an app for an install worker and cleans up the package on operator and target pod
@@ -740,7 +757,7 @@ func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) err
 	}
 
 	// Mark the worker for install complete status
-	markWorkerPhaseInstallationComplete(phaseInfo)
+	markWorkerPhaseInstallationComplete(rctx, phaseInfo, worker)
 
 	return nil
 }
@@ -1009,17 +1026,10 @@ func needToRunClusterScopedPlaybook(afwPipeline *AppInstallPipeline) bool {
 
 // tryAppPkgCleanupFromOperatorPod tries to change the app install status, also cleans the app pkg from Operator Pod
 func tryAppPkgCleanupFromOperatorPod(ctx context.Context, installWorker *PipelineWorker) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("tryAppPkgCleanupFromOperatorPod")
-
+	// Check for fanout CRs(standalone for now) and delete only
+	// when installation is complete on all replicas
 	if isFanOutApplicableToCR(installWorker.cr) {
 		if isAppInstallationCompleteOnAllReplicas(installWorker.appDeployInfo.AuxPhaseInfo) {
-			scopedLog.Info("app pkg installed on all the pods", "app pkg", installWorker.appDeployInfo.AppName)
-			installWorker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
-			installWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallComplete
-
-			//For now, set the deploy status as complete. Eventually, we can phase it out
-			installWorker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusComplete
 			deleteAppPkgFromOperator(ctx, installWorker)
 		}
 	} else {
@@ -1888,7 +1898,7 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	}
 
 	// Mark app package installation complete
-	markWorkerPhaseInstallationComplete(phaseInfo)
+	markWorkerPhaseInstallationComplete(rctx, phaseInfo, worker)
 
 	// Mark afw pipeline for bundle push on shc deployer
 	if cr.GetObjectKind().GroupVersionKind().Kind == "SearchHeadCluster" {
