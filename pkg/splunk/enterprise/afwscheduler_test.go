@@ -242,6 +242,60 @@ func TestCreateFanOutWorker(t *testing.T) {
 
 }
 
+func TestMarkWorkerPhaseInstallationComplete(t *testing.T) {
+	ctx := context.TODO()
+	phaseInfo := enterpriseApi.PhaseInfo{
+		Status:    enterpriseApi.AppPkgDownloadPending,
+		FailCount: 12,
+	}
+	worker := PipelineWorker{
+		cr: &enterpriseApi.ClusterManager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "s1",
+				Namespace: "test",
+			},
+			TypeMeta: metav1.TypeMeta{
+				Kind: "ClusterManager",
+			},
+		},
+	}
+
+	// Mark basic status for non fan-out CRs
+	markWorkerPhaseInstallationComplete(ctx, &phaseInfo, &worker)
+	if phaseInfo.Status != enterpriseApi.AppPkgInstallComplete || phaseInfo.FailCount != 0 {
+		t.Errorf("Phase info not marked as install complete properly")
+	}
+
+	// Fan out CRs test
+	worker.cr = &enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "s1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+	}
+
+	worker.appDeployInfo = &enterpriseApi.AppDeploymentInfo{
+		AuxPhaseInfo: make([]enterpriseApi.PhaseInfo, 1),
+	}
+
+	worker.appDeployInfo.AuxPhaseInfo[0] = enterpriseApi.PhaseInfo{
+		Status:    enterpriseApi.AppPkgInstallComplete,
+		FailCount: 12,
+		Phase:     enterpriseApi.PhaseInstall,
+	}
+
+	markWorkerPhaseInstallationComplete(ctx, &phaseInfo, &worker)
+	if worker.appDeployInfo.PhaseInfo.Phase != enterpriseApi.PhaseInstall ||
+		worker.appDeployInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete ||
+		worker.appDeployInfo.DeployStatus != enterpriseApi.DeployStatusComplete {
+		t.Errorf("Aux phase info for fanout CRs not working")
+	}
+
+}
+
 func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
