@@ -136,7 +136,7 @@ rolling_restart_my_pods() {
 	TARGET=$2
 
 	RESTARTED_PODS=0
-	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${TARGET} | awk '{print $1}')
+	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${TARGET} | awk '{print $1}' | sort -r)
 	N_PODS=$(echo $PODS | wc -w)
 
 	for pod in ${PODS}; do
