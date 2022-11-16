@@ -1073,27 +1073,15 @@ installHandler:
 					appSrcScope = installWorker.afwConfig.Defaults.Scope
 				}
 
-				// Since local app context is needed for premiumAppContext we retrieve it for both cases
-				localCtx := getLocalScopePlaybookContext(ctx, installWorker, installTracker[podID], podExecClient)
-				if localCtx == nil {
-					<-installTracker[podID]
-					scopedLog.Error(nil, "unable to get the local scoped context. app name %s", installWorker.appDeployInfo.AppName)
-				} else if appSrcScope == enterpriseApi.ScopeLocal {
-					// Handle local app scope
+				// Get insall worker playbook context, only support local or premiumApp scope context currently
+				iwctx := getInsallWorkerPlaybookContext(ctx, installWorker, installTracker[podID], podExecClient, appSrcSpec, appSrcScope, ppln)
+				if iwctx != nil {
+					// Handle install work
 					installWorker.waiter.Add(1)
-					go localCtx.runPlaybook(ctx)
-				} else if appSrcScope == enterpriseApi.ScopePremiumApps {
-					// Handle premium app scope
-					preCtx := getPremiumAppScopePlaybookContext(ctx, localCtx, appSrcSpec, ppln.client, ppln.cr, ppln)
-					if preCtx != nil {
-						installWorker.waiter.Add(1)
-						go preCtx.runPlaybook(ctx)
-					} else {
-						<-installTracker[podID]
-						scopedLog.Error(nil, "unable to get the premium app scoped context. app name %s", installWorker.appDeployInfo.AppName)
-					}
+					go iwctx.runPlaybook(ctx)
 				} else {
-					scopedLog.Error(nil, "Only local or premiumApps scope can have install workers")
+					<-installTracker[podID]
+					scopedLog.Error(nil, "unable to get install worker context. app name %s", installWorker.appDeployInfo.AppName)
 				}
 			} else {
 				// This should never happen
@@ -1408,6 +1396,26 @@ func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWo
 		sem:           sem,
 		podExecClient: podExecClient,
 	}
+}
+
+// getInsallWorkerPlaybookContext returns the playbook context for install workers i.e either local
+// or premiumApps scope for now
+func getInsallWorkerPlaybookContext(ctx context.Context, worker *PipelineWorker, sem chan struct{}, podExecClient splutil.PodExecClientImpl, appSrcSpec *enterpriseApi.AppSourceSpec, appSrcScope string, ppln *AppInstallPipeline) PlaybookImpl {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getInsallWorkerPlaybookContext").WithValues("crName", ppln.cr.GetName(), "namespace", ppln.cr.GetNamespace())
+
+	// Since local app context is needed for premiumAppContext we retrieve it for both cases
+	localCtx := getLocalScopePlaybookContext(ctx, worker, sem, podExecClient)
+	if appSrcScope == enterpriseApi.ScopeLocal {
+		return localCtx
+	} else if appSrcScope == enterpriseApi.ScopePremiumApps {
+		return getPremiumAppScopePlaybookContext(ctx, localCtx, appSrcSpec, ppln.client, ppln.cr, ppln)
+	}
+
+	// Invalid scope
+	scopedLog.Error(nil, "Install workers can have only local or premium apps scope", "appSrcScope", appSrcScope)
+
+	return nil
 }
 
 // getClusterScopePlaybookContext returns the context for running playbook
