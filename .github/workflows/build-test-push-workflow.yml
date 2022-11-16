@@ -17,6 +17,7 @@ jobs:
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
     - name: Run Static Check via staticcheck
+      continue-on-error: true
       run: |
         go install honnef.co/go/tools/cmd/staticcheck@2022.1
         staticcheck ./...
