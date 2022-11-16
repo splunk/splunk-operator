@@ -16,6 +16,10 @@ jobs:
       run: make fmt && if [[ $? -ne 0 ]]; then false; fi
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
+    - name: Run Static Check via staticcheck
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@2022.1
+        staticcheck ./...
   unit-tests:
     runs-on: ubuntu-latest
     needs: check-formating
