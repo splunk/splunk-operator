@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 2.1.0 (2022-11-23)
+## 2.1.0 (2022-11-22)
 
 * This is the 2.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
@@ -15,8 +15,6 @@
 * CSPL-218: Telemetry Support for Operator
 
 * CSPL-1407: Bias Language Support
-
-* Functional QA automation enhancements
 
 * Documentation Updates
   
