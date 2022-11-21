@@ -603,7 +603,7 @@ func (ppln *AppInstallPipeline) shutdownPipelinePhase(ctx context.Context, phase
 	ppln.phaseWaiter.Done()
 }
 
-//downloadPhaseManager creates download phase manager for the install pipeline
+// downloadPhaseManager creates download phase manager for the install pipeline
 func (ppln *AppInstallPipeline) downloadPhaseManager(ctx context.Context) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("downloadPhaseManager")
@@ -1355,7 +1355,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	return sts
 }
 
-// getPremiumAppScopePlaybookContext returns the idxc playbook context
+// getPremiumAppScopePlaybookContext returns the premium apps scope playbook context
 func getPremiumAppScopePlaybookContext(ctx context.Context, localCtx *localScopePlaybookContext, appSrcSpec *enterpriseApi.AppSourceSpec, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline) *premiumAppScopePlaybookContext {
 	return &premiumAppScopePlaybookContext{
 		localCtx:    localCtx,
@@ -1857,7 +1857,6 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	stdOut, stdErr, err := preCtx.localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
-	// if the app was already installed previously, then just mark it for install complete
 	if stdErr != "" || err != nil {
 		phaseInfo.FailCount++
 		scopedLog.Error(err, "premium scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "post install command", command, "failCount", phaseInfo.FailCount)
@@ -1869,9 +1868,9 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 
 // runPlaybook implements installing the app for premiumApps
 // For ES app:
-//     1. Installs the app like any other app on standalone/SHC deployer
-//     2. Runs the post install command for the ES app
-//     3. Sets the bundle push flag for the deployer only
+//  1. Installs the app like any other app on standalone/SHC deployer
+//  2. Runs the post install command for the ES app
+//  3. Sets the bundle push flag for the deployer only
 func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) error {
 	cr := preCtx.cr
 	worker := preCtx.localCtx.worker
