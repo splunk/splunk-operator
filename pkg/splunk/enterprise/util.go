@@ -39,6 +39,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -714,7 +715,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource
-func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) error {
+func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, instanceType InstanceType) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForResources").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -728,6 +729,14 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 	_, err = splutil.RemoveSecretOwnerRef(ctx, client, defaultSecretName, cr)
 	if err != nil {
 		scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", defaultSecretName))
+		return err
+	}
+
+	// Remove unwanted Owner References for statefulSet during deletion
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(instanceType, cr.GetName())}
+	err = splctrl.RemoveUnwantedOwnerRefSs(ctx, client, namespacedName, cr)
+	if err != nil {
+		scopedLog.Error(err, "Owner Reference removal failed for statefulSet")
 		return err
 	}
 
@@ -932,6 +941,84 @@ func changePhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, 
 		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
 		scopedLog.Error(nil, "Could not find the App Source in App context")
 	}
+}
+
+// checkCmRemainingReferences checks for any stale references of IndexerCluster, LicenseManager, SearchheadCluster, MonitoringConsole
+// pointing to a particular ClusterManager CR
+func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClient, cmCr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("checkCmRemainingReferences").WithValues("cmCr", cmCr.GetName(), "namespace", cmCr.GetNamespace())
+
+	// Filter by namespace
+	listOpts := []client.ListOption{
+		client.InNamespace(cmCr.GetNamespace()),
+	}
+
+	// Look for indexerClusters still holding references to the ClusterManager
+	idxcList, err := getIndexerClusterList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve IndexerCluster list")
+			return err
+		}
+	}
+	for _, item := range idxcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`IndexerCluster %s still has a reference for clusterManager %s,
+				please backup if needed and delete the IndexerCluster`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to an indexerCluster")
+		}
+	}
+
+	// Look for searchHeadClusters still holding references to the ClusterManager
+	shcList, err := getSearchHeadClusterList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve SearchHeadCluster list")
+			return err
+		}
+	}
+	for _, item := range shcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`SearchHeadCluster %s still has a reference for clusterManager %s,
+				please backup if needed and delete the SearchHeadCluster`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a searchHeadCluster")
+		}
+	}
+
+	// Look for LicenseManagers still holding references to the ClusterManager
+	lmList, err := getLicenseManagerList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve LicenseManager list")
+			return err
+		}
+	}
+	for _, item := range lmList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`LicenseManager %s still has a reference for clusterManager %s,
+				please backup if needed and delete the LicenseManager`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a LicenseManager")
+		}
+	}
+
+	// Look for MonitoringConsole still holding references to the ClusterManager
+	mcList, err := getMonitoringConsoleList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve MonitoringConsole list")
+			return err
+		}
+	}
+	for _, item := range mcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`MonitoringConsole %s still has a reference for clusterManager %s,
+				please backup if needed and delete the MonitoringConsole`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a MonitoringConsole")
+		}
+	}
+
+	return nil
 }
 
 func removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
