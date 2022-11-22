@@ -24,8 +24,9 @@ import (
 	"sync"
 	"time"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+
 	"github.com/pkg/errors"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -74,6 +75,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		podType = "standalone"
+	case "LicenseManager":
+		podType = "license-manager"
 	case "LicenseMaster":
 		podType = "license-master"
 	case "SearchHeadCluster":
@@ -82,11 +85,113 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		return ""
 	case "ClusterMaster":
 		podType = "cluster-master"
+	case "ClusterManager":
+		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
 	}
 
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
+}
+
+// runCustomCommandOnSplunkPods  runs the specified custom command on the pod/s
+func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, replicas int32, command string, podExecClient splutil.PodExecClientImpl) error {
+	var err error
+	var stdOut string
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	// Run the command on each replica pod
+	for replicaIndex := 0; replicaIndex < int(replicas); replicaIndex++ {
+		// get the target pod name
+		podName := getApplicablePodNameForAppFramework(cr, replicaIndex)
+		podExecClient.SetTargetPodName(ctx, podName)
+
+		// CSPL-1639: reset the Stdin so that reader pipe can read from the correct offset of the string reader.
+		// This is particularly needed in the cases where we are trying to run the same command across multiple pods
+		// and we need to clear the reader pipe so that we can read the read buffer from the correct offset again.
+		splutil.ResetStringReader(streamOptions, command)
+
+		// Throw an error if we are not able to run the command
+		stdOut, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+		if err != nil {
+			err = fmt.Errorf("unable to run command %s. stdout: %s, err: %s", command, stdOut, err)
+			break
+		}
+	}
+	return err
+}
+
+// Get extension for name of telemetry app
+func getTelAppNameExtension(crKind string) (string, error) {
+	switch crKind {
+	case "Standalone":
+		return "stdaln", nil
+	case "LicenseMaster":
+		return "lmaster", nil
+	case "LicenseManager":
+		return "lmanager", nil
+	case "SearchHeadCluster":
+		return "shc", nil
+	case "ClusterMaster":
+		return "cmaster", nil
+	case "ClusterManager":
+		return "cmanager", nil
+	default:
+		return "", errors.New("Invalid CR kind for telemetry app")
+	}
+}
+
+// addTelApp adds a telemetry app
+var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	var err error
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("addTelApp").WithValues(
+		"name", cr.GetObjectMeta().GetName(),
+		"namespace", cr.GetObjectMeta().GetNamespace())
+
+	// Create pod exec client
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
+
+	// Get Tel App Name Extension
+	appNameExt, err := getTelAppNameExtension(crKind)
+	if err != nil {
+		return err
+	}
+
+	// Commands to run on pods
+	var command1, command2 string
+
+	// Handle non SHC scenarios(Standalone, CM, LM)
+	if crKind != "SearchHeadCluster" {
+		// Create dir on pods
+		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
+
+		// App reload
+		command2 = telAppReloadString
+
+	} else {
+		// Create dir on pods
+		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
+
+		// Bundle push
+		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
+	}
+
+	// Run the commands on Splunk pods
+	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command1, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
+	}
+
+	err = runCustomCommandOnSplunkPods(ctx, cr, replicas, command2, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
+	}
+
+	return err
 }
 
 // getOrdinalValFromPodName returns the pod ordinal value
@@ -333,7 +438,7 @@ func (downloadWorker *PipelineWorker) createDownloadDirOnOperator(ctx context.Co
 }
 
 // download API will do the actual work of downloading apps from remote storage
-func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, s3ClientMgr S3ClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
+func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *PipelinePhase, remoteDataClientMgr RemoteDataClientManager, localPath string, downloadWorkersRunPool chan struct{}) {
 
 	defer func() {
 		downloadWorker.isActive = false
@@ -362,7 +467,7 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 	}
 
 	// download the app from remote storage
-	err = s3ClientMgr.DownloadApp(ctx, remoteFile, localFile, appDeployInfo.ObjectHash)
+	err = remoteDataClientMgr.DownloadApp(ctx, remoteFile, localFile, appDeployInfo.ObjectHash)
 	if err != nil {
 		scopedLog.Error(err, "unable to download app", "appName", appName)
 
@@ -444,11 +549,11 @@ downloadWork:
 					continue
 				}
 
-				// get the S3ClientMgr instance
-				s3ClientMgr, _ := getS3ClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+				// get the remoteDataClientMgr instance
+				remoteDataClientMgr, _ := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
 
 				// start the actual download
-				go downloadWorker.download(ctx, pplnPhase, *s3ClientMgr, localPath, downloadWorkersRunPool)
+				go downloadWorker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
 
 			default:
 				<-downloadWorkersRunPool
@@ -489,7 +594,7 @@ func (ppln *AppInstallPipeline) shutdownPipelinePhase(ctx context.Context, phase
 	ppln.phaseWaiter.Done()
 }
 
-//downloadPhaseManager creates download phase manager for the install pipeline
+// downloadPhaseManager creates download phase manager for the install pipeline
 func (ppln *AppInstallPipeline) downloadPhaseManager(ctx context.Context) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("downloadPhaseManager")
@@ -1097,7 +1202,7 @@ func isAppInstallationCompleteOnAllReplicas(auxPhaseInfo []enterpriseApi.PhaseIn
 
 // isClusterScoped checks whether current cr is a SHC or a CM
 func isClusterScoped(kind string) bool {
-	return kind == "ClusterMaster" || kind == "SearchHeadCluster"
+	return kind == "ClusterMaster" || kind == "ClusterManager" || kind == "SearchHeadCluster"
 }
 
 // checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
@@ -1165,11 +1270,15 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "Standalone":
 		instanceID = SplunkStandalone
-	case "LicenseMaster":
+	case "LicenseManager":
 		instanceID = SplunkLicenseManager
+	case "LicenseMaster":
+		instanceID = SplunkLicenseMaster
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
+		instanceID = SplunkClusterMaster
+	case "ClusterManager":
 		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
@@ -1223,7 +1332,7 @@ func getLocalScopePlaybookContext(ctx context.Context, installWorker *PipelineWo
 func getClusterScopePlaybookContext(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, afwPipeline *AppInstallPipeline, podName string, kind string, podExecClient splutil.PodExecClientImpl) PlaybookImpl {
 
 	switch kind {
-	case "ClusterMaster":
+	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	case "SearchHeadCluster":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
@@ -1308,6 +1417,8 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 
 // triggerBundlePush triggers the bundle push operation for SHC
 func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Context) error {
+	// Reduce the liveness probe level
+	shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 	cmd := fmt.Sprintf(applySHCBundleCmdStr, shcPlaybookContext.searchHeadCaptainURL, shcBundlePushStatusCheckFile)
 	streamOptions := splutil.NewStreamOptionsObject(cmd)
 	stdOut, stdErr, err := shcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
@@ -1318,10 +1429,47 @@ func (shcPlaybookContext *SHCPlaybookContext) triggerBundlePush(ctx context.Cont
 	return nil
 }
 
+// setLivenessProbeLevel sets the liveness probe level across all the Search Head Pods.
+func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("shcPlaybookContext.setLivenessProbeLevel()")
+
+	shcStsName := GetSplunkStatefulsetName(SplunkSearchHead, shcPlaybookContext.cr.GetName())
+	shcStsNamespaceName := types.NamespacedName{Namespace: shcPlaybookContext.cr.GetNamespace(), Name: shcStsName}
+	shcSts, err := splctrl.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the stateful set")
+		return err
+	}
+
+	err = func() error {
+		// playbook context uses fixed CR and target pod names, but, when it comes to the
+		// probes tuning, we are mostly dealing with different pods, and also CRs,
+		// so, backup and then restore
+		cr := shcPlaybookContext.podExecClient.GetCR()
+		targetPodname := shcPlaybookContext.podExecClient.GetTargetPodName()
+
+		defer func() {
+			shcPlaybookContext.podExecClient.SetCR(cr)
+			shcPlaybookContext.podExecClient.SetTargetPodName(ctx, targetPodname)
+		}()
+
+		err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
+		if err != nil {
+			scopedLog.Error(err, "Unable to set the Liveness probe level")
+			return err
+		}
+
+		return err
+	}()
+
+	return err
+}
+
 // getClusterScopedAppsLocOnPod returns the cluster apps directory
 func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "ClusterMaster":
+	case "ClusterManager", "ClusterMaster":
 		return idxcAppsLocationOnClusterManager
 	case "SearchHeadCluster":
 		return shcAppsLocationOnDeployer
@@ -1354,7 +1502,10 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 
 	var err error
 	var ok bool
-	cr := shcPlaybookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	cr, ok := shcPlaybookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	if !ok {
+		return nil
+	}
 	if cr.Status.Phase != enterpriseApi.PhaseReady {
 		scopedLog.Info("SHC is not ready yet.")
 		return nil
@@ -1377,6 +1528,9 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
+
+			// set the liveness probe to default
+			shcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else if err != nil {
 			scopedLog.Error(err, "there was an error in SHC bundle push, will retry again")
 		} else {
@@ -1435,6 +1589,9 @@ func (idxcPlaybookContext *IdxcPlaybookContext) isBundlePushComplete(ctx context
 func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Context) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("idxcPlaybookContext.triggerBundlePush()")
+
+	// Reduce the liveness probe level
+	idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
 	streamOptions := splutil.NewStreamOptionsObject(applyIdxcBundleCmdStr)
 	stdOut, stdErr, err := idxcPlaybookContext.podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
@@ -1448,6 +1605,66 @@ func (idxcPlaybookContext *IdxcPlaybookContext) triggerBundlePush(ctx context.Co
 	}
 
 	return nil
+}
+
+// setLivenessProbeLevel sets the liveness probe level across all the indexer pods
+func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx context.Context, probeLevel int) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("idxcPlaybookContext.setLivenessProbeLevel()")
+	var err error
+
+	managerSts := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
+	if managerSts == nil {
+		return fmt.Errorf("Not able to retrieve Cluster Manager STS")
+	}
+
+	err = func() error {
+		// playbook context uses fixed CR and target pod names, but, when it comes to the
+		// probes tuning, we are mostly dealing with different pods, and also CRs,
+		// so, backup and then restore
+		cr := idxcPlaybookContext.podExecClient.GetCR()
+		targetPodname := idxcPlaybookContext.podExecClient.GetTargetPodName()
+
+		defer func() {
+			idxcPlaybookContext.podExecClient.SetCR(cr)
+			idxcPlaybookContext.podExecClient.SetTargetPodName(ctx, targetPodname)
+		}()
+
+		managerOwnerRefs := managerSts.GetOwnerReferences()
+		for i := 0; i < len(managerOwnerRefs); i++ {
+			// We are only interested for Indexer pods, skip all other references
+			if managerOwnerRefs[i].Kind != "IndexerCluster" {
+				continue
+			}
+
+			idxcNameSpaceName := types.NamespacedName{Namespace: idxcPlaybookContext.cr.GetNamespace(), Name: managerOwnerRefs[i].Name}
+			var idxcCR enterpriseApi.IndexerCluster
+			err = idxcPlaybookContext.client.Get(ctx, idxcNameSpaceName, &idxcCR)
+			if err != nil {
+				// Probably a dangling owner reference, just ignore and continue
+				scopedLog.Error(err, "Unable to fetch the CR", "Name", managerOwnerRefs[i].Name, "Namespace", idxcPlaybookContext.cr.GetNamespace())
+				continue
+			}
+
+			idxcStsName := GetSplunkStatefulsetName(SplunkIndexer, idxcCR.GetName())
+			idxcStsNamespaceName := types.NamespacedName{Namespace: idxcCR.GetNamespace(), Name: idxcStsName}
+			idxcSts, err := splctrl.GetStatefulSetByName(ctx, idxcPlaybookContext.client, idxcStsNamespaceName)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get the stateful set")
+				// Probably a dangling owner reference, just ignore and continue
+				continue
+			}
+
+			err = setProbeLevelOnCRPods(ctx, &idxcCR, *idxcSts.Spec.Replicas, idxcPlaybookContext.podExecClient, probeLevel)
+			if err != nil {
+				scopedLog.Error(err, "Unable to set the Liveness probe level")
+				return err
+			}
+		}
+		return err
+	}()
+
+	return err
 }
 
 // runPlaybook will implement the following logic(and set the bundle push state accordingly)  -
@@ -1474,6 +1691,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 
 			// set the state to install complete for all the cluster scoped apps
 			setInstallStateForClusterScopedApps(ctx, appDeployContext)
+			idxcPlaybookContext.setLivenessProbeLevel(ctx, livenessProbeLevelDefault)
 		} else {
 			scopedLog.Info("IndexerCluster Bundle Push is still in progress, will check back again in next reconcile..")
 		}

@@ -1,0 +1,15 @@
+# Entrypoint for helm automation
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+- ./kuttl/tests/helm
+parallel: 1
+timeout: 1000
+startKIND: false
+artifactsDir: kuttl-artifacts
+kindNodeCache: false
+commands:
+  - command: bash -c "helm upgrade --install splunk-operator helm-chart/splunk-operator --namespace splunk-operator --create-namespace --set splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMG}"
+    background: false
+  - command: bash -c "sleep 30"
+    background: false

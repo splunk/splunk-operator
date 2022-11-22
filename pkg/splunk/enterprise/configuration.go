@@ -17,8 +17,10 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 
@@ -30,13 +32,57 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var defaultLivenessProbe corev1.Probe = corev1.Probe{
+	InitialDelaySeconds: livenessProbeDefaultDelaySec,
+	TimeoutSeconds:      livenessProbeTimeoutSec,
+	PeriodSeconds:       livenessProbePeriodSec,
+	FailureThreshold:    livenessProbeFailureThreshold,
+	ProbeHandler: corev1.ProbeHandler{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				GetProbeMountDirectory() + "/" + GetLivenessScriptName(),
+			},
+		},
+	},
+}
+
+var defaultReadinessProbe corev1.Probe = corev1.Probe{
+	InitialDelaySeconds: readinessProbeDefaultDelaySec,
+	TimeoutSeconds:      readinessProbeTimeoutSec,
+	PeriodSeconds:       readinessProbePeriodSec,
+	FailureThreshold:    readinessProbeFailureThreshold,
+	ProbeHandler: corev1.ProbeHandler{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				GetProbeMountDirectory() + "/" + GetReadinessScriptName(),
+			},
+		},
+	},
+}
+
+var defaultStartupProbe corev1.Probe = corev1.Probe{
+	InitialDelaySeconds: startupProbeDefaultDelaySec,
+	TimeoutSeconds:      startupProbeTimeoutSec,
+	PeriodSeconds:       startupProbePeriodSec,
+	FailureThreshold:    startupProbeFailureThreshold,
+	ProbeHandler: corev1.ProbeHandler{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				GetProbeMountDirectory() + "/" + GetStartupScriptName(),
+			},
+		},
+	},
+}
 
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
@@ -125,12 +171,16 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 	instanceIdentifier := cr.GetName()
 	var partOfIdentifier string
 	if instanceType == SplunkIndexer {
-		if len(spec.ClusterMasterRef.Name) == 0 {
+		if len(spec.ClusterManagerRef.Name) == 0 && len(spec.ClusterMasterRef.Name) == 0 {
 			// Do not specify the instance label in the selector of IndexerCluster services, so that the services of the main part
 			// of multisite / multipart IndexerCluster can be used to resolve (headless) or load balance traffic to the indexers of all parts
 			partOfIdentifier = instanceIdentifier
 			instanceIdentifier = ""
-		} else {
+		} else if len(spec.ClusterManagerRef.Name) > 0 {
+			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
+			// in the app.kubernetes.io/part-of label
+			partOfIdentifier = spec.ClusterManagerRef.Name
+		} else if len(spec.ClusterMasterRef.Name) > 0 {
 			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
 			// in the app.kubernetes.io/part-of label
 			partOfIdentifier = spec.ClusterMasterRef.Name
@@ -299,6 +349,21 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		},
 	}
 
+	err := validateLivenessProbe(ctx, cr, spec.LivenessProbe)
+	if err != nil {
+		return err
+	}
+
+	err = validateReadinessProbe(ctx, cr, spec.ReadinessProbe)
+	if err != nil {
+		return err
+	}
+
+	err = validateStartupProbe(ctx, cr, spec.StartupProbe)
+	if err != nil {
+		return err
+	}
+
 	if spec.LivenessInitialDelaySeconds < 0 {
 		return fmt.Errorf("negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
 	}
@@ -308,7 +373,7 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 	}
 
 	// if not provided, set default values for imagePullSecrets
-	err := ValidateImagePullSecrets(ctx, c, cr, spec)
+	err = ValidateImagePullSecrets(ctx, c, cr, spec)
 	if err != nil {
 		return err
 	}
@@ -461,7 +526,11 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 }
 
 // addStorageVolumes adds storage volumes to the StatefulSet
-func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string) error {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("addStorageVolumes").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
 	// configure storage for mount path /opt/splunk/etc
 	if spec.EtcVolumeStorageConfig.EphemeralStorage {
 		// add ephemeral volumes
@@ -486,7 +555,64 @@ func addStorageVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunk
 		}
 	}
 
+	// Add Splunk Probe config map
+	probeConfigMap, err := getProbeConfigMap(ctx, client, cr)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get probeConfigMap")
+		return err
+	}
+	addProbeConfigMapVolume(probeConfigMap, statefulSet)
 	return nil
+}
+
+func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
+
+	configMap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetProbeConfigMapName(cr.GetNamespace()),
+			Namespace: cr.GetNamespace(),
+		},
+	}
+
+	// Add readiness script to config map
+	data, err := ReadFile(ctx, GetReadinessScriptLocation())
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data = map[string]string{GetReadinessScriptName(): data}
+	// Add liveness script to config map
+	livenessScriptLocation, _ := filepath.Abs(GetLivenessScriptLocation())
+	data, err = ReadFile(ctx, livenessScriptLocation)
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data[GetLivenessScriptName()] = data
+	// Add startup script to config map
+	startupScriptLocation, _ := filepath.Abs(GetStartupScriptLocation())
+	data, err = ReadFile(ctx, startupScriptLocation)
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data[GetStartupScriptName()] = data
+
+	// Apply the configured config map
+	_, err = controller.ApplyConfigMap(ctx, client, &configMap)
+	if err != nil {
+		return &configMap, err
+	}
+	return &configMap, nil
+}
+
+func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.StatefulSet) {
+	configMapVolDefaultMode := GetProbeVolumePermission()
+	addSplunkVolumeToTemplate(&statefulSet.Spec.Template, configMap.Name, GetProbeMountDirectory(), corev1.VolumeSource{
+		ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: configMap.GetName(),
+			},
+			DefaultMode: &configMapVolDefaultMode,
+		},
+	})
 }
 
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
@@ -496,6 +622,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
 	annotations := splcommon.GetIstioAnnotations(ports)
 	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
+	if len(spec.ClusterManagerRef.Name) > 0 && len(spec.ClusterMasterRef.Name) == 0 {
+		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)
+	}
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
 
 	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
@@ -561,7 +690,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	}
 
 	// Add storage volumes
-	err = addStorageVolumes(cr, spec, statefulSet, labels)
+	err = addStorageVolumes(ctx, cr, client, spec, statefulSet, labels)
 	if err != nil {
 		return statefulSet, err
 	}
@@ -598,7 +727,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) *corev1.ConfigMap {
 	var configMap *corev1.ConfigMap
 
-	if instanceType == SplunkStandalone || instanceType == SplunkClusterManager {
+	if instanceType == SplunkStandalone || isCMDeployed(instanceType) {
 		smartStoreConfigMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), cr.GetObjectKind().GroupVersionKind().Kind)
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: smartStoreConfigMapName}
 		configMap, _ = splctrl.GetConfigMap(ctx, client, namespacedName)
@@ -710,10 +839,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		RunAsNonRoot: &runAsNonRoot,
 	}
 
-	var additionalDelayForAppInstallation int32
-
-	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec, additionalDelayForAppInstallation)
-	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec, 0)
+	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
+	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec)
+	startupProbe := getStartupProbe(ctx, cr, instanceType, spec)
 
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
@@ -730,7 +858,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	// prepare container env variables
 	role := instanceType.ToRole()
-	if instanceType == SplunkStandalone && len(spec.ClusterMasterRef.Name) > 0 {
+	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
 	env := []corev1.EnvVar{
@@ -740,6 +868,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 	}
 
 	// update variables for licensing, if configured
@@ -749,47 +878,102 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Value: spec.LicenseURL,
 		})
 	}
-	if instanceType != SplunkLicenseManager && spec.LicenseMasterRef.Name != "" {
-		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseMasterRef.Name, false)
-		if spec.LicenseMasterRef.Namespace != "" {
-			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseManagerURL)
+	if instanceType != SplunkLicenseManager && spec.LicenseManagerRef.Name != "" {
+		licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, spec.LicenseManagerRef.Name, false)
+		if spec.LicenseManagerRef.Namespace != "" {
+			licenseManagerURL = splcommon.GetServiceFQDN(spec.LicenseManagerRef.Namespace, licenseManagerURL)
 		}
 		env = append(env, corev1.EnvVar{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
+			Name:  splcommon.LicenseManagerURL,
 			Value: licenseManagerURL,
+		})
+	} else if instanceType != SplunkLicenseMaster && spec.LicenseMasterRef.Name != "" {
+		licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, spec.LicenseMasterRef.Name, false)
+		if spec.LicenseMasterRef.Namespace != "" {
+			licenseMasterURL = splcommon.GetServiceFQDN(spec.LicenseMasterRef.Namespace, licenseMasterURL)
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  splcommon.LicenseManagerURL,
+			Value: licenseMasterURL,
 		})
 	}
 
 	// append URL for cluster manager, if configured
 	var clusterManagerURL string
-	if instanceType == SplunkClusterManager {
+	if isCMDeployed(instanceType) {
 		// This makes splunk-ansible configure indexer-discovery on cluster-manager
 		clusterManagerURL = "localhost"
-	} else if spec.ClusterMasterRef.Name != "" {
-		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterMasterRef.Name, false)
-		if spec.ClusterMasterRef.Namespace != "" {
-			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
+	} else if spec.ClusterManagerRef.Name != "" {
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterManager, spec.ClusterManagerRef.Name, false)
+		if spec.ClusterManagerRef.Namespace != "" {
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterManagerRef.Namespace, clusterManagerURL)
 		}
-		if spec.LicenseMasterRef.Name == "" {
+		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
 			//Check if CM is connected to a LicenseManager
 			namespacedName := types.NamespacedName{
 				Namespace: cr.GetNamespace(),
-				Name:      spec.ClusterMasterRef.Name,
+				Name:      spec.ClusterManagerRef.Name,
 			}
-			managerIdxCluster := &enterpriseApi.ClusterMaster{}
+			managerIdxCluster := &enterpriseApi.ClusterManager{}
 			err := client.Get(ctx, namespacedName, managerIdxCluster)
 			if err != nil {
 				scopedLog.Error(err, "Unable to get ClusterManager")
 			}
 
-			if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
-				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
-				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
-					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseManagerURL)
+			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
+					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
 				}
 				env = append(env, corev1.EnvVar{
-					Name:  "SPLUNK_LICENSE_MASTER_URL",
+					Name:  splcommon.LicenseManagerURL,
 					Value: licenseManagerURL,
+				})
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseMasterURL,
+				})
+			}
+		}
+	} else if spec.ClusterMasterRef.Name != "" {
+		clusterManagerURL = GetSplunkServiceName(SplunkClusterMaster, spec.ClusterMasterRef.Name, false)
+		if spec.ClusterMasterRef.Namespace != "" {
+			clusterManagerURL = splcommon.GetServiceFQDN(spec.ClusterMasterRef.Namespace, clusterManagerURL)
+		}
+		if spec.LicenseManagerRef.Name == "" || spec.LicenseMasterRef.Name == "" {
+			//Check if CM is connected to a LicenseManager
+			namespacedName := types.NamespacedName{
+				Namespace: cr.GetNamespace(),
+				Name:      spec.ClusterMasterRef.Name,
+			}
+			managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
+			err := client.Get(ctx, namespacedName, managerIdxCluster)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get ClusterManager")
+			}
+
+			if managerIdxCluster.Spec.LicenseManagerRef.Name != "" {
+				licenseManagerURL := GetSplunkServiceName(SplunkLicenseManager, managerIdxCluster.Spec.LicenseManagerRef.Name, false)
+				if managerIdxCluster.Spec.LicenseManagerRef.Namespace != "" {
+					licenseManagerURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseManagerRef.Namespace, licenseManagerURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseManagerURL,
+				})
+			} else if managerIdxCluster.Spec.LicenseMasterRef.Name != "" {
+				licenseMasterURL := GetSplunkServiceName(SplunkLicenseMaster, managerIdxCluster.Spec.LicenseMasterRef.Name, false)
+				if managerIdxCluster.Spec.LicenseMasterRef.Namespace != "" {
+					licenseMasterURL = splcommon.GetServiceFQDN(managerIdxCluster.Spec.LicenseMasterRef.Namespace, licenseMasterURL)
+				}
+				env = append(env, corev1.EnvVar{
+					Name:  splcommon.LicenseManagerURL,
+					Value: licenseMasterURL,
 				})
 			}
 		}
@@ -797,7 +981,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 
 	if clusterManagerURL != "" {
 		extraEnv = append(extraEnv, corev1.EnvVar{
-			Name:  "SPLUNK_CLUSTER_MASTER_URL",
+			Name:  splcommon.ClusterManagerURL,
 			Value: clusterManagerURL,
 		})
 	}
@@ -823,57 +1007,75 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
+		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
 	}
 }
 
 // getLivenessProbe the probe for checking the liveness of the Pod
-// uses script provided by enterprise container to check if pod is alive
-func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+func getLivenessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	livenessDelay := int32(livenessProbeDefaultDelaySec)
-
-	// If configured, always use the Liveness initial delay from the CR
-	if spec.LivenessInitialDelaySeconds != 0 {
-		livenessDelay = spec.LivenessInitialDelaySeconds
-	} else {
-		livenessDelay += additionalDelay
-	}
-	scopedLog.Info("LivenessProbeInitialDelay", "configured", spec.LivenessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", livenessDelay)
-
-	livenessCommand := []string{
-		"/sbin/checkstate.sh",
-	}
-
-	return getProbe(livenessCommand, livenessDelay, livenessProbeTimeoutSec, livenessProbePeriodSec)
+	livenessProbe := getProbeWithConfigUpdates(&defaultLivenessProbe, spec.LivenessProbe, spec.LivenessInitialDelaySeconds)
+	scopedLog.Info("LivenessProbe", "Configured", livenessProbe)
+	return livenessProbe
 }
 
-// getReadinessProbe provides the probe for checking the readiness of the Pod
-// pod is ready if container artifact file is created with contents of "started".
-func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec, additionalDelay int32) *corev1.Probe {
+// getReadinessProbe the probe for checking the readiness of the Pod
+func getReadinessProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getReadinessProbe")
+	scopedLog := reqLogger.WithName("getReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	readinessProbe := getProbeWithConfigUpdates(&defaultReadinessProbe, spec.ReadinessProbe, spec.ReadinessInitialDelaySeconds)
+	scopedLog.Info("ReadinessProbe", "Configured", readinessProbe)
+	return readinessProbe
+}
 
-	readinessDelay := int32(readinessProbeDefaultDelaySec)
+// getStartupProbe the probe for checking the first start of splunk on the Pod
+func getStartupProbe(ctx context.Context, cr splcommon.MetaObject, instanceType InstanceType, spec *enterpriseApi.CommonSplunkSpec) *corev1.Probe {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	startupProbe := getProbeWithConfigUpdates(&defaultStartupProbe, spec.StartupProbe, 0)
+	scopedLog.Info("StartupProbe", "Configured", startupProbe)
+	return startupProbe
+}
 
-	// If configured, always use the readiness initial delay from the CR
-	if spec.ReadinessInitialDelaySeconds != 0 {
-		readinessDelay = spec.ReadinessInitialDelaySeconds
-	} else {
-		readinessDelay += additionalDelay
+// getProbeWithConfigUpdates Validates probe values and updates them
+func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *enterpriseApi.Probe, configuredDelay int32) *corev1.Probe {
+	if configuredProbe != nil {
+		// Always take a separate probe, instead of referring the memory address from spec.
+		// (Referring the configured Probe memory is kind of OK as we are not writing to the DB, however
+		// updating any values(if the Application needs to do) can cause confusion when referring the CR
+		// while handling a reconcile event)
+		//var derivedProbe = *configuredProbe
+		derivedProbe := corev1.Probe{
+			InitialDelaySeconds: configuredProbe.InitialDelaySeconds,
+			TimeoutSeconds:      configuredProbe.TimeoutSeconds,
+			PeriodSeconds:       configuredProbe.PeriodSeconds,
+			FailureThreshold:    configuredProbe.FailureThreshold,
+		}
+
+		if derivedProbe.InitialDelaySeconds == 0 {
+			if configuredDelay != 0 {
+				derivedProbe.InitialDelaySeconds = configuredDelay
+			} else {
+				derivedProbe.InitialDelaySeconds = defaultProbe.InitialDelaySeconds
+			}
+		}
+		if derivedProbe.TimeoutSeconds == 0 {
+			derivedProbe.TimeoutSeconds = defaultProbe.TimeoutSeconds
+		}
+		if derivedProbe.PeriodSeconds == 0 {
+			derivedProbe.PeriodSeconds = defaultProbe.PeriodSeconds
+		}
+		// Always use defaultProbe Exec. At this time customer supported scripts are not supported.
+		derivedProbe.Exec = defaultProbe.Exec
+		return &derivedProbe
+	} else if configuredProbe == nil && configuredDelay != 0 {
+		var derivedProbe = *defaultProbe
+		derivedProbe.InitialDelaySeconds = configuredDelay
+		return &derivedProbe
 	}
-
-	scopedLog.Info("ReadinessProbeInitialDelay", "configured", spec.ReadinessInitialDelaySeconds, "additionalDelay", additionalDelay, "finalCalculatedValue", readinessDelay)
-
-	readinessCommand := []string{
-		"/bin/grep",
-		"started",
-		"/opt/container_artifact/splunk-container.state",
-	}
-
-	return getProbe(readinessCommand, readinessDelay, readinessProbeTimeoutSec, readinessProbePeriodSec)
+	return defaultProbe
 }
 
 // getProbe returns the Probe for given values.
@@ -917,6 +1119,10 @@ func isSmartstoreConfigured(smartstore *enterpriseApi.SmartStoreSpec) bool {
 	}
 
 	return smartstore.IndexList != nil || smartstore.VolList != nil || smartstore.Defaults.VolName != ""
+}
+
+func isCMDeployed(instanceType InstanceType) bool {
+	return instanceType == SplunkClusterManager || instanceType == SplunkClusterMaster
 }
 
 // AreRemoteVolumeKeysChanged discovers if the S3 keys changed
@@ -1118,8 +1324,8 @@ func initAppFrameWorkContext(ctx context.Context, client splcommon.ControllerCli
 	}
 
 	for _, vol := range appFrameworkConf.VolList {
-		if _, ok := splclient.S3Clients[vol.Provider]; !ok {
-			splclient.RegisterS3Client(ctx, vol.Provider)
+		if _, ok := splclient.RemoteDataClientsMap[vol.Provider]; !ok {
+			splclient.RegisterRemoteDataClient(ctx, vol.Provider)
 		}
 	}
 	return nil
@@ -1254,8 +1460,8 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	return nil
 }
 
-//  isAppFrameworkConfigured checks and returns true if App Framework is configured
-//  App Repo config without any App sources will not cause any App Framework activity
+// isAppFrameworkConfigured checks and returns true if App Framework is configured
+// App Repo config without any App sources will not cause any App Framework activity
 func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
 	return !(appFramework == nil || appFramework.AppSources == nil)
 }
@@ -1296,7 +1502,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 	_, err = os.Stat(appDownloadVolume)
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
-	if _, err := os.Stat(appDownloadVolume); os.IsNotExist(err) {
+	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
 		scopedLog.Error(err, "Volume needs to be mounted on operator pod to download apps. Please mount it as a separate volume on operator pod.", "volume path", appDownloadVolume)
 		return err
 	}
@@ -1343,15 +1549,20 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 			scopedLog.Info("No valid SecretRef for volume.", "volumeName", volume.Name)
 		}
 
-		// provider is used in App framework to pick the S3 client(aws, minio), and is not applicable to Smartstore
+		// provider is used in App framework to pick the S3 client(supported providers are aws and minio),
+		// or Blob client (supported provider is azure) and is not applicable to Smartstore
 		// For now, Smartstore supports only S3, which is by default.
 		if isAppFramework {
 			if !isValidStorageType(volume.Type) {
-				return fmt.Errorf("remote volume type is invalid. Only storageType=s3 is supported")
+				return fmt.Errorf("storageType '%s' is invalid. Valid values are 's3' and 'blob'", volume.Type)
 			}
 
 			if !isValidProvider(volume.Provider) {
-				return fmt.Errorf("s3 Provider is invalid")
+				return fmt.Errorf("provider '%s' is invalid. Valid values are 'aws', 'minio' and 'azure'", volume.Provider)
+			}
+
+			if !isValidProviderForStorageType(volume.Type, volume.Provider) {
+				return fmt.Errorf("storageType '%s' cannot be used with provider '%s'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)", volume.Type, volume.Provider)
 			}
 		}
 	}
@@ -1360,12 +1571,19 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 
 // isValidStorageType checks if the storage type specified is valid and supported
 func isValidStorageType(storage string) bool {
-	return storage != "" && storage == "s3"
+	return storage != "" && (storage == "s3" || storage == "blob")
 }
 
 // isValidProvider checks if the provider specified is valid and supported
 func isValidProvider(provider string) bool {
-	return provider != "" && (provider == "aws" || provider == "minio")
+	return provider != "" && (provider == "aws" || provider == "minio" || provider == "azure")
+}
+
+// Valid provider for s3 are aws and minio
+// Valid provider for blob is azure
+func isValidProviderForStorageType(storageType string, provider string) bool {
+	return ((storageType == "s3" && (provider == "aws" || provider == "minio")) ||
+		(storageType == "blob" && provider == "azure"))
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec
@@ -1517,7 +1735,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 	return indexesConf
 }
 
-//GetServerConfigEntries prepares the server.conf entries, and returns as a string
+// GetServerConfigEntries prepares the server.conf entries, and returns as a string
 func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
 	if cacheManagerConf == nil {
 		return ""
@@ -1606,4 +1824,111 @@ maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
 	indexDefaults = fmt.Sprintf(`%s
 `, indexDefaults)
 	return indexDefaults
+}
+
+// validateProbe validates a generic probe values
+func validateProbe(probe *enterpriseApi.Probe) error {
+	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.FailureThreshold < 0 {
+		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold)
+	}
+	return nil
+}
+
+// validateLivenessProbe validates the liveness probe config
+func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenessProbe *enterpriseApi.Probe) error {
+	var err error
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validateLivenessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if livenessProbe == nil {
+		scopedLog.Info("empty liveness probe.")
+		return err
+	}
+
+	err = validateProbe(livenessProbe)
+	if err != nil {
+		return fmt.Errorf("invalid Liveness Probe config. Reason: %s", err)
+	}
+
+	if livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
+		scopedLog.Error(err, "InitialDelaySeconds is too small", "configured", livenessProbe.InitialDelaySeconds, "recommended minimum", livenessProbeDefaultDelaySec)
+	}
+
+	if livenessProbe.TimeoutSeconds < livenessProbeTimeoutSec {
+		scopedLog.Error(err, "TimeoutSeconds is too small", "configured", livenessProbe.TimeoutSeconds, "recommended minimum", livenessProbeTimeoutSec)
+	}
+
+	if livenessProbe.PeriodSeconds < livenessProbePeriodSec {
+		scopedLog.Error(err, "PeriodSeconds is too small", "configured", livenessProbe.PeriodSeconds, "recommended minimum", livenessProbePeriodSec)
+	}
+
+	if livenessProbe.FailureThreshold < livenessProbeFailureThreshold {
+		scopedLog.Error(err, "FailureThreshold is too small", "configured", livenessProbe.FailureThreshold, "recommended minimum", livenessProbeFailureThreshold)
+	}
+
+	return err
+}
+
+// validateReadinessProbe validates the Readiness probe config
+func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readinessProbe *enterpriseApi.Probe) error {
+	var err error
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validateReadinessProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if readinessProbe == nil {
+		scopedLog.Info("empty readiness probe.")
+		return err
+	}
+
+	err = validateProbe(readinessProbe)
+	if err != nil {
+		return fmt.Errorf("invalid Readiness Probe config. Reason: %s", err)
+	}
+
+	if readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
+		scopedLog.Error(err, "InitialDelaySeconds is too small", "configured", readinessProbe.InitialDelaySeconds, "recommended minimum", readinessProbeDefaultDelaySec)
+	}
+
+	if readinessProbe.TimeoutSeconds < readinessProbeTimeoutSec {
+		scopedLog.Error(err, "TimeoutSeconds is too small", "configured", readinessProbe.TimeoutSeconds, "recommended minimum", readinessProbeTimeoutSec)
+	}
+
+	if readinessProbe.PeriodSeconds < readinessProbePeriodSec {
+		scopedLog.Error(err, "PeriodSeconds is too small", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
+	}
+
+	if readinessProbe.FailureThreshold < readinessProbeFailureThreshold {
+		scopedLog.Error(err, "FailureThreshold is too small", "configured", readinessProbe.FailureThreshold, "recommended minimum", readinessProbeFailureThreshold)
+	}
+	return err
+}
+
+// validateStartupProbe validates the startup probe config
+func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupProbe *enterpriseApi.Probe) error {
+	var err error
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validateStartupProbe").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	if startupProbe == nil {
+		scopedLog.Info("empty startup probe.")
+		return err
+	}
+
+	err = validateProbe(startupProbe)
+	if err != nil {
+		return fmt.Errorf("invalid Startup Probe config. Reason: %s", err)
+	}
+
+	if startupProbe.InitialDelaySeconds < startupProbeDefaultDelaySec {
+		scopedLog.Error(err, "InitialDelaySeconds is too small", "configured", startupProbe.InitialDelaySeconds, "recommended minimum", startupProbeDefaultDelaySec)
+	}
+
+	if startupProbe.TimeoutSeconds < startupProbeTimeoutSec {
+		scopedLog.Error(err, "TimeoutSeconds is too small", "configured", startupProbe.TimeoutSeconds, "recommended minimum", startupProbeTimeoutSec)
+	}
+
+	if startupProbe.PeriodSeconds < startupProbePeriodSec {
+		scopedLog.Error(err, "PeriodSeconds is too small", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
+	}
+	return err
 }

@@ -18,19 +18,18 @@ package test
 import (
 	"encoding/json"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 )
 
 // MockAWSS3Client is used to store all the objects for an app source
 type MockAWSS3Client struct {
-	Objects []*MockS3Object
+	Objects []*MockRemoteDataObject
 }
 
 // MockAWSS3Handler is used for checking response received
@@ -51,15 +50,15 @@ func (c *MockAWSS3Handler) AddObjects(appFrameworkRef enterpriseApi.AppFramework
 	}
 }
 
-// CheckAWSS3Response checks if the received objects are same as the one we expect
-func (c *MockAWSS3Handler) CheckAWSS3Response(t *testing.T, testMethod string) {
+// CheckAWSRemoteDataListResponse checks if the received objects are same as the one we expect
+func (c *MockAWSS3Handler) CheckAWSRemoteDataListResponse(t *testing.T, testMethod string) {
 	if len(c.WantSourceAppListResponseMap) != len(c.GotSourceAppListResponseMap) {
 		t.Fatalf("%s got %d Responses; want %d", testMethod, len(c.GotSourceAppListResponseMap), len(c.WantSourceAppListResponseMap))
 	}
 
 	for appSourceName, gotObjects := range c.GotSourceAppListResponseMap {
 		wantObjects := c.WantSourceAppListResponseMap[appSourceName]
-		checkS3Response(t, testMethod, gotObjects.Objects, wantObjects.Objects, appSourceName)
+		checkRemoteDataListResponse(t, testMethod, gotObjects.Objects, wantObjects.Objects, appSourceName)
 	}
 }
 

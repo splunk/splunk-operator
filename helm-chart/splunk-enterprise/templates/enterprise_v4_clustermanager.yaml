@@ -1,0 +1,131 @@
+{{- if or .Values.clusterManager.enabled ( and (not $.Values.existingClusterManager) ( or .Values.sva.c3.enabled .Values.sva.m4.enabled ) )}}
+apiVersion:  enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: {{ .Values.clusterManager.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.clusterManager.namespaceOverride }}
+{{- with .Values.clusterManager.additionalLabels }}
+  labels:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- with .Values.clusterManager.appRepo }}
+  appRepo: 
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterManager.smartstore }}
+  smartstore:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.existingLicenseManager }}
+  licenseManagerRef:
+    name: {{ .Values.existingLicenseManager.name }}
+  {{- if .Values.existingLicenseManager.namespace }}
+    namespace: {{ .Values.existingLicenseManager.namespace }}
+  {{- end }}
+{{- else if .Values.licenseManager.enabled }}
+  licenseManagerRef:
+    name: {{ .Values.licenseManager.name }}
+  {{- if .Values.licenseManager.namespaceOverride }}
+    namespace: {{ .Values.licenseManager.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.existingMonitoringConsole }}
+  monitoringConsoleRef:
+    name: {{ .Values.existingMonitoringConsole.name }}
+  {{- if .Values.existingMonitoringConsole.namespace }}
+    namespace: {{ .Values.existingMonitoringConsole.namespace }}
+  {{- end }}
+{{- else if .Values.monitoringConsole.enabled }}
+  monitoringConsoleRef:
+    name: {{ .Values.monitoringConsole.name }}
+  {{- if .Values.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+  {{- end }}
+{{- end }}
+{{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+{{- end }}
+{{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+{{- end }}
+{{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterManager.volumes }}      
+  volumes:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.licenseUrl }}
+  licenseUrl: {{ .Values.clusterManager.licenseUrl }}
+{{- end }}
+{{- if .Values.clusterManager.defaultsUrl }}
+  defaultsUrl: {{ .Values.clusterManager.defaultsUrl }}
+{{- end }}
+{{- if .Values.sva.m4.enabled }}
+  defaults: |-
+    splunk:
+      site: {{ .Values.sva.m4.clusterManager.site }}
+      multisite_master: localhost
+      all_sites: {{ .Values.sva.m4.clusterManager.allSites }}
+      multisite_replication_factor_origin: 1
+      multisite_replication_factor_total: 2
+      multisite_search_factor_origin: 1
+      multisite_search_factor_total: 2
+      idxc:
+        search_factor: 2
+        replication_factor: 2
+{{- else if .Values.clusterManager.defaults }}
+  defaults: |-
+{{ toYaml .Values.clusterManager.defaults | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.clusterManager.defaultsUrlApps }}
+{{- end }}
+{{- with .Values.clusterManager.extraEnv }}
+  extraEnv:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.clusterManager.livenessInitialDelaySeconds }}
+{{- end }}
+{{- if .Values.clusterManager.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.clusterManager.readinessInitialDelaySeconds }}
+{{- end }}
+{{- with .Values.clusterManager.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterManager.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.clusterManager.resources }}
+  resources:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.serviceAccount }}
+  serviceAccount: {{ .Values.clusterManager.serviceAccount }}
+{{- end }}
+{{- with .Values.clusterManager.tolerations }}
+  tolerations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- if $.Values.sva.m4.enabled }}
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+            - {{ .Values.sva.m4.clusterManager.zone }}
+{{- else }}
+  {{- with .Values.clusterManager.affinity }}
+  affinity:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

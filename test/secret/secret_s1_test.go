@@ -1,11 +1,10 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +17,11 @@ import (
 	"context"
 	"fmt"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -56,7 +56,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM and MC", func() {
-		It("secret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
+		It("mastersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
 
 			//  Test Scenario
 			// 1. Update Secrets Data
@@ -66,18 +66,29 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// 5. Verify New Secrets via api access (password)
 
 			// Download License File
-			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to download license file")
+			downloadDir := "licenseFolder"
+			switch testenv.ClusterProvider {
+			case "eks":
+				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "azure":
+				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
+				Expect(err).To(Succeed(), "Unable to download license file from Azure")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			default:
+				fmt.Printf("Unable to download license file")
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+			}
 
-			// Create License Config Map
-			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-
-			// Create standalone Deployment with License Manager
+			// Create standalone Deployment with License Master
 			mcName := deployment.GetName()
 			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -110,7 +121,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -147,7 +158,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM amd MC", func() {
-		It("secret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
+		It("mastersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
 
 			// Test Scenario
 			//1. Delete Secret Object
@@ -157,18 +168,29 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			//5. Verify New Secrets via api access (password)
 
 			// Download License File
-			licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-			Expect(err).To(Succeed(), "Unable to download license file")
+			downloadDir := "licenseFolder"
+			switch testenv.ClusterProvider {
+			case "eks":
+				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "azure":
+				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
+				Expect(err).To(Succeed(), "Unable to download license file from Azure")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			default:
+				fmt.Printf("Unable to download license file")
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+			}
 
-			// Create License Config Map
-			testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-
-			// Create standalone Deployment with License Manager
+			// Create standalone Deployment with License Master
 			mcName := deployment.GetName()
 			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcName)
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -197,7 +219,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Ensure standalone is updating
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Master to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for Standalone to be in READY status
@@ -233,7 +255,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("secret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
+		It("mastersecret, smoke, s1: Secret Object data is repopulated in secret object on passing empty Data map and new secrets are applied to Splunk Pods", func() {
 
 			// Test Scenario
 			// 1. Delete Secret Passing Empty Data Map to secret Object

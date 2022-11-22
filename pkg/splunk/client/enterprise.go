@@ -19,7 +19,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -89,7 +89,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 	}
 
 	// unmarshall response if obj != nil
-	data, _ := ioutil.ReadAll(response.Body)
+	data, _ := io.ReadAll(response.Body)
 	if len(data) == 0 {
 		return fmt.Errorf("received empty response body from %s", request.URL)
 	}
@@ -334,7 +334,7 @@ func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 			Text string `json:"text"`
 		} `json:"messages"`
 	}{}
-	data, _ := ioutil.ReadAll(response.Body)
+	data, _ := io.ReadAll(response.Body)
 	if len(data) == 0 {
 		return fmt.Errorf("received 503 response with empty body from %s", request.URL)
 	}
@@ -369,9 +369,9 @@ type ClusterBundleInfo struct {
 	Timestamp int64 `json:"timestamp"`
 }
 
-// ClusterMasterInfo represents the status of the indexer cluster manager.
+// ClusterManagerInfo represents the status of the indexer cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
-type ClusterMasterInfo struct {
+type ClusterManagerInfo struct {
 	// Indicates if the cluster is initialized.
 	Initialized bool `json:"initialized_flag"`
 
@@ -404,13 +404,13 @@ type ClusterMasterInfo struct {
 // GetClusterManagerInfo queries the cluster manager for info about the indexer cluster.
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Finfo
-func (c *SplunkClient) GetClusterManagerInfo() (*ClusterMasterInfo, error) {
+func (c *SplunkClient) GetClusterManagerInfo() (*ClusterManagerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
-			Content ClusterMasterInfo `json:"content"`
+			Content ClusterManagerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := splcommon.URIClusterManagerGetInfo
+	path := "/services/cluster/manager/info"
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -457,7 +457,7 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 			Content IndexerClusterPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := splcommon.URIPeerGetInfo
+	path := "/services/cluster/peer/info"
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
@@ -468,9 +468,9 @@ func (c *SplunkClient) GetIndexerClusterPeerInfo() (*IndexerClusterPeerInfo, err
 	return &apiResponse.Entry[0].Content, nil
 }
 
-// ClusterMasterPeerInfo represents the status of a indexer cluster peer (cluster manager endpoint).
+// ClusterManagerPeerInfo represents the status of a indexer cluster peer (cluster manager endpoint).
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
-type ClusterMasterPeerInfo struct {
+type ClusterManagerPeerInfo struct {
 	// Unique identifier or GUID for the peer
 	ID string `json:"guid"`
 
@@ -573,20 +573,20 @@ type ClusterMasterPeerInfo struct {
 // GetClusterManagerPeers queries the cluster manager for info about indexer cluster peers.
 // You can only use this on a cluster manager.
 // See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fmanager.2Fpeers
-func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterMasterPeerInfo, error) {
+func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterManagerPeerInfo, error) {
 	apiResponse := struct {
 		Entry []struct {
-			Name    string                `json:"name"`
-			Content ClusterMasterPeerInfo `json:"content"`
+			Name    string                 `json:"name"`
+			Content ClusterManagerPeerInfo `json:"content"`
 		} `json:"entry"`
 	}{}
-	path := splcommon.URIClusterManagerGetPeers
+	path := "/services/cluster/manager/peers"
 	err := c.Get(path, &apiResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	peers := make(map[string]ClusterMasterPeerInfo)
+	peers := make(map[string]ClusterManagerPeerInfo)
 	for _, e := range apiResponse.Entry {
 		e.Content.ID = e.Name
 		peers[e.Content.Label] = e.Content
@@ -600,7 +600,7 @@ func (c *SplunkClient) GetClusterManagerPeers() (map[string]ClusterMasterPeerInf
 // See https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Removepeerfrommanagerlist
 func (c *SplunkClient) RemoveIndexerClusterPeer(id string) error {
 	// sent request to remove a peer from Cluster Manager peers list
-	endpoint := fmt.Sprintf("%s%s?peers=%s", c.ManagementURI, splcommon.URIClusterManagerRemovePeers, id)
+	endpoint := fmt.Sprintf("%s%s?peers=%s", c.ManagementURI, "/services/cluster/manager/control/control/remove_peers", id)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -617,7 +617,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	if enforceCounts {
 		enforceCountsAsInt = 1
 	}
-	endpoint := fmt.Sprintf("%s%s?enforce_counts=%d", c.ManagementURI, splcommon.URIPeerDecommission, enforceCountsAsInt)
+	endpoint := fmt.Sprintf("%s%s?enforce_counts=%d", c.ManagementURI, "/services/cluster/peer/control/control/decommission", enforceCountsAsInt)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
@@ -628,7 +628,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 
 // BundlePush pushes the Cluster manager apps bundle to all the indexer peers
 func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
-	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, splcommon.URIClusterManagerApplyBundle)
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, "/services/cluster/manager/control/default/apply")
 	reqBody := fmt.Sprintf("&ignore_identical_bundle=%t", ignoreIdenticalBundle)
 
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(reqBody))
@@ -640,20 +640,20 @@ func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
 	return c.Do(request, expectedStatus, nil)
 }
 
-//MCServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
+// MCServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
 type MCServerRolesInfo struct {
 	ServerRoles []string `json:"server_roles"`
 }
 
-//MCDistributedPeers is the struct for information about distributed peers of the monitoring console
+// MCDistributedPeers is the struct for information about distributed peers of the monitoring console
 type MCDistributedPeers struct {
 	ClusterLabel []string `json:"cluster_label"`
 	ServerRoles  []string `json:"server_roles"`
 }
 
-//AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
+// AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
 func (c *SplunkClient) AutomateMCApplyChanges() error {
-	var configuredPeers, indexerMemberList, licenseMasterMemberList string
+	var configuredPeers, indexerMemberList, licenseManagerMemberList string
 	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
 	if err != nil {
 		return err
@@ -682,8 +682,8 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 			if s == "indexer" {
 				indexerMemberList = indexerMemberList + "&member=" + e.Name
 			}
-			if s == "license_master" {
-				licenseMasterMemberList = licenseMasterMemberList + "&member=" + e.Name
+			if s == "license_master" || s == "license_manager" {
+				licenseManagerMemberList = licenseManagerMemberList + "&member=" + e.Name
 			}
 		}
 	}
@@ -692,17 +692,17 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 		if e == "indexer" {
 			indexerMemberList = "&member=localhost:localhost" + indexerMemberList
 		}
-		if e == "license_master" {
-			licenseMasterMemberList = licenseMasterMemberList + "&member=localhost:localhost"
+		if e == "license_master" || e == "license_manager" {
+			licenseManagerMemberList = licenseManagerMemberList + "&member=localhost:localhost"
 		}
 	}
 	reqBodyIndexer := indexerMemberList + "&default=true"
-	reqBodyLicenseMaster := licenseMasterMemberList + "&default=false"
+	reqBodyLicenseManager := licenseManagerMemberList + "&default=false"
 	err = c.UpdateDMCGroups("dmc_group_indexer", reqBodyIndexer)
 	if err != nil {
 		return err
 	}
-	err = c.UpdateDMCGroups(splcommon.LicenseManagerDMCGroup, reqBodyLicenseMaster)
+	err = c.UpdateDMCGroups(splcommon.LicenseManagerDMCGroup, reqBodyLicenseManager)
 	if err != nil {
 		return err
 	}
@@ -754,13 +754,10 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 		return err
 	}
 	err = c.UpdateMonitoringConsoleApp()
-	if err != nil {
-		return err
-	}
 	return err
 }
 
-//GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
+// GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
 func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, error) {
 	apiResponseServerRoles := struct {
 		Entry []struct {
@@ -778,7 +775,7 @@ func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, er
 	return &apiResponseServerRoles.Entry[0].Content, nil
 }
 
-//UpdateDMCGroups dmc* groups with new members
+// UpdateDMCGroups dmc* groups with new members
 func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/%s/edit", c.ManagementURI, dmcGroupName)
 	request, _ := http.NewRequest("POST", endpoint, strings.NewReader(groupMembers))
@@ -787,7 +784,7 @@ func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string)
 	return err
 }
 
-//UpdateDMCClusteringLabelGroup update respective clustering group
+// UpdateDMCClusteringLabelGroup update respective clustering group
 func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/dmc_indexerclustergroup_%s/edit", c.ManagementURI, groupName)
 	reqBodyClusterGroup := groupMembers + "&default=false"
@@ -797,13 +794,13 @@ func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMemb
 	return err
 }
 
-//MCAssetBuildTable is the struct for information about asset table
+// MCAssetBuildTable is the struct for information about asset table
 type MCAssetBuildTable struct {
 	DispatchAutoCancel string `json:"dispatch.auto_cancel"`
 	DispatchBuckets    int64  `json:"dispatch.buckets"`
 }
 
-//GetMonitoringconsoleAssetTable to GET monitoring console asset table data.
+// GetMonitoringconsoleAssetTable to GET monitoring console asset table data.
 func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, error) {
 	apiResponseMCAssetTableBuild := struct {
 		Entry []struct {
@@ -821,7 +818,7 @@ func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, err
 	return &apiResponseMCAssetTableBuild.Entry[0].Content, nil
 }
 
-//PostMonitoringConsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
+// PostMonitoringConsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
 func (c *SplunkClient) PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBuild *MCAssetBuildTable) error {
 	reqBodyAssetTable := "&trigger_actions=true&dispatch.auto_cancel=" + apiResponseMCAssetTableBuild.DispatchAutoCancel + "&dispatch.buckets=" + strconv.FormatInt(apiResponseMCAssetTableBuild.DispatchBuckets, 10) + "&dispatch.enablePreview=true"
 	endpoint := c.ManagementURI + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
@@ -832,7 +829,7 @@ func (c *SplunkClient) PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBu
 	return err
 }
 
-//UISettings is the struct for storing monitoring console app UI settings
+// UISettings is the struct for storing monitoring console app UI settings
 type UISettings struct {
 	EaiData     string `json:"eai:data"`
 	Disabled    bool   `json:"disabled"`
@@ -841,7 +838,7 @@ type UISettings struct {
 	EaiUserName string `json:"eai:userName"`
 }
 
-//GetMonitoringConsoleUISettings do a Get for app UI settings
+// GetMonitoringConsoleUISettings do a Get for app UI settings
 func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 	apiResponseUISettings := struct {
 		Entry []struct {
@@ -859,7 +856,7 @@ func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 	return &apiResponseUISettings.Entry[0].Content, nil
 }
 
-//UpdateLookupUISettings updates assets.csv
+// UpdateLookupUISettings updates assets.csv
 func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiResponseUISettings *UISettings) error {
 	reqBodyMCLookups := "configuredPeers=" + configuredPeers + "&eai:appName=" + apiResponseUISettings.EaiAppName + "&eai:acl=" + apiResponseUISettings.EaiACL + "&eai:userName=" + apiResponseUISettings.EaiUserName + "&disabled=" + strconv.FormatBool(apiResponseUISettings.Disabled)
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", c.ManagementURI)
@@ -870,7 +867,7 @@ func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiRespons
 	return err
 }
 
-//UpdateMonitoringConsoleApp updates the monitoring console app
+// UpdateMonitoringConsoleApp updates the monitoring console app
 func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/apps/local/splunk_monitoring_console", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
@@ -882,7 +879,7 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 	return err
 }
 
-//ClusterInfo is the struct for checking ClusterInfo
+// ClusterInfo is the struct for checking ClusterInfo
 type ClusterInfo struct {
 	MultiSite             string `json:"multisite"`
 	ReplicationFactor     int32  `json:"replication_factor"`
@@ -890,7 +887,7 @@ type ClusterInfo struct {
 }
 
 // GetClusterInfo queries the cluster about multi-site or single-site.
-//See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fconfig
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fconfig
 func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 	if mockCall {
 		return nil, nil

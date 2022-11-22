@@ -1,13 +1,13 @@
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: hwf-example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm-example
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
     replicas: 1
   appRepo:

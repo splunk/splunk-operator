@@ -5,6 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/splunk/splunk-operator)](https://goreportcard.com/report/github.com/splunk/splunk-operator)
 [![CircleCI](https://circleci.com/gh/splunk/splunk-operator/tree/master.svg?style=shield)](https://circleci.com/gh/splunk/splunk-operator/tree/master)
 [![Coverage Status](https://coveralls.io/repos/github/splunk/splunk-operator/badge.svg?branch=master)](https://coveralls.io/github/splunk/splunk-operator?branch=master)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator?ref=badge_shield)
 
 The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk
 Administrators to deploy and operate Enterprise deployments in a Kubernetes
@@ -25,7 +26,7 @@ You must have [Docker Engine](https://docs.docker.com/install/) installed to
 build the Splunk Operator.
 
 This project uses [Go modules](https://blog.golang.org/using-go-modules),
-and requires [golang](https://golang.org/doc/install) 1.17.3 or later.
+and requires [golang](https://golang.org/doc/install) 1.19.2 or later.
 You must `export GO111MODULE=on` if cloning these repositories into your
 `$GOPATH` (not recommended).
 
@@ -33,7 +34,7 @@ The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk
 must also be installed to build this project.
 
 ```
-git clone -b v1.18.1 https://github.com/operator-framework/operator-sdk
+git clone -b v1.25.0 https://github.com/operator-framework/operator-sdk
 cd operator-sdk
 make tidy
 make install
@@ -107,7 +108,6 @@ Other make targets include (more info below):
 * `make clean`: removes the binary build output and `splunk-operator` container image example `make docker-push IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make run`: runs the Splunk Operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context
 * `make fmt`: runs `go fmt` on all `*.go` source files in this project
-* `make lint`: runs the `golint` utility on all `*.go` source files in this project
 * `make bundle-build`: generates `splunk-operator-bundle` bundle container image for OLM example `make bundle-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name>  IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make bundle-push`: push OLM bundle docker image to given repository example `make bundle-push IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name> IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make catalog-build`: generates `splunk-operator-catalog` catalog container image example `make catalog-build IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=<tag name> IMG=docker.io/splunk/splunk-operator:<tag name>`
@@ -144,3 +144,7 @@ resources in your current namespace.
 Please see the [Getting Started Documentation](docs/README.md) for more
 information, including instructions on how to install the operator in your
 cluster.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fsplunk%2Fsplunk-operator?ref=badge_large)

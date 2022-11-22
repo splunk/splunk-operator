@@ -1,11 +1,10 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//  http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +20,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +40,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	BeforeEach(func() {
 		var err error
-		name := fmt.Sprintf("%s-%s", testenvInstance.GetName(), testenv.RandomDNSName(3))
+		name := fmt.Sprintf("%s-%s", "master"+testenvInstance.GetName(), testenv.RandomDNSName(3))
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
@@ -64,15 +64,15 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
+		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the Cluster Master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -158,15 +158,15 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("crcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
+		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// Ensure that the Cluster Master goes to Ready phase
+			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -193,7 +193,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Indexers PVCs (etc and var) exists
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, true, verificationTimeout)
 
-			// Verify Cluster Manager PVCs (etc and var) exists
+			// Verify Cluster Master PVCs (etc and var) exists
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, true, verificationTimeout)
 
 			// Delete the Search Head Cluster
@@ -210,8 +210,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			err = deployment.DeleteCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Unable to delete IDXC instance", "IDXC Name", idxc)
 
-			// Delete the Cluster Manager
-			cm := &enterpriseApi.ClusterMaster{}
+			// Delete the Cluster Master
+			cm := &enterpriseApiV3.ClusterMaster{}
 			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
 			Expect(err).To(Succeed(), "Unable to GET Cluster Manager instance", "Cluster Manager Name", cm)
 			err = deployment.DeleteCR(ctx, cm)
@@ -232,7 +232,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Indexers PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "idxc-indexer", 3, false, verificationTimeout)
 
-			// Verify Cluster Manager PVCs (etc and var) have been deleted
+			// Verify Cluster Master PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, false, verificationTimeout)
 
 			// Verify Monitoring Console PVCs (etc and var) have been deleted

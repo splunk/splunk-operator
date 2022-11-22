@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 
+	"path/filepath"
+
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -41,6 +43,48 @@ const (
 
 	// identifier
 	smartstoreTemplateStr = "splunk-%s-%s-smartstore"
+
+	// identifier
+	probeConfigMapTemplateStr = "splunk-%s-probe-configmap"
+
+	// livenessScriptName
+	livenessScriptName = "livenessProbe.sh"
+
+	// readinessScriptName
+	readinessScriptName = "readinessProbe.sh"
+
+	// startupScriptName
+	startupScriptName = "startupProbe.sh"
+
+	// startupScriptLocation
+	startupScriptLocation = "tools/k8_probes/" + startupScriptName
+
+	// readinessScriptLocation
+	readinessScriptLocation = "tools/k8_probes/" + readinessScriptName
+
+	// livenessScriptLocation
+	livenessScriptLocation = "tools/k8_probes/" + livenessScriptName
+
+	// livenessDriverLocation
+	//livenessDriverLocation = "/opt/splunk/etc/k8_liveness_driver.sh"
+	livenessDriverLocation = "/tmp/splunk_operator_k8s/probes/"
+
+	// livenessDriverFile
+	livenessDriverFile = "k8_liveness_driver.sh"
+
+	// livenessProbeLevelName
+	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
+	livenessProbeLevelName = "K8_OPERATOR_LIVENESS_LEVEL"
+
+	// livenessProbeDriverPath
+	// NOTE: Changing this value must also reflect in ../tools/k9_probes/ directory script files
+	livenessProbeDriverPathEnv = "SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH"
+
+	// probeMountDirectory
+	probeMountDirectory = "/mnt/probes"
+
+	// probeVolumePermission
+	probeVolumePermission = int32(0555)
 
 	// init container name
 	initContainerTemplate = "%s-init-%d-%s"
@@ -116,14 +160,58 @@ const (
 	maxSplunkAppsInstallationDelaySecs = 1500
 
 	// Readiness probe time values
-	readinessProbeDefaultDelaySec = 10
-	readinessProbeTimeoutSec      = 5
-	readinessProbePeriodSec       = 5
+	readinessProbeDefaultDelaySec  = 10
+	readinessProbeTimeoutSec       = 5
+	readinessProbePeriodSec        = 5
+	readinessProbeFailureThreshold = 3
 
 	// Liveness probe time values
-	livenessProbeDefaultDelaySec = 300
-	livenessProbeTimeoutSec      = 30
-	livenessProbePeriodSec       = 30
+	livenessProbeDefaultDelaySec  = 30
+	livenessProbeTimeoutSec       = 30
+	livenessProbePeriodSec        = 30
+	livenessProbeFailureThreshold = 3
+
+	// Startup probe time values
+	startupProbeDefaultDelaySec  = 40
+	startupProbeTimeoutSec       = 30
+	startupProbePeriodSec        = 30
+	startupProbeFailureThreshold = 12
+
+	// Number of ClusterMasterReplicas
+	numberOfClusterMasterReplicas = 1
+
+	// Number of Deployer replicas
+	numberOfDeployerReplicas = 1
+
+	// Number of Licensemaster replicas
+	numberOfLicenseMasterReplicas = 1
+
+	// Telemetry app.conf string
+	telAppConfString = `[install]
+is_configured = 1
+
+[ui]
+is_visible = 0
+label = Splunk Operator for K8s
+
+[launcher]
+author = Splunk
+description = When telemetry is enabled, this app is used to help Splunk understand how many customers are deploying Splunk using Splunk Operator for K8s
+version = 1.0.0
+`
+	// Command to create telemetry app on non SHC scenarios
+	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/app.conf"
+
+	// Command to create telemetry app on SHC scenarios
+	createTelAppShcString = "mkdir -p %s/app_tel_for_sok8s_%s/default/; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/default/app.conf"
+
+	// Command to reload app configuration
+	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+)
+
+const (
+	livenessProbeLevelDefault int = iota
+	livenessProbeLevelOne
 )
 
 // GetSplunkDeploymentName uses a template to name a Kubernetes Deployment for Splunk instances.
@@ -218,4 +306,59 @@ func GetSplunkImage(specImage string) string {
 // GetPortName uses a template to enrich a port name with protocol information for usage with mesh services
 func GetPortName(port string, protocol string) string {
 	return fmt.Sprintf(portNameTemplateStr, protocol, port)
+}
+
+// GetProbeConfigMapName uses a template to name a Kubernetes ConfigMap for a Liveness/Readiness Probe.
+func GetProbeConfigMapName(identifier string) string {
+	return fmt.Sprintf(probeConfigMapTemplateStr, identifier)
+}
+
+// GetReadinessScriptLocation return the location of readiness script
+var GetReadinessScriptLocation = func() string {
+	return readinessScriptLocation
+}
+
+// GetLivenessScriptLocation return the location of liveness script
+var GetLivenessScriptLocation = func() string {
+	return livenessScriptLocation
+}
+
+// GetReadinessScriptName returns the name of liveness script on pod
+var GetReadinessScriptName = func() string {
+	return readinessScriptName
+}
+
+// GetLivenessScriptName returns the name of liveness script on pod
+var GetLivenessScriptName = func() string {
+	return livenessScriptName
+}
+
+// GetProbeMountDirectory returns the name of mount location for probe config map
+var GetProbeMountDirectory = func() string {
+	return probeMountDirectory
+}
+
+// GetProbeVolumePermission returns the permission for probe config map volume mount
+var GetProbeVolumePermission = func() int32 {
+	return probeVolumePermission
+}
+
+// GetLivenessDriverFilePath returns the location of liveness level drive file path
+var GetLivenessDriverFilePath = func() string {
+	return filepath.Join(livenessDriverLocation, livenessDriverFile)
+}
+
+// GetLivenessDriverFileDir returns directory location for liveness drive file
+var GetLivenessDriverFileDir = func() string {
+	return livenessDriverLocation
+}
+
+// GetStartupScriptLocation return the location of startup probe script
+var GetStartupScriptLocation = func() string {
+	return startupScriptLocation
+}
+
+// GetStartupScriptName returns the name of startup probe script on pod
+var GetStartupScriptName = func() string {
+	return startupScriptName
 }

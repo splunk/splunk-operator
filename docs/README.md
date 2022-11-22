@@ -16,7 +16,7 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 
 ## Support Resources
 
-SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for deploying distributed Splunk Enterprise environments using containers.
+SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for deploying distributed Splunk Enterprise environments using containers. The Splunk Operator is categorized as an Extension and subject to the support terms found [here](https://www.splunk.com/en_us/legal/splunk-software-support-policy.html).  Splunk Enterprise deployed using the Splunk Operator is subject to the applicable support level offered [here](https://www.splunk.com/en_us/customer-success/support-programs.html).
 
 COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
 
@@ -59,8 +59,8 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.0.0 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.0 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.1.0 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.2 or later)
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -108,12 +108,12 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-namespace.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.1.0/splunk-operator-namespace.yaml
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.0.0/splunk-operator-cluster.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.1.0/splunk-operator-cluster.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
@@ -128,6 +128,11 @@ $ kubectl get pods
 NAME                               READY   STATUS    RESTARTS   AGE
 splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 ```
+
+### Installation using Helm charts
+
+Installing the Splunk Operator using Helm allows you to quickly deploy the operator and Splunk Enterprise in a Kubernetes cluster. The operator and custom resources are easily configurable allowing for advanced installations including support for Splunk Validated Architectures. Helm also provides a number of features to manage the operator and custom resource lifecycle. The [Installation using Helm](Helm.md) page will walk you through installing and configuring Splunk Enterprise deployments using Helm charts.
+
 ## Upgrading the Splunk Operator
 
 For information on upgrading the Splunk Operator, see the [How to upgrade Splunk Operator and Splunk Enterprise Deployments](SplunkOperatorUpgrade.md) page.
@@ -141,7 +146,7 @@ The `Standalone` custom resource is used to create a single instance deployment 
 
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: s1
@@ -150,7 +155,7 @@ metadata:
 EOF
 ```
 
-**The `enterprise.splunk.com/delete-pvc` finalizer is optional, and tells the Splunk Operator to remove any Kubernetes [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) associated with the instance if you delete the pod.**
+**The `enterprise.splunk.com/delete-pvc` finalizer is optional, and tells the Splunk Operator to remove any Kubernetes [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) associated with the instance if you delete the custom resource(CR).**
 
 Within a few minutes, you'll see new pods running in your namespace:
 

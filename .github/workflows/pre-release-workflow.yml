@@ -61,10 +61,6 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     
-    - name: Install golint
-      run: |
-        go get -u golang.org/x/lint/golint
-    
     - name: Install goveralls
       run: |
         go get github.com/mattn/goveralls@latest
@@ -131,6 +127,18 @@ jobs:
         exclude: "ChangeLog.md"
         include: "**.md"
 
+    - name: Install Operator SDK
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+
+    - name: Run Bundle Creation for the release
+      run: |
+        make bundle IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=${{ github.event.inputs.release_version }} IMG=docker.io/splunk/splunk-operator:${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=docker.io/splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
     - name: Reset go.mod and go.sum before creating Pull Request
       run: |
         git checkout go.sum

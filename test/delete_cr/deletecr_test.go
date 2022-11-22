@@ -18,21 +18,14 @@ package deletecr
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
-	"github.com/splunk/splunk-operator/test/testenv"
+	testenv "github.com/splunk/splunk-operator/test/testenv"
+	corev1 "k8s.io/api/core/v1"
 )
-
-func dumpGetPods(ns string) {
-	output, _ := exec.Command("kubectl", "get", "pod", "-n", ns).Output()
-	for _, line := range strings.Split(string(output), "\n") {
-		testenvInstance.Log.Info(line)
-	}
-}
 
 var _ = Describe("DeleteCR test", func() {
 
@@ -62,23 +55,77 @@ var _ = Describe("DeleteCR test", func() {
 		}
 	})
 
-	Context("Multisite cluster deployment (M13 - Multisite indexer cluster, Search head cluster)", func() {
-		It("deletecr: can deploy indexers and search head cluster", func() {
+	Context("Standalone deployment (S1 - Standalone Pod)", func() {
+		It("integration, managerdeletecr: can deploy standalone and delete", func() {
 
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
-			Expect(err).To(Succeed(), "Unable to deploy cluster")
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
+				},
+			}
 
-			// Ensure that the cluster-manager goes to Ready phase
+			// Deploy Standalone
+			testcaseEnvInst.Log.Info("Deploy Standalone")
+			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance")
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Delete Standalone CR
+			err = deployment.DeleteCR(ctx, standalone)
+			Expect(err).To(Succeed(), "Unable to Delete Standalone")
+
+		})
+	})
+
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3)", func() {
+		It("integration, managerdeletecr: can deploy C3 and delete search head, clustermanager", func() {
+
+			// Deploy C3
+			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
+			indexerReplicas := 3
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true, "")
+			Expect(err).To(Succeed(), "Unable to deploy C3 instance")
+
+			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure the indexers of all sites go to Ready phase
+			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure search head cluster go to Ready phase
+			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify no SH in disconnected status is present on CM
-			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
+			idxc := &enterpriseApi.IndexerCluster{}
+			idxcName := deployment.GetName() + "-idxc"
+			err = deployment.GetInstance(ctx, idxcName, idxc)
+			Expect(err).To(Succeed(), "Unable to get Indexer instance")
+
+			// Delete Indexer Cluster CR
+			err = deployment.DeleteCR(ctx, idxc)
+			Expect(err).To(Succeed(), "Unable to Delete Indexer Cluster")
+
+			sh := &enterpriseApi.SearchHeadCluster{}
+			shcName := deployment.GetName() + "-shc"
+			err = deployment.GetInstance(ctx, shcName, sh)
+			Expect(err).To(Succeed(), "Unable to get Search Head instance")
+
+			// Delete Search Head Cluster CR
+			err = deployment.DeleteCR(ctx, sh)
+			Expect(err).To(Succeed(), "Unable to Delete Search Head Cluster")
+
+			cm := &enterpriseApi.ClusterManager{}
+			cmName := deployment.GetName()
+			err = deployment.GetInstance(ctx, cmName, cm)
+			Expect(err).To(Succeed(), "Unable to get Cluster Manager instance")
+
+			// Delete Cluster Manager CR
+			err = deployment.DeleteCR(ctx, cm)
+			Expect(err).To(Succeed(), "Unable to Delete Cluster Manager")
 
 		})
 	})

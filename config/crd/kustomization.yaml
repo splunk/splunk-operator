@@ -2,9 +2,11 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
+- bases/enterprise.splunk.com_clustermanagers.yaml
 - bases/enterprise.splunk.com_clustermasters.yaml
 - bases/enterprise.splunk.com_indexerclusters.yaml
 - bases/enterprise.splunk.com_licensemasters.yaml
+- bases/enterprise.splunk.com_licensemanagers.yaml
 - bases/enterprise.splunk.com_monitoringconsoles.yaml
 - bases/enterprise.splunk.com_searchheadclusters.yaml
 - bases/enterprise.splunk.com_standalones.yaml
@@ -15,9 +17,11 @@ patchesStrategicMerge:
 - patches/patch_preserve_unknown_fields.yaml
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
+#- patches/webhook_in_clustermanagers.yaml
 #- patches/webhook_in_clustermasters.yaml
 #- patches/webhook_in_indexerclusters.yaml
 #- patches/webhook_in_licensemasters.yaml
+#- patches/webhook_in_licensemanagers.yaml
 #- patches/webhook_in_monitoringconsoles.yaml
 #- patches/webhook_in_searchheadclusters.yaml
 #- patches/webhook_in_standalones.yaml
@@ -25,9 +29,11 @@ patchesStrategicMerge:
 
 # [CERTMANAGER] To enable cert-manager, uncomment all the sections with [CERTMANAGER] prefix.
 # patches here are for enabling the CA injection for each CRD
+#- patches/cainjection_in_clustermanagers.yaml
 #- patches/cainjection_in_clustermasters.yaml
 #- patches/cainjection_in_indexerclusters.yaml
 #- patches/cainjection_in_licensemasters.yaml
+#- patches/cainjection_in_licensemanagers.yaml
 #- patches/cainjection_in_monitoringconsoles.yaml
 #- patches/cainjection_in_searchheadclusters.yaml
 #- patches/cainjection_in_standalones.yaml

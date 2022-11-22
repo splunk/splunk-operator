@@ -33,8 +33,8 @@ type licenserLocalPeerResponse struct {
 			GUID                     []string `json:"guid"`
 			LastTrackerdbServiceTime int      `json:"last_trackerdb_service_time"`
 			LicenseKeys              []string `json:"license_keys"`
-			MasterGUID               string   `json:"master_guid"`
-			MasterURI                string   `json:"master_uri"`
+			ManagerGUID              string   `json:"master_guid"`
+			ManagerURI               string   `json:"master_uri"`
 		} `json:"content"`
 	} `json:"entry"`
 }
@@ -55,7 +55,7 @@ func CheckLicenseManagerConfigured(ctx context.Context, deployment *Deployment, 
 		logf.Log.Error(err, "Failed to parse health status")
 		return false
 	}
-	licenseManager := restResponse.Entry[0].Content.MasterURI
+	licenseManager := restResponse.Entry[0].Content.ManagerURI
 	logf.Log.Info("License Manager configuration on POD", "POD", podName, "License Manager", licenseManager)
-	return strings.Contains(licenseManager, splcommon.TestLicenseManagerMgmtPort)
+	return strings.Contains(licenseManager, "license-manager-service:8089") || strings.Contains(licenseManager, "license-master-service:8089")
 }

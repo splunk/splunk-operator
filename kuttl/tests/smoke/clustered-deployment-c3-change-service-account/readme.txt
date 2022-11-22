@@ -13,6 +13,6 @@ Scenario:
 8. remove finalizer from cluster manager 
 9. remove finalizer from indexer cluster
 10. remove finalizer from search head cluster
-11 remove search head master
+11 remove search head manager
 12. remove indexer cluster
-13. remove cluster master
+13. remove cluster manager

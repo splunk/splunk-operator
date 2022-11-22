@@ -26,7 +26,8 @@ import (
 
 	gomega "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -183,13 +184,13 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 // ClusterManagerReady verify Cluster Manager Instance is in ready status
 func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	// Ensure that the cluster-manager goes to Ready phase
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApi.ClusterManager{}
 	gomega.Eventually(func() enterpriseApi.Phase {
 		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		testenvInstance.Log.Info("Waiting for cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()
@@ -202,6 +203,32 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
 		testenvInstance.Log.Info("Check for Consistency "+splcommon.ClusterManager+" phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "cluster-manager")
+		testenvInstance.Log.Info("Check for Consistency cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		return cm.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// ClusterMasterReady verify Cluster Master Instance is in ready status
+func ClusterMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	// Ensure that the cluster-master goes to Ready phase
+	cm := &enterpriseApiV3.ClusterMaster{}
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		// Test ClusterMaster Phase to see if its ready
+		return cm.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// In a steady state, cluster-master should stay in Ready and not flip-flop around
+	gomega.Consistently(func() enterpriseApi.Phase {
+		_ = deployment.GetInstance(ctx, deployment.GetName(), cm)
+		testenvInstance.Log.Info("Check for Consistency cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		return cm.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -246,8 +273,13 @@ func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, 
 		siteIndexerMap[siteName] = []string{fmt.Sprintf("splunk-%s-indexer-0", instanceName)}
 	}
 	gomega.Eventually(func() map[string][]string {
-		podName := fmt.Sprintf(ClusterManagerPod, deployment.GetName())
-		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) " + splcommon.LocalURLClusterManagerGetSite
+		var podName string
+		if strings.Contains(deployment.name, "master") {
+			podName = fmt.Sprintf(ClusterMasterPod, deployment.GetName())
+		} else {
+			podName = fmt.Sprintf(ClusterManagerPod, deployment.GetName())
+		}
+		stdin := "curl -ks -u admin:$(cat /mnt/splunk-secrets/password) https://localhost:8089/services/cluster/manager/sites?output_mode=json"
 		command := []string{"/bin/sh"}
 		stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
 		if err != nil {
@@ -255,7 +287,7 @@ func IndexerClusterMultisiteStatus(ctx context.Context, deployment *Deployment, 
 			return map[string][]string{}
 		}
 		testenvInstance.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
-		siteIndexerResponse := ClusterMasterSitesResponse{}
+		siteIndexerResponse := ClusterManagerSitesResponse{}
 		json.Unmarshal([]byte(stdout), &siteIndexerResponse)
 		siteIndexerStatus := map[string][]string{}
 		for _, site := range siteIndexerResponse.Entries {
@@ -297,27 +329,53 @@ func VerifyNoSHCInNamespace(deployment *Deployment, testenvInstance *TestCaseEnv
 
 // LicenseManagerReady verify LM is in ready status and does not flip flop
 func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
-	licenseMaster := &enterpriseApi.LicenseMaster{}
+	LicenseManager := &enterpriseApi.LicenseManager{}
 
 	testenvInstance.Log.Info("Verifying License Manager becomes READY")
 	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deployment.GetName(), licenseMaster)
+		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
 		testenvInstance.Log.Info("Waiting for License Manager instance status to be ready",
-			"instance", licenseMaster.ObjectMeta.Name, "Phase", licenseMaster.Status.Phase)
+			"instance", LicenseManager.ObjectMeta.Name, "Phase", LicenseManager.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()
 
-		return licenseMaster.Status.Phase
+		return LicenseManager.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), licenseMaster)
-		return licenseMaster.Status.Phase
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseManager)
+		return LicenseManager.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
+// LicenseMasterReady verify LM is in ready status and does not flip flop
+func LicenseMasterReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	LicenseMaster := &enterpriseApiV3.LicenseMaster{}
+
+	testenvInstance.Log.Info("Verifying License Master becomes READY")
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for License Master instance status to be ready",
+			"instance", LicenseMaster.ObjectMeta.Name, "Phase", LicenseMaster.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+
+		return LicenseMaster.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() enterpriseApi.Phase {
+		_ = deployment.GetInstance(ctx, deployment.GetName(), LicenseMaster)
+		return LicenseMaster.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
@@ -487,13 +545,13 @@ func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInst
 	case *enterpriseApi.Standalone:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.LicenseMaster:
+	case *enterpriseApi.LicenseManager:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
 	case *enterpriseApi.IndexerCluster:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
-	case *enterpriseApi.ClusterMaster:
+	case *enterpriseApi.ClusterManager:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
 	case *enterpriseApi.MonitoringConsole:
@@ -525,7 +583,12 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
-		case *enterpriseApi.LicenseMaster:
+		case *enterpriseApi.LicenseManager:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApiV3.LicenseMaster:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
@@ -535,7 +598,12 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
-		case *enterpriseApi.ClusterMaster:
+		case *enterpriseApi.ClusterManager:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			kind = cr.Kind
+			newResourceVersion = cr.ResourceVersion
+			name = cr.Name
+		case *enterpriseApiV3.ClusterMaster:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			kind = cr.Kind
 			newResourceVersion = cr.ResourceVersion
@@ -593,13 +661,30 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 
 // VerifyClusterManagerPhase verify phase of cluster manager
 func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase) {
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApi.ClusterManager{}
 	gomega.Eventually(func() enterpriseApi.Phase {
 		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
-		testenvInstance.Log.Info("Waiting for"+splcommon.ClusterManager+"Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
+		testenvInstance.Log.Info("Waiting for cluster-manager Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		// Test ClusterManager Phase to see if its ready
+		return cm.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
+}
+
+// VerifyClusterMasterPhase verify phase of cluster manager
+func VerifyClusterMasterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase) {
+	cm := &enterpriseApiV3.ClusterMaster{}
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, deployment.GetName(), cm)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for cluster-manager Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()
@@ -769,7 +854,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 
 			if versionCheck {
 				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-				if !(clusterWideInstall && (strings.Contains(podName, splcommon.TestDeployerDashed) || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
+				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
 					var expectedVersion string
 					if checkupdated {
 						expectedVersion = AppInfo[appName]["V2"]
@@ -791,9 +876,9 @@ func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstan
 		path := "etc/apps"
 		//For cluster-wide install the apps are extracted to different locations
 		if scope == enterpriseApi.ScopeCluster {
-			if strings.Contains(podName, splcommon.ClusterManager) {
+			if strings.Contains(podName, "cluster-manager") || strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
-			} else if strings.Contains(podName, splcommon.TestDeployerDashed) {
+			} else if strings.Contains(podName, "-deployer-") {
 				path = splcommon.SHClusterAppsLoc
 			} else if strings.Contains(podName, "-indexer-") {
 				path = splcommon.PeerAppsLoc
@@ -957,9 +1042,12 @@ func VerifyPodsInMCConfigString(ctx context.Context, deployment *Deployment, tes
 func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, replicas int, previousBundleHash string) {
 	gomega.Eventually(func() bool {
 		// Get Bundle status and check that each pod has successfully deployed the latest bundle
-		clusterMasterBundleStatus := ClusterManagerBundlePushstatus(ctx, deployment, previousBundleHash)
-		if len(clusterMasterBundleStatus) < replicas {
-			testenvInstance.Log.Info("Bundle push on Pod not complete on all pods", "Pod with bundle push", clusterMasterBundleStatus)
+		clusterManagerBundleStatus := CMBundlePushstatus(ctx, deployment, previousBundleHash, "cmanager")
+		if strings.Contains(deployment.GetName(), "master") {
+			clusterManagerBundleStatus = CMBundlePushstatus(ctx, deployment, previousBundleHash, "cmaster")
+		}
+		if len(clusterManagerBundleStatus) < replicas {
+			testenvInstance.Log.Info("Bundle push on Pod not complete on all pods", "Pod with bundle push", clusterManagerBundleStatus)
 			return false
 		}
 		clusterPodNames := DumpGetPods(testenvInstance.GetName())
@@ -967,9 +1055,9 @@ func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment,
 		DumpGetTopNodes()
 		for _, podName := range clusterPodNames {
 			if strings.Contains(podName, "-indexer-") {
-				if _, present := clusterMasterBundleStatus[podName]; present {
-					if clusterMasterBundleStatus[podName] != "Up" {
-						testenvInstance.Log.Info("Bundle push on Pod not complete", "Pod Name", podName, "Status", clusterMasterBundleStatus[podName])
+				if _, present := clusterManagerBundleStatus[podName]; present {
+					if clusterManagerBundleStatus[podName] != "Up" {
+						testenvInstance.Log.Info("Bundle push on Pod not complete", "Pod Name", podName, "Status", clusterManagerBundleStatus[podName])
 						return false
 					}
 				} else {
@@ -1073,4 +1161,23 @@ func VerifyIsDeploymentInProgressFlagIsSet(ctx context.Context, deployment *Depl
 		testenvInstance.Log.Info("IsDeploymentInProgress Flag status found", "CR NAME", name, "CR Kind", crKind, "IsDeploymentInProgress", isDeploymentInProgress)
 		return isDeploymentInProgress
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyFilesInDirectoryOnPod verify that files are present in folder.
+func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, ns string, podNames []string, files []string, path string, checkDirectory bool, checkPresent bool) {
+	for _, podName := range podNames {
+		gomega.Eventually(func() bool {
+			// Using checkDirectory here to get all files in case of negative check.  GetDirsOrFilesInPath  will return files/directory when checkDirecotry is FALSE
+			filelist, err := GetDirsOrFilesInPath(ctx, deployment, podName, path, checkDirectory)
+			gomega.Expect(err).To(gomega.Succeed(), "Unable to get files on pod", "Pod", podName)
+			for _, file := range files {
+				found := CheckStringInSlice(filelist, file)
+				logf.Log.Info("File check", "On pod", podName, "Filename", file, "is in path", path, "Status", found)
+				if found != checkPresent {
+					return false
+				}
+			}
+			return true
+		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+	}
 }

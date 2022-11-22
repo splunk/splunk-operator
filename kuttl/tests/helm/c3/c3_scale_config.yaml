@@ -1,0 +1,15 @@
+splunk-operator:
+  enabled: false
+sva: 
+    c3:
+      enabled: true
+
+      clusterManager:
+        name: cm
+
+      indexerClusters:
+        - name: idxc
+          replicaCount: 4
+
+      searchHeadClusters:
+        - name: shc

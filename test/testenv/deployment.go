@@ -38,8 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
@@ -149,17 +149,17 @@ func (d *Deployment) Teardown() error {
 }
 
 // DeployStandalone deploys a standalone splunk enterprise instance on the specified testenv
-func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef string, licenseMaster string) (*enterpriseApi.Standalone, error) {
+func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef string, LicenseManager string) (*enterpriseApi.Standalone, error) {
 	standalone := newStandalone(name, d.testenv.namespace)
 
 	// If license file specified, deploy License Manager
-	if licenseMaster != "" && d.testenv.licenseFilePath != "" {
+	if LicenseManager != "" && d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseManager(ctx, name)
 		if err != nil {
 			return nil, err
 		}
-		licenseMaster = name
+		LicenseManager = name
 
 	}
 	if mcRef != "" {
@@ -175,9 +175,9 @@ func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef st
 }
 
 // DeployMonitoringConsole deploys MC instance on specified testenv,
-// licenseMasterRef is optional, pass empty string if MC should not be attached to a LM
-func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, licenseMasterRef string) (*enterpriseApi.MonitoringConsole, error) {
-	mc := newMonitoringConsoleSpec(name, d.testenv.namespace, licenseMasterRef)
+// LicenseManagerRef is optional, pass empty string if MC should not be attached to a LM
+func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, LicenseManagerRef string) (*enterpriseApi.MonitoringConsole, error) {
+	mc := newMonitoringConsoleSpec(name, d.testenv.namespace, LicenseManagerRef)
 	deployed, err := d.deployCR(ctx, name, mc)
 	if err != nil {
 		return nil, err
@@ -196,7 +196,7 @@ func (d *Deployment) DeployMonitoringConsoleWithGivenSpec(ctx context.Context, n
 	return deployed.(*enterpriseApi.MonitoringConsole), err
 }
 
-// GetInstance retrieves the standalone, indexer, searchhead, licensemaster instance
+// GetInstance retrieves the standalone, indexer, searchhead, LicenseManager instance
 func (d *Deployment) GetInstance(ctx context.Context, name string, instance client.Object) error {
 	key := client.ObjectKey{Name: name, Namespace: d.testenv.namespace}
 
@@ -326,8 +326,8 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	return stdout.String(), stderr.String(), nil
 }
 
-//DeployLicenseManager deploys the license manager instance
-func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*enterpriseApi.LicenseMaster, error) {
+// DeployLicenseManager deploys the license manager instance
+func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*enterpriseApi.LicenseManager, error) {
 
 	if d.testenv.licenseFilePath == "" {
 		return nil, fmt.Errorf("no license file path specified")
@@ -341,13 +341,31 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 	// Verify standalone goes to ready state
 	LicenseManagerReady(ctx, d, d.testenv)
 
-	return deployed.(*enterpriseApi.LicenseMaster), err
+	return deployed.(*enterpriseApi.LicenseManager), err
 }
 
-//DeployClusterMaster deploys the cluster manager
-func (d *Deployment) DeployClusterMaster(ctx context.Context, name, licenseMasterName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
-	cm := newClusterMaster(name, d.testenv.namespace, licenseMasterName, ansibleConfig)
+// DeployLicenseMaster deploys the license manager instance
+func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*enterpriseApiV3.LicenseMaster, error) {
+
+	if d.testenv.licenseFilePath == "" {
+		return nil, fmt.Errorf("no license file path specified")
+	}
+
+	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
+	deployed, err := d.deployCR(ctx, name, lm)
+	if err != nil {
+		return nil, err
+	}
+	// Verify standalone goes to ready state
+	LicenseMasterReady(ctx, d, d.testenv)
+
+	return deployed.(*enterpriseApiV3.LicenseMaster), err
+}
+
+// DeployClusterManager deploys the cluster manager
+func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterManager, error) {
+	d.testenv.Log.Info("Deploying cluster-manager", "name", name, "LicenseRef", LicenseManagerName)
+	cm := newClusterManager(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
 	if mcRef != "" {
 		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -361,13 +379,33 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, licenseMaste
 	// Verify standalone goes to ready state
 	ClusterManagerReady(ctx, d, d.testenv)
 
-	return deployed.(*enterpriseApi.ClusterMaster), err
+	return deployed.(*enterpriseApi.ClusterManager), err
 }
 
-//DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
-func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, licenseMasterName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
-	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, licenseMasterName, ansibleConfig, smartstorespec)
+// DeployClusterMaster deploys the cluster manager
+func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApiV3.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-master", "name", name, "LicenseRef", LicenseManagerName)
+	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
+	if mcRef != "" {
+		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
+			Name: mcRef,
+		}
+	}
+	deployed, err := d.deployCR(ctx, name, cm)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify standalone goes to ready state
+	ClusterMasterReady(ctx, d, d.testenv)
+
+	return deployed.(*enterpriseApiV3.ClusterMaster), err
+}
+
+// DeployClusterManagerWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
+func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterManager, error) {
+	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
+	cm := newClusterManagerWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
@@ -375,13 +413,27 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 	// Verify standalone goes to ready state
 	//ClusterManagerReady(ctx, d, d.testenv)
 
-	return deployed.(*enterpriseApi.ClusterMaster), err
+	return deployed.(*enterpriseApi.ClusterManager), err
 }
 
-//DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMasterName string, count int, clusterMasterRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
-	d.testenv.Log.Info("Deploying indexer cluster", "name", name)
-	indexer := newIndexerCluster(name, d.testenv.namespace, licenseMasterName, count, clusterMasterRef, ansibleConfig)
+// DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
+func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApiV3.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
+	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
+	deployed, err := d.deployCR(ctx, name, cm)
+	if err != nil {
+		return nil, err
+	}
+	// Verify standalone goes to ready state
+	//ClusterManagerReady(ctx, d, d.testenv)
+
+	return deployed.(*enterpriseApiV3.ClusterMaster), err
+}
+
+// DeployIndexerCluster deploys the indexer cluster
+func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
+	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
+	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
@@ -393,9 +445,9 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, licenseMast
 }
 
 // DeploySearchHeadCluster deploys a search head cluster
-func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, clusterMasterRef, licenseMasterName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterManagerRef, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)
-	sh := newSearchHeadCluster(name, d.testenv.namespace, clusterMasterRef, licenseMasterName, ansibleConfig)
+	sh := newSearchHeadCluster(name, d.testenv.namespace, ClusterManagerRef, LicenseManagerName, ansibleConfig)
 	if mcRef != "" {
 		sh.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -498,12 +550,21 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			current.Spec = ucr.Spec
 			cobject = current
 		case "LicenseMaster":
-			current := &enterpriseApi.LicenseMaster{}
+			current := &enterpriseApiV3.LicenseMaster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
 			if err != nil {
 				return err
 			}
-			ucr := cr.(*enterpriseApi.LicenseMaster)
+			ucr := cr.(*enterpriseApiV3.LicenseMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "LicenseManager":
+			current := &enterpriseApi.LicenseManager{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.LicenseManager)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "IndexerCluster":
@@ -516,12 +577,21 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			current.Spec = ucr.Spec
 			cobject = current
 		case "ClusterMaster":
-			current := &enterpriseApi.ClusterMaster{}
+			current := &enterpriseApiV3.ClusterMaster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
 			if err != nil {
 				return err
 			}
-			ucr := cr.(*enterpriseApi.ClusterMaster)
+			ucr := cr.(*enterpriseApiV3.ClusterMaster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "ClusterManager":
+			current := &enterpriseApi.ClusterManager{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.ClusterManager)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "MonitoringConsole":
@@ -568,34 +638,51 @@ func (d *Deployment) DeleteCR(ctx context.Context, cr client.Object) error {
 // DeploySingleSiteCluster deploys a lm and indexer cluster (shc optional)
 func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, indexerReplicas int, shc bool, mcRef string) error {
 
-	var licenseMaster string
+	var LicenseManager string
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, name)
+		// Enable LM to be tested
+		if strings.Contains(name, "master") {
+			// Deploy the license master
+			_, err := d.DeployLicenseMaster(ctx, name)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Deploy the license manager
+			_, err := d.DeployLicenseManager(ctx, name)
+			if err != nil {
+				return err
+			}
+		}
+
+		LicenseManager = name
+	}
+
+	if strings.Contains(name, "master") {
+		// Deploy the cluster master
+		_, err := d.DeployClusterMaster(ctx, name, LicenseManager, "", mcRef)
 		if err != nil {
 			return err
 		}
-
-		licenseMaster = name
-	}
-
-	// Deploy the cluster manager
-	_, err := d.DeployClusterMaster(ctx, name, licenseMaster, "", mcRef)
-	if err != nil {
-		return err
+	} else {
+		// Deploy the cluster manager
+		_, err := d.DeployClusterManager(ctx, name, LicenseManager, "", mcRef)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	_, err := d.DeployIndexerCluster(ctx, name+"-idxc", LicenseManager, indexerReplicas, name, "")
 	if err != nil {
 		return err
 	}
 
 	// Deploy the SH cluster
 	if shc {
-		_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, licenseMaster, "", mcRef)
+		_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, "", mcRef)
 		if err != nil {
 			return err
 		}
@@ -604,20 +691,19 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 	return nil
 }
 
-// DeployMultisiteClusterWithSearchHead deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
-func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
+// DeployMultisiteClusterMasterWithSearchHead deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
 
-	var licenseMaster string
+	var LicenseMaster string
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
-		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, name)
+		// Enable LM to be tested
+		_, err := d.DeployLicenseMaster(ctx, name)
 		if err != nil {
 			return err
 		}
-
-		licenseMaster = name
+		LicenseMaster = name
 	}
 
 	// Deploy the cluster-manager
@@ -633,7 +719,79 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployClusterMaster(ctx, name, licenseMaster, defaults, mcRef)
+	_, err := d.DeployClusterMaster(ctx, name, LicenseMaster, defaults, mcRef)
+	if err != nil {
+		return err
+	}
+
+	ClusterMasterReady(ctx, d, d.testenv)
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: %s
+`, name, "cluster-master", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseMaster, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+		//IndexersReady(ctx, d, d.testenv, site)
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: site0
+`, name, "cluster-master")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseMaster, siteDefaults, mcRef)
+	if err != nil {
+		return err
+	}
+	//SearchHeadClusterReady(ctx, d, d.testenv)
+
+	return nil
+}
+
+// DeployMultisiteClusterWithSearchHead deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
+
+	var LicenseManager string
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Enable LM to be tested
+		if strings.Contains(name, "master") {
+			// Deploy the license master
+			_, err := d.DeployLicenseMaster(ctx, name)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Deploy the license manager
+			_, err := d.DeployLicenseManager(ctx, name)
+			if err != nil {
+				return err
+			}
+		}
+
+		LicenseManager = name
+	}
+
+	// Deploy the cluster-manager
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployClusterManager(ctx, name, LicenseManager, defaults, mcRef)
 	if err != nil {
 		return err
 	}
@@ -646,8 +804,8 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.ClusterManager, siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+`, name, "cluster-manager", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}
@@ -657,8 +815,8 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.ClusterManager)
-	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, licenseMaster, siteDefaults, mcRef)
+`, name, "cluster-manager")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, mcRef)
 	if err != nil {
 		return err
 	}
@@ -670,7 +828,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
 // DeployMultisiteCluster deploys a lm, cluster-manager, indexers in multiple sites
 func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, indexerReplicas int, siteCount int, mcRef string) error {
 
-	var licenseMaster string
+	var LicenseManager string
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -680,7 +838,7 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
 			return err
 		}
 
-		licenseMaster = name
+		LicenseManager = name
 	}
 
 	// Deploy the cluster-manager
@@ -696,7 +854,7 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployClusterMaster(ctx, name, licenseMaster, defaults, mcRef)
+	_, err := d.DeployClusterManager(ctx, name, LicenseManager, defaults, mcRef)
 	if err != nil {
 		return err
 	}
@@ -707,8 +865,8 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.ClusterManager, siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+`, name, "cluster-manager", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}
@@ -717,9 +875,36 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
 	return nil
 }
 
+// DeployStandaloneWithLMaster deploys a standalone splunk enterprise instance with license manager on the specified testenv
+func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name string, mcRef string) (*enterpriseApi.Standalone, error) {
+	var LicenseManager string
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		LicenseManager = name
+	}
+
+	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager)
+	if mcRef != "" {
+		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
+			Name: mcRef,
+		}
+	}
+	deployed, err := d.deployCR(ctx, name, standalone)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApi.Standalone), err
+}
+
 // DeployStandaloneWithLM deploys a standalone splunk enterprise instance with license manager on the specified testenv
 func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mcRef string) (*enterpriseApi.Standalone, error) {
-	var licenseMaster string
+	var LicenseManager string
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -728,10 +913,10 @@ func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mc
 		if err != nil {
 			return nil, err
 		}
-		licenseMaster = name
+		LicenseManager = name
 	}
 
-	standalone := newStandaloneWithLM(name, d.testenv.namespace, licenseMaster)
+	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager)
 	if mcRef != "" {
 		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -778,7 +963,7 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(ctx context.Context
 // DeployMultisiteClusterWithSearchHeadAndIndexes deploys a lm, cluster-manager, indexers in multiple sites and SH clusters
 func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.Context, name string, indexerReplicas int, siteCount int, indexesSecret string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
 
-	var licenseMaster string
+	var LicenseManager string
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -788,7 +973,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
 			return err
 		}
 
-		licenseMaster = name
+		LicenseManager = name
 	}
 
 	// Deploy the cluster-manager
@@ -804,7 +989,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
     search_factor: 2
     replication_factor: 2
 `
-	_, err := d.DeployClusterMasterWithSmartStoreIndexes(ctx, name, licenseMaster, defaults, smartStoreSpec)
+	_, err := d.DeployClusterManagerWithSmartStoreIndexes(ctx, name, LicenseManager, defaults, smartStoreSpec)
 	if err != nil {
 		return err
 	}
@@ -815,8 +1000,8 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.ClusterManager, siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+`, name, "cluster-manager", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
 		}
@@ -825,20 +1010,86 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.ClusterManager)
-	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, licenseMaster, siteDefaults, "")
+`, name, "cluster-manager")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "")
 	return err
 }
 
+// DeployMultisiteClusterMasterWithSearchHeadAndIndexes deploys a lm, cluster-master, indexers in multiple sites and SH clusters
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx context.Context, name string, indexerReplicas int, siteCount int, indexesSecret string, smartStoreSpec enterpriseApi.SmartStoreSpec) error {
+
+	var LicenseManager string
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		LicenseManager = name
+	}
+
+	// Deploy the cluster-manager
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+	_, err := d.DeployClusterMasterWithSmartStoreIndexes(ctx, name, LicenseManager, defaults, smartStoreSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: %s
+`, name, "cluster-master", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: site0
+`, name, "cluster-master")
+	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "")
+	return err
+}
+
+// DeployClusterManagerWithGivenSpec deploys the cluster manager with given SPEC
+func (d *Deployment) DeployClusterManagerWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.ClusterManagerSpec) (*enterpriseApi.ClusterManager, error) {
+	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
+	cm := newClusterManagerWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(ctx, name, cm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApi.ClusterManager), err
+}
+
 // DeployClusterMasterWithGivenSpec deploys the cluster manager with given SPEC
-func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.ClusterMasterSpec) (*enterpriseApi.ClusterMaster, error) {
-	d.testenv.Log.Info("Deploying "+splcommon.ClusterManager, "name", name)
+func (d *Deployment) DeployClusterMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApiV3.ClusterMasterSpec) (*enterpriseApiV3.ClusterMaster, error) {
+	d.testenv.Log.Info("Deploying cluster-master", "name", name)
 	cm := newClusterMasterWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
 	}
-	return deployed.(*enterpriseApi.ClusterMaster), err
+	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
 
 // DeploySearchHeadClusterWithGivenSpec deploys a search head cluster
@@ -850,20 +1101,31 @@ func (d *Deployment) DeploySearchHeadClusterWithGivenSpec(ctx context.Context, n
 }
 
 // DeployLicenseManagerWithGivenSpec deploys the license manager with given SPEC
-func (d *Deployment) DeployLicenseManagerWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.LicenseMasterSpec) (*enterpriseApi.LicenseMaster, error) {
+func (d *Deployment) DeployLicenseManagerWithGivenSpec(ctx context.Context, name string, spec enterpriseApi.LicenseManagerSpec) (*enterpriseApi.LicenseManager, error) {
 	d.testenv.Log.Info("Deploying license-manager", "name", name)
 	lm := newLicenseManagerWithGivenSpec(name, d.testenv.namespace, spec)
 	deployed, err := d.deployCR(ctx, name, lm)
 	if err != nil {
 		return nil, err
 	}
-	return deployed.(*enterpriseApi.LicenseMaster), err
+	return deployed.(*enterpriseApi.LicenseManager), err
+}
+
+// DeployLicenseMasterWithGivenSpec deploys the license manager with given SPEC
+func (d *Deployment) DeployLicenseMasterWithGivenSpec(ctx context.Context, name string, spec enterpriseApiV3.LicenseMasterSpec) (*enterpriseApiV3.LicenseMaster, error) {
+	d.testenv.Log.Info("Deploying license-master", "name", name)
+	lm := newLicenseMasterWithGivenSpec(name, d.testenv.namespace, spec)
+	deployed, err := d.deployCR(ctx, name, lm)
+	if err != nil {
+		return nil, err
+	}
+	return deployed.(*enterpriseApiV3.LicenseMaster), err
 }
 
 // DeploySingleSiteClusterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
-func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseManager string) (*enterpriseApi.ClusterManager, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApi.ClusterManager{}
 	idxc := &enterpriseApi.IndexerCluster{}
 	sh := &enterpriseApi.SearchHeadCluster{}
 
@@ -877,7 +1139,83 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 	}
 
 	// Deploy the cluster manager
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	cmSpec := enterpriseApi.ClusterManagerSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+		},
+		AppFrameworkConfig: appFrameworkSpecIdxc,
+	}
+	cm, err := d.DeployClusterManagerWithGivenSpec(ctx, name, cmSpec)
+	if err != nil {
+		return cm, idxc, sh, err
+	}
+
+	// Deploy the indexer cluster
+	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	if err != nil {
+		return cm, idxc, sh, err
+	}
+
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterManagerRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+		},
+		Replicas:           3,
+		AppFrameworkConfig: appFrameworkSpecShc,
+	}
+
+	pdata, _ := json.Marshal(shSpec)
+	d.testenv.Log.Info("Search head Spec", "cr", pdata)
+
+	if shc {
+		sh, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+
+	return cm, idxc, sh, nil
+}
+
+// DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec deploys indexer cluster (lm, shc optional) with app framework spec
+func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx context.Context, name string, indexerReplicas int, shc bool, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, mcName string, licenseMaster string) (*enterpriseApiV3.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApiV3.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+
+	// Deploy the cluster manager
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
@@ -937,16 +1275,16 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 }
 
 // DeployMultisiteClusterWithSearchHeadAndAppFramework deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with app framework spec
-func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) (*enterpriseApi.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseManager string) (*enterpriseApi.ClusterManager, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
 
-	cm := &enterpriseApi.ClusterMaster{}
+	cm := &enterpriseApi.ClusterManager{}
 	idxc := &enterpriseApi.IndexerCluster{}
 	sh := &enterpriseApi.SearchHeadCluster{}
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
-		_, err := d.DeployLicenseManager(ctx, licenseMaster)
+		_, err := d.DeployLicenseManager(ctx, licenseManager)
 		if err != nil {
 			return cm, idxc, sh, err
 		}
@@ -967,7 +1305,109 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 `
 
 	// Cluster Manager Spec
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	cmSpec := enterpriseApi.ClusterManagerSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+			Defaults: defaults,
+		},
+		AppFrameworkConfig: appFrameworkSpecIdxc,
+	}
+
+	cm, err := d.DeployClusterManagerWithGivenSpec(ctx, name, cmSpec)
+	if err != nil {
+		return cm, idxc, sh, err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: %s
+`, name, "cluster-manager", siteName)
+		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: site0
+`, name, "cluster-manager")
+	// Deploy the SH cluster
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterManagerRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: mcName,
+			},
+			Defaults: siteDefaults,
+			// LivenessInitialDelaySeconds:  int32(delaySeconds),
+			// ReadinessInitialDelaySeconds: int32(delaySeconds),
+		},
+		Replicas:           3,
+		AppFrameworkConfig: appFrameworkSpecShc,
+	}
+	if shc {
+		sh, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+	return cm, idxc, sh, nil
+}
+
+// DeployMultisiteClusterMasterWithSearchHeadAndAppFramework deploys cluster-master in multiple sites (SHC LM Optional) with app framework spec
+func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx context.Context, name string, indexerReplicas int, siteCount int, appFrameworkSpecIdxc enterpriseApi.AppFrameworkSpec, appFrameworkSpecShc enterpriseApi.AppFrameworkSpec, shc bool, mcName string, licenseMaster string) (*enterpriseApiV3.ClusterMaster, *enterpriseApi.IndexerCluster, *enterpriseApi.SearchHeadCluster, error) {
+
+	cm := &enterpriseApiV3.ClusterMaster{}
+	idxc := &enterpriseApi.IndexerCluster{}
+	sh := &enterpriseApi.SearchHeadCluster{}
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, licenseMaster)
+		if err != nil {
+			return cm, idxc, sh, err
+		}
+	}
+
+	// Deploy the cluster-manager
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+
+	// Cluster Manager Spec
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
@@ -995,7 +1435,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.ClusterManager, siteName)
+`, name, "cluster-master", siteName)
 		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return cm, idxc, sh, err
@@ -1005,7 +1445,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.ClusterManager)
+`, name, "cluster-master")
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1041,7 +1481,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 // DeploySingleSiteClusterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
 func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx context.Context, name string, indexerReplicas int, shc bool, monitoringConsoleName string) error {
 
-	licenseMaster := ""
+	licenseManager := ""
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
@@ -1051,11 +1491,81 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 			return err
 		}
 
+		licenseManager = name
+	}
+
+	// Deploy the cluster manager
+	cmSpec := enterpriseApi.ClusterManagerSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+	}
+	_, err := d.DeployClusterManagerWithGivenSpec(ctx, name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy the indexer cluster
+	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	if err != nil {
+		return err
+	}
+
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterManagerRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+		Replicas: 3,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// DeploySingleSiteClusterMasterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
+func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx context.Context, name string, indexerReplicas int, shc bool, monitoringConsoleName string) error {
+
+	licenseMaster := ""
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
+		if err != nil {
+			return err
+		}
+
 		licenseMaster = name
 	}
 
 	// Deploy the cluster manager
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
@@ -1111,12 +1621,110 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 // DeployMultisiteClusterWithMonitoringConsole deploys cluster-manager, indexers in multiple sites (SHC LM Optional) with monitoring console
 func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Context, name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
 
-	licenseMaster := ""
+	licenseManager := ""
 
 	// If license file specified, deploy License Manager
 	if d.testenv.licenseFilePath != "" {
 		// Deploy the license manager
 		_, err := d.DeployLicenseManager(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		licenseManager = name
+	}
+
+	// Deploy the cluster-manager
+	defaults := `splunk:
+  multisite_master: localhost
+  all_sites: site1,site2,site3
+  site: site1
+  multisite_replication_factor_origin: 1
+  multisite_replication_factor_total: 2
+  multisite_search_factor_origin: 1
+  multisite_search_factor_total: 2
+  idxc:
+    search_factor: 2
+    replication_factor: 2
+`
+
+	// Cluster Manager Spec
+	cmSpec := enterpriseApi.ClusterManagerSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			Defaults: defaults,
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+	}
+
+	_, err := d.DeployClusterManagerWithGivenSpec(ctx, name, cmSpec)
+	if err != nil {
+		return err
+	}
+
+	// Deploy indexer sites
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%d", site)
+		siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: %s
+`, name, "cluster-manager", siteName)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults)
+		if err != nil {
+			return err
+		}
+	}
+
+	siteDefaults := fmt.Sprintf(`splunk:
+  multisite_master: splunk-%s-%s-service
+  site: site0
+`, name, "cluster-manager")
+	// Deploy the SH cluster
+	shSpec := enterpriseApi.SearchHeadClusterSpec{
+		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Spec: enterpriseApi.Spec{
+				ImagePullPolicy: "Always",
+			},
+			Volumes: []corev1.Volume{},
+			ClusterManagerRef: corev1.ObjectReference{
+				Name: name,
+			},
+			LicenseManagerRef: corev1.ObjectReference{
+				Name: licenseManager,
+			},
+			Defaults: siteDefaults,
+			MonitoringConsoleRef: corev1.ObjectReference{
+				Name: monitoringConsoleName,
+			},
+		},
+		Replicas: 3,
+	}
+	if shc {
+		_, err = d.DeploySearchHeadClusterWithGivenSpec(ctx, name+"-shc", shSpec)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeployMultisiteClusterMasterWithMonitoringConsole deploys cluster-master, indexers in multiple sites (SHC LM Optional) with monitoring console
+func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx context.Context, name string, indexerReplicas int, siteCount int, monitoringConsoleName string, shc bool) error {
+
+	licenseMaster := ""
+
+	// If license file specified, deploy License Manager
+	if d.testenv.licenseFilePath != "" {
+		// Deploy the license manager
+		_, err := d.DeployLicenseMaster(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -1138,14 +1746,14 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
     replication_factor: 2
 `
 
-	// Cluster Manager Spec
-	cmSpec := enterpriseApi.ClusterMasterSpec{
+	// Cluster Master Spec
+	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
 			},
 			Volumes: []corev1.Volume{},
-			LicenseMasterRef: corev1.ObjectReference{
+			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
 			Defaults: defaults,
@@ -1166,7 +1774,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 		siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: %s
-`, name, splcommon.ClusterManager, siteName)
+`, name, "cluster-master", siteName)
 		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
 		if err != nil {
 			return err
@@ -1176,7 +1784,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	siteDefaults := fmt.Sprintf(`splunk:
   multisite_master: splunk-%s-%s-service
   site: site0
-`, name, splcommon.ClusterManager)
+`, name, "cluster-master")
 	// Deploy the SH cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1187,7 +1795,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
-			LicenseMasterRef: corev1.ObjectReference{
+			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
 			Defaults: siteDefaults,

@@ -17,7 +17,6 @@ package enterprise
 
 import (
 	"fmt"
-	"io/ioutil"
 
 	"io"
 	"os"
@@ -36,7 +35,7 @@ func TestCpMakeTar(t *testing.T) {
 	}
 }
 
-//TestRecursiveTarEmptySrcDir test recursively tar empty directory
+// TestRecursiveTarEmptySrcDir test recursively tar empty directory
 func TestRecursiveTarEmptySrcDir(t *testing.T) {
 
 	// prepare temporary files to tar operation
@@ -74,7 +73,7 @@ func TestRecursiveTarSrcOneDir(t *testing.T) {
 	}
 	for i := 0; i < 10; i++ {
 		path := fmt.Sprintf("/tmp/src2/filename-%d.txt", i)
-		err := ioutil.WriteFile(path, []byte("Hello"), 0755)
+		err := os.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %s", err.Error()))
 		}
@@ -110,22 +109,22 @@ func TestRecursiveTarSrcAllDir(t *testing.T) {
 	}
 	for i := 0; i < 10; i++ {
 		path := fmt.Sprintf("/tmp/src3/a/filename-%d.txt", i)
-		err := ioutil.WriteFile(path, []byte("Hello"), 0755)
+		err := os.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %s", err.Error()))
 		}
 		path = fmt.Sprintf("/tmp/src3/a/b/filename-%d.txt", i)
-		err = ioutil.WriteFile(path, []byte("Hello"), 0755)
+		err = os.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
 		}
 		path = fmt.Sprintf("/tmp/src3/a/b/c/filename-%d.txt", i)
-		err = ioutil.WriteFile(path, []byte("Hello"), 0755)
+		err = os.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
 		}
 		path = fmt.Sprintf("/tmp/src3/a/b/c/d/filename-%d.txt", i)
-		err = ioutil.WriteFile(path, []byte("Hello"), 0755)
+		err = os.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
 			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
 		}

@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +38,7 @@ import (
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -44,13 +46,12 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
-func TestApplyClusterManager(t *testing.T) {
+func TestApplyClusterMaster(t *testing.T) {
 
 	// redefining cpmakeTar to return nil always
 	cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
 		return nil
 	}
-
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -59,6 +60,8 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
@@ -74,6 +77,7 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
@@ -95,10 +99,10 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[5]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[5]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -106,7 +110,7 @@ func TestApplyClusterManager(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -115,25 +119,25 @@ func TestApplyClusterManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApiV3.ClusterMaster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMaster", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApiV3.ClusterMaster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
 
-func TestGetClusterManagerStatefulSet(t *testing.T) {
+func TestGetClusterMasterStatefulSet(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -148,26 +152,26 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateClusterManagerSpec(ctx, c, &cr); err != nil {
-				t.Errorf("validateClusterManagerSpec() returned error: %v", err)
+			if err := validateClusterMasterSpec(ctx, c, &cr); err != nil {
+				t.Errorf("validateClusterMasterSpec() returned error: %v", err)
 			}
-			return getClusterManagerStatefulSet(ctx, c, &cr)
+			return getClusterMasterStatefulSet(ctx, c, &cr)
 		}
-		configTester(t, "getClusterManagerStatefulSet", f, want)
+		configTester(t, "getClusterMasterStatefulSet", f, want)
 	}
 
-	test(splcommon.TestGetCMStatefulSet)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 
-	cr.Spec.LicenseMasterRef.Name = "stack1"
-	cr.Spec.LicenseMasterRef.Namespace = "test"
-	test(splcommon.TestGetCMStatefulSetLicense)
+	cr.Spec.LicenseManagerRef.Name = "stack1"
+	cr.Spec.LicenseManagerRef.Namespace = "test"
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_LICENSE_MASTER_URL","value":"splunk-stack1-license-manager-service.test.svc.cluster.local"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 
-	cr.Spec.LicenseMasterRef.Name = ""
+	cr.Spec.LicenseManagerRef.Name = ""
 	cr.Spec.LicenseURL = "/mnt/splunk.lic"
-	test(splcommon.TestGetCMStatefulSetURL)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(splcommon.TestGetCMStatefulSetApps)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
@@ -178,7 +182,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(splcommon.TestGetCMStatefulSetServiceAccount)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -187,10 +191,10 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(splcommon.TestGetCMStatefulSetExtraEnv)
+	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-cluster-master","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-cluster-master-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_cluster_master"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_LICENSE_URI","value":"/mnt/splunk.lic"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"localhost"},{"name":"TEST_ENV_VAR","value":"test_value"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-cluster-master"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-cluster-master","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-master","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-cluster-master-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 }
 
-func TestApplyClusterManagerWithSmartstore(t *testing.T) {
+func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -203,11 +207,11 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -226,11 +230,10 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-master-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
-		//{MetaName: "*v1." + splcommon.ClusterManager},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermaster-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -249,10 +252,10 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[12]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11], funcCalls[13]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[14]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -260,7 +263,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -288,10 +291,15 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	client := spltest.NewMockClient()
 
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
+	}
+
 	// Without S3 keys, ApplyClusterManager should fail
-	_, err := ApplyClusterManager(ctx, client, &current)
+	_, err := ApplyClusterMaster(ctx, client, &current)
 	if err == nil {
-		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
+		t.Errorf("ApplyClusterMaster should fail without S3 secrets configured")
 	}
 
 	// Create namespace scoped secret
@@ -318,12 +326,12 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.CommonSplunkSpec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterMaster))
+		_, err := ApplyClusterMaster(context.Background(), c, cr.(*enterpriseApiV3.ClusterMaster))
 		return err
 	}
 
 	client.AddObject(&smartstoreConfigMap)
-	ss, _ := getClusterManagerStatefulSet(ctx, client, &current)
+	ss, _ := getClusterMasterStatefulSet(ctx, client, &current)
 	ss.Status.ReadyReplicas = 1
 
 	pod := &corev1.Pod{
@@ -342,16 +350,16 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		},
 	}
 
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Status.BundlePushTracker.NeedToPushMasterApps = true
-	if _, err = ApplyClusterManager(context.Background(), client, &current); err != nil {
-		t.Errorf("ApplyClusterManager() should not have returned error")
+	if _, err = ApplyClusterMaster(context.Background(), client, &current); err != nil {
+		t.Errorf("ApplyClusterMaster() should not have returned error")
 	}
 
 	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
-		t.Errorf("ApplyClusterManager() should have returned error")
+	if _, err := ApplyClusterMaster(context.Background(), client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
 	}
 
 	var replicas int32 = 3
@@ -360,8 +368,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
 	client.AddObject(ss)
-	if result, err := ApplyClusterManager(context.Background(), client, &current); err == nil && !result.Requeue {
-		t.Errorf("ApplyClusterManager() should have returned error or result.requeue should have been false")
+	if result, err := ApplyClusterMaster(context.Background(), client, &current); err == nil && !result.Requeue {
+		t.Errorf("ApplyClusterMaster() should have returned error or result.requeue should have been false")
 	}
 
 	ss.Status.ReadyReplicas = 1
@@ -370,15 +378,15 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client.AddObjects(objects)
 	current.Spec.CommonSplunkSpec.Mock = false
 
-	if _, err := ApplyClusterManager(context.Background(), client, &current); err == nil {
-		t.Errorf("ApplyClusterManager() should have returned error")
+	if _, err := ApplyClusterMaster(context.Background(), client, &current); err == nil {
+		t.Errorf("ApplyClusterMaster() should have returned error")
 	}
 }
 
-func TestPerformCmBundlePush(t *testing.T) {
+func TestPerformCmasterBundlePush(t *testing.T) {
 
 	ctx := context.TODO()
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -386,7 +394,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -397,7 +405,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	// When the secret object is not present, should return an error
 	current.Status.BundlePushTracker.NeedToPushMasterApps = true
-	err := PerformCmBundlePush(ctx, client, &current)
+	err := PerformCmasterBundlePush(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Should return error, when the secret object is not present")
 	}
@@ -429,21 +437,21 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	//Re-attempting to push the CM bundle in less than 5 seconds should return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 1
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle Push Should fail, if attempted to push within 5 seconds interval")
 	}
 
 	//Re-attempting to push the CM bundle after 5 seconds passed, should not return an error
 	current.Status.BundlePushTracker.LastCheckInterval = time.Now().Unix() - 10
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
 		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
 	}
 
 	// When the CM Bundle push is not pending, should not return an error
 	current.Status.BundlePushTracker.NeedToPushMasterApps = false
-	err = PerformCmBundlePush(ctx, client, &current)
+	err = PerformCmasterBundlePush(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
 	}
@@ -452,7 +460,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 func TestPushMasterAppsBundle(t *testing.T) {
 
 	ctx := context.TODO()
-	current := enterpriseApi.ClusterMaster{
+	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -460,7 +468,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -470,7 +478,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	//Without global secret object, should return an error
-	err := PushManagerAppsBundle(ctx, client, &current)
+	err := PushMasterAppsBundle(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the secret object is not found")
 	}
@@ -485,14 +493,14 @@ func TestPushMasterAppsBundle(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	err = PushManagerAppsBundle(ctx, client, &current)
+	err = PushMasterAppsBundle(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the password is not found")
 	}
 
 	//Without password, should return an error
 	delete(secret.Data, "password")
-	err = PushManagerAppsBundle(ctx, client, &current)
+	err = PushMasterAppsBundle(ctx, client, &current)
 	if err == nil {
 		t.Errorf("Bundle push should fail, when the password is not found")
 	}
@@ -501,7 +509,7 @@ func TestPushMasterAppsBundle(t *testing.T) {
 func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	initGlobalResourceTracker()
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -509,7 +517,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 60,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -565,15 +573,15 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	_, err = ApplyClusterManager(context.Background(), client, &cm)
+	_, err = ApplyClusterMaster(context.Background(), client, &cm)
 	if err != nil {
-		t.Errorf("ApplyClusterManager should not have returned error here.")
+		t.Errorf("ApplyClusterMaster should not have returned error here.")
 	}
 }
 
 func TestApplyCLusterMasterDeletion(t *testing.T) {
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -581,7 +589,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 0,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -660,7 +668,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyClusterManager(ctx, c, &cm)
+	_, err = ApplyClusterMaster(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterMaster should not have returned error here.")
 	}
@@ -668,12 +676,12 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				Defaults: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol2",
@@ -732,7 +740,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client(ctx, "aws")
+	splclient.RegisterRemoteDataClient(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
@@ -744,7 +752,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -755,7 +763,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[1],
 					Key:          &Keys[1],
@@ -766,7 +774,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[2],
 					Key:          &Keys[2],
@@ -792,11 +800,11 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			continue
 		}
 
-		// Update the GetS3Client with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.S3Clients[vol.Provider]
-		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
-		s3ClientMgr := &S3ClientManager{
+		remoteDataClientMgr := &RemoteDataClientManager{
 			client:          client,
 			cr:              &cm,
 			appFrameworkRef: &cm.Spec.AppFrameworkConfig,
@@ -807,23 +815,23 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
 			},
-			getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 				appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-				location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+				location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
 				// Get the mock client
 				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 				return c, err
 			},
 		}
 
-		s3Response, err := s3ClientMgr.GetAppsList(ctx)
+		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
 
-		var mockResponse spltest.MockS3Client
-		mockResponse, err = splclient.ConvertS3Response(ctx, s3Response)
+		var mockResponse spltest.MockRemoteDataClient
+		mockResponse, err = splclient.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
@@ -840,18 +848,18 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to get apps list for all the app sources")
 	}
 	method := "GetAppsList"
-	mockAwsHandler.CheckAWSS3Response(t, method)
+	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
 }
 
 func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol",
@@ -881,7 +889,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	splclient.RegisterS3Client(ctx, "aws")
+	splclient.RegisterRemoteDataClient(ctx, "aws")
 
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
@@ -893,7 +901,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
-			Objects: []*spltest.MockS3Object{
+			Objects: []*spltest.MockRemoteDataObject{
 				{
 					Etag:         &Etags[0],
 					Key:          &Keys[0],
@@ -917,11 +925,11 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
 
-	// Update the GetS3Client with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.S3Clients[vol.Provider]
-	getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
 
-	s3ClientMgr := &S3ClientManager{
+	remoteDataClientMgr := &RemoteDataClientManager{
 		client:          client,
 		cr:              &cm,
 		appFrameworkRef: &cm.Spec.AppFrameworkConfig,
@@ -931,16 +939,16 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
-		getS3Client: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
+		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splclient.GetInitFunc) (splclient.SplunkS3Client, error) {
+			location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
 			// Get the mock client
 			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
 			return c, err
 		},
 	}
 
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
@@ -956,21 +964,21 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 
 	client.AddObject(&s3Secret)
 
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
 
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
 
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
@@ -978,31 +986,31 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create S3 secret
 	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
 
-	// This should return an error as we have initialized initFn for s3ClientMgr
+	// This should return an error as we have initialized initFn for remoteDataClientMgr
 	// to return a nil client.
-	_, err = s3ClientMgr.GetAppsList(ctx)
+	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	s3ClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	s3Resp, err := s3ClientMgr.GetAppsList(ctx)
+	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
 	}
-	if len(s3Resp.Objects) != 0 {
+	if len(remoteDataClientResponse.Objects) != 0 {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
 	}
 }
 
-func TestGetClusterManagerList(t *testing.T) {
+func TestGetClusterMasterList(t *testing.T) {
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{}
+	cm := enterpriseApiV3.ClusterMaster{}
 
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
@@ -1012,29 +1020,29 @@ func TestGetClusterManagerList(t *testing.T) {
 
 	var numOfObjects int
 	// Invalid scenario since we haven't added clustermanager to the list yet
-	_, err := getClusterManagerList(ctx, client, &cm, listOpts)
+	_, err := getClusterMasterList(ctx, client, &cm, listOpts)
 	if err == nil {
 		t.Errorf("getNumOfObjects should have returned error as we haven't added cluster manager to the list yet")
 	}
 
-	cmList := &enterpriseApi.ClusterMasterList{}
+	cmList := &enterpriseApiV3.ClusterMasterList{}
 	cmList.Items = append(cmList.Items, cm)
 
 	client.ListObj = cmList
 
-	numOfObjects, err = getClusterManagerList(ctx, client, &cm, listOpts)
+	numOfObjects, err = getClusterMasterList(ctx, client, &cm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
 	if numOfObjects != 1 {
-		t.Errorf("Got wrong number of ClusterManager objects. Expected=%d, Got=%d", 1, numOfObjects)
+		t.Errorf("Got wrong number of ClusterMaster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }
 
-func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
+func TestCheckIfMastersmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterMaster{
+	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
@@ -1068,24 +1076,24 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
-	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
+	err := CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
 	if err == nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error")
+		t.Errorf("CheckIfMastersmartstoreConfigMapUpdatedToPod should have returned error")
 	}
 
 	mockPodExecReturnContexts[0].Err = nil
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
+	err = CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
 	if err == nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
+		t.Errorf("CheckIfMastersmartstoreConfigMapUpdatedToPod should have returned error since we did not add configMap yet.")
 	}
 
 	c.AddObject(&smartstoreConfigMap)
-	err = CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
+	err = CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx, c, &cm, mockPodExecClient)
 	if err != nil {
-		t.Errorf("CheckIfsmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
+		t.Errorf("CheckIfMastersmartstoreConfigMapUpdatedToPod should not have returned error; err=%v", err)
 	}
 
-	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
+	mockPodExecClient.CheckPodExecCommands(t, "CheckIfMastersmartstoreConfigMapUpdatedToPod")
 }
 
 func TestClusterMasterWitReadyState(t *testing.T) {
@@ -1094,14 +1102,14 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	err := os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
-	GetAppsList = func(ctx context.Context, s3ClientMgr S3ClientManager) (splclient.S3Response, error) {
-		s3Response := splclient.S3Response{}
-		return s3Response, nil
+	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
+		RemoteDataListResponse := splclient.RemoteDataListResponse{}
+		return RemoteDataListResponse, nil
 	}
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// Create App framework volume
@@ -1141,12 +1149,12 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	// create clustermaster custom resource
-	clustermaster := enterpriseApi.ClusterMaster{
+	clustermaster := &enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
@@ -1202,9 +1210,9 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	c.Create(ctx, statefulset)
 
 	// simulate create clustermaster instance before reconcilation
-	c.Create(ctx, &clustermaster)
+	c.Create(ctx, clustermaster)
 
-	_, err = ApplyClusterManager(ctx, c, &clustermaster)
+	_, err = ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermaster with app framework  %v", err)
 		debug.PrintStack()
@@ -1227,20 +1235,20 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "cluster-master",
 		"app.kubernetes.io/part-of":    "splunk-test-cluster-master",
 	}
-	err = c.Status().Update(ctx, &clustermaster)
+	err = c.Status().Update(ctx, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, &clustermaster)
+	err = c.Get(ctx, namespacedName, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected get cluster master %v", err)
 		debug.PrintStack()
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, &clustermaster)
+	_, err = ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
@@ -1307,7 +1315,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	err = c.Get(ctx, namespacedName, &clustermaster)
+	err = c.Get(ctx, namespacedName, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected get cluster manager %v", err)
 		debug.PrintStack()
@@ -1329,7 +1337,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	}
 
 	//setownerReference
-	err = splctrl.SetStatefulSetOwnerRef(ctx, c, &clustermaster, namespacedName)
+	err = splctrl.SetStatefulSetOwnerRef(ctx, c, clustermaster, namespacedName)
 	if err != nil {
 		t.Errorf("Couldn't set owner ref for resource %s", current.GetName())
 	}
@@ -1352,8 +1360,13 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		t.Errorf("Failed to create resource  %s", current.GetName())
 	}
 
+	// Mock the addTelApp function for unit tests
+	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+		return nil
+	}
+
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, &clustermaster)
+	_, err = ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

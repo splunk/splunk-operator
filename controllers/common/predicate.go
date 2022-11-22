@@ -4,7 +4,8 @@ import (
 	"reflect"
 
 	"github.com/google/go-cmp/cmp"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -40,8 +41,14 @@ func SecretChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*corev1.Secret)
-			oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Secret)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*corev1.Secret)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*corev1.Secret)
+			if !ok {
+				return false
+			}
 			return !cmp.Equal(newObj.Data, oldObj.Data)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -66,8 +73,14 @@ func ConfigMapChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*corev1.ConfigMap)
-			oldObj := e.ObjectOld.DeepCopyObject().(*corev1.ConfigMap)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*corev1.ConfigMap)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*corev1.ConfigMap)
+			if !ok {
+				return false
+			}
 			return !cmp.Equal(newObj.Data, oldObj.Data)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -92,8 +105,14 @@ func StatefulsetChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*appsv1.StatefulSet)
-			oldObj := e.ObjectOld.DeepCopyObject().(*appsv1.StatefulSet)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*appsv1.StatefulSet)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*appsv1.StatefulSet)
+			if !ok {
+				return false
+			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -118,8 +137,14 @@ func PodChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*corev1.Pod)
-			oldObj := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*corev1.Pod)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*corev1.Pod)
+			if !ok {
+				return false
+			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -144,7 +169,10 @@ func ResourceFailedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*enterpriseApi.Standalone)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*enterpriseApi.Standalone)
+			if !ok {
+				return false
+			}
 			return newObj.Status.Phase == "Error"
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
@@ -169,11 +197,18 @@ func CrdChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*crdv1.CustomResourceDefinition)
-			oldObj := e.ObjectOld.DeepCopyObject().(*crdv1.CustomResourceDefinition)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*crdv1.CustomResourceDefinition)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*crdv1.CustomResourceDefinition)
+			if !ok {
+				return false
+			}
 			if !stringInSlice(newObj.Name, []string{"clustermasters.enterprise.splunk.com",
 				"indexerclusters.enterprise.splunk.com",
 				"licensemasters.enterprise.splunk.com",
+				"licensemanagers.enterprise.splunk.com",
 				"monitoringconsoles.enterprise.splunk.com",
 				"searchheadclusters.enterprise.splunk.com",
 				"standalones.enterprise.splunk.com"}) {
@@ -194,7 +229,7 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
-			if _, ok := e.ObjectNew.(*enterpriseApi.ClusterMaster); !ok {
+			if _, ok := e.ObjectNew.(*enterpriseApi.ClusterManager); !ok {
 				return false
 			}
 
@@ -203,8 +238,46 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 			}
 
 			// if old and new data is the same, don't reconcile
-			newObj := e.ObjectNew.DeepCopyObject().(*enterpriseApi.ClusterMaster)
-			oldObj := e.ObjectOld.DeepCopyObject().(*enterpriseApi.ClusterMaster)
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*enterpriseApi.ClusterManager)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*enterpriseApi.ClusterManager)
+			if !ok {
+				return false
+			}
+			return !cmp.Equal(newObj.Status, oldObj.Status)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
+// ClusterMasterChangedPredicate .
+func ClusterMasterChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// This update is in fact a Delete event, process it
+			if _, ok := e.ObjectNew.(*enterpriseApiV3.ClusterMaster); !ok {
+				return false
+			}
+
+			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			// if old and new data is the same, don't reconcile
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*enterpriseApiV3.ClusterMaster)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*enterpriseApiV3.ClusterMaster)
+			if !ok {
+				return false
+			}
 			return !cmp.Equal(newObj.Status, oldObj.Status)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {

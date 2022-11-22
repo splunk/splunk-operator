@@ -15,24 +15,24 @@
 
 package smoke
 
-// ClusterMasterSitesResponse is a representation of the sites managed by a Splunk cluster-manager
+// ClusterManagerSitesResponse is a representation of the sites managed by a Splunk cluster-manager
 // Endpoint: /services/cluster/manager/sites
-type ClusterMasterSitesResponse struct {
-	Entries []ClusterMasterSitesEntry `json:"entry"`
+type ClusterManagerSitesResponse struct {
+	Entries []ClusterManagerSitesEntry `json:"entry"`
 }
 
-// ClusterMasterSitesEntry represents a site of an indexer cluster with its metadata
-type ClusterMasterSitesEntry struct {
-	Name    string                    `json:"name"`
-	Content ClusterMasterSitesContent `json:"content"`
+// ClusterManagerSitesEntry represents a site of an indexer cluster with its metadata
+type ClusterManagerSitesEntry struct {
+	Name    string                     `json:"name"`
+	Content ClusterManagerSitesContent `json:"content"`
 }
 
-// ClusterMasterSitesContent represents detailed information about a site
-type ClusterMasterSitesContent struct {
-	Peers map[string]ClusterMasterSitesPeer `json:"peers"`
+// ClusterManagerSitesContent represents detailed information about a site
+type ClusterManagerSitesContent struct {
+	Peers map[string]ClusterManagerSitesPeer `json:"peers"`
 }
 
-// ClusterMasterSitesPeer reprensents an indexer peer member of a site
-type ClusterMasterSitesPeer struct {
+// ClusterManagerSitesPeer reprensents an indexer peer member of a site
+type ClusterManagerSitesPeer struct {
 	ServerName string `json:"server_name"`
 }

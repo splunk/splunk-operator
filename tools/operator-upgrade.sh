@@ -18,7 +18,7 @@
 # Upgrading the Splunk Operator from 1.0.5 or older version to latest is a 
 # new installation rather than an upgrade from the current operator. 
 # The older Splunk Operator must be cleaned up before installing the new version. 
-# Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.0.0/operator-upgrade.sh) 
+# Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh)
 # helps you to do the cleanup. The script expects the current namespace where the operator is installed and the path 
 # to the latest operator deployment manifest file. The script performs the following steps
 # * Backup of all the operator resources within the namespace like
@@ -202,7 +202,7 @@ delete_operator() {
 deploy_operator() {
     echo "--------------------------------------------------------------"
     echo "installing Splunk Operator ....." 
-    kubectl apply -f ${manifest_file}
+    kubectl apply -f ${manifest_file} --server-side  --force-conflicts
     echo "--------------------------------------------------------------"
   echo "wait for operator pod to be ready..."
   # sleep before checking for deployment, in slow clusters deployment call may not even started

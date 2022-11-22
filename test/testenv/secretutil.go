@@ -51,7 +51,7 @@ func GetSecretStruct(ctx context.Context, deployment *Deployment, ns string, sec
 	return secretObject, err
 }
 
-//ModifySecretObject Modifies the secret object with given data
+// ModifySecretObject Modifies the secret object with given data
 func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
@@ -62,7 +62,7 @@ func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, 
 	return err
 }
 
-//DeleteSecretObject Deletes the entire secret object
+// DeleteSecretObject Deletes the entire secret object
 func DeleteSecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string) error {
 	logf.Log.Info("Delete secret object", "Secret Name", secretName, "Namespace", ns)
 	secret := newSecretSpec(ns, secretName, map[string][]byte{})
@@ -74,7 +74,7 @@ func DeleteSecretObject(ctx context.Context, deployment *Deployment, ns string, 
 	return nil
 }
 
-//GetMountedKey Gets the key mounted on pod
+// GetMountedKey Gets the key mounted on pod
 func GetMountedKey(ctx context.Context, deployment *Deployment, podName string, key string) string {
 	stdin := fmt.Sprintf("cat /mnt/splunk-secrets/%s", key)
 	command := []string{"/bin/sh"}
@@ -125,11 +125,11 @@ func DecryptSplunkEncodedSecret(ctx context.Context, deployment *Deployment, pod
 // GetKeysToMatch retuns slice of secrets in server conf based on pod name
 func GetKeysToMatch(podName string) []string {
 	var keysToMatch []string
-	if strings.Contains(podName, "standalone") || strings.Contains(podName, splcommon.LicenseManager) || strings.Contains(podName, "monitoring-console") {
+	if strings.Contains(podName, "standalone") || strings.Contains(podName, "license-manager") || strings.Contains(podName, "monitoring-console") || strings.Contains(podName, splcommon.LicenseManager) {
 		keysToMatch = []string{"pass4SymmKey"}
-	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, splcommon.ClusterManager) {
+	} else if strings.Contains(podName, "indexer") || strings.Contains(podName, "cluster-manager") || strings.Contains(podName, splcommon.ClusterManager) {
 		keysToMatch = []string{"pass4SymmKey", "idxc_secret"}
-	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, splcommon.TestDeployerDashed) {
+	} else if strings.Contains(podName, "search-head") || strings.Contains(podName, "-deployer-") {
 		keysToMatch = []string{"pass4SymmKey", "shc_secret"}
 	}
 	return keysToMatch

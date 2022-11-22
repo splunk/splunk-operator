@@ -36,7 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -80,7 +81,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test search head with indexer reference
-	searchHeadRevised.Spec.ClusterMasterRef.Name = "stack2"
+	searchHeadRevised.Spec.ClusterManagerRef.Name = "stack2"
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &searchHeadCR, searchHeadRevised, createCalls, updateCalls, reconcile, false)
 
 	// test indexer with license manager
@@ -95,7 +96,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	}
 	indexerRevised := indexerCR.DeepCopy()
 	indexerRevised.Spec.Image = "splunk/test"
-	indexerRevised.Spec.LicenseMasterRef.Name = "stack2"
+	indexerRevised.Spec.LicenseManagerRef.Name = "stack2"
 	reconcile = func(c *spltest.MockClient, cr interface{}) error {
 		obj := cr.(*enterpriseApi.IndexerCluster)
 		_, err := ApplySplunkConfig(ctx, c, obj, obj.Spec.CommonSplunkSpec, SplunkIndexer)
@@ -111,20 +112,19 @@ func TestApplySplunkConfig(t *testing.T) {
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
-	ctx := context.TODO()
-	cr := enterpriseApi.LicenseMaster{
+	cr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
 		},
 	}
 
-	cr.Spec.LicenseMasterRef.Name = "stack1"
-	got := getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	cr.Spec.LicenseManagerRef.Name = "stack1"
+	got := getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want := []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.TestStack1LicenseManagerService,
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service",
 		},
 	}
 	result := splcommon.CompareEnvs(got, want)
@@ -133,12 +133,12 @@ func TestGetLicenseManagerURL(t *testing.T) {
 		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
 	}
 
-	cr.Spec.LicenseMasterRef.Namespace = "test"
-	got = getLicenseManagerURL(ctx, &cr, &cr.Spec.CommonSplunkSpec)
+	cr.Spec.LicenseManagerRef.Namespace = "test"
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
 	want = []corev1.EnvVar{
 		{
-			Name:  "SPLUNK_LICENSE_MASTER_URL",
-			Value: splcommon.TestStack1LicenseManagerClusterLocal,
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service.test.svc.cluster.local",
 		},
 	}
 
@@ -151,12 +151,12 @@ func TestGetLicenseManagerURL(t *testing.T) {
 
 func TestApplySmartstoreConfigMap(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -216,12 +216,12 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -277,12 +277,12 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 
 	// If the secret object doesn't exist, should return an error
 	// Here in the volume references, secrets splunk-test-sec_1, to splunk-test-sec_4 doesn't exist
-	cr = enterpriseApi.ClusterMaster{
+	cr = enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "idxCluster",
 			Namespace: "testWithNoSecret",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-sec_1"},
@@ -309,12 +309,12 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 
 func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: enterpriseApi.SmartStoreSpec{
 				VolList: []enterpriseApi.VolumeSpec{
 					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
@@ -610,7 +610,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	client := spltest.NewMockClient()
 
 	var appDeployContext enterpriseApi.AppDeploymentContext
-	var remoteObjListMap map[string]splclient.S3Response
+	var remoteObjListMap map[string]splclient.RemoteDataListResponse
 	var appFramworkConf enterpriseApi.AppFrameworkSpec = cr.Spec.AppFrameworkConfig
 	var err error
 
@@ -618,7 +618,7 @@ func TestHandleAppRepoChanges(t *testing.T) {
 		appDeployContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
 	}
 
-	var S3Response splclient.S3Response
+	var RemoteDataListResponse splclient.RemoteDataListResponse
 
 	// Test-1: Empty remoteObjectList Map should return an error
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
@@ -629,11 +629,11 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-2: Valid remoteObjectList should not cause an error
 	startAppPathAndName := "bucketpath1/bpath2/locationpath1/lpath2/adminCategoryOne.tgz"
-	remoteObjListMap = make(map[string]splclient.S3Response)
-	// Prepare a S3Response
-	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
+	remoteObjListMap = make(map[string]splclient.RemoteDataListResponse)
+	// Prepare a RemoteDataListResponse
+	RemoteDataListResponse.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	// Set the app source with a matching one
-	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
+	remoteObjListMap[appFramworkConf.AppSources[0].Name] = RemoteDataListResponse
 
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
@@ -683,9 +683,9 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusPending)
 
 	// delete an object on remote store for the app source
-	tmpS3Response := S3Response
-	tmpS3Response.Objects = append(tmpS3Response.Objects[:0], tmpS3Response.Objects[1:]...)
-	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpS3Response
+	tmpRemoteDataListResponse := RemoteDataListResponse
+	tmpRemoteDataListResponse.Objects = append(tmpRemoteDataListResponse.Objects[:0], tmpRemoteDataListResponse.Objects[1:]...)
+	remoteObjListMap[appFramworkConf.AppSources[0].Name] = tmpRemoteDataListResponse
 
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 	if err != nil {
@@ -698,8 +698,8 @@ func TestHandleAppRepoChanges(t *testing.T) {
 	}
 
 	// Test-7: Object hash change on the remote store should cause App state and status as Active and Pending.
-	S3Response.Objects = createRemoteObjectList("e41d8cd98f00", startAppPathAndName, 2322, nil, 10)
-	remoteObjListMap[appFramworkConf.AppSources[0].Name] = S3Response
+	RemoteDataListResponse.Objects = createRemoteObjectList("e41d8cd98f00", startAppPathAndName, 2322, nil, 10)
+	remoteObjListMap[appFramworkConf.AppSources[0].Name] = RemoteDataListResponse
 
 	setStateAndStatusForAppDeployInfoList(appDeployContext.AppsSrcDeployStatus[appFramworkConf.AppSources[0].Name].AppDeploymentInfoList, enterpriseApi.RepoStateDeleted, enterpriseApi.DeployStatusComplete)
 
@@ -728,9 +728,9 @@ func TestHandleAppRepoChanges(t *testing.T) {
 
 	// Test-9: Unknown App source in remote obj listing should return an error
 	startAppPathAndName = "csecurityApps.spl"
-	S3Response.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
+	RemoteDataListResponse.Objects = createRemoteObjectList("d41d8cd98f00", startAppPathAndName, 2322, nil, 10)
 	invalidAppSourceName := "UnknownAppSourceInConfig"
-	remoteObjListMap[invalidAppSourceName] = S3Response
+	remoteObjListMap[invalidAppSourceName] = RemoteDataListResponse
 	_, err = handleAppRepoChanges(ctx, client, &cr, &appDeployContext, remoteObjListMap, &appFramworkConf)
 
 	if err == nil {
@@ -1640,7 +1640,7 @@ func TestCheckIfFileExistsOnPod(t *testing.T) {
 
 func TestGetAppPackageLocalPath(t *testing.T) {
 	ctx := context.TODO()
-	cr := enterpriseApi.ClusterMaster{
+	cr := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "ClusterMaster",
 		},
@@ -1648,7 +1648,7 @@ func TestGetAppPackageLocalPath(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
@@ -2249,6 +2249,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// create standalone custom resource
@@ -2298,6 +2299,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// Standalone: should return a vaid CR
@@ -2350,7 +2352,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	}
 
 	// LicenseMaster: Should return a valid CR
-	lmCR := enterpriseApi.LicenseMaster{
+	lmCR := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "LicenseMaster",
 			APIVersion: "enterprise.splunk.com/v3",
@@ -2360,7 +2362,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.LicenseMasterSpec{
+		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
@@ -2417,7 +2419,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	}
 
 	// ClusterMaster: Should return a valid CR
-	cmCR := enterpriseApi.ClusterMaster{
+	cmCR := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterMaster",
 			APIVersion: "enterprise.splunk.com/v3",
@@ -2427,7 +2429,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 			Name:      "test",
 			Namespace: "default",
 		},
-		Spec: enterpriseApi.ClusterMasterSpec{
+		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
@@ -2435,7 +2437,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 				Volumes: []corev1.Volume{},
 			},
 		},
-		Status: enterpriseApi.ClusterMasterStatus{},
+		Status: enterpriseApiV3.ClusterMasterStatus{},
 	}
 
 	err = c.Create(ctx, &cmCR)
@@ -2520,5 +2522,66 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
 		t.Errorf("Failed to fetch the CR")
+	}
+}
+
+// func getApplicablePodNameForK8Probes(t *testing.T) {
+func TestGetApplicablePodNameForK8Probes(t *testing.T) {
+	cr := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	podID := int32(0)
+
+	expectedPodName := "splunk-stack1-cluster-master-0"
+	returnedPodName := getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "Standalone"
+	expectedPodName = "splunk-stack1-standalone-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "IndexerCluster"
+	expectedPodName = "splunk-stack1-indexer-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "SearchHeadCluster"
+	expectedPodName = "splunk-stack1-search-head-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "MonitoringConsole"
+	expectedPodName = "splunk-stack1-monitoring-console-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", getApplicablePodNameForK8Probes(&cr, 0))
+	}
+
+	cr.TypeMeta.Kind = "LicenseMaster"
+	expectedPodName = "splunk-stack1-license-master-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 }

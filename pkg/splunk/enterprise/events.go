@@ -17,8 +17,9 @@ package enterprise
 
 import (
 	"context"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -53,22 +54,52 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	// based on the custom resource instance type find name, type and create new event
 	switch k.instance.(type) {
 	case *enterpriseApi.Standalone:
-		cr := k.instance.(*enterpriseApi.Standalone)
+		cr, ok := k.instance.(*enterpriseApi.Standalone)
+		if ok {
+			return
+		}
 		event = cr.NewEvent(eventType, reason, message)
-	case *enterpriseApi.LicenseMaster:
-		cr := k.instance.(*enterpriseApi.LicenseMaster)
+	case *enterpriseApiV3.LicenseMaster:
+		cr, ok := k.instance.(*enterpriseApiV3.LicenseMaster)
+		if ok {
+			return
+		}
+		event = cr.NewEvent(eventType, reason, message)
+	case *enterpriseApi.LicenseManager:
+		cr, ok := k.instance.(*enterpriseApi.LicenseManager)
+		if ok {
+			return
+		}
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.IndexerCluster:
-		cr := k.instance.(*enterpriseApi.IndexerCluster)
+		cr, ok := k.instance.(*enterpriseApi.IndexerCluster)
+		if ok {
+			return
+		}
 		event = cr.NewEvent(eventType, reason, message)
-	case *enterpriseApi.ClusterMaster:
-		cr := k.instance.(*enterpriseApi.ClusterMaster)
+	case *enterpriseApi.ClusterManager:
+		cr, ok := k.instance.(*enterpriseApi.ClusterManager)
+		if ok {
+			return
+		}
+		event = cr.NewEvent(eventType, reason, message)
+	case *enterpriseApiV3.ClusterMaster:
+		cr, ok := k.instance.(*enterpriseApiV3.ClusterMaster)
+		if ok {
+			return
+		}
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.MonitoringConsole:
-		cr := k.instance.(*enterpriseApi.MonitoringConsole)
+		cr, ok := k.instance.(*enterpriseApi.MonitoringConsole)
+		if ok {
+			return
+		}
 		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.SearchHeadCluster:
-		cr := k.instance.(*enterpriseApi.SearchHeadCluster)
+		cr, ok := k.instance.(*enterpriseApi.SearchHeadCluster)
+		if ok {
+			return
+		}
 		event = cr.NewEvent(eventType, reason, message)
 	default:
 		return

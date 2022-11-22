@@ -1,5 +1,5 @@
-apiVersion: enterprise.splunk.com/v3
-kind: LicenseMaster
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
 metadata:
   name: lm-example
   finalizers:
@@ -11,14 +11,14 @@ spec:
         name: splunk-licenses
   licenseUrl: /mnt/licenses/enterprise.lic
 ---
-apiVersion: enterprise.splunk.com/v3
-kind: ClusterMaster
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
 metadata:
   name: cm-example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
   appRepo:
     appsRepoPollIntervalSeconds: 600
@@ -47,7 +47,7 @@ spec:
         endpoint: https://<smartstore-endpoint>
         secretRef: s3-secret
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: idxc-example
@@ -55,21 +55,21 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: <n>
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm-example
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
 ---
-apiVersion: enterprise.splunk.com/v3
+apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: sh-example
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  clusterManagerRef:
     name: cm-example
-  licenseMasterRef:
+  licenseManagerRef:
     name: lm-example
   appRepo:
     appsRepoPollIntervalSeconds: 600

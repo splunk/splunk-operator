@@ -18,9 +18,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -275,11 +275,7 @@ func SetStatefulSetOwnerRef(ctx context.Context, client splcommon.ControllerClie
 
 	// Update owner reference if needed
 	err = splutil.UpdateResource(ctx, client, statefulset)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // GetStatefulSetByName retrieves current statefulset
@@ -326,7 +322,7 @@ func DeleteReferencesToAutomatedMCIfExists(ctx context.Context, client splcommon
 	return nil
 }
 
-//isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
+// isCurrentCROwner returns true if current CR is the ONLY owner of the automated MC
 func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerReference) bool {
 	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID())
 }

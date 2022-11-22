@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -95,6 +96,29 @@ func GenerateIndexVolumeSpec(volumeName string, endpoint string, secretRef strin
 		Provider:  provider,
 		Type:      storageType,
 		Region:    region,
+	}
+}
+
+// GenerateIndexVolumeSpecAzure return VolumeSpec struct with given values for Azure
+func GenerateIndexVolumeSpecAzure(volumeName string, endpoint string, secretRef string, provider string, storageType string) enterpriseApi.VolumeSpec {
+	return enterpriseApi.VolumeSpec{
+		Name:      volumeName,
+		Endpoint:  endpoint,
+		Path:      azureIndexesContainer,
+		SecretRef: secretRef,
+		Provider:  provider,
+		Type:      storageType,
+	}
+}
+
+// GenerateIndexVolumeSpecAzureManagedID return VolumeSpec struct with given values for Azure using Managed Identities
+func GenerateIndexVolumeSpecAzureManagedID(volumeName string, endpoint string, provider string, storageType string) enterpriseApi.VolumeSpec {
+	return enterpriseApi.VolumeSpec{
+		Name:     volumeName,
+		Endpoint: endpoint,
+		Path:     azureIndexesContainer,
+		Provider: provider,
+		Type:     storageType,
 	}
 }
 

@@ -111,6 +111,11 @@ func (client *MockPodExecClient) GetCR() splcommon.MetaObject {
 	return client.Cr
 }
 
+// SetCR sets the CR
+func (client *MockPodExecClient) SetCR(cr splcommon.MetaObject) {
+	client.Cr = cr
+}
+
 // RunPodExecCommand returns the dummy values for mockPodExecClient
 func (client *MockPodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
 

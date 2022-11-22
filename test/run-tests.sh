@@ -21,11 +21,11 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
-  # Don't pull Splunk Operator if exists locally since we maybe building it locally
+  # Don't pull splunk operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
-    docker pull ${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
+    docker pull ${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
-     echo "Unable to pull ${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}. Exiting..."
+     echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
      exit 1
     fi
   fi
@@ -55,14 +55,22 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   docker images
 fi
 
-
-if [  "${CLUSTER_WIDE}" != "true" ]; then 
+if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then 
+  echo "Installing Splunk Operator using Helm charts"
+  helm uninstall splunk-operator -n splunk-operator
+  if [ "${CLUSTER_WIDE}" != "true" ]; then
+    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
+  else
+    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
+  fi
+elif [  "${CLUSTER_WIDE}" != "true" ]; then 
   # Install the CRDs
   echo "Installing enterprise CRDs..."
-  make kustomize
-  bin/kustomize build config/crd | kubectl apply -f -
+  make kustomize 
+  make uninstall
+  bin/kustomize build config/crd | kubectl create -f -
 else
-  echo "Installing enterprise opearator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 
@@ -106,33 +114,68 @@ else
   echo "Running following test :: ${TEST_TO_RUN}"
 fi
 
-# Set env variable for LM
-if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
-  echo "License path not set. Changing to default"
-  export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_PATH}"
-fi
+# Set variables
+export CLUSTER_PROVIDER="${CLUSTER_PROVIDER}"
+case ${CLUSTER_PROVIDER} in
+    "eks")
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
+        fi
 
-# Set env s3 env variables
-if [[ -z "${TEST_BUCKET}" ]]; then
-  echo "Data bucket not set. Changing to default"
-  export TEST_BUCKET="${TEST_S3_BUCKET}"
-fi
+        if [[ -z "${TEST_BUCKET}" ]]; then
+          echo "Data bucket not set. Changing to default"
+          export TEST_BUCKET="${TEST_S3_BUCKET}"
+        fi
 
-if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
-  echo "Test bucket not set. Changing to default"
-  export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
-fi
+        if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+          echo "Test bucket not set. Changing to default"
+          export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
+        fi
+
+        if [[ -z "${S3_REGION}" ]]; then
+          echo "S3 Region not set. Changing to default"
+          export S3_REGION="${AWS_S3_REGION}"
+        fi
+        ;;
+    "azure")
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${AZURE_ENTERPRISE_LICENSE_PATH}"
+        fi
+
+        if [[ -z "${TEST_CONTAINER}" ]]; then
+          echo "Data container not set. Changing to default"
+          export TEST_CONTAINER="${AZURE_TEST_CONTAINER}"
+        fi
+
+        if [[ -z "${INDEXES_CONTAINER}" ]]; then
+          echo "Test container not set. Changing to default"
+          export INDEXES_CONTAINER="${AZURE_INDEXES_CONTAINER}"
+        fi
+
+        if [[ -z "${REGION}" ]]; then
+          echo "Azure Region not set. Changing to default"
+          export REGION="${AZURE_REGION}"
+        fi
+
+        if [[ -z "${STORAGE_ACCOUNT}" ]]; then
+          echo "Azure Storage account not set. Changing to default"
+          export STORAGE_ACCOUNT="${AZURE_STORAGE_ACCOUNT}"
+        fi
+
+        if [[ -z "${STORAGE_ACCOUNT_KEY}" ]]; then
+          echo "Azure Storage account key not set. Changing to default"
+          export STORAGE_ACCOUNT_KEY="${AZURE_STORAGE_ACCOUNT_KEY}"
+        fi
+        ;;
+esac
+
 
 if [[ -z "${CLUSTER_NODES}" ]]; then
-  echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
-  export CLUSTER_NODES="${NUM_NODES}"
+    echo "Test Cluster Nodes Not Set in Environment Variables. Changing to env.sh value"
+    export CLUSTER_NODES="${NUM_NODES}"
 fi
-
-if [[ -z "${S3_REGION}" ]]; then
-  echo "S3 Region not set. Changing to default"
-  export S3_REGION="${AWS_S3_REGION}"
-fi
-
 if [[ -z "${TEST_TO_SKIP}" ]]; then
   echo "TEST_TO_SKIP not set. Changing to default"
   export TEST_TO_SKIP="${SKIP_REGEX}"
@@ -148,4 +191,4 @@ fi
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-ginkgo -v --trace --failFast -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
+ginkgo -v -keepGoing --trace -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}

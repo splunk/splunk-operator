@@ -22,9 +22,10 @@ import (
 	"strings"
 	"time"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+
 	"github.com/go-logr/logr"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -211,6 +212,17 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 
+		// Add a splunk operator telemetry app
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
+			if err != nil {
+				return result, err
+			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
+		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {
 			result = *finalResult
@@ -470,6 +482,15 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		// Detain search head
 		mgr.log.Info("Detaining search head cluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
+		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
+		err := setProbeLevelOnSplunkPod(ctx, podExecClient, livenessProbeLevelOne)
+		if err != nil {
+			// During the Recycle, our reconcile loop is entered multiple times. If the Pod is already down,
+			// there is a chance of readiness probe failing, in which case, even the podExec will not be successful.
+			// So, just log the message, and ignore the error.
+			mgr.log.Info("Setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
+		}
+
 		return false, c.SetSearchHeadDetention(true)
 
 	case "ManualDetention":
