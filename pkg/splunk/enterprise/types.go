@@ -17,9 +17,10 @@ package enterprise
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sync"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -171,12 +172,14 @@ type PlaybookImpl interface {
 	runPlaybook(ctx context.Context) error
 }
 
+// blank assignment to implement PlaybookImpl
 var _ PlaybookImpl = &localScopePlaybookContext{}
 
-// blank assignment to implement PlaybookImpl
 var _ PlaybookImpl = &IdxcPlaybookContext{}
 
 var _ PlaybookImpl = &SHCPlaybookContext{}
+
+var _ PlaybookImpl = &premiumAppScopePlaybookContext{}
 
 // IdxcPlaybookContext is used to implement playbook to push bundle to indexer cluster peers
 type IdxcPlaybookContext struct {
@@ -195,6 +198,15 @@ type SHCPlaybookContext struct {
 	targetPodName        string
 	searchHeadCaptainURL string
 	podExecClient        splutil.PodExecClientImpl
+}
+
+// premiumAppScopePlaybookContext is used to implement playbook to run special commands for premium apps installation
+type premiumAppScopePlaybookContext struct {
+	localCtx    *localScopePlaybookContext
+	client      splcommon.ControllerClient
+	appSrcSpec  *enterpriseApi.AppSourceSpec
+	cr          splcommon.MetaObject
+	afwPipeline *AppInstallPipeline
 }
 
 type localScopePlaybookContext struct {

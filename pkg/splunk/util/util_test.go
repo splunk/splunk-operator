@@ -231,3 +231,14 @@ func TestGetSetTargetPodName(t *testing.T) {
 		t.Errorf("invalid targetPodName, expected: %s, got: %s", podName, gotPodName)
 	}
 }
+
+func TestSuppressHarmlessErrorMessages(t *testing.T) {
+	string1 := splunkSSHWarningMessage
+	string2 := splunkEsAppSSLWarning
+
+	// Test replacement of strings
+	suppressHarmlessErrorMessages(&string1, &string2)
+	if string1 != "" || string2 != "" {
+		t.Errorf("Strings are supposed to be empty")
+	}
+}

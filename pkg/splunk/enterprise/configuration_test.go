@@ -825,7 +825,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// If the app scope value other than "local" or "cluster" should return an error
 	AppFramework.AppSources[0].Scope = "unknown"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false)
-	if err == nil || !strings.Contains(err.Error(), "should be either local or cluster or clusterWithPreConfig") {
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("scope for App Source: %s should be either %s or %s or %s", AppFramework.AppSources[0].Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopeCluster, enterpriseApi.ScopePremiumApps)) {
 		t.Errorf("Unsupported app scope should be cause error, but failed to detect")
 	}
 
@@ -866,6 +866,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err != nil {
 		t.Errorf("Valid scope clusterWithPreConfig should not cause an error")
 	}
+
 	AppFramework.Defaults.Scope = enterpriseApi.ScopeLocal
 	AppFramework.AppSources[0].Scope = enterpriseApi.ScopeLocal
 
@@ -968,6 +969,60 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'minio'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
 		t.Errorf("ValidateAppFrameworkSpec with blob and minio combination should have returned error.")
 	}
+
+	//
+	// Start of tests for premiumApps input validations
+	//
+	// Scope premiumApps should not retrun an error
+
+	AppFramework.VolList[0].Type = "s3"
+	AppFramework.VolList[0].Provider = "aws"
+
+	AppFramework.Defaults.Scope = ""
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopePremiumApps
+	AppFramework.AppSources[0].PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
+	if err != nil {
+		t.Errorf("Valid scope premiumApps should not cause an error")
+	}
+
+	// Scope premiumApps should not retrun an error for a valid ssl enablement value
+	AppFramework.Defaults.Scope = ""
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopePremiumApps
+	AppFramework.AppSources[0].PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
+	AppFramework.AppSources[0].PremiumAppsProps.EsDefaults.SslEnablement = enterpriseApi.SslEnablementAuto
+	AppFramework.AppSources[1].Scope = enterpriseApi.ScopePremiumApps
+	AppFramework.AppSources[1].PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
+	AppFramework.AppSources[1].PremiumAppsProps.EsDefaults.SslEnablement = enterpriseApi.SslEnablementStrict
+	AppFramework.AppSources[2].Scope = enterpriseApi.ScopePremiumApps
+	AppFramework.AppSources[2].PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
+	AppFramework.AppSources[2].PremiumAppsProps.EsDefaults.SslEnablement = enterpriseApi.SslEnablementIgnore
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
+	if err != nil {
+		t.Errorf("Valid SslEnablement flags should not cause an error")
+	}
+
+	// unknown premiumApp type
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopePremiumApps
+	AppFramework.AppSources[0].PremiumAppsProps.Type = "unknowndPremiumType"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid PremiumAppsProps. Valid value is enterpriseSecurity") {
+		t.Errorf("invalid premium app type should be detected, but failed")
+	}
+
+	//invalid ssl flag should throws error
+	AppFramework.AppSources[0].Scope = enterpriseApi.ScopePremiumApps
+	AppFramework.AppSources[0].PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
+	AppFramework.AppSources[0].PremiumAppsProps.EsDefaults.SslEnablement = "invalidflag"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, true)
+	if err == nil || !strings.HasPrefix(err.Error(), "invalid sslEnablement. Valid values") {
+		t.Errorf("invalid sslEnablement flag should be detected, but failed")
+	}
+
+	//
+	// End of tests for premiumApps input validations
+	//
+
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
