@@ -86,9 +86,6 @@ const (
 	// probeVolumePermission
 	probeVolumePermission = int32(0555)
 
-	// init container name
-	initContainerTemplate = "%s-init-%d-%s"
-
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
@@ -134,9 +131,6 @@ const (
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
 
-	// appsUpdateToken used to track if the if the latest app list is reflecting on pod or not
-	appsUpdateToken = "appsUpdateToken"
-
 	// port names and templates and protocols
 	portNameTemplateStr = "%s-%s"
 
@@ -154,10 +148,6 @@ const (
 
 	// Mount location on splunk pod for the app package volume
 	appBktMnt = "/operator-staging/appframework/"
-
-	// Time delay involved in installating the Splunk Apps.
-	// Apps like Splunk ES will take as high as 20 minutes for completeing the installation
-	maxSplunkAppsInstallationDelaySecs = 1500
 
 	// Readiness probe time values
 	readinessProbeDefaultDelaySec  = 10

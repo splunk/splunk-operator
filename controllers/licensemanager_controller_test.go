@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -144,15 +145,7 @@ func CreateLicenseManager(name string, namespace string, annotations map[string]
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-		},
-		Spec: enterpriseApi.LicenseManagerSpec{},
-	}
-	ssSpec = testutils.NewLicenseManager(name, namespace, "image")
+	ssSpec := testutils.NewLicenseManager(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 

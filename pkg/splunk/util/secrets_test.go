@@ -100,13 +100,13 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data with empty secret token
-	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "")
+	_, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "")
 	if err.Error() != emptySecretTokenError {
 		t.Errorf("Didn't recognize empty secret token")
 	}
 
 	// Retrieve secret data with invalid secret token
-	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "random")
+	_, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "random")
 	if err.Error() != invalidSecretDataError {
 		t.Errorf("Didn't recognize invalid secret token")
 	}
@@ -119,7 +119,7 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
+	_, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
 	if err.Error() != invalidSecretDataError {
 		t.Errorf("Didn't recognize nil secret data")
 	}
@@ -142,7 +142,7 @@ func TestGetSpecificSecretTokenFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotData, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
+	_, err = GetSpecificSecretTokenFromPod(ctx, c, pod.GetName(), "test", "key1")
 	if err.Error() != emptyPodSpecVolumes {
 		t.Errorf("Didn't recognize empty pod spec volumes")
 	}
@@ -216,7 +216,7 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from non-existing pod
-	gotSecret, err = GetSecretFromPod(ctx, c, "random", "test")
+	_, err = GetSecretFromPod(ctx, c, "random", "test")
 	if err.Error() != splcommon.PodNotFoundError {
 		t.Errorf("Didn't recognize non-existing pod %s", "random")
 	}
@@ -228,7 +228,7 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Non-existing secret data from non-existing pod
-	gotSecret, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
+	_, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err.Error() != splcommon.SecretNotFoundError {
 		t.Errorf("Didn't recognize non-existing secret %s", "test")
 	}
@@ -251,7 +251,7 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from Pod
-	gotSecret, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
+	_, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err.Error() != emptyPodSpecVolumes {
 		t.Errorf("Couldn't recognize empty pod spec volumes")
 	}
@@ -291,7 +291,7 @@ func TestGetSecretFromPod(t *testing.T) {
 	}
 
 	// Retrieve secret data from Pod
-	gotSecret, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
+	_, err = GetSecretFromPod(ctx, c, pod.GetName(), "test")
 	if err.Error() != emptySecretVolumeSource {
 		t.Errorf("Couldn't recognize empty pod spec volumes")
 	}
@@ -508,7 +508,7 @@ func TestGetNamespaceScopedSecret(t *testing.T) {
 	}
 
 	// Negative testing - look for secret in "random" namespace(doesn't exist)
-	retrievedSecret, err = GetNamespaceScopedSecret(ctx, c, "random")
+	_, err = GetNamespaceScopedSecret(ctx, c, "random")
 	if !k8serrors.IsNotFound(err) {
 		t.Errorf("Failed to detect secret in random namespace")
 	}
@@ -909,7 +909,7 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 
 	c := spltest.NewMockClient()
 
-	_, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	_, _ = ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	secretName := splcommon.GetNamespaceScopedSecretName("test")
 
 	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secretName)

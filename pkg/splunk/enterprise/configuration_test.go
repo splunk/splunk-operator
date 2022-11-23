@@ -1004,7 +1004,7 @@ func TestGetSmartstoreIndexesConfig(t *testing.T) {
 		},
 	}
 
-	expectedINIFormatString := fmt.Sprintf(`
+	expectedINIFormatString := `
 [salesdata1]
 remotePath = volume:msos_s2s3_vol/remotepath1
 maxGlobalDataSizeMB = 6000
@@ -1026,7 +1026,7 @@ hotlist_bloom_filter_recency_hours = 24
 hotlist_recency_secs = 86400
 maxGlobalDataSizeMB = 4000
 maxGlobalRawDataSizeMB = 5000
-`)
+`
 
 	indexesConfIni := GetSmartstoreIndexesConfig(SmartStoreIndexes.IndexList)
 	if indexesConfIni != expectedINIFormatString {
@@ -1048,7 +1048,7 @@ func TestGetServerConfigEntries(t *testing.T) {
 	}
 
 	// Do not change the format
-	expectedIniContents := fmt.Sprintf(`[cachemanager]
+	expectedIniContents := `[cachemanager]
 eviction_padding = 2048
 eviction_policy = lru
 hotlist_bloom_filter_recency_hours = 24
@@ -1056,8 +1056,7 @@ hotlist_recency_secs = 86400
 max_cache_size = 20480
 max_concurrent_downloads = 6
 max_concurrent_uploads = 6
-`)
-
+`
 	serverConfForCacheManager := GetServerConfigEntries(&SmartStoreCacheManager)
 
 	if expectedIniContents != serverConfForCacheManager {
@@ -1083,7 +1082,7 @@ func TestGetSmartstoreIndexesDefaults(t *testing.T) {
 	}
 
 	// Do not change the format
-	expectedIniContents := fmt.Sprintf(`[default]
+	expectedIniContents := `[default]
 repFactor = auto
 maxDataSize = auto
 homePath = $SPLUNK_DB/$_index_name/db
@@ -1092,7 +1091,7 @@ thawedPath = $SPLUNK_DB/$_index_name/thaweddb
 remotePath = volume:s2s3_vol/$_index_name
 maxGlobalDataSizeMB = 51200
 maxGlobalRawDataSizeMB = 61440
-`)
+`
 
 	SmartstoreDefaultIniConfig := GetSmartstoreIndexesDefaults(SmartStoreDefaultsConf)
 
@@ -1177,7 +1176,6 @@ func TestAreRemoteVolumeKeysChanged(t *testing.T) {
 
 	// No change on the secret object should return false
 	keysChanged = AreRemoteVolumeKeysChanged(ctx, client, &cr, SplunkClusterManager, &cr.Spec.SmartStore, ResourceRev, &err)
-	resourceVersionUpdated, ok = ResourceRev["splunk-test-secret"]
 	if keysChanged {
 		t.Errorf("If there is no change on secret object, should return false")
 	}

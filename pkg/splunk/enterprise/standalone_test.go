@@ -996,7 +996,7 @@ func TestGetStandaloneList(t *testing.T) {
 func TestStandaloneWitAppFramework(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
-	err := os.MkdirAll(newpath, os.ModePerm)
+	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
@@ -1099,7 +1099,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 	c.Create(ctx, standalone)
 
 	// call reconciliation
-	_, err = ApplyStandalone(ctx, c, standalone)
+	_, err := ApplyStandalone(ctx, c, standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()
@@ -1109,7 +1109,7 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 func TestStandaloneWithReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
-	err := os.MkdirAll(newpath, os.ModePerm)
+	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
@@ -1215,7 +1215,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	// simulate create standalone instance before reconcilation
 	c.Create(ctx, &standalone)
 
-	_, err = ApplyStandalone(ctx, c, &standalone)
+	_, err := ApplyStandalone(ctx, c, &standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()

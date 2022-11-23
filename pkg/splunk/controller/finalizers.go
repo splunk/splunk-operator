@@ -63,7 +63,7 @@ func CheckForDeletion(ctx context.Context, cr splcommon.MetaObject, c splcommon.
 		// check if finalizer name is registered
 		callback, ok := SplunkFinalizerRegistry[finalizer]
 		if !ok {
-			return false, fmt.Errorf("Finalizer in %s %s/%s not recognized: %s", cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName(), finalizer)
+			return false, fmt.Errorf("finalizer in %s %s/%s not recognized: %s", cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName(), finalizer)
 		}
 
 		// process finalizer callback

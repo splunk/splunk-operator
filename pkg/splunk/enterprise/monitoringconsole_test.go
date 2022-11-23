@@ -457,7 +457,7 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 	client.AddObject(&s3Secret)
 
 	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
 
 	_, err = ApplyMonitoringConsole(ctx, client, &cr)
