@@ -953,6 +953,50 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList, CrReplicas: int(shc.Spec.Replicas), CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			//############### UPGRADE APPS ################
+			// Delete ES app on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			uploadedApps = nil
+
+			// Download ES App from Azure
+			appVersion = "V2"
+			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
+			Expect(err).To(Succeed(), "Unable to download ES app")
+
+			// Upload V2 apps to Azure for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s ES app to Azure for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirShc, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s ES app to Azure test directory for Search Head Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameIdxc, appFileList)
+
+			// // Ensure that the Cluster Master goes to Ready phase
+			// testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
+
+			// // Ensure Indexers go to Ready phase
+			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// // Verify RF SF is met
+			// testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############ FINAL VERIFICATIONS ############
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = esApp
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(esApp)
+			allAppSourceInfo = []testenv.AppSourceInfo{shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 

@@ -46,7 +46,4 @@ const (
 
 	// splunkEsAppSSLWarning Note: The ES app post install spews out a harmless ES app message which can be ignored
 	splunkEsAppSSLWarning = "INFO: Installation complete\nINFO: SSL enablement set to ignore, continuing...\n"
-
-	// splunkEsAppSSLWarningRestart Note: The ES app post install spews out a harmless ES app message which can be ignored
-	splunkEsAppSSLWarningRestart = "INFO: Initialization complete, please restart Splunk\nINFO: SSL enablement set to ignore, continuing...\n"
 )
