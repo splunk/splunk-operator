@@ -51,6 +51,7 @@ backup_configs() {
 label_Node() {
 	MSTR_NODE=$1
 	kubectl -n ${NS} label nodes ${MSTR_NODE} biasLangMasterNode=yes --overwrite >/dev/null 2>&1 # Long label(biasLangMasterNode) to avoid conflicts with possibly existing labels
+	kubectl -n ${NS} label nodes ${MSTR_NODE} name=biasLangMasterNode --overwrite >/dev/null 2>&1 # Long label(biasLangMasterNode) to avoid conflicts with possibly existing labels
 	if [[ "$?" -ne 0 ]]; then
 		err "Failed to label node ${MSTR_NODE}"
 	fi
@@ -59,6 +60,7 @@ label_Node() {
 unlabel_Nodes() {
 	for node in $(kubectl -n ${NS} get nodes -o json | jq ".items[].metadata.name" -r); do
 		kubectl -n ${NS} label node $node biasLangMasterNode-
+		kubectl -n ${NS} label node $node name-
 	done
 }
 
@@ -134,7 +136,7 @@ rolling_restart_my_pods() {
 	TARGET=$2
 
 	RESTARTED_PODS=0
-	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${TARGET} | awk '{print $1}')
+	PODS=$(kubectl -n ${NS} get pods | grep ${NAME} | grep ${TARGET} | awk '{print $1}' | sort -r)
 	N_PODS=$(echo $PODS | wc -w)
 
 	for pod in ${PODS}; do
@@ -338,6 +340,10 @@ create_job() {
                     }
                   }
                 ],
+                "nodeSelector":
+                {
+                    "name": "biasLangMasterNode"
+                },
                 "containers": [
                   {
                     "name": "alpine",
@@ -399,16 +405,45 @@ migrate_pvc() {
 
 # For Indexer Cluster is recommended to enable Maintenance during CM migration
 setMaintenanceMode() {
-	pod=$1
-	enable=$2
+    pod=$1
+    enable=$2
 
-	secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
-	command="/opt/splunk/bin/splunk ${enable} maintenance-mode --answer-yes -auth admin:${secret}"
-	kubectl -n ${NS} exec -i ${pod} -- /bin/bash -c "${command}"
+    for i in {1..10} 
+    do 
+        echo "Setting ${enable} maintenance mode for ${pod}"
+        secret=$(kubectl -n ${NS} get secret splunk-${NS}-secret -o jsonpath='{.data.password}' | base64 --decode)
+        command="/opt/splunk/bin/splunk ${enable} maintenance-mode --answer-yes -auth admin:${secret}"
+        kubectl -n ${NS} exec -i ${pod} --quiet -- /bin/bash -c "${command}"
 
-	if [[ "$?" -ne 0 ]] && [[ "${enable}" != "disable" ]]; then
-		err "Failed to set maintenance mode for ${pod}"
-	fi
+        command="/opt/splunk/bin/splunk show maintenance-mode --answer-yes -auth admin:${secret}"
+        output=$(kubectl -n ${NS} exec -i ${pod} --quiet -- /bin/bash -c "${command}")
+
+        if [[ "${enable}" != "disable" ]]
+        then
+            echo $output | grep "Maintenance mode is : 1"
+            if [[ $? != 0 ]]
+            then
+                echo "Failed to enable maintenance mode for ${pod} retrying.."
+                sleep 120
+                continue
+            fi
+            break
+        else 
+            echo $output | grep "Maintenance mode is : 0"
+            if [[ $? != 0 ]]
+            then
+                echo "Failed to disable maintenance mode for ${pod} retrying.."
+                sleep 120
+                continue
+            fi
+            break
+        fi
+    done
+
+    if [[ $? != 0 ]]
+    then
+        err "Failed to ${enable} maintenance mode for ${pod}"
+    fi
 }
 
 to_delete_CRs() {
@@ -597,7 +632,7 @@ apply_new_CRs() {
 
 	# Disable maintenance mode in all CMs migrated
 	for CM in "${to_disable_maint_mode[@]}"; do
-		echo "Going to Disable maintenance mode for {CM}"
+		echo "Going to Disable maintenance mode for ${CM}"
 		setMaintenanceMode "${CM}" "disable"
 	done
 
@@ -689,4 +724,5 @@ fi
 unlabel_Nodes >/dev/null 2>&1
 
 echo -e "\nExecution Completed. Once you validate your environment you can remove ClusterMasters and LicenseMasters stored in ${TO_REMOVE_CRs}"
+echo -e "\nAlso you need to delete cluster master related statefulsets"
 echo -e "\n*** Migration script finished execution ***\n"

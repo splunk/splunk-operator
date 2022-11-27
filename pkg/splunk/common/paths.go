@@ -2,7 +2,7 @@ package common
 
 // List of all Paths used in the Splunk Operator
 
-//List of Splunk Enterprise Paths
+// List of Splunk Enterprise Paths
 const (
 
 	//PeerAppsLoc

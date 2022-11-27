@@ -1,11 +1,10 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//  http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -1651,25 +1650,23 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			################## SETUP ####################
-			* Upload apps to S3 for Standalone
+			* Upload app to S3 for Standalone
 			* Create app source for Standalone
 			* Prepare and deploy Standalone
 			* While app download is completed, upload new versions of the apps
 			############## VERIFICATIONS ################
-			* Verify App download is in progress on Standalone
-			* Upload more apps from S3 during bigger app install
-			* Wait for polling interval to pass
-			* Verify all apps are installed on Standalone
+			* Verify App download is in completed on Standalone
+			* Upload updated app to S3 as pervious app download is complete
+			* Verify app is installed on Standalone
 			############## UPGRADE VERIFICATIONS ################
-			* Verify App download is in progress on Standalone
-			* Upload more apps from S3 during bigger app install
-			* Wait for polling interval to pass
+			* Wait for next poll to trigger on Standalone
 			* Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from S3
+			// Download test app from S3
 			appVersion := "V1"
+			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
 			err := testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
@@ -1677,7 +1674,7 @@ var _ = Describe("s1appfw test", func() {
 			// Upload apps to S3 for Standalone
 			testcaseEnvInst.Log.Info("Upload apps to S3 for Standalone")
 			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			Expect(err).To(Succeed(), "Unable to upload app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
@@ -1703,12 +1700,19 @@ var _ = Describe("s1appfw test", func() {
 
 			// Upload V2 apps to S3 for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			appFileList = testenv.GetAppFileList(appListV2)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s app to S3 for Standalone", appVersion))
+			appFileList = testenv.GetAppFileList([]string{appListV2[0]})
 
 			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s app to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			//######### VERIFICATIONS #############
+			appVersion = "V1"
+			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}, appListV1, false, "enabled", false, false)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -1716,30 +1720,11 @@ var _ = Describe("s1appfw test", func() {
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
-			// ############ VERIFICATION ###########
-			appVersion = "V1"
-			appFileList = testenv.GetAppFileList(appListV1)
-			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
-			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
-
-			// Check for changes in App phase to determine if next poll has been triggered
-			appFileList = testenv.GetAppFileList(appListV2)
-			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Get Pod age to check for pod resets later
-			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
-
 			//############ UPGRADE VERIFICATION ###########
 			appVersion = "V2"
-			standaloneAppSourceInfo.CrAppVersion = appVersion
-			standaloneAppSourceInfo.CrAppList = appListV2
-			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: []string{appListV2[0]}, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})

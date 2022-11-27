@@ -640,18 +640,18 @@ func (c *SplunkClient) BundlePush(ignoreIdenticalBundle bool) error {
 	return c.Do(request, expectedStatus, nil)
 }
 
-//MCServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
+// MCServerRolesInfo is the struct for the server roles of the localhost, in this case SplunkMonitoringConsole
 type MCServerRolesInfo struct {
 	ServerRoles []string `json:"server_roles"`
 }
 
-//MCDistributedPeers is the struct for information about distributed peers of the monitoring console
+// MCDistributedPeers is the struct for information about distributed peers of the monitoring console
 type MCDistributedPeers struct {
 	ClusterLabel []string `json:"cluster_label"`
 	ServerRoles  []string `json:"server_roles"`
 }
 
-//AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
+// AutomateMCApplyChanges change the state of new indexers from "New" to "Configured" and add them in monitoring console asset table
 func (c *SplunkClient) AutomateMCApplyChanges() error {
 	var configuredPeers, indexerMemberList, licenseManagerMemberList string
 	apiResponseServerRoles, err := c.GetMonitoringconsoleServerRoles()
@@ -757,7 +757,7 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 	return err
 }
 
-//GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
+// GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
 func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, error) {
 	apiResponseServerRoles := struct {
 		Entry []struct {
@@ -775,7 +775,7 @@ func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, er
 	return &apiResponseServerRoles.Entry[0].Content, nil
 }
 
-//UpdateDMCGroups dmc* groups with new members
+// UpdateDMCGroups dmc* groups with new members
 func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/%s/edit", c.ManagementURI, dmcGroupName)
 	request, _ := http.NewRequest("POST", endpoint, strings.NewReader(groupMembers))
@@ -784,7 +784,7 @@ func (c *SplunkClient) UpdateDMCGroups(dmcGroupName string, groupMembers string)
 	return err
 }
 
-//UpdateDMCClusteringLabelGroup update respective clustering group
+// UpdateDMCClusteringLabelGroup update respective clustering group
 func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMembers string) error {
 	endpoint := fmt.Sprintf("%s/services/search/distributed/groups/dmc_indexerclustergroup_%s/edit", c.ManagementURI, groupName)
 	reqBodyClusterGroup := groupMembers + "&default=false"
@@ -794,13 +794,13 @@ func (c *SplunkClient) UpdateDMCClusteringLabelGroup(groupName string, groupMemb
 	return err
 }
 
-//MCAssetBuildTable is the struct for information about asset table
+// MCAssetBuildTable is the struct for information about asset table
 type MCAssetBuildTable struct {
 	DispatchAutoCancel string `json:"dispatch.auto_cancel"`
 	DispatchBuckets    int64  `json:"dispatch.buckets"`
 }
 
-//GetMonitoringconsoleAssetTable to GET monitoring console asset table data.
+// GetMonitoringconsoleAssetTable to GET monitoring console asset table data.
 func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, error) {
 	apiResponseMCAssetTableBuild := struct {
 		Entry []struct {
@@ -818,7 +818,7 @@ func (c *SplunkClient) GetMonitoringconsoleAssetTable() (*MCAssetBuildTable, err
 	return &apiResponseMCAssetTableBuild.Entry[0].Content, nil
 }
 
-//PostMonitoringConsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
+// PostMonitoringConsoleAssetTable to build monitoring console asset table. Kicks off the search [Build Asset Table full]
 func (c *SplunkClient) PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBuild *MCAssetBuildTable) error {
 	reqBodyAssetTable := "&trigger_actions=true&dispatch.auto_cancel=" + apiResponseMCAssetTableBuild.DispatchAutoCancel + "&dispatch.buckets=" + strconv.FormatInt(apiResponseMCAssetTableBuild.DispatchBuckets, 10) + "&dispatch.enablePreview=true"
 	endpoint := c.ManagementURI + "/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch"
@@ -829,7 +829,7 @@ func (c *SplunkClient) PostMonitoringConsoleAssetTable(apiResponseMCAssetTableBu
 	return err
 }
 
-//UISettings is the struct for storing monitoring console app UI settings
+// UISettings is the struct for storing monitoring console app UI settings
 type UISettings struct {
 	EaiData     string `json:"eai:data"`
 	Disabled    bool   `json:"disabled"`
@@ -838,7 +838,7 @@ type UISettings struct {
 	EaiUserName string `json:"eai:userName"`
 }
 
-//GetMonitoringConsoleUISettings do a Get for app UI settings
+// GetMonitoringConsoleUISettings do a Get for app UI settings
 func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 	apiResponseUISettings := struct {
 		Entry []struct {
@@ -856,7 +856,7 @@ func (c *SplunkClient) GetMonitoringConsoleUISettings() (*UISettings, error) {
 	return &apiResponseUISettings.Entry[0].Content, nil
 }
 
-//UpdateLookupUISettings updates assets.csv
+// UpdateLookupUISettings updates assets.csv
 func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiResponseUISettings *UISettings) error {
 	reqBodyMCLookups := "configuredPeers=" + configuredPeers + "&eai:appName=" + apiResponseUISettings.EaiAppName + "&eai:acl=" + apiResponseUISettings.EaiACL + "&eai:userName=" + apiResponseUISettings.EaiUserName + "&disabled=" + strconv.FormatBool(apiResponseUISettings.Disabled)
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", c.ManagementURI)
@@ -867,7 +867,7 @@ func (c *SplunkClient) UpdateLookupUISettings(configuredPeers string, apiRespons
 	return err
 }
 
-//UpdateMonitoringConsoleApp updates the monitoring console app
+// UpdateMonitoringConsoleApp updates the monitoring console app
 func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/apps/local/splunk_monitoring_console", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
@@ -879,7 +879,7 @@ func (c *SplunkClient) UpdateMonitoringConsoleApp() error {
 	return err
 }
 
-//ClusterInfo is the struct for checking ClusterInfo
+// ClusterInfo is the struct for checking ClusterInfo
 type ClusterInfo struct {
 	MultiSite             string `json:"multisite"`
 	ReplicationFactor     int32  `json:"replication_factor"`
@@ -887,7 +887,7 @@ type ClusterInfo struct {
 }
 
 // GetClusterInfo queries the cluster about multi-site or single-site.
-//See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fconfig
+// See https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTcluster#cluster.2Fconfig
 func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 	if mockCall {
 		return nil, nil
