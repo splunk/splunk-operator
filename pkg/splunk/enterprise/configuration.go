@@ -1763,7 +1763,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 	return indexesConf
 }
 
-//  GetServerConfigEntries prepares the server.conf entries, and returns as a string
+// GetServerConfigEntries prepares the server.conf entries, and returns as a string
 func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
 	if cacheManagerConf == nil {
 		return ""

@@ -921,16 +921,14 @@ spec:
                               description: Enterpreise Security App defaults
                               properties:
                                 sslEnablement:
-                                  description: "Sets the sslEnablement value for ES
-                                    app installation     strict: Ensure that SSL is
-                                    enabled             in the web.conf configuration
-                                    file to use             this mode. Otherwise,
-                                    the installer exists \t     \t   with an error.
-                                    \    auto: Enables SSL in the etc/system/local/web.conf
-                                    \          configuration file.     ignore: Ignores
-                                    whether SSL is enabled or disabled.             This
-                                    is the DEFAULT mode used by the operator             if
-                                    left empty."
+                                  description: 'Sets the sslEnablement value for ES
+                                    app installation strict: Ensure that SSL is enabled
+                                    in the web.conf configuration file to use this
+                                    mode. Otherwise, the installer exists with an
+                                    error. auto: Enables SSL in the etc/system/local/web.conf
+                                    configuration file. ignore: Ignores whether SSL
+                                    is enabled or disabled. This is the DEFAULT mode
+                                    used by the operator if left empty.'
                                   type: string
                               type: object
                             type:
@@ -972,15 +970,14 @@ spec:
                             description: Enterpreise Security App defaults
                             properties:
                               sslEnablement:
-                                description: "Sets the sslEnablement value for ES
-                                  app installation     strict: Ensure that SSL is
-                                  enabled             in the web.conf configuration
-                                  file to use             this mode. Otherwise, the
-                                  installer exists \t     \t   with an error.     auto:
-                                  Enables SSL in the etc/system/local/web.conf           configuration
-                                  file.     ignore: Ignores whether SSL is enabled
-                                  or disabled.             This is the DEFAULT mode
-                                  used by the operator             if left empty."
+                                description: 'Sets the sslEnablement value for ES
+                                  app installation strict: Ensure that SSL is enabled
+                                  in the web.conf configuration file to use this mode.
+                                  Otherwise, the installer exists with an error. auto:
+                                  Enables SSL in the etc/system/local/web.conf configuration
+                                  file. ignore: Ignores whether SSL is enabled or
+                                  disabled. This is the DEFAULT mode used by the operator
+                                  if left empty.'
                                 type: string
                             type: object
                           type:
@@ -3756,17 +3753,15 @@ spec:
                                   description: Enterpreise Security App defaults
                                   properties:
                                     sslEnablement:
-                                      description: "Sets the sslEnablement value for
-                                        ES app installation     strict: Ensure that
-                                        SSL is enabled             in the web.conf
-                                        configuration file to use             this
-                                        mode. Otherwise, the installer exists \t     \t
-                                        \  with an error.     auto: Enables SSL in
-                                        the etc/system/local/web.conf           configuration
-                                        file.     ignore: Ignores whether SSL is enabled
-                                        or disabled.             This is the DEFAULT
-                                        mode used by the operator             if left
-                                        empty."
+                                      description: 'Sets the sslEnablement value for
+                                        ES app installation strict: Ensure that SSL
+                                        is enabled in the web.conf configuration file
+                                        to use this mode. Otherwise, the installer
+                                        exists with an error. auto: Enables SSL in
+                                        the etc/system/local/web.conf configuration
+                                        file. ignore: Ignores whether SSL is enabled
+                                        or disabled. This is the DEFAULT mode used
+                                        by the operator if left empty.'
                                       type: string
                                   type: object
                                 type:
@@ -3809,16 +3804,14 @@ spec:
                                 description: Enterpreise Security App defaults
                                 properties:
                                   sslEnablement:
-                                    description: "Sets the sslEnablement value for
-                                      ES app installation     strict: Ensure that
-                                      SSL is enabled             in the web.conf configuration
-                                      file to use             this mode. Otherwise,
-                                      the installer exists \t     \t   with an error.
-                                      \    auto: Enables SSL in the etc/system/local/web.conf
-                                      \          configuration file.     ignore: Ignores
-                                      whether SSL is enabled or disabled.             This
-                                      is the DEFAULT mode used by the operator             if
-                                      left empty."
+                                    description: 'Sets the sslEnablement value for
+                                      ES app installation strict: Ensure that SSL
+                                      is enabled in the web.conf configuration file
+                                      to use this mode. Otherwise, the installer exists
+                                      with an error. auto: Enables SSL in the etc/system/local/web.conf
+                                      configuration file. ignore: Ignores whether
+                                      SSL is enabled or disabled. This is the DEFAULT
+                                      mode used by the operator if left empty.'
                                     type: string
                                 type: object
                               type:
@@ -5052,16 +5045,14 @@ spec:
                               description: Enterpreise Security App defaults
                               properties:
                                 sslEnablement:
-                                  description: "Sets the sslEnablement value for ES
-                                    app installation     strict: Ensure that SSL is
-                                    enabled             in the web.conf configuration
-                                    file to use             this mode. Otherwise,
-                                    the installer exists \t     \t   with an error.
-                                    \    auto: Enables SSL in the etc/system/local/web.conf
-                                    \          configuration file.     ignore: Ignores
-                                    whether SSL is enabled or disabled.             This
-                                    is the DEFAULT mode used by the operator             if
-                                    left empty."
+                                  description: 'Sets the sslEnablement value for ES
+                                    app installation strict: Ensure that SSL is enabled
+                                    in the web.conf configuration file to use this
+                                    mode. Otherwise, the installer exists with an
+                                    error. auto: Enables SSL in the etc/system/local/web.conf
+                                    configuration file. ignore: Ignores whether SSL
+                                    is enabled or disabled. This is the DEFAULT mode
+                                    used by the operator if left empty.'
                                   type: string
                               type: object
                             type:
@@ -5103,15 +5094,14 @@ spec:
                             description: Enterpreise Security App defaults
                             properties:
                               sslEnablement:
-                                description: "Sets the sslEnablement value for ES
-                                  app installation     strict: Ensure that SSL is
-                                  enabled             in the web.conf configuration
-                                  file to use             this mode. Otherwise, the
-                                  installer exists \t     \t   with an error.     auto:
-                                  Enables SSL in the etc/system/local/web.conf           configuration
-                                  file.     ignore: Ignores whether SSL is enabled
-                                  or disabled.             This is the DEFAULT mode
-                                  used by the operator             if left empty."
+                                description: 'Sets the sslEnablement value for ES
+                                  app installation strict: Ensure that SSL is enabled
+                                  in the web.conf configuration file to use this mode.
+                                  Otherwise, the installer exists with an error. auto:
+                                  Enables SSL in the etc/system/local/web.conf configuration
+                                  file. ignore: Ignores whether SSL is enabled or
+                                  disabled. This is the DEFAULT mode used by the operator
+                                  if left empty.'
                                 type: string
                             type: object
                           type:
@@ -7887,17 +7877,15 @@ spec:
                                   description: Enterpreise Security App defaults
                                   properties:
                                     sslEnablement:
-                                      description: "Sets the sslEnablement value for
-                                        ES app installation     strict: Ensure that
-                                        SSL is enabled             in the web.conf
-                                        configuration file to use             this
-                                        mode. Otherwise, the installer exists \t     \t
-                                        \  with an error.     auto: Enables SSL in
-                                        the etc/system/local/web.conf           configuration
-                                        file.     ignore: Ignores whether SSL is enabled
-                                        or disabled.             This is the DEFAULT
-                                        mode used by the operator             if left
-                                        empty."
+                                      description: 'Sets the sslEnablement value for
+                                        ES app installation strict: Ensure that SSL
+                                        is enabled in the web.conf configuration file
+                                        to use this mode. Otherwise, the installer
+                                        exists with an error. auto: Enables SSL in
+                                        the etc/system/local/web.conf configuration
+                                        file. ignore: Ignores whether SSL is enabled
+                                        or disabled. This is the DEFAULT mode used
+                                        by the operator if left empty.'
                                       type: string
                                   type: object
                                 type:
@@ -7940,16 +7928,14 @@ spec:
                                 description: Enterpreise Security App defaults
                                 properties:
                                   sslEnablement:
-                                    description: "Sets the sslEnablement value for
-                                      ES app installation     strict: Ensure that
-                                      SSL is enabled             in the web.conf configuration
-                                      file to use             this mode. Otherwise,
-                                      the installer exists \t     \t   with an error.
-                                      \    auto: Enables SSL in the etc/system/local/web.conf
-                                      \          configuration file.     ignore: Ignores
-                                      whether SSL is enabled or disabled.             This
-                                      is the DEFAULT mode used by the operator             if
-                                      left empty."
+                                    description: 'Sets the sslEnablement value for
+                                      ES app installation strict: Ensure that SSL
+                                      is enabled in the web.conf configuration file
+                                      to use this mode. Otherwise, the installer exists
+                                      with an error. auto: Enables SSL in the etc/system/local/web.conf
+                                      configuration file. ignore: Ignores whether
+                                      SSL is enabled or disabled. This is the DEFAULT
+                                      mode used by the operator if left empty.'
                                     type: string
                                 type: object
                               type:
