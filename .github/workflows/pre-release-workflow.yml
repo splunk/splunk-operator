@@ -61,10 +61,6 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     
-    - name: Install golint
-      run: |
-        make setup/golint
-    
     - name: Install goveralls
       run: |
         go get github.com/mattn/goveralls@latest
@@ -142,8 +138,7 @@ jobs:
 
     - name: Run Bundle Creation for the release
       run: |
-        make bundle IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION="${{ github.event.inputs.release_version }}" IMG=splunk/splunk-operator:"${{ github.event.inputs.release_version }}" SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:"${{ github.event.inputs.new_enterprise_version }}"
-
+        make bundle IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=${{ github.event.inputs.release_version }} IMG=docker.io/splunk/splunk-operator:${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=docker.io/splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
     - name: Reset go.mod and go.sum before creating Pull Request
       run: |
         git checkout go.sum

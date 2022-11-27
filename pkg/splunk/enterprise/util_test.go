@@ -2525,7 +2525,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	}
 }
 
-//func getApplicablePodNameForK8Probes(t *testing.T) {
+// func getApplicablePodNameForK8Probes(t *testing.T) {
 func TestGetApplicablePodNameForK8Probes(t *testing.T) {
 	cr := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{

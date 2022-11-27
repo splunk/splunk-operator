@@ -553,7 +553,7 @@ var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Indexe
 	}
 }
 
-//getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
+// getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
 func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseApi.IndexerCluster, cmMonitoringConsoleConfigRef string) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef, false))
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
@@ -1043,7 +1043,7 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 	return numOfObjects, nil
 }
 
-//RetrieveCMSpec finds monitoringConsole ref from cm spec
+// RetrieveCMSpec finds monitoringConsole ref from cm spec
 func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
 	var monitoringConsoleRef string = ""
 
