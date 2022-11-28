@@ -994,7 +994,6 @@ func tryAppPkgCleanupFromOperatorPod(ctx context.Context, installWorker *Pipelin
 	} else {
 		deleteAppPkgFromOperator(ctx, installWorker)
 	}
-	scopedLog.Info("Adding anonymous log")
 }
 
 // installWorkerHandler fetches and runs the install workers
