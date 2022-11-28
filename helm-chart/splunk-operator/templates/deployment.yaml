@@ -68,9 +68,12 @@ spec:
 {{- end }}
           env:
           - name: WATCH_NAMESPACE
-{{- if and .Values.splunkOperator.clusterWideAcess .Values.splunkOperator.watchNamespaces }}          
+{{- if and .Values.splunkOperator.clusterWideAccess .Values.splunkOperator.watchNamespaces }}          
             value: {{ .Values.splunkOperator.watchNamespaces }}
+{{- else }}
+            value: {{ .Release.Namespace }}
 {{- end }}
+
           - name: POD_NAME
             valueFrom:
               fieldRef:
