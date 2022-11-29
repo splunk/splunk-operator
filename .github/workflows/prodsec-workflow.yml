@@ -4,6 +4,7 @@ on:
     branches:
     - main
     - develop
+    - cspl_2165_fix_sa_bugs
 name: Prodsec Workflow
 jobs:
   semgrep:
