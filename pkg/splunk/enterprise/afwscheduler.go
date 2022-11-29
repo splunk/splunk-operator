@@ -63,7 +63,7 @@ func (ppln *AppInstallPipeline) createAndAddPipelineWorker(ctx context.Context, 
 		fanOut:        isFanOutApplicableToCR(cr),
 	}
 
-	scopedLog.Info("Created new worker", "Pod name", worker.targetPodName, "App name", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase, "fan out", worker.fanOut)
+	scopedLog.Info("Created new worker test", "Pod name", worker.targetPodName, "App name", appDeployInfo.AppName, "digest", appDeployInfo.ObjectHash, "phase", appDeployInfo.PhaseInfo.Phase, "fan out", worker.fanOut)
 
 	ppln.addWorkersToPipelinePhase(ctx, phase, worker)
 }
