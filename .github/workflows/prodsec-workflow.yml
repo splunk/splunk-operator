@@ -4,6 +4,7 @@ on:
     branches:
     - main
     - develop
+    - dev2es_merge
 name: Prodsec Workflow
 jobs:
   semgrep:
