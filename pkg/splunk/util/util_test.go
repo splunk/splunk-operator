@@ -235,10 +235,11 @@ func TestGetSetTargetPodName(t *testing.T) {
 func TestSuppressHarmlessErrorMessages(t *testing.T) {
 	string1 := splunkSSHWarningMessage
 	string2 := splunkEsAppSSLWarning
+	string3 := splunkEsAppSSLWarningRestart
 
 	// Test replacement of strings
-	suppressHarmlessErrorMessages(&string1, &string2)
-	if string1 != "" || string2 != "" {
-		t.Errorf("Strings are supposed to be empty")
+	suppressHarmlessErrorMessages(&string1, &string2, &string3)
+	if string1 != "" || string2 != "" || string3 != "" {
+		t.Errorf("Known messages did not get suppressed.")
 	}
 }
