@@ -68,7 +68,7 @@ spec:
 {{- end }}
           env:
           - name: WATCH_NAMESPACE
-{{- if and .Values.splunkOperator.clusterWideAccess .Values.splunkOperator.watchNamespaces }}          
+{{- if .Values.splunkOperator.clusterWideAccess  }}          
             value: {{ .Values.splunkOperator.watchNamespaces }}
 {{- else }}
             value: {{ .Release.Namespace }}
