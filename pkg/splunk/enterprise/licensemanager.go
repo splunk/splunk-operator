@@ -18,10 +18,11 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"reflect"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -103,7 +104,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkLicenseManager)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -207,19 +208,17 @@ func validateLicenseManagerSpec(ctx context.Context, c splcommon.ControllerClien
 }
 
 // helper function to get the list of LicenseManager types in the current namespace
-func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.LicenseManagerList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getLicenseManagerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.LicenseManagerList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
 	if err != nil {
 		scopedLog.Error(err, "LicenseManager types not found in namespace", "namsespace", cr.GetNamespace())
-		return numOfObjects, err
+		return objectList, err
 	}
 
-	return numOfObjects, nil
+	return objectList, nil
 }

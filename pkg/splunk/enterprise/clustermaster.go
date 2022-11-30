@@ -18,9 +18,10 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/go-logr/logr"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -132,7 +133,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 				return result, err
 			}
 		}
-		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
+		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore, SplunkClusterMaster)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after

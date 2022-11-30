@@ -18,10 +18,11 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -131,7 +132,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 				return result, err
 			}
 		}
-		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
+
+		// Check if ClusterManager has any remaining references to other CRs, if so don't delete
+		err = checkCmRemainingReferences(ctx, client, cr)
+		if err != nil {
+			return result, err
+		}
+
+		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore, SplunkClusterManager)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
