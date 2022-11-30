@@ -468,9 +468,9 @@ for more details.
 
 ## Installing Splunk Apps
 
-*Note that this requires using the Splunk Enterprise container version 9.0.2 or later*
+*Note that this requires using the Splunk Enterprise container version 9.0.0 or later*
 
-With the latest release of the Splunk Operator, new App Framework is available to centrally store and deploy apps. See [AppFramework](AppFramework.md) for information and examples.
+With the Splunk Operator 2.0 release, new App Framework is available to centrally store and deploy apps. See [AppFramework](AppFramework.md) for information and examples.
 
 ## Creating a LicenseManager Using a ConfigMap
 
