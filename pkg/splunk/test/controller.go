@@ -19,10 +19,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"testing"
+
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -68,6 +69,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
 	case *enterpriseApi.SearchHeadCluster:
 		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
+	case *enterpriseApi.MonitoringConsole:
+		*dstP.(*enterpriseApi.MonitoringConsole) = *srcP.(*enterpriseApi.MonitoringConsole)
 	default:
 		return false
 	}
@@ -125,6 +128,8 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 		*dstP.(*enterpriseApiV3.ClusterMasterList) = *srcP.(*enterpriseApiV3.ClusterMasterList)
 	case *enterpriseApi.StandaloneList:
 		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
+	case *enterpriseApi.MonitoringConsoleList:
+		*dstP.(*enterpriseApi.MonitoringConsoleList) = *srcP.(*enterpriseApi.MonitoringConsoleList)
 	default:
 		return false
 	}
@@ -247,22 +252,22 @@ type MockClient struct {
 	NotFoundError error
 }
 
-//RESTMapper wrapper for REST Client
-//FIXME
+// RESTMapper wrapper for REST Client
+// FIXME
 func (c MockClient) RESTMapper() meta.RESTMapper {
 	ne := &meta.DefaultRESTMapper{}
 	return ne
 }
 
-//Scheme Wrapper for Scheme client object
-//FIXME
+// Scheme Wrapper for Scheme client object
+// FIXME
 func (c MockClient) Scheme() *runtime.Scheme {
 	sc := &runtime.Scheme{}
 	return sc
 }
 
 // Get returns mock client's Err field
-func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	c.Calls["Get"] = append(c.Calls["Get"], MockFuncCall{
 		CTX: ctx,
 		Key: key,

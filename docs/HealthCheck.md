@@ -27,12 +27,12 @@ metadata:
 spec:
   replicas: 1
   startupProbe:
-    initialDelaySeconds: 10
-    timeoutSeconds: 5
-    periodSeconds: 5
-    failureThreshold: 16
+    initialDelaySeconds: 40
+    timeoutSeconds: 30
+    periodSeconds: 30
+    failureThreshold: 12
   livenessProbe:
-    initialDelaySeconds: 300
+    initialDelaySeconds: 30
     timeoutSeconds: 30
     periodSeconds: 30
     failureThreshold: 3

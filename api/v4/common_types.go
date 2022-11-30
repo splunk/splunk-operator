@@ -469,7 +469,7 @@ type AppSrcDeployInfo struct {
 	AppDeploymentInfoList []AppDeploymentInfo `json:"appDeploymentInfo,omitempty"`
 }
 
-//BundlePushStageType represents the bundle push status
+// BundlePushStageType represents the bundle push status
 type BundlePushStageType int
 
 const (

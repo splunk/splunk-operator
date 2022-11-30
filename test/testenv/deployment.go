@@ -326,7 +326,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 	return stdout.String(), stderr.String(), nil
 }
 
-//DeployLicenseManager deploys the license manager instance
+// DeployLicenseManager deploys the license manager instance
 func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*enterpriseApi.LicenseManager, error) {
 
 	if d.testenv.licenseFilePath == "" {
@@ -344,7 +344,7 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 	return deployed.(*enterpriseApi.LicenseManager), err
 }
 
-//DeployLicenseMaster deploys the license manager instance
+// DeployLicenseMaster deploys the license manager instance
 func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*enterpriseApiV3.LicenseMaster, error) {
 
 	if d.testenv.licenseFilePath == "" {
@@ -362,7 +362,7 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 	return deployed.(*enterpriseApiV3.LicenseMaster), err
 }
 
-//DeployClusterManager deploys the cluster manager
+// DeployClusterManager deploys the cluster manager
 func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterManager, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name, "LicenseRef", LicenseManagerName)
 	cm := newClusterManager(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
@@ -382,7 +382,7 @@ func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseMana
 	return deployed.(*enterpriseApi.ClusterManager), err
 }
 
-//DeployClusterMaster deploys the cluster manager
+// DeployClusterMaster deploys the cluster manager
 func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name, "LicenseRef", LicenseManagerName)
 	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
@@ -402,7 +402,7 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManag
 	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
 
-//DeployClusterManagerWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
+// DeployClusterManagerWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
 func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterManager, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
 	cm := newClusterManagerWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
@@ -416,7 +416,7 @@ func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Conte
 	return deployed.(*enterpriseApi.ClusterManager), err
 }
 
-//DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
+// DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
 func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
 	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
@@ -430,7 +430,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 	return deployed.(*enterpriseApiV3.ClusterMaster), err
 }
 
-//DeployIndexerCluster deploys the indexer cluster
+// DeployIndexerCluster deploys the indexer cluster
 func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
 	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig)
