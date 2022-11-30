@@ -3048,7 +3048,7 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("runPlayBook should have returned error")
 	}
 
-	if ! strings.Contains(err.Error(),"premium scoped app package install failed") {
+	if !strings.Contains(err.Error(), "premium scoped app package install failed") {
 		t.Errorf("runPlayBook did not return `premium scoped app package install failed`")
 	}
 
