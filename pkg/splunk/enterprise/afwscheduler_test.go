@@ -2944,8 +2944,8 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	podExecCommands := []string{
 		"test -f",
 		"/opt/splunk/bin/splunk install app",
-		"rm -f",
 		"/opt/splunk/bin/splunk search",
+		"rm -f",
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
