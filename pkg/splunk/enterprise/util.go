@@ -732,7 +732,18 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 		return err
 	}
 
-	// Remove unwanted Owner References for statefulSet during deletion
+	// Remove unwanted Owner References for statefulSet during deletion.
+	// There are several owner references added to the statefulSet currently
+	// and potentially a few more in the future. With this approach we are
+	// removing all of the owner references except to the parent CR(needed for deletion)
+	// Currently for the cluster manager, we are checking if there are any entities
+	// holding ties to it via clusterManagerRef(via checkCmRemainingReferences)
+	// and removing the owner references only when all the ties no longer exist.
+	// TODO: Implement the same logic for LicenseManager and MonitoringConsole for
+	// their respective references. Alternatively, see if we can implement a solution
+	// where the ownerReferenced entity can be the one to remove its ownerReference
+	// during its deletion/other conditions(For eg. on IndexerCluster when we change
+	// from clusterMasterRef to clusterManagerRef)
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(instanceType, cr.GetName())}
 	err = splctrl.RemoveUnwantedOwnerRefSs(ctx, client, namespacedName, cr)
 	if err != nil {
