@@ -35,6 +35,7 @@ var AppInfo = map[string]map[string]string{
 	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "filename": "splunk-db-connect.tgz"},
 	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "filename": "splunk-security-essentials.tgz"},
 	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "filename": "splunk-enterprise-security.spl"},
+	"Splunk_TA_ForIndexers":             {"V1": "1.0.0", "V2": "1.0.0", "filename": "TA_ForIndexers.spl"},
 	"test_app":                          {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app.tgz"},
 	"test_app2":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app2.tgz"},
 	"test_app3":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app3.tgz"},
