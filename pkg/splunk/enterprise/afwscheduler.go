@@ -1883,7 +1883,7 @@ func handleEsappPostinstall(rctx context.Context, preCtx *premiumAppScopePlayboo
 	stdOut, stdErr, err := preCtx.localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		phaseInfo.FailCount++
-		scopedLog.Error(err, "premium scoped app package install failed new", "stdout", stdOut, "stderr", stdErr, "post install command", command, "failCount", phaseInfo.FailCount)
+		scopedLog.Error(err, "premium scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "post install command", command, "failCount", phaseInfo.FailCount)
 		return fmt.Errorf("premium scoped app package install failed. stdOut: %s, stdErr: %s, post install command: %s, failCount: %d", stdOut, stdErr, command, phaseInfo.FailCount)
 	}
 
