@@ -256,7 +256,7 @@ func suppressHarmlessErrorMessages(values ...*string) {
 
 		if strings.Contains(*val, splunkEsAppInstallationComplete) {
 			*val = strings.ReplaceAll(*val, splunkEsAppInstallationComplete, "")
-    }
+		}
 
 		if strings.Contains(*val, splunkEsAppSSLWarningRestart) {
 			*val = strings.ReplaceAll(*val, splunkEsAppSSLWarningRestart, "")
