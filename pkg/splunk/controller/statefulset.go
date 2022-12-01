@@ -279,6 +279,32 @@ func SetStatefulSetOwnerRef(ctx context.Context, client splcommon.ControllerClie
 	return err
 }
 
+// RemoveUnwantedOwnerRefSs removes all the unwanted owner references for statefulset except the CR it belongs to
+func RemoveUnwantedOwnerRefSs(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, cr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("RemoveUnwantedOwnerRefSs").WithValues("statefulSet", namespacedName)
+
+	scopedLog.Info("Removing unwanted owner references on CR deletion")
+
+	// Get statefulSet
+	statefulset, err := GetStatefulSetByName(ctx, client, namespacedName)
+	if err != nil {
+		return err
+	}
+
+	// Configure statefulSet with only the CR's owner reference
+	crOwnerRef := make([]metav1.OwnerReference, 0)
+	statefulset.SetOwnerReferences(append(crOwnerRef, splcommon.AsOwner(cr, true)))
+
+	// Update statefulSet
+	err = splutil.UpdateResource(ctx, client, statefulset)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
 // GetStatefulSetByName retrieves current statefulset
 func GetStatefulSetByName(ctx context.Context, c splcommon.ControllerClient, namespacedName types.NamespacedName) (*appsv1.StatefulSet, error) {
 	var statefulset appsv1.StatefulSet

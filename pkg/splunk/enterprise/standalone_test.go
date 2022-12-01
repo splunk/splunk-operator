@@ -983,11 +983,12 @@ func TestGetStandaloneList(t *testing.T) {
 
 	client.ListObj = standaloneList
 
-	numOfObjects, err = getStandaloneList(ctx, client, &standalone, listOpts)
+	objList, err := getStandaloneList(ctx, client, &standalone, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
+	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of standalone objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}

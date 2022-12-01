@@ -18,9 +18,10 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"testing"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +63,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		client.InNamespace(cr.GetNamespace()),
 		client.MatchingLabels(labelsB),
 	}
+
 	pvclist := corev1.PersistentVolumeClaimList{
 		Items: []corev1.PersistentVolumeClaim{
 			{
@@ -72,7 +74,6 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			},
 		},
 	}
-
 	mockCalls := make(map[string][]spltest.MockFuncCall)
 	wantDeleted := false
 	if cr.GetObjectMeta().GetDeletionTimestamp() != nil {
@@ -138,41 +139,59 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			switch cr.GetObjectKind().GroupVersionKind().Kind {
 			case "Standalone":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 					{MetaName: "*v4.Standalone-test-stack1"},
 					{MetaName: "*v4.Standalone-test-stack1"},
 				}...)
 
 			case "LicenseMaster":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 					{MetaName: "*v3.LicenseMaster-test-stack1"},
 					{MetaName: "*v3.LicenseMaster-test-stack1"},
 				}...)
 
 			case "LicenseManager":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 					{MetaName: "*v4.LicenseManager-test-stack1"},
 					{MetaName: "*v4.LicenseManager-test-stack1"},
 				}...)
 
 			case "SearchHeadCluster":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 				}...)
 
 			case "ClusterMaster":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 					{MetaName: "*v3.ClusterMaster-test-stack1"},
 					{MetaName: "*v3.ClusterMaster-test-stack1"},
 				}...)
 
 			case "ClusterManager":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 					{MetaName: "*v4.ClusterManager-test-stack1"},
 					{MetaName: "*v4.ClusterManager-test-stack1"},
 				}...)
 
+				listOptsTest := []client.ListOption{
+					client.InNamespace(cr.GetNamespace()),
+				}
+
+				mockCalls["List"] = append(mockCalls["List"], []spltest.MockFuncCall{
+					{ListOpts: listOptsTest},
+					{ListOpts: listOptsTest},
+					{ListOpts: listOptsTest},
+					{ListOpts: listOptsTest},
+				}...)
+				mockCalls["List"][0], mockCalls["List"][len(mockCalls["List"])-1] = mockCalls["List"][len(mockCalls["List"])-1], mockCalls["List"][0]
 			case "MonitoringConsole":
+				mockCalls["Get"] = append(mockCalls["Get"], spltest.MockFuncCall{MetaName: "*v4.MonitoringConsole-test-stack1"})
 				mockCalls["Get"] = append(mockCalls["Get"], spltest.MockFuncCall{MetaName: "*v4.MonitoringConsole-test-stack1"})
 			}
 		} else {
@@ -196,6 +215,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v4.ClusterManager-test-manager1"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
+				{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
 				{MetaName: "*v4.IndexerCluster-test-stack1"},
 				{MetaName: "*v4.IndexerCluster-test-stack1"},
 			}

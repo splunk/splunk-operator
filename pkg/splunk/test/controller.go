@@ -69,6 +69,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApi.Standalone) = *srcP.(*enterpriseApi.Standalone)
 	case *enterpriseApi.SearchHeadCluster:
 		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
+	case *enterpriseApi.MonitoringConsole:
+		*dstP.(*enterpriseApi.MonitoringConsole) = *srcP.(*enterpriseApi.MonitoringConsole)
 	default:
 		return false
 	}
@@ -126,6 +128,8 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 		*dstP.(*enterpriseApiV3.ClusterMasterList) = *srcP.(*enterpriseApiV3.ClusterMasterList)
 	case *enterpriseApi.StandaloneList:
 		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
+	case *enterpriseApi.MonitoringConsoleList:
+		*dstP.(*enterpriseApi.MonitoringConsoleList) = *srcP.(*enterpriseApi.MonitoringConsoleList)
 	default:
 		return false
 	}

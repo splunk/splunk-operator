@@ -74,6 +74,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
+		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
 
 	updateFuncCalls := []spltest.MockFuncCall{
@@ -91,6 +92,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
 
@@ -1069,5 +1071,31 @@ func TestApplyMonitoringConsoleDeletion(t *testing.T) {
 	_, err = ApplyMonitoringConsole(ctx, c, &mc)
 	if err != nil {
 		t.Errorf("ApplyMonitoringConsole should not have returned error here.")
+	}
+}
+
+func TestGetMonitoringConsoleList(t *testing.T) {
+	ctx := context.TODO()
+	mc := enterpriseApi.MonitoringConsole{}
+
+	listOpts := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	client := spltest.NewMockClient()
+
+	mcList := &enterpriseApi.MonitoringConsoleList{}
+	mcList.Items = append(mcList.Items, mc)
+
+	client.ListObj = mcList
+
+	objectList, err := getMonitoringConsoleList(ctx, client, &mc, listOpts)
+	if err != nil {
+		t.Errorf("getNumOfObjects should not have returned error=%v", err)
+	}
+
+	numOfObjects := len(objectList.Items)
+	if numOfObjects != 1 {
+		t.Errorf("Got wrong number of IndexerCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }

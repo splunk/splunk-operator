@@ -1210,11 +1210,12 @@ func TestGetIndexerClusterList(t *testing.T) {
 
 	client.ListObj = idxcList
 
-	numOfObjects, err := getIndexerClusterList(ctx, client, &idxc, listOpts)
+	objectList, err := getIndexerClusterList(ctx, client, &idxc, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
+	numOfObjects := len(objectList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of IndexerCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
