@@ -1376,7 +1376,7 @@ func isAppSourceScopeValid(scope string) bool {
 }
 
 // validateSplunkAppSources validates the App source config in App Framework spec
-func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localOrPremScope bool) error {
+func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localOrPremScope bool, crKind string) error {
 
 	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
@@ -1430,8 +1430,8 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 			}
 
 			// Check for premium apps properties
-			if appSrc.Scope == enterpriseApi.ScopePremiumApps {
-				err := validatePremiumAppsInputs(appSrc)
+			if appSrc.Scope == enterpriseApi.ScopePremiumApps || appFramework.Defaults.Scope == enterpriseApi.ScopePremiumApps {
+				err := validatePremiumAppsInputs(appSrc, crKind)
 				if err != nil {
 					return err
 				}
@@ -1471,7 +1471,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 }
 
 // validatePremiumAppsInputs validates premium app source spec
-func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec) error {
+func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec, crKind string) error {
 
 	if appSrc.AppSourceDefaultSpec.PremiumAppsProps.Type != enterpriseApi.PremiumAppsTypeEs {
 		return fmt.Errorf("invalid PremiumAppsProps. Valid value is %s", enterpriseApi.PremiumAppsTypeEs)
@@ -1486,6 +1486,14 @@ func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec) error {
 			enterpriseApi.SslEnablementIgnore, enterpriseApi.SslEnablementStrict)
 	}
 
+	// SHC ES app cannot use ssl_enablement auto, product doesn't support it
+	if crKind == "SearchHeadCluster" {
+		if appSrc.PremiumAppsProps.Type == enterpriseApi.PremiumAppsTypeEs {
+			if appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement == enterpriseApi.SslEnablementAuto {
+				return fmt.Errorf("scope for app source: %s search head cluster cannot have an ES app installed with ssl_enablement auto", appSrc.Name)
+			}
+		}
+	}
 	return nil
 }
 
@@ -1496,7 +1504,7 @@ func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
+func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool, crKind string) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
@@ -1541,7 +1549,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		return err
 	}
 
-	err = validateSplunkAppSources(appFramework, localScope)
+	err = validateSplunkAppSources(appFramework, localScope, crKind)
 	if err == nil {
 		scopedLog.Info("App framework configuration is valid")
 	}
