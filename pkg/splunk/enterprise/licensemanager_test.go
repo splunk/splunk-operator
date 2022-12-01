@@ -678,11 +678,12 @@ func TestLicenseManagerList(t *testing.T) {
 
 	client.ListObj = lmList
 
-	numOfObjects, err = getLicenseManagerList(ctx, client, &lm, listOpts)
+	objList, err := getLicenseManagerList(ctx, client, &lm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
+	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of LicenseManager objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
