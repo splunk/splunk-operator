@@ -46,4 +46,13 @@ const (
 
 	// splunkEsAppSSLWarning Note: The ES app post install spews out a harmless ES app message which can be ignored
 	splunkEsAppSSLWarning = "INFO: Installation complete\nINFO: SSL enablement set to ignore, continuing...\n"
+
+	// splunkEsAppSSLAutoWarning Note: The ES app post install spews out a harmless ES app message which can be ignored
+	splunkEsAppSSLAutoWarning = "INFO: Enabled SSL in system namespace\nINFO: Installation complete\n"
+
+	// splunkEsAppAlreadyExists Note: The ES app post install spews out a harmless ES app message which can be ignored
+	splunkEsAppAlreadyExists = "App \"SplunkEnterpriseSecuritySuite\" already exists; use the \"update\" argument to install anyway\n"
+
+	// splunkEsAppInstallationComplete
+	splunkEsAppInstallationComplete = "INFO: Installation complete\n"
 )

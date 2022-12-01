@@ -685,7 +685,7 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	worker := localCtx.worker
 
 	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("installAppAndCleanup").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := reqLogger.WithName("installApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
 
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
@@ -726,7 +726,7 @@ func cleanupApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	worker := localCtx.worker
 
 	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("installAppAndCleanup").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := reqLogger.WithName("cleanupApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
 
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)

@@ -1470,6 +1470,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	return nil
 }
 
+// validatePremiumAppsInputs validates premium app source spec
 func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec) error {
 
 	if appSrc.AppSourceDefaultSpec.PremiumAppsProps.Type != enterpriseApi.PremiumAppsTypeEs {
