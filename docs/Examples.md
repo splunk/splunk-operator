@@ -3,26 +3,35 @@
 This document includes various examples for configuring Splunk Enterprise deployments with the Splunk Operator.
 
 
+- [Configuring Splunk Enterprise Deployments](#configuring-splunk-enterprise-deployments)
   - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
     - [Indexer Clusters](#indexer-clusters)
       - [Cluster Manager](#cluster-manager)
-      - [Indexer part](#indexer-part)
+      - [Indexer cluster peers](#indexer-cluster-peers)
       - [Scaling cluster peers using replicas](#scaling-cluster-peers-using-replicas)
       - [Scaling cluster peers using pod autoscaling](#scaling-cluster-peers-using-pod-autoscaling)
       - [Create a search head for your index cluster](#create-a-search-head-for-your-index-cluster)
+      - [Another Cluster Manager example](#another-cluster-manager-example)
     - [Monitoring Console](#monitoring-console)
     - [Search Head Clusters](#search-head-clusters)
     - [Cluster Services](#cluster-services)
     - [Cleaning Up](#cleaning-up)
-  - [Smartstore Index Management](#smartstore-index-management)
+  - [SmartStore Index Management](#smartstore-index-management)
   - [Using Default Settings](#using-default-settings)
   - [Installing Splunk Apps](#installing-splunk-apps)
-  - [Using Apps for Splunk Configuration](#using-apps-for-splunk-configuration)
-  - [Creating a LicenseManager Using a ConfigMap](#creating-a-LicenseManager-using-a-configmap)
+  - [Creating a LicenseManager Using a ConfigMap](#creating-a-licensemanager-using-a-configmap)
   - [Configuring Standalone to use License Manager](#configuring-standalone-to-use-license-manager)
   - [Configuring Indexer Clusters to use License Manager](#configuring-indexer-clusters-to-use-license-manager)
   - [Using an External License Manager](#using-an-external-license-manager)
+    - [Configuring pass4Symmkey:](#configuring-pass4symmkey)
+      - [Approach 1](#approach-1)
+      - [Approach 2](#approach-2)
+    - [Configuring license\_master\_url:](#configuring-license_master_url)
   - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
+    - [Configuring IDXC pass4Symmkey:](#configuring-idxc-pass4symmkey)
+      - [Approach 1](#approach-1-1)
+      - [Approach 2](#approach-2-1)
+    - [Configuring cluster\_master\_url:](#configuring-cluster_master_url)
   - [Managing global kubernetes secret object](#managing-global-kubernetes-secret-object)
     - [Creating global kubernetes secret object](#creating-global-kubernetes-secret-object)
     - [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object)
@@ -459,181 +468,9 @@ for more details.
 
 ## Installing Splunk Apps
 
-*Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
+*Note that this requires using the Splunk Enterprise container version 9.0.0 or later*
 
-With the latest release of the Splunk Operator, a Beta version of the new App Framework is available to centrally store and deploy apps. See [AppFramework](AppFramework.md) for information and examples.
-
-The below method of installing apps continues to be supported, but will be deprecated in future releases.
-
-The Splunk Operator can be used to automatically install apps for you by
-including the `apps_location` parameter in your default settings. The value
-may either be a comma-separated list of apps or a YAML list, with each app
-referenced using a filesystem path or URL.
-
-Note: In the case of `SearchHeadCluster` or `ClusterManager` when the apps are configured through 
-the `apps_location`, all those apps will be deployed to the Search Heads or Indexers respectively.
-To install the apps locally to the Deployer or ClusterManager, the apps should be specified through `apps_location_local`.
-
-When using filesystem paths, the apps should be mounted using the
-`volumes` parameter. This may be used to reference either Kubernetes
-ConfigMaps, Secrets or multi-read Volumes.
-
-For example, let's say you want to store two of your apps (`app1.tgz` and
-`app2.tgz`) in a ConfigMap named `splunk-apps`:
-
-```
-kubectl create -n splunk-operator configmap splunk-apps --from-file=app1.tgz --from-file=app2.tgz
-```
-
-You can have the Splunk Operator install these automatically using something
-like the following:
-
-
-### Example: Standalone
-In the standalone example, app1 and app2 are installed on Splunk Standalone instances.
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: Standalone
-metadata:
-  name: example
-  namespace: splunk-operator
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
-spec:
-  volumes:
-    - name: apps
-      configMap:
-        name: splunk-apps
-  defaults: |-
-    splunk:
-      apps_location:
-        - "/mnt/apps/app1.tgz"
-        - "/mnt/apps/app2.tgz"
-```
-
-
-### Example: Cluster Manager
-In this example, app3 and app4 are installed on any indexer instances that are managed by the cluster manager. App5 and app6 are installed locally on the ClusterManager instance.
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: ClusterManager
-metadata:
-  name: cmexample
-  namespace: splunk-operator
-  finalizers:
-  - enterprise.splunk.com/delete-pvc
-spec:
-  volumes:
-    - name: apps
-      configMap:
-        name: splunk-apps
-  defaults: |-
-    splunk:
-      apps_location:
-        - "/mnt/apps/app3.tgz"
-        - "/mnt/apps/app4.tgz"
-      apps_location_local:
-        - "/mnt/apps/app5.tgz"
-        - "/mnt/apps/app6.tgz"
-```
-
-If you are using a search head cluster, the deployer will be used to push
-these apps out to your search heads.
-
-Instead of using a YAML list, you could also have used a comma-separated list:
-
-```yaml
-  defaults: |-
-    splunk:
-      apps_location: "/mnt/apps/app1.tgz,/mnt/apps/app2.tgz"
-```
-
-You can also install apps hosted remotely using URLs:
-
-```yaml
-    splunk:
-      apps_location:
-        - "/mnt/apps/app1.tgz"
-        - "/mnt/apps/app2.tgz"
-        - "https://example.com/splunk-apps/app3.tgz"
-```
-
-Also these application configuration parameters can be placed in a `defaults.yml`
-file and use the `defaultsUrlApps` parameter.  The `defaultsUrlApps` parameter
-is specific for application installation and will install the apps in the
-correct instances as per the deployment.
-
-Unlike `defaultsUrl` which is applied at every instance created by the CR, the
-`defaultsUrlApps` will be applied on instances that will **not** get the application
-installed via a bundle push.  Search head and indexer cluster members will not have
-the `defaultsUrlApps` parameter applied.  This means:
-
- - For Standalone & License Manager, these applications will be installed as normal.
- - For SearchHeadClusters, these applications will only be installed on the SHC Deployer
-and pushed to the members via SH Bundle push.
- - For IndexerClusters, these applications will only be installed on the ClusterManager
-and pushed to the indexers in the cluster via CM Bundle push.
-
-For application installation the preferred method will be through the `defaultsUrlApps`
-while other Ansible defaults can be still be installed via `defaultsUrl`.  For backwards
-compatibility applications could be installed via `defaultsUrl` though this is not
-recommended.  Both options can be used in conjunction:
-
-```yaml
-    defaultsUrl : "http://myco.com/splunk/generic.yml"
-    defaultsUrlApps: "/mnt/defaults/apps.yml"
-```
-
-
-## Using Apps for Splunk Configuration
-
-Splunk Enterprise apps are often used to package custom configuration files.
-An app in its simplest form needs only to provide a `default/app.conf` file.
-To create a new app, first create a directory containing a `default`
-subdirectory. For example, let's create a simple app in a directory named
-`myapp`:
-
-```
-mkdir -p myapp/default && cat <<EOF > myapp/default/app.conf
-[install]
-is_configured = 0
-
-[ui]
-is_visible = 1
-label = My Splunk App
-
-[launcher]
-author = Me
-description = My Splunk App for Custom Configuration
-version = 1.0
-EOF
-```
-
-Next, we'll add a few event type knowledge objects (from
-[docs](https://docs.splunk.com/Documentation/Splunk/latest/Knowledge/Configureeventtypes)):
-
-```
-cat <<EOF > myapp/default/eventtypes.conf
-[web]
-search = html OR http OR https OR css OR htm OR html OR shtml OR xls OR cgi
-
-[fatal]
-search = FATAL
-EOF
-```
-
-Splunk apps are typically packaged into gzip'd tarballs:
-
-```
-tar cvzf myapp.tgz myapp
-```
-
-You now have your custom knowledge objects configuration packaged into an app
-that can be automatically deployed to your Splunk Enterprise clusters by
-following instructions from the [previous example](#installing-splunk-apps).
-
+With the Splunk Operator 2.0 release, new App Framework is available to centrally store and deploy apps. See [AppFramework](AppFramework.md) for information and examples.
 
 ## Creating a LicenseManager Using a ConfigMap
 

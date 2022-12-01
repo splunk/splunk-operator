@@ -118,8 +118,6 @@ kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.1
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
 
-The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
-
 *Note: We recommended that the Splunk Enterprise Docker image is copied to a private registry, or directly onto your Kubernetes workers before creating large Splunk Enterprise deployments. See the [Required Images Documentation](Images.md) page, and the [Advanced Installation Instructions](Install.md) page for guidance on working with copies of the Docker images.*
 
 After the Splunk Operator starts, you'll see a single pod running within your current namespace:
