@@ -928,7 +928,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3, managerappframeworkc3, appframework: can deploy a C3 SVA and have ES app installed on Search Head Cluster", func() {
 
 			/* Test Steps
@@ -958,26 +958,27 @@ var _ = Describe("c3appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
-			appSourceName := "appframework-shc-" + testenv.RandomDNSName(3)
+			appSourceNameShc := "appframework-shc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceName, s3TestDirShc, 60)
-			appFrameworkSpecShc.Defaults.PremiumAppsProps = enterpriseApi.PremiumAppsProps{
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopePremiumApps, appSourceNameShc, s3TestDirShc, 60)
+			appFrameworkSpecShc.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
+				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
-					SslEnablement: "ignore",
+					SslEnablement: enterpriseApi.SslEnablementIgnore,
 				},
 			}
 
 			// Deploy C3 SVA
-			// Deploy the Cluster Manager
-			testcaseEnvInst.Log.Info("Deploy Cluster Manager")
-			_, err = deployment.DeployClusterManager(ctx, deployment.GetName(), "", "", "")
-			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+			// // Deploy the Cluster Manager
+			// testcaseEnvInst.Log.Info("Deploy Cluster Manager")
+			// _, err = deployment.DeployClusterManager(ctx, deployment.GetName(), "", "", "")
+			// Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
-			// Deploy the Indexer Cluster
-			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
-			indexerReplicas := 3
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", deployment.GetName(), indexerReplicas, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
+			// // Deploy the Indexer Cluster
+			// testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
+			// indexerReplicas := 3
+			// _, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", deployment.GetName(), indexerReplicas, deployment.GetName(), "")
+			// Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Deploy the Search Head Cluster
 			testcaseEnvInst.Log.Info("Deploy Search Head Cluster")
@@ -987,9 +988,9 @@ var _ = Describe("c3appfw test", func() {
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
-					ClusterManagerRef: corev1.ObjectReference{
-						Name: deployment.GetName(),
-					},
+					// ClusterManagerRef: corev1.ObjectReference{
+					// 	Name: deployment.GetName(),
+					// },
 				},
 				Replicas:           3,
 				AppFrameworkConfig: appFrameworkSpecShc,
@@ -997,32 +998,76 @@ var _ = Describe("c3appfw test", func() {
 			_, err = deployment.DeploySearchHeadClusterWithGivenSpec(ctx, deployment.GetName()+"-shc", shSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster")
 
-			// Ensure that the Cluster Manager goes to Ready phase
-			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+			// // Ensure that the Cluster Manager goes to Ready phase
+			// testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			// // Ensure Indexers go to Ready phase
+			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
-			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+			//testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
-			// Get instance of current Search Head Cluster CR with latest config\
+			// Get instance of current Search Head Cluster CR with latest config
 			shc := &enterpriseApi.SearchHeadCluster{}
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
 			Expect(err).To(Succeed(), "Unable to get Search Head Cluster Instance")
 
 			//######### INITIAL VERIFICATIONS #############
 			appVersion := "V1"
-			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
+			shcPodNames := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), int(shSpec.Replicas), false, 1)
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: int(shc.Spec.Replicas), CrClusterPods: shcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList, CrReplicas: int(shc.Spec.Replicas), CrClusterPods: shcPodNames}
 			allAppSourceInfo := []testenv.AppSourceInfo{shcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			//############### UPGRADE APPS ################
+			// Delete ES app on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			// Download ES App from S3
+			appVersion = "V2"
+			testcaseEnvInst.Log.Info("Download updated ES app from S3")
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			Expect(err).To(Succeed(), "Unable to download ES app")
+
+			// Upload V2 apps to S3 for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s ES app to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s ES app to S3 test directory for Search Head Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
+
+			// // Ensure that the Cluster Manager goes to Ready phase
+			// testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// // Ensure Indexers go to Ready phase
+			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			// testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############ FINAL VERIFICATIONS ############
+
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = esApp
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(esApp)
+			allAppSourceInfo = []testenv.AppSourceInfo{shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})

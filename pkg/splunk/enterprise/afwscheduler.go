@@ -1847,14 +1847,15 @@ func (idxcPlaybookContext *IdxcPlaybookContext) runPlaybook(ctx context.Context)
 }
 
 // getSslCliOption gets the ssl cli option for installing ES app.
-// Returns `ignore` if not configured. Note: Validation of spec done already
+// Returns `strict` if not configured. Note: Validation of spec done already
+// Reference: https://docs.splunk.com/Documentation/ES/latest/Install/InstallEnterpriseSecuritySHC
 func getSslCliOption(appSrcSpec *enterpriseApi.AppSourceSpec) string {
 	sslEn := appSrcSpec.PremiumAppsProps.EsDefaults.SslEnablement
 	if sslEn != "" {
 		return sslEn
 	}
 
-	return enterpriseApi.SslEnablementIgnore
+	return enterpriseApi.SslEnablementStrict
 }
 
 // Handles ES app post install steps
