@@ -236,30 +236,12 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 // suppressHarmlessErrorMessages suppresses harmless error messages
 func suppressHarmlessErrorMessages(values ...*string) {
 	for _, val := range values {
-		// Replace ssh warning message
-		if strings.Contains(*val, splunkSSHWarningMessage) {
-			*val = strings.ReplaceAll(*val, splunkSSHWarningMessage, "")
-		}
-
-		// Replace es app warnings
-		if strings.Contains(*val, splunkEsAppSSLWarning) {
-			*val = strings.ReplaceAll(*val, splunkEsAppSSLWarning, "")
-		}
-
-		if strings.Contains(*val, splunkEsAppSSLAutoWarning) {
-			*val = strings.ReplaceAll(*val, splunkEsAppSSLAutoWarning, "")
-		}
-
-		if strings.Contains(*val, splunkEsAppAlreadyExists) {
-			*val = strings.ReplaceAll(*val, splunkEsAppAlreadyExists, "")
-		}
-
-		if strings.Contains(*val, splunkEsAppInstallationComplete) {
-			*val = strings.ReplaceAll(*val, splunkEsAppInstallationComplete, "")
-		}
-
-		if strings.Contains(*val, splunkEsAppSSLWarningRestart) {
-			*val = strings.ReplaceAll(*val, splunkEsAppSSLWarningRestart, "")
+		// Replace each input string if it contains suppressions strings
+		for _, replStr := range splunkCliSuppressionStrings {
+			// Runs per suppression string
+			if strings.Contains(*val, replStr) {
+				*val = strings.ReplaceAll(*val, replStr, "")
+			}
 		}
 	}
 }
