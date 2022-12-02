@@ -1255,11 +1255,12 @@ func TestGetSearchHeadClusterList(t *testing.T) {
 
 	client.ListObj = shcList
 
-	numOfObjects, err = getSearchHeadClusterList(ctx, client, &shc, listOpts)
+	objList, err := getSearchHeadClusterList(ctx, client, &shc, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
+	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of SearchHeadCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}

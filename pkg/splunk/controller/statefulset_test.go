@@ -17,8 +17,9 @@ package controller
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"testing"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -350,5 +351,35 @@ func TestIsStatefulSetScalingUp(t *testing.T) {
 	_, err = IsStatefulSetScalingUpOrDown(ctx, c, &cr, statefulSetName, replicas)
 	if err != nil {
 		t.Errorf("IsStatefulSetScalingUp should not have returned error")
+	}
+}
+
+func TestRemoveUnwantedOwnerRefSs(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+	current := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-monitoring-console",
+			Namespace: "test",
+		},
+	}
+	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
+
+	err := RemoveUnwantedOwnerRefSs(ctx, c, namespacedName, &cr)
+	if err == nil {
+		t.Errorf("Expected an error for statefulSet not found")
+	}
+
+	c.AddObject(&current)
+	err = RemoveUnwantedOwnerRefSs(ctx, c, namespacedName, &cr)
+	if err != nil {
+		t.Errorf("Unexpected error")
 	}
 }
