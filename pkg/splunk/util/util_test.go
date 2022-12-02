@@ -236,10 +236,13 @@ func TestSuppressHarmlessErrorMessages(t *testing.T) {
 	string1 := splunkSSHWarningMessage
 	string2 := splunkEsAppSSLWarning
 	string3 := splunkEsAppSSLWarningRestart
+	string4 := splunkEsAppAlreadyExists
+	string5 := splunkEsAppSSLAutoWarning
+	string6 := splunkEsAppInstallationComplete
 
 	// Test replacement of strings
-	suppressHarmlessErrorMessages(&string1, &string2, &string3)
-	if string1 != "" || string2 != "" || string3 != "" {
+	suppressHarmlessErrorMessages(&string1, &string2, &string3, &string4, &string5, &string6)
+	if string1 != "" || string2 != "" || string3 != "" || string4 != "" || string5 != "" || string6 != "" {
 		t.Errorf("Known messages did not get suppressed.")
 	}
 }

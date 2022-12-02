@@ -608,6 +608,38 @@ func TestValidateSplunkSmartstoreSpec(t *testing.T) {
 	}
 }
 
+func TestValidatePremiumAppsInputs(t *testing.T) {
+	appSrcSpec := enterpriseApi.AppSourceSpec{
+		Name: "testapp",
+		AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+			PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+				Type: "",
+			},
+		},
+	}
+
+	// Fails for invalid types, only ES allowed for now
+	err := validatePremiumAppsInputs(appSrcSpec, "")
+	if err == nil {
+		t.Errorf("Expected to see an error for invalid type, accepts only ES")
+	}
+
+	appSrcSpec.PremiumAppsProps.Type = enterpriseApi.PremiumAppsTypeEs
+	appSrcSpec.PremiumAppsProps.EsDefaults.SslEnablement = enterpriseApi.SslEnablementAuto
+
+	// Valid case
+	err = validatePremiumAppsInputs(appSrcSpec, "")
+	if err != nil {
+		t.Errorf("Should pass, valid config")
+	}
+
+	// invalid case, for SHC cannot use ssl_enablement auto
+	err = validatePremiumAppsInputs(appSrcSpec, "SearchHeadCluster")
+	if err == nil {
+		t.Errorf("Expected to see an error for invalid ssl_enablement for SHC in ES")
+	}
+}
+
 func TestValidateAppFrameworkSpec(t *testing.T) {
 	var err error
 	ctx := context.TODO()
