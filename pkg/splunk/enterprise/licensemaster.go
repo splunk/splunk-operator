@@ -18,9 +18,10 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -104,7 +105,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkLicenseMaster)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after

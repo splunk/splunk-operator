@@ -18,11 +18,12 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -32,6 +33,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -186,6 +188,22 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 	return ss, nil
+}
+
+// helper function to get the list of MonitoringConsole types in the current namespace
+func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getMonitoringConsoleList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.MonitoringConsoleList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	if err != nil {
+		scopedLog.Error(err, "MonitoringConsole types not found in namespace", "namsespace", cr.GetNamespace())
+		return objectList, err
+	}
+
+	return objectList, nil
 }
 
 // validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsole, and returns error if something is wrong.
