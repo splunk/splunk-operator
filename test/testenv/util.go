@@ -391,7 +391,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string, deployerName string) *enterpriseApi.SearchHeadCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -423,6 +423,53 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 				},
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
+				},
+				DeployerRef: corev1.ObjectReference{
+					Name: deployerName,
+				},
+				Defaults: ansibleConfig,
+			},
+		},
+	}
+
+	return &new
+}
+
+func newDeployer(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.Deployer {
+
+	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
+	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
+
+	new := enterpriseApi.Deployer{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Deployer",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.Deployer{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Volumes: []corev1.Volume{},
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: clusterManagerRef,
+				},
+				ClusterMasterRef: corev1.ObjectReference{
+					Name: clusterMasterRef,
+				},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: licenseManagerRef,
+				},
+				LicenseMasterRef: corev1.ObjectReference{
+					Name: licenseMasterRef,
+				},
+				SearchHeadClusterRef: corev1.ObjectReference{
+					Name: SearchHeadClusterRef,
 				},
 				Defaults: ansibleConfig,
 			},
@@ -933,6 +980,22 @@ func newSearchHeadClusterWithGivenSpec(name string, ns string, spec enterpriseAp
 	new := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+		Spec: spec,
+	}
+	return &new
+}
+
+// newDeployerWithGivenSpec create and initializes CR for Deployer Kind with Given Spec
+func newDeployerWithGivenSpec(name string, ns string, spec enterpriseApi.DeployerSpec) *enterpriseApi.Deployer {
+	new := enterpriseApi.Deployer{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Deployer",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,

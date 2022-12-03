@@ -86,7 +86,8 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			siteCount := 3
 			mcName := deployment.GetName()
-			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName)
+			deployerName := deployment.GetName()
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcName, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Master to be in READY status
@@ -100,6 +101,9 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
@@ -153,6 +157,9 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)

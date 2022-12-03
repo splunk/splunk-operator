@@ -66,9 +66,9 @@ var _ = Describe("Smoke test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, basic, c3: can deploy indexers and search head cluster", func() {
-
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
+		It("smoke, basic, c3: can deploy indexers and search head cluster with deployer", func() {
+			deployerName := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -80,16 +80,20 @@ var _ = Describe("Smoke test", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 		})
 	})
 
 	Context("Multisite cluster deployment (M4 - Multisite indexer cluster, Search head cluster)", func() {
-		It("smoke, basic, m4: can deploy indexers and search head cluster", func() {
+		It("smoke, basic, m4: can deploy indexers and search head cluster with deployer", func() {
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
+			deployerName := deployment.GetName()
+			err := deployment.DeployMultisiteClusterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -103,6 +107,9 @@ var _ = Describe("Smoke test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)

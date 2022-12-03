@@ -180,7 +180,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -192,6 +193,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -266,6 +270,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -393,7 +400,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -405,6 +413,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -475,6 +486,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -573,7 +587,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -585,6 +600,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -662,6 +680,9 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
@@ -733,6 +754,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -820,8 +844,9 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			indexerReplicas := 3
 			shReplicas := 3
+			deployerName := deployment.GetName()
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -833,6 +858,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -883,6 +911,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -983,6 +1014,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1115,7 +1149,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single site Indexer Cluster with both Local and Cluster scope for apps installation")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -1127,6 +1162,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1192,6 +1230,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1326,7 +1367,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single site Indexer Cluster with both Local and Cluster scope for apps installation")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -1338,6 +1380,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1403,6 +1448,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1490,7 +1538,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Create Single Site Indexer Cluster and Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -1502,6 +1551,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1616,8 +1668,9 @@ var _ = Describe("c3appfw test", func() {
 			// Create Single site Cluster and Search Head Cluster, with App Framework enabled on Cluster Manager and Deployer
 			indexerReplicas := 3
 			shReplicas := 3
+			deployerName := deployment.GetName()
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with App framework")
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -1628,6 +1681,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1692,6 +1748,9 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
@@ -1727,6 +1786,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1829,8 +1891,9 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			indexerReplicas := 3
 			shReplicas := 3
+			deployerName := deployment.GetName()
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -1841,6 +1904,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -1892,6 +1958,9 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
@@ -1926,6 +1995,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2056,7 +2128,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single site Indexer Cluster with both Local and Cluster scope for apps installation")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -2067,6 +2140,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2144,6 +2220,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2265,7 +2344,8 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
-			cm, _, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			deployerName := deployment.GetName()
+			cm, _, _, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App installation is in progress on Cluster Manager
@@ -2299,6 +2379,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify all apps are installed on Deployer
 			appList = append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -2395,7 +2478,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
@@ -2432,6 +2516,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for polling interval to pass
 			testenv.WaitForAppInstall(ctx, deployment, testcaseEnvInst, deployment.GetName()+"-shc", shc.Kind, appSourceNameShc, appFileList)
@@ -2498,7 +2585,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App installation is in progress on Cluster Manager
@@ -2515,6 +2603,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2593,7 +2684,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is in progress on Cluster Manager
@@ -2610,6 +2702,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2685,7 +2780,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -2696,6 +2792,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2808,7 +2907,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is in progress on Cluster Manager
@@ -2848,6 +2948,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -2926,7 +3029,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -2938,6 +3042,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -3012,7 +3119,8 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify App Download is completed on Cluster Manager
@@ -3032,6 +3140,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -3097,7 +3208,8 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
+			deployerName := deployment.GetName()
+			cm, _, shc, _, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Verify IsDeploymentInProgress Flag is set to true for Cluster Manager CR
@@ -3117,6 +3229,9 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 		})
@@ -3135,8 +3250,9 @@ var _ = Describe("c3appfw test", func() {
 			//################## SETUP ####################
 			// Deploy C3 CRD
 			indexerReplicas := 3
+			deployerName := deployment.GetName()
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "")
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Create spec with clusterMasterRef for Standalone

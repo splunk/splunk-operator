@@ -16,11 +16,13 @@ package crcrud
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	//splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
@@ -67,7 +69,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
+			deployerName := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -78,6 +81,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer go to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
@@ -145,6 +151,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
@@ -161,7 +170,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
+			deployerName := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Manager goes to Ready phase
@@ -172,6 +182,9 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer go to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
@@ -194,6 +207,20 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify Cluster Manager PVCs (etc and var) exists
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "cluster-manager", 1, true, verificationTimeout)
+
+			/* // Delete the Search Head Cluster
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc", shc)
+			Expect(err).To(Succeed(), "Unable to GET SHC instance", "SHC Name", shc)
+			err = deployment.DeleteCR(ctx, shc)
+			Expect(err).To(Fail(), "We should be unable to delete SHC instance if Deployer is deployed", "SHC Name", shc) */
+
+			// Delete the Deployer
+			deployer := &enterpriseApi.Deployer{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-shc-deployer", deployer)
+			Expect(err).To(Succeed(), "Unable to GET Deployer instance", "Deployer Name", deployer)
+			err = deployment.DeleteCR(ctx, deployer)
+			Expect(err).To(Succeed(), "Unable to delete SHC instance", "Deployer Name", deployer)
 
 			// Delete the Search Head Cluster
 			shc := &enterpriseApi.SearchHeadCluster{}

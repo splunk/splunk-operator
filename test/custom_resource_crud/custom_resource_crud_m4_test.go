@@ -16,6 +16,7 @@ package crcrud
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo"
@@ -64,7 +65,8 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Deploy Multisite Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
+			deployerName := deployment.GetName()
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -78,6 +80,9 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
