@@ -2944,8 +2944,8 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	podExecCommands := []string{
 		"test -f",
 		"/opt/splunk/bin/splunk install app",
-		"rm -f",
 		"/opt/splunk/bin/splunk search",
+		"rm -f",
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -3030,16 +3030,16 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
 	}
 
-	// Test3: install command passes but removing app package from pod returns error
+	// Test3: failure in es post install pod exec command
 	mockPodExecReturnContexts[1].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
-	if err == nil {
+	if !strings.Contains(err.Error(), "premium scoped app package install failed") {
 		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
 	}
 
-	// Test4: failure in es post install pod exec command
+	// Test4: install command passes but removing app package from pod returns error
 	mockPodExecReturnContexts[2].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3048,8 +3048,8 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("runPlayBook should have returned error")
 	}
 
-	if !strings.Contains(err.Error(), "premium scoped app package install failed") {
-		t.Errorf("runPlayBook did not return `premium scoped app package install failed`")
+	if err == nil {
+		t.Errorf("runPlayBook did not return `premium scoped app package install failed` got %v", err.Error())
 	}
 
 	// Test5: everything passes
