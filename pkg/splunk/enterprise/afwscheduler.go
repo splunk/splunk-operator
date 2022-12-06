@@ -700,11 +700,42 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		return fmt.Errorf("app pkg missing on Pod. app pkg path: %s", appPkgPathOnPod)
 	}
 
+	// gather installed app name
+	// this is the name of top folder when we untar the app archive package
+	if worker.appDeployInfo.InstalledAppName == "" {
+		installedAppName, err := getInstalledAppNameFromPackage(rctx, cr, appPkgPathOnPod, localCtx.podExecClient)
+		if err != nil {
+			scopedLog.Error(err, "local scoped app package install failed while getting name of installed app")
+			return err
+		}
+		scopedLog.Info("Installed app", "name", installedAppName)
+
+		worker.appDeployInfo.InstalledAppName = installedAppName
+	}
+
 	var command string
 	if worker.appDeployInfo.IsUpdate {
 		// App was already installed, update scenario
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -update 1 -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	} else {
+		// install the app only if it was not already installed
+		// we can come to this block if post installation failed
+		// e.g. es post installation failed but es app was already installed
+
+		scopedLog.Info("Check if app is already installed ", "name", worker.appDeployInfo.InstalledAppName)
+
+		appInstalled, err := isAppAlreadyInstalled(rctx, cr, localCtx.podExecClient, worker.appDeployInfo.InstalledAppName)
+
+		if err != nil {
+			scopedLog.Error(err, "local scoped app package install failed while checking if app is already installed")
+			return err
+		}
+
+		if appInstalled {
+			scopedLog.Info("Not reinstalling app as it is already installed.")
+			return nil
+		}
+
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	}
 
@@ -719,6 +750,55 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	}
 
 	return nil
+}
+
+// check if the given app is already installed in the
+// pod (assume it is enabled also)
+func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExecClient splutil.PodExecClientImpl, installedAppName string) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isAppAlreadyInstalled").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace()).WithValues("installedAppName", installedAppName)
+
+	scopedLog.Info("check app's installation state")
+
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s| grep ENABLED; echo -n $?", installedAppName)
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+
+	if stdErr != "" || err != nil {
+		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	}
+
+	appInstallCheck, _ := strconv.Atoi(stdOut)
+
+	scopedLog.Info("Apps installation state", stdOut, stdOut)
+
+	return appInstallCheck == 0, nil
+}
+
+// get the name of app from the app package
+// assuming it is same as the top folder name after untarring
+// the app package. tar -tf appPkgPathOnPod |head -1
+func getInstalledAppNameFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
+
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("cleanupApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
+
+	command := fmt.Sprintf("tar tf %s|head -1|cut -d/ -f1", appPkgPathOnPod)
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	scopedLog.Info("Pod exec result", "stdOut", stdOut)
+
+	if stdErr != "" || err != nil {
+		return "", fmt.Errorf("could not get installed app name stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	}
+
+	//output contains a trailing \n also, something like "SplunkEnterpriseSecuritySuite\n"
+	stdOut = strings.Trim(stdOut, "\n")
+	return stdOut, nil
 }
 
 // cleanupApp cleans up the package on operator and target pod

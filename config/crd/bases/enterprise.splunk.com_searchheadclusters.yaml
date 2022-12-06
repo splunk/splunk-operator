@@ -3816,6 +3816,8 @@ spec:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
                                 type: integer
+                              installedAppName:
+                                type: string
                               isUpdate:
                                 type: boolean
                               lastModifiedTime:
@@ -7784,6 +7786,8 @@ spec:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
                                 type: integer
+                              installedAppName:
+                                type: string
                               isUpdate:
                                 type: boolean
                               lastModifiedTime:

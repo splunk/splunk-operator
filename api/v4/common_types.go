@@ -454,6 +454,7 @@ type AppDeploymentInfo struct {
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+	InstalledAppName string              `json:"installedAppName"`
 
 	// App phase info to track download, copy and install
 	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
