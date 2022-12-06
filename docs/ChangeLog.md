@@ -2,9 +2,9 @@
 
 ## 2.1.1 (2022-12-06)
 
-* Fixed namespace specific installation issue in Helm chart
+* CSPL-2177: Fixed CVE-2022-42898 vulnerability
 
-* Fixed namespace specific installation issue in manifest files
+* CSPL-2171: Fixed namespace specific installation issue in Helm chart and in manifest files
 
 * Fixed Operator Bundle issues
 
