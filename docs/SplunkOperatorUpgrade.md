@@ -51,7 +51,7 @@ If a Splunk Operator release includes an updated Splunk Enterprise Docker image,
 
 ## Steps to Upgrade from 1.0.5 or older version to latest
 
-Upgrading the Splunk Operator from 1.0.5 or older version to latest is a new installation rather than an upgrade from current operator installation. The older Splunk Operator must be cleaned up before installing the new version. You should upgrade operator to 1.1.0 first and then use [normal upgrade process from 1.1.0 to latest](#Steps-to-upgrade-from-version-greater-than-1.0.5-to-2.1.0).
+Upgrading the Splunk Operator from 1.0.5 or older version to latest is a new installation rather than an upgrade from current operator installation. The older Splunk Operator must be cleaned up before installing the new version. You should upgrade operator to 1.1.0 first and then use [normal upgrade process from 1.1.0 to latest](#Steps-to-Upgrade-from-1.0.5-or-older-version to-latest).
 
 Script [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/1.1.0/operator-upgrade.sh) helps you to do the cleanup, and install 1.1.0 Splunk operator. The script expects the current namespace where the operator is installed and the path to the latest operator deployment manifest file. The script performs the following steps
 
