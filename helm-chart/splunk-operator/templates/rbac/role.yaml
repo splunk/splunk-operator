@@ -191,7 +191,7 @@ rules:
 - apiGroups:
     - enterprise.splunk.com
   resources:
-    - clustermanager/status
+    - clustermanagers/status
   verbs:
     - get
     - patch
