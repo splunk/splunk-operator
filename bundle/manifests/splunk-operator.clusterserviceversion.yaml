@@ -915,4 +915,4 @@ spec:
   - image: docker.io/splunk/splunk:9.0.2
     name: splunk-enterprise
   replaces: splunk-operator.v2.0.0
-  version: 2.1.0
+  version: 2.1.1
