@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 2.1.1 (2022-12-06)
+## 2.1.1 (2022-12-07)
 
 * CSPL-2177: Fixed CVE-2022-42898 vulnerability
 
