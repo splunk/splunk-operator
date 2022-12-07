@@ -3766,6 +3766,14 @@ spec:
                                 format: int64
                                 type: integer
                               appName:
+                                description: AppName is the name of app archive retrieved
+                                  from the remote bucket e.g app1.tgz or app2.spl
+                                type: string
+                              appPackageTopFolder:
+                                description: AppPackageTopFolder is the name of top
+                                  folder when we untar the app archive, which is also
+                                  assumed to be same as the name of the app after
+                                  it is installed.
                                 type: string
                               auxPhaseInfo:
                                 description: Used to track the copy and install status
@@ -3793,8 +3801,6 @@ spec:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
                                 type: integer
-                              installedAppName:
-                                type: string
                               isUpdate:
                                 type: boolean
                               lastModifiedTime:
@@ -7649,6 +7655,14 @@ spec:
                                 format: int64
                                 type: integer
                               appName:
+                                description: AppName is the name of app archive retrieved
+                                  from the remote bucket e.g app1.tgz or app2.spl
+                                type: string
+                              appPackageTopFolder:
+                                description: AppPackageTopFolder is the name of top
+                                  folder when we untar the app archive, which is also
+                                  assumed to be same as the name of the app after
+                                  it is installed.
                                 type: string
                               auxPhaseInfo:
                                 description: Used to track the copy and install status
@@ -7676,8 +7690,6 @@ spec:
                                 description: AppDeploymentStatus represents the status
                                   of an App on the Pod
                                 type: integer
-                              installedAppName:
-                                type: string
                               isUpdate:
                                 type: boolean
                               lastModifiedTime:

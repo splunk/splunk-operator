@@ -2866,6 +2866,16 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed")
 	}
 
+	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
+	mockPodExecReturnContexts[2].StdErr = "Could not find object"
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = localInstallCtxt.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Expected app install failed")
+	}
+
 	// Test5: install app should be successful
 
 	mockPodExecReturnContexts[3].StdErr = "" //no error for app install

@@ -700,17 +700,15 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		return fmt.Errorf("app pkg missing on Pod. app pkg path: %s", appPkgPathOnPod)
 	}
 
-	// gather installed app name
-	// this is the name of top folder when we untar the app archive package
-	if worker.appDeployInfo.InstalledAppName == "" {
-		installedAppName, err := getInstalledAppNameFromPackage(rctx, cr, appPkgPathOnPod, localCtx.podExecClient)
+	if worker.appDeployInfo.AppPackageTopFolder == "" {
+		appTopFolder, err := getAppTopFolderFromPackage(rctx, cr, appPkgPathOnPod, localCtx.podExecClient)
 		if err != nil {
 			scopedLog.Error(err, "local scoped app package install failed while getting name of installed app")
 			return err
 		}
-		scopedLog.Info("Installed app", "name", installedAppName)
+		scopedLog.Info("app top folder", "name", appTopFolder)
 
-		worker.appDeployInfo.InstalledAppName = installedAppName
+		worker.appDeployInfo.AppPackageTopFolder = appTopFolder
 	}
 
 	var command string
@@ -722,9 +720,9 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		// we can come to this block if post installation failed
 		// e.g. es post installation failed but es app was already installed
 
-		scopedLog.Info("Check if app is already installed ", "name", worker.appDeployInfo.InstalledAppName)
+		scopedLog.Info("Check if app is already installed ", "name", worker.appDeployInfo.AppPackageTopFolder)
 
-		appInstalled, err := isAppAlreadyInstalled(rctx, cr, localCtx.podExecClient, worker.appDeployInfo.InstalledAppName)
+		appInstalled, err := isAppAlreadyInstalled(rctx, cr, localCtx.podExecClient, worker.appDeployInfo.AppPackageTopFolder)
 
 		if err != nil {
 			scopedLog.Error(err, "local scoped app package install failed while checking if app is already installed")
@@ -752,15 +750,16 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	return nil
 }
 
-// check if the given app is already installed in the
-// pod (assume it is enabled also)
-func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExecClient splutil.PodExecClientImpl, installedAppName string) (bool, error) {
+// check if the given app is already installed and enabled.
+// the installed app name is supposed to be same as
+// name of top folder (AppTopFolder)
+func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExecClient splutil.PodExecClientImpl, appTopFolder string) (bool, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isAppAlreadyInstalled").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace()).WithValues("installedAppName", installedAppName)
+	scopedLog := reqLogger.WithName("isAppAlreadyInstalled").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace()).WithValues("AppTopFolder", appTopFolder)
 
 	scopedLog.Info("check app's installation state")
 
-	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", installedAppName)
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", appTopFolder)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
@@ -784,13 +783,12 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 	return appInstallCheck == 0, nil
 }
 
-// get the name of app from the app package
-// assuming it is same as the top folder name after untarring
-// the app package. tar -tf appPkgPathOnPod |head -1
-func getInstalledAppNameFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
+// get the name of top folder from the package.
+// this name is later used as installed app name
+func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
 
 	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("getInstalledAppNameFromPackage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
+	scopedLog := reqLogger.WithName("getAppTopFolderFromPackage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
 
 	command := fmt.Sprintf("tar tf %s|head -1|cut -d/ -f1", appPkgPathOnPod)
 
