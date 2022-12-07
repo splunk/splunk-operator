@@ -280,13 +280,6 @@ func (testenv *TestEnv) GetName() string {
 	return testenv.name
 }
 
-func (testenv *TestEnv) setup() error {
-	testenv.Log.Info("testenv initializing.\n")
-	testenv.initialized = true
-	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace, "operatorImage", testenv.operatorImage, "splunkImage", testenv.splunkImage)
-	return nil
-}
-
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestEnv) Teardown() error {
 
@@ -306,10 +299,6 @@ func (testenv *TestEnv) Teardown() error {
 
 	testenv.Log.Info("testenv deleted.\n")
 	return nil
-}
-
-func (testenv *TestEnv) pushCleanupFunc(fn cleanupFunc) {
-	testenv.cleanupFuncs = append(testenv.cleanupFuncs, fn)
 }
 
 func (testenv *TestEnv) popCleanupFunc() (cleanupFunc, error) {

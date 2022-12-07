@@ -17,16 +17,16 @@ package common
 
 const (
 	// InvalidSecretObjectError represents an invalid secret object error
-	InvalidSecretObjectError = "Invalid secret object"
+	InvalidSecretObjectError = "invalid secret object"
 
 	// PodNotFoundError indicates Pod is not found
-	PodNotFoundError = "Couldn't find pod"
+	PodNotFoundError = "couldn't find pod"
 
 	// PodSecretNotFoundError indicates that a mounted secret wasn't found on the Pod
-	PodSecretNotFoundError = "Couldn't find secret in Pod %s"
+	PodSecretNotFoundError = "couldn't find secret in Pod %s"
 
 	// SecretNotFoundError indicates Pod is not found
-	SecretNotFoundError = "Couldn't find secret"
+	SecretNotFoundError = "couldn't find secret"
 
 	// SecretTokenNotRetrievable indicates missing secret token in pod secret
 	SecretTokenNotRetrievable = "couldn't retrieve %s from secret data"
