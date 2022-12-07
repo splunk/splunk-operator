@@ -760,11 +760,18 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	scopedLog.Info("check app's installation state")
 
-	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s| grep ENABLED; echo -n $?", installedAppName)
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", installedAppName)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+
+	if strings.Contains(stdErr, "Could not find object") {
+		// when app is not installed you will see something like on StdErr:
+		// "Could not find object id=<app_name>"
+		// which mean app is not installed (no need to check enabled at this time)
+		return false, nil
+	}
 
 	if stdErr != "" || err != nil {
 		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
@@ -783,7 +790,7 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 func getInstalledAppNameFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
 
 	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("cleanupApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
+	scopedLog := reqLogger.WithName("getInstalledAppNameFromPackage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
 
 	command := fmt.Sprintf("tar tf %s|head -1|cut -d/ -f1", appPkgPathOnPod)
 
