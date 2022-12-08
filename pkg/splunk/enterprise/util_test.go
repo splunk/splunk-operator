@@ -301,7 +301,7 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	}
 
 	// Smartstore volume config with non-existing secret objects
-	err = DeleteOwnerReferencesForResources(ctx, client, &cr, &cr.Spec.SmartStore)
+	err = DeleteOwnerReferencesForResources(ctx, client, &cr, &cr.Spec.SmartStore, SplunkClusterMaster)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret objects doesn't exist")
 	}
@@ -468,8 +468,8 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	// prepare the configMap
 	crKindMap := make(map[string]string)
-	configMapData := fmt.Sprintf(`status: on
-	refCount: 2`)
+	configMapData := `status: on
+	refCount: 2`
 
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
@@ -990,8 +990,8 @@ func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
 	var turnOffManualChecking bool
 
 	crKindMap := make(map[string]string)
-	configMapData := fmt.Sprintf(`status: on
-refCount: 1`)
+	configMapData := `status: on
+refCount: 1`
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
@@ -1070,8 +1070,8 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 	}
 
 	crKindMap := make(map[string]string)
-	configMapData := fmt.Sprintf(`status: on
-refCount: 1`)
+	configMapData := `status: on
+refCount: 1`
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
@@ -1152,8 +1152,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
 
-	var serviceURLs []corev1.EnvVar
-	serviceURLs = []corev1.EnvVar{
+	serviceURLs := []corev1.EnvVar{
 		{
 			Name:  "A",
 			Value: "a",
@@ -1244,8 +1243,8 @@ func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 	crKindMap := make(map[string]string)
 
 	// now prepare the configMap and add it
-	configMapData := fmt.Sprintf(`status: off
-refCount: 1`)
+	configMapData := `status: off
+refCount: 1`
 
 	crKindMap[kind] = configMapData
 	configMapName := GetSplunkManualAppUpdateConfigMapName(stand1.GetNamespace())
@@ -1417,6 +1416,9 @@ func TestCopyFileToPod(t *testing.T) {
 
 	// Now create a file on the Pod
 	f, err := os.Create(fileOnOperator)
+	if err != nil {
+		t.Errorf("Unable to create file")
+	}
 	defer f.Close()
 	defer os.Remove(fileOnOperator)
 	if err != nil {
@@ -1429,7 +1431,6 @@ func TestCopyFileToPod(t *testing.T) {
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
-	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	podExecCommands := []string{
 		"test -d",
@@ -2584,4 +2585,131 @@ func TestGetApplicablePodNameForK8Probes(t *testing.T) {
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
+}
+
+func TestCheckCmRemainingReferences(t *testing.T) {
+	ctx := context.TODO()
+	cmCr := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{},
+	}
+	client := spltest.NewMockClient()
+
+	err := checkCmRemainingReferences(ctx, client, &cmCr)
+	if err != nil {
+		t.Errorf("Didn't expect error, clean run required %v", err)
+	}
+
+	// Add an indexerCluster to the client
+	idxc := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	idxcList := &enterpriseApi.IndexerClusterList{}
+	idxcList.Items = append(idxcList.Items, idxc)
+
+	client.ListObj = idxcList
+	err = checkCmRemainingReferences(ctx, client, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale IDXC connected to clusterManager %v", err)
+	}
+
+	// Add a SHC to the client
+	shcClient := spltest.NewMockClient()
+
+	shc := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	shcList := &enterpriseApi.SearchHeadClusterList{}
+	shcList.Items = append(shcList.Items, shc)
+
+	shcClient.ListObj = shcList
+	err = checkCmRemainingReferences(ctx, shcClient, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale SHC connected to clusterManager %v", err)
+	}
+
+	// Add a LM to the client
+	lmClient := spltest.NewMockClient()
+
+	lm := enterpriseApi.LicenseManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	lmList := &enterpriseApi.LicenseManagerList{}
+	lmList.Items = append(lmList.Items, lm)
+
+	lmClient.ListObj = lmList
+	err = checkCmRemainingReferences(ctx, lmClient, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale LM connected to clusterManager %v", err)
+	}
+
+	// Add a MC to the client
+	mcClient := spltest.NewMockClient()
+
+	mc := enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "stack1",
+				},
+			}},
+	}
+	mcList := &enterpriseApi.MonitoringConsoleList{}
+	mcList.Items = append(mcList.Items, mc)
+
+	mcClient.ListObj = mcList
+	err = checkCmRemainingReferences(ctx, mcClient, &cmCr)
+	if err == nil {
+		t.Errorf("Expected an error for having found a stale MC connected to clusterManager %v", err)
+	}
+
 }

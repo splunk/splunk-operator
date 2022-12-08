@@ -1257,11 +1257,12 @@ func TestGetSearchHeadClusterList(t *testing.T) {
 
 	client.ListObj = shcList
 
-	numOfObjects, err = getSearchHeadClusterList(ctx, client, &shc, listOpts)
+	objList, err := getSearchHeadClusterList(ctx, client, &shc, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
+	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of SearchHeadCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
@@ -1404,9 +1405,9 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	// mock search head cluster calls
-	response1, err := json.Marshal(apiResponse1)
-	response2, err := json.Marshal(apiResponse2)
-	response3, err := json.Marshal(apiResponse3)
+	response1, _ := json.Marshal(apiResponse1)
+	response2, _ := json.Marshal(apiResponse2)
+	response3, _ := json.Marshal(apiResponse3)
 	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/info?count=0&output_mode=json", nil)
 	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/member/peers?count=0&output_mode=json", nil)
 	wantRequest3, _ := http.NewRequest("GET", "https://splunk-test-search-head-0.splunk-test-search-head-headless.default.svc.cluster.local:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
@@ -1452,7 +1453,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
-	err = os.MkdirAll(newpath, os.ModePerm)
+	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
@@ -1533,7 +1534,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, searchheadcluster)
 
-	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
+	_, err := ApplySearchHeadCluster(ctx, c, searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for searchhead cluster %v", err)
 		debug.PrintStack()

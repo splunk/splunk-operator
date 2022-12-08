@@ -19,17 +19,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
+
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // GetSpecificSecretTokenFromPod retrieves a specific secret token's value from a Pod
@@ -72,7 +73,7 @@ func GetSecretFromPod(ctx context.Context, c splcommon.ControllerClient, PodName
 	// Get Pod Spec Volumes
 	podSpecVolumes := currentPod.Spec.Volumes
 	if len(podSpecVolumes) == 0 {
-		return nil, errors.New("Empty pod spec volumes")
+		return nil, errors.New("empty pod spec volumes")
 	}
 
 	var found bool = false
@@ -88,7 +89,7 @@ func GetSecretFromPod(ctx context.Context, c splcommon.ControllerClient, PodName
 
 	// Check if we find the secret
 	if !found {
-		return nil, errors.New("Didn't find secret volume source in any pod volume")
+		return nil, errors.New("didn't find secret volume source in any pod volume")
 	}
 
 	// Retrieve the secret
@@ -320,7 +321,7 @@ func GetLatestVersionedSecret(ctx context.Context, c splcommon.ControllerClient,
 	if existingLatestVersion == -1 {
 		// No secret based on versionedSecretIdentifier, create one with version v1
 		scopedLog.Info("Creating first version secret")
-		latestVersionedSecret, err = ApplySplunkSecret(ctx, c, cr, splunkReadableData, splcommon.GetVersionedSecretName(versionedSecretIdentifier, splcommon.FirstVersion), namespace)
+		latestVersionedSecret, _ = ApplySplunkSecret(ctx, c, cr, splunkReadableData, splcommon.GetVersionedSecretName(versionedSecretIdentifier, splcommon.FirstVersion), namespace)
 	} else {
 		// Check if contents of latest versionedSecretIdentifier based secret is different from that of namespace scoped secrets object
 		if !reflect.DeepEqual(splunkReadableData, existingLatestVersionedSecret.Data) {

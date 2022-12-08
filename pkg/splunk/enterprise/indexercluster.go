@@ -25,20 +25,19 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	"github.com/go-logr/logr"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // NewSplunkClientFunc funciton pointer type
@@ -103,6 +102,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			cr.Status.ClusterManagerPhase = managerIdxCluster.Status.Phase
 		}
 	} else {
+		scopedLog.Error(nil, "The configured clusterMasterRef doesn't exist", "clusterManagerRef", cr.Spec.ClusterManagerRef.Name)
 		cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	}
 
@@ -118,7 +118,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkIndexer)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
@@ -361,7 +361,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkIndexer)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
@@ -947,7 +947,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.IndexingReady = false
 		mgr.cr.Status.ServiceReady = false
 		mgr.cr.Status.MaintenanceMode = false
-		return fmt.Errorf("Waiting for cluster manager to become ready")
+		return fmt.Errorf("waiting for cluster manager to become ready")
 	}
 
 	// get indexer cluster info from cluster manager if it's ready
@@ -1026,21 +1026,19 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 }
 
 // helper function to get the list of IndexerCluster types in the current namespace
-func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.IndexerClusterList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getIndexerClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.IndexerClusterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
 	if err != nil {
 		scopedLog.Error(err, "IndexerCluster types not found in namespace", "namsespace", cr.GetNamespace())
-		return numOfObjects, err
+		return objectList, err
 	}
 
-	return numOfObjects, nil
+	return objectList, nil
 }
 
 // RetrieveCMSpec finds monitoringConsole ref from cm spec

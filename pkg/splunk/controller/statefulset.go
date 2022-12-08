@@ -18,8 +18,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -198,7 +199,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
 			return enterpriseApi.PhaseError, err
 		}
-		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || pod.Status.ContainerStatuses[0].Ready != true {
+		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
 			scopedLog.Error(err, "Waiting for Pod to become ready", "podName", podName)
 			return enterpriseApi.PhaseUpdating, err
 		}
@@ -275,6 +276,32 @@ func SetStatefulSetOwnerRef(ctx context.Context, client splcommon.ControllerClie
 
 	// Update owner reference if needed
 	err = splutil.UpdateResource(ctx, client, statefulset)
+	return err
+}
+
+// RemoveUnwantedOwnerRefSs removes all the unwanted owner references for statefulset except the CR it belongs to
+func RemoveUnwantedOwnerRefSs(ctx context.Context, client splcommon.ControllerClient, namespacedName types.NamespacedName, cr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("RemoveUnwantedOwnerRefSs").WithValues("statefulSet", namespacedName)
+
+	scopedLog.Info("Removing unwanted owner references on CR deletion")
+
+	// Get statefulSet
+	statefulset, err := GetStatefulSetByName(ctx, client, namespacedName)
+	if err != nil {
+		return err
+	}
+
+	// Configure statefulSet with only the CR's owner reference
+	crOwnerRef := make([]metav1.OwnerReference, 0)
+	statefulset.SetOwnerReferences(append(crOwnerRef, splcommon.AsOwner(cr, true)))
+
+	// Update statefulSet
+	err = splutil.UpdateResource(ctx, client, statefulset)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 

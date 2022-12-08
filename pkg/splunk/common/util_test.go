@@ -172,7 +172,7 @@ func TestGenerateSecret(t *testing.T) {
 
 			// ensure each result is unique
 			for x := i; x > 0; x-- {
-				if bytes.Compare(results[x-1], results[i]) == 0 {
+				if bytes.Equal(results[x-1], results[i]) {
 					t.Errorf("GenerateSecret(\"%s\",%d) returned two identical values: %s", SecretBytes, n, string(results[i]))
 				}
 			}

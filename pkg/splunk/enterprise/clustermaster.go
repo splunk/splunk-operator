@@ -18,9 +18,10 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/go-logr/logr"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -116,7 +117,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, err := VerifyCMasterisMultisite(ctx, cr, namespaceScopedSecret)
+			extraEnv, _ := VerifyCMasterisMultisite(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
@@ -132,7 +133,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 				return result, err
 			}
 		}
-		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
+		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore, SplunkClusterMaster)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -227,7 +228,6 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 
 // clusterMasterPodMaster is used to manage the cluster manager pod
 type clusterMasterPodManager struct {
-	c               splcommon.ControllerClient
 	log             logr.Logger
 	cr              *enterpriseApiV3.ClusterMaster
 	secrets         *corev1.Secret
@@ -302,17 +302,17 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 			return nil
 		}
 		eventPublisher.Warning(ctx, "getSmartstoreConfigMap", fmt.Sprintf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap))
-		return fmt.Errorf("Waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
+		return fmt.Errorf("waiting for the configMap update to the Pod. Token on Pod=%s, Token from configMap=%s", stdOut, tokenFromConfigMap)
 	}
 
 	// Somehow the configmap was deleted, ideally this should not happen
 	eventPublisher.Warning(ctx, "getSmartstoreConfigMap", "smartstore ConfigMap is missing")
-	return fmt.Errorf("Smartstore ConfigMap is missing")
+	return fmt.Errorf("smartstore ConfigMap is missing")
 }
 
 // PerformCmasterBundlePush initiates the bundle push from cluster manager
 func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
-	if cr.Status.BundlePushTracker.NeedToPushMasterApps == false {
+	if !cr.Status.BundlePushTracker.NeedToPushMasterApps {
 		return nil
 	}
 
@@ -364,14 +364,14 @@ func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr 
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
 	if err != nil {
 		eventPublisher.Warning(ctx, "PushMasterAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
-		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)
+		return fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
 	}
 
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushMasterAppsBundle", fmt.Sprintf("Could not find admin password while trying to push the manager apps bundle"))
-		return fmt.Errorf("Could not find admin password while trying to push the manager apps bundle")
+		eventPublisher.Warning(ctx, "PushMasterAppsBundle", "Could not find admin password while trying to push the manager apps bundle")
+		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 
 	scopedLog.Info("Issuing REST call to push manager aps bundle")

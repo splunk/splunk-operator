@@ -678,11 +678,12 @@ func TestLicenseManagerList(t *testing.T) {
 
 	client.ListObj = lmList
 
-	numOfObjects, err = getLicenseManagerList(ctx, client, &lm, listOpts)
+	objList, err := getLicenseManagerList(ctx, client, &lm, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
 
+	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of LicenseManager objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
@@ -741,8 +742,8 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		},
 	}
 
-	response1, err := json.Marshal(apiResponse1)
-	response2, err := json.Marshal(apiResponse2)
+	response1, _ := json.Marshal(apiResponse1)
+	response2, _ := json.Marshal(apiResponse2)
 	wantRequest1, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json", nil)
 	wantRequest2, _ := http.NewRequest("GET", "https://splunk-test-cluster-manager-service.default.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json", nil)
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
@@ -755,7 +756,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
-	err = os.MkdirAll(newpath, os.ModePerm)
+	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
@@ -870,7 +871,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "cluster-manager",
 		"app.kubernetes.io/part-of":    "splunk-test-cluster-manager",
 	}
-	err = c.Status().Update(ctx, clustermanager)
+	err := c.Status().Update(ctx, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

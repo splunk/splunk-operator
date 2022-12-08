@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -39,6 +38,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -233,16 +233,6 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	return namespaceScopedSecret, nil
 }
 
-// getIndexerExtraEnv returns extra environment variables used by indexer clusters
-func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_INDEXER_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkIndexer, cr.GetName(), replicas, false),
-		},
-	}
-}
-
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
 func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
@@ -360,34 +350,6 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 // and etag is "abcd1234", then it will be downloaded locally as sample_app.tgz_abcd1234
 func getLocalAppFileName(ctx context.Context, downloadPath, appName, etag string) string {
 	return downloadPath + appName + "_" + strings.Trim(etag, "\"")
-}
-
-// getObjectsAsPointers converts and returns a slice of pointers to objects.
-// For e.g., if we have a slice of ints as []int, then this API will return []*int
-func getObjectsAsPointers(v interface{}) interface{} {
-	in := reflect.ValueOf(v)
-	out := reflect.MakeSlice(reflect.SliceOf(reflect.PtrTo(in.Type().Elem())), in.Len(), in.Len())
-	for i := 0; i < in.Len(); i++ {
-		out.Index(i).Set(in.Index(i).Addr())
-	}
-	return out.Interface()
-}
-
-// extractAppNameFromKey extracts the app name from Key received from remote storage
-func extractAppNameFromKey(ctx context.Context, key string) string {
-	nameAt := strings.LastIndex(key, "/")
-	return key[nameAt+1:]
-}
-
-// getRemoteObjectFromRemoteDataListResponse returns the remote object for the app from RemoteDataListResponse
-func getRemoteObjectFromRemoteDataListResponse(ctx context.Context, appName string, RemoteDataListResponse splclient.RemoteDataListResponse) *splclient.RemoteObject {
-	for _, object := range RemoteDataListResponse.Objects {
-		rcvdAppName := extractAppNameFromKey(ctx, *object.Key)
-		if rcvdAppName == appName {
-			return object
-		}
-	}
-	return nil
 }
 
 // appPhaseStatusAsStr converts the state enum to corresponding string
@@ -705,7 +667,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource
-func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec) error {
+func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, instanceType InstanceType) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForResources").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -719,6 +681,25 @@ func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.Con
 	_, err = splutil.RemoveSecretOwnerRef(ctx, client, defaultSecretName, cr)
 	if err != nil {
 		scopedLog.Error(err, fmt.Sprintf("Owner reference removal failed for Secret Object %s", defaultSecretName))
+		return err
+	}
+
+	// Remove unwanted Owner References for statefulSet during deletion.
+	// There are several owner references added to the statefulSet currently
+	// and potentially a few more in the future. With this approach we are
+	// removing all of the owner references except to the parent CR(needed for deletion)
+	// Currently for the cluster manager, we are checking if there are any entities
+	// holding ties to it via clusterManagerRef(via checkCmRemainingReferences)
+	// and removing the owner references only when all the ties no longer exist.
+	// TODO: Implement the same logic for LicenseManager and MonitoringConsole for
+	// their respective references. Alternatively, see if we can implement a solution
+	// where the ownerReferenced entity can be the one to remove its ownerReference
+	// during its deletion/other conditions(For eg. on IndexerCluster when we change
+	// from clusterMasterRef to clusterManagerRef)
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(instanceType, cr.GetName())}
+	err = splctrl.RemoveUnwantedOwnerRefSs(ctx, client, namespacedName, cr)
+	if err != nil {
+		scopedLog.Error(err, "Owner Reference removal failed for statefulSet")
 		return err
 	}
 
@@ -923,6 +904,84 @@ func changePhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, 
 		// Ideally this should never happen, check if the "IsDeploymentInProgress" flag is handled correctly or not
 		scopedLog.Error(nil, "Could not find the App Source in App context")
 	}
+}
+
+// checkCmRemainingReferences checks for any stale references of IndexerCluster, LicenseManager, SearchheadCluster, MonitoringConsole
+// pointing to a particular ClusterManager CR
+func checkCmRemainingReferences(ctx context.Context, c splcommon.ControllerClient, cmCr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("checkCmRemainingReferences").WithValues("cmCr", cmCr.GetName(), "namespace", cmCr.GetNamespace())
+
+	// Filter by namespace
+	listOpts := []client.ListOption{
+		client.InNamespace(cmCr.GetNamespace()),
+	}
+
+	// Look for indexerClusters still holding references to the ClusterManager
+	idxcList, err := getIndexerClusterList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve IndexerCluster list")
+			return err
+		}
+	}
+	for _, item := range idxcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`IndexerCluster %s still has a reference for clusterManager %s,
+				please backup if needed and delete the IndexerCluster`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to an indexerCluster")
+		}
+	}
+
+	// Look for searchHeadClusters still holding references to the ClusterManager
+	shcList, err := getSearchHeadClusterList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve SearchHeadCluster list")
+			return err
+		}
+	}
+	for _, item := range shcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`SearchHeadCluster %s still has a reference for clusterManager %s,
+				please backup if needed and delete the SearchHeadCluster`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a searchHeadCluster")
+		}
+	}
+
+	// Look for LicenseManagers still holding references to the ClusterManager
+	lmList, err := getLicenseManagerList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve LicenseManager list")
+			return err
+		}
+	}
+	for _, item := range lmList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`LicenseManager %s still has a reference for clusterManager %s,
+				please backup if needed and delete the LicenseManager`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a LicenseManager")
+		}
+	}
+
+	// Look for MonitoringConsole still holding references to the ClusterManager
+	mcList, err := getMonitoringConsoleList(ctx, c, cmCr, listOpts)
+	if err != nil {
+		if err.Error() != "NotFound" && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Couldn't retrieve MonitoringConsole list")
+			return err
+		}
+	}
+	for _, item := range mcList.Items {
+		if item.Spec.ClusterManagerRef.Name == cmCr.GetName() {
+			scopedLog.Error(nil, fmt.Sprintf(`MonitoringConsole %s still has a reference for clusterManager %s,
+				please backup if needed and delete the MonitoringConsole`, item.GetName(), cmCr.GetName()))
+			return fmt.Errorf("ClusterManager has stale references to a MonitoringConsole")
+		}
+	}
+
+	return nil
 }
 
 func removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int32, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo) {
@@ -1310,7 +1369,7 @@ func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerCl
 // Ex. '\"b38a8f911e2b43982b71a979fe1d3c3f\"' is converted to b38a8f911e2b43982b71a979fe1d3c3f
 func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 	// S3: In the case of multipart upload, '-' is an allowed character as part of the etag
-	reg, err := regexp.Compile("[^A-Fa-f0-9\\-]+")
+	reg, err := regexp.Compile("[^A-Fa-f0-9...-]+")
 	if err != nil {
 		return nil, err
 	}
@@ -1769,23 +1828,6 @@ func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *
 	}
 }
 
-// getAdminPasswordFromSecret retrieves the admin password from secret object
-func getAdminPasswordFromSecret(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) ([]byte, error) {
-	// get the admin password from the namespace scoped secret
-	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
-	if err != nil {
-		return nil, fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
-	}
-
-	//Get the admin password from the secret object
-	adminPwd, foundSecret := defaultSecret.Data["password"]
-	if !foundSecret {
-		return nil, fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
-	}
-	return adminPwd, nil
-}
-
 // isPersistantVolConfigured confirms if the Operator Pod is configured with storage
 func isPersistantVolConfigured() bool {
 	return operatorResourceTracker != nil && operatorResourceTracker.storage != nil
@@ -2119,7 +2161,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		return latestMcCR, nil
 	}
 
-	return nil, fmt.Errorf("Invalid CR Kind")
+	return nil, fmt.Errorf("invalid CR Kind")
 }
 
 // ReadFile reads the contents of the given file name passed as string
@@ -2127,7 +2169,7 @@ func ReadFile(ctx context.Context, fileLocation string) (string, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReadFile").WithValues("FileLocation", fileLocation)
 
-	byteString, err := ioutil.ReadFile(fileLocation)
+	byteString, err := os.ReadFile(fileLocation)
 	if err != nil {
 		scopedLog.Error(err, "Failed to read file")
 		return "", err
@@ -2151,7 +2193,7 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExec
 		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
 
 	default:
-		return fmt.Errorf("Invalid probe Level %d", probeLevel)
+		return fmt.Errorf("invalid probe Level %d", probeLevel)
 	}
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())
