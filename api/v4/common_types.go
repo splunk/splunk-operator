@@ -179,10 +179,10 @@ type CommonSplunkSpec struct {
 	// +optional
 	LicenseManagerRef corev1.ObjectReference `json:"licenseManagerRef,omitempty"`
 
-	// ClusterMasterRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	// ClusterMasterRef refers to a Splunk Enterprise cluster master managed by the operator within Kubernetes
 	ClusterMasterRef corev1.ObjectReference `json:"clusterMasterRef"`
 
-	// ClusterManagerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
+	// ClusterManagerRef refers to a Splunk Enterprise cluster manager managed by the operator within Kubernetes
 	ClusterManagerRef corev1.ObjectReference `json:"clusterManagerRef"`
 
 	// MonitoringConsoleRef refers to a Splunk Enterprise monitoring console managed by the operator within Kubernetes

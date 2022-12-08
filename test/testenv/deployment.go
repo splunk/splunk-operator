@@ -612,6 +612,15 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			ucr := cr.(*enterpriseApi.SearchHeadCluster)
 			current.Spec = ucr.Spec
 			cobject = current
+		case "Deployer":
+			current := &enterpriseApi.Deployer{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.Deployer)
+			current.Spec = ucr.Spec
+			cobject = current
 		default:
 			return fmt.Errorf("unknown custom resource")
 		}

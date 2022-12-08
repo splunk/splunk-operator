@@ -308,14 +308,14 @@ func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployme
 
 // GetAppDeploymentInfoSearchHeadCluster returns AppDeploymentInfo for given Search Head Cluster, appSourceName and appName
 func GetAppDeploymentInfoSearchHeadCluster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
-	cm := &enterpriseApi.SearchHeadCluster{}
+	cr := &enterpriseApi.Deployer{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
-	err := deployment.GetInstance(ctx, name, cm)
+	err := deployment.GetInstance(ctx, name, cr)
 	if err != nil {
 		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
 		return appDeploymentInfo, err
 	}
-	appInfoList := cm.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	appInfoList := cr.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
 		testenvInstance.Log.Info("Checking Search Head Cluster AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
@@ -337,7 +337,7 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 		appDeploymentInfo, err = GetAppDeploymentInfoStandalone(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "MonitoringConsole":
 		appDeploymentInfo, err = GetAppDeploymentInfoMonitoringConsole(ctx, deployment, testenvInstance, name, appSourceName, appName)
-	case "SearchHeadCluster":
+	case "SearchHeadCluster", "Deployer":
 		appDeploymentInfo, err = GetAppDeploymentInfoSearchHeadCluster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterManager":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
@@ -515,8 +515,8 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
-	case "SearchHeadCluster":
-		cr := &enterpriseApi.SearchHeadCluster{}
+	case "SearchHeadCluster", "Deployer":
+		cr := &enterpriseApi.Deployer{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {
 			testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name, "CR Kind", crKind)

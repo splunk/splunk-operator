@@ -39,6 +39,9 @@ const (
 type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
+	// DeployerRef refers to a Splunk Enterprise deployer managed by the operator within Kubernetes
+	DeployerRef corev1.ObjectReference `json:"deployerRef"`
+
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
 
@@ -65,6 +68,9 @@ type SearchHeadClusterMemberStatus struct {
 
 	// Number of currently running realtime searches.
 	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
+
+	// DeployerPhase maintains deployer phase
+	DeployerPhase Phase `json:"deployer_phase"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster

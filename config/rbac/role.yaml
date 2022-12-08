@@ -199,6 +199,32 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - deployers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - deployers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - deployers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
   - indexerclusters
   verbs:
   - create

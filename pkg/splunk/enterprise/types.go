@@ -17,9 +17,10 @@ package enterprise
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sync"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -251,7 +252,7 @@ func (instanceType InstanceType) ToKind() string {
 	case SplunkSearchHead:
 		kind = "search-head"
 	case SplunkDeployer:
-		kind = "search-head"
+		kind = "deployer"
 	case SplunkLicenseMaster:
 		kind = splcommon.LicenseManager
 	case SplunkLicenseManager:

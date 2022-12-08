@@ -986,8 +986,8 @@ spec:
                     type: array
                 type: object
               clusterManagerRef:
-                description: ClusterManagerRef refers to a Splunk Enterprise indexer
-                  cluster managed by the operator within Kubernetes
+                description: ClusterManagerRef refers to a Splunk Enterprise cluster
+                  manager managed by the operator within Kubernetes
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -1024,8 +1024,8 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               clusterMasterRef:
-                description: ClusterMasterRef refers to a Splunk Enterprise indexer
-                  cluster managed by the operator within Kubernetes
+                description: ClusterMasterRef refers to a Splunk Enterprise cluster
+                  master managed by the operator within Kubernetes
                 properties:
                   apiVersion:
                     description: API version of the referent.

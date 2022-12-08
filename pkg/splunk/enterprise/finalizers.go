@@ -47,8 +47,10 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 		components = append(components, splcommon.LicenseManager)
 	case "LicenseManager":
 		components = append(components, "license-manager")
+	case "Deployer":
+		components = append(components, "deployer")
 	case "SearchHeadCluster":
-		components = append(components, "search-head", "deployer")
+		components = append(components, "search-head")
 	case "IndexerCluster":
 		components = append(components, "indexer")
 	case "ClusterManager":

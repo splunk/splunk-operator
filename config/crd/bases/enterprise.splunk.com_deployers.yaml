@@ -5,31 +5,39 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
-  name: licensemasters.enterprise.splunk.com
+  name: deployers.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: LicenseMaster
-    listKind: LicenseMasterList
-    plural: licensemasters
+    kind: Deployer
+    listKind: DeployerList
+    plural: deployers
     shortNames:
-    - lm
-    singular: licensemaster
+    - dep
+    singular: deployer
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of license manager
+    - description: Status of deployer
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of license manager
+    - description: Desired number of deployer members
+      jsonPath: .status.replicas
+      name: Desired
+      type: integer
+    - description: Current number of deployer members
+      jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - description: Age of deployer
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    name: v4
     schema:
       openAPIV3Schema:
-        description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+        description: Deployer is the Schema for a Splunk Enterprise Deployer
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -44,8 +52,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
-              license manager.
+            description: DeployerSpec defines the desired state of a Splunk Enterprise
+              Deployer
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -880,7 +888,7 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk enterprise App repository. Specifies remote App
+                description: Splunk Enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
                   appInstallPeriodSeconds:
@@ -3535,9 +3543,14 @@ spec:
                 type: array
             type: object
           status:
-            description: LicenseMasterStatus defines the observed state of a Splunk
-              Enterprise license manager.
+            description: DeployerStatus defines the observed state of a Splunk Enterprise
+              Deployer
             properties:
+              SearchHeadClusterReplicas:
+                description: SearchHeadClusterReplicas stores search head cluster
+                  replicas
+                format: int32
+                type: integer
               appContext:
                 description: App Framework Context
                 properties:
@@ -3758,8 +3771,11 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
+              namespace_scoped_secret_resource_version:
+                description: Indicates resource version of namespace scoped secret
+                type: string
               phase:
-                description: current phase of the license manager
+                description: current phase of the deployer
                 enum:
                 - Pending
                 - Ready
@@ -3769,6 +3785,28 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              readyReplicas:
+                description: current number of ready deployer members
+                format: int32
+                type: integer
+              replicas:
+                description: desired number of deployer members
+                format: int32
+                type: integer
+              searchHeadClusterPhase:
+                description: SearchHeadClusterPhase stores search head cluster status
+                enum:
+                - Pending
+                - Ready
+                - Updating
+                - ScalingUp
+                - ScalingDown
+                - Terminating
+                - Error
+                type: string
+              selector:
+                description: selector for pods, used by HorizontalPodAutoscaler
+                type: string
               telAppInstalled:
                 description: Telemetry App installation flag
                 type: boolean
@@ -3777,4 +3815,8 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        labelSelectorPath: .status.selector
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
       status: {}

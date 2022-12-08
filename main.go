@@ -143,6 +143,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
 		os.Exit(1)
 	}
+	if err = (&controllers.DeployerReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
+		os.Exit(1)
+	}
 	if err = (&controllers.SearchHeadClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

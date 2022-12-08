@@ -154,21 +154,28 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	// create or update statefulset for the deployer
-	statefulSet, err := getDeployerStatefulSet(ctx, client, cr)
-	if err != nil {
-		return result, err
+	// Update deployerphase here
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.DeployerRef.Name,
 	}
-
-	deployerManager := splctrl.DefaultStatefulSetPodManager{}
-	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
-	if err != nil {
-		return result, err
+	deployer := &enterpriseApi.Deployer{}
+	err = client.Get(context.TODO(), namespacedName, deployer)
+	if err == nil {
+		// when user creates both cluster manager and index cluster yaml file at the same time
+		// cluser manager status is not yet set so it will be blank
+		if deployer.Status.Phase == "" {
+			cr.Status.DeployerPhase = enterpriseApi.PhasePending
+		} else {
+			cr.Status.DeployerPhase = deployer.Status.Phase
+		}
+	} else {
+		scopedLog.Error(err, "Failed to retrieve configured Splunk Deployer")
+		cr.Status.DeployerPhase = enterpriseApi.PhaseError
 	}
-	cr.Status.DeployerPhase = phase
 
 	// create or update statefulset for the search heads
-	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
+	statefulSet, err := getSearchHeadStatefulSet(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -180,7 +187,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	mgr := newSerachHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
 	}
@@ -212,17 +219,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
 
-		// Add a splunk operator telemetry app
-		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
-			podExecClient := splutil.GetPodExecClient(client, cr, "")
-			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
-			if err != nil {
-				return result, err
-			}
-
-			// Mark telemetry app as installed
-			cr.Status.TelAppInstalled = true
-		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {
 			result = *finalResult
@@ -610,12 +606,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 // getSearchHeadStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise search heads.
 func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-
-	// get search head env variables with deployer
-	env := getSearchHeadEnv(cr)
-
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, env)
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkSearchHead, cr.Spec.Replicas, getSearchHeadEnv(cr))
 	if err != nil {
 		return nil, err
 	}
@@ -623,23 +615,15 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	return ss, nil
 }
 
-// getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
-func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
-	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
-	if err != nil {
-		return ss, err
-	}
-
-	// Setup App framework staging volume for apps
-	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
-
-	return ss, err
-}
-
 // validateSearchHeadClusterSpec checks validity and makes default updates to a SearchHeadClusterSpec, and returns error if something is wrong.
 func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) error {
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
+	}
+
+	// SHC needs to have a deployerRef
+	if cr.Spec.DeployerRef.Name == "" {
+		return fmt.Errorf("SearchHeadCluster needs to have a deployerRef configured to it")
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {

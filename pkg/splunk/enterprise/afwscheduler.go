@@ -79,7 +79,7 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		podType = "license-manager"
 	case "LicenseMaster":
 		podType = "license-master"
-	case "SearchHeadCluster":
+	case "SearchHeadCluster", "Deployer":
 		podType = "deployer"
 	case "IndexerCluster":
 		return ""
@@ -126,12 +126,12 @@ func getTelAppNameExtension(crKind string) (string, error) {
 	switch crKind {
 	case "Standalone":
 		return "stdaln", nil
+	case "SearchHeadCluster", "Deployer":
+		return "shc", nil
 	case "LicenseMaster":
 		return "lmaster", nil
 	case "LicenseManager":
 		return "lmanager", nil
-	case "SearchHeadCluster":
-		return "shc", nil
 	case "ClusterMaster":
 		return "cmaster", nil
 	case "ClusterManager":
@@ -1274,7 +1274,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 		instanceID = SplunkLicenseManager
 	case "LicenseMaster":
 		instanceID = SplunkLicenseMaster
-	case "SearchHeadCluster":
+	case "SearchHeadCluster", "Deployer":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
 		instanceID = SplunkClusterMaster
@@ -1334,7 +1334,7 @@ func getClusterScopePlaybookContext(ctx context.Context, client splcommon.Contro
 	switch kind {
 	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
-	case "SearchHeadCluster":
+	case "SearchHeadCluster", "Deployer":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	default:
 		return nil
@@ -1471,7 +1471,7 @@ func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "ClusterManager", "ClusterMaster":
 		return idxcAppsLocationOnClusterManager
-	case "SearchHeadCluster":
+	case "SearchHeadCluster", "Deployer":
 		return shcAppsLocationOnDeployer
 	default:
 		return ""

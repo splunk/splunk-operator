@@ -45,6 +45,40 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 	return ad
 }
 
+// NewDeployer returns new Standalone instance with its config hash
+func NewDeployer(name, ns, image string) *enterpriseApi.Deployer {
+
+	c := &enterpriseApi.Spec{
+		ImagePullPolicy: string(pullPolicy),
+	}
+
+	cs := &enterpriseApi.CommonSplunkSpec{
+		Mock:    true,
+		Spec:    *c,
+		Volumes: []corev1.Volume{},
+		MonitoringConsoleRef: corev1.ObjectReference{
+			Name: "mcName",
+		},
+	}
+
+	ad := &enterpriseApi.Deployer{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v3",
+			Kind:       "Deployer",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+	}
+
+	ad.Spec = enterpriseApi.DeployerSpec{
+		CommonSplunkSpec: *cs,
+	}
+	return ad
+}
+
 // NewSearchHeadCluster returns new serach head cluster instance with its config hash
 func NewSearchHeadCluster(name, ns, image string) *enterpriseApi.SearchHeadCluster {
 

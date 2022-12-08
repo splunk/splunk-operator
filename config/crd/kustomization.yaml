@@ -4,6 +4,7 @@
 resources:
 - bases/enterprise.splunk.com_clustermanagers.yaml
 - bases/enterprise.splunk.com_clustermasters.yaml
+- bases/enterprise.splunk.com_deployers.yaml
 - bases/enterprise.splunk.com_indexerclusters.yaml
 - bases/enterprise.splunk.com_licensemasters.yaml
 - bases/enterprise.splunk.com_licensemanagers.yaml
