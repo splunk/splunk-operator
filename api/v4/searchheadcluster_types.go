@@ -68,9 +68,6 @@ type SearchHeadClusterMemberStatus struct {
 
 	// Number of currently running realtime searches.
 	ActiveRealtimeSearchCount int `json:"active_realtime_search_count"`
-
-	// DeployerPhase maintains deployer phase
-	DeployerPhase Phase `json:"deployer_phase"`
 }
 
 // SearchHeadClusterStatus defines the observed state of a Splunk Enterprise search head cluster

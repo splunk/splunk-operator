@@ -28,7 +28,6 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -103,7 +102,7 @@ func ApplyDeployer(ctx context.Context, client splcommon.ControllerClient, cr *e
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkDeployer)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
@@ -216,22 +215,4 @@ func validateDeployerSpec(ctx context.Context, c splcommon.ControllerClient, cr 
 	}
 
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-// helper function to get the list of Deployer types in the current namespace
-func getDeployerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getDeployerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	objectList := enterpriseApi.DeployerList{}
-
-	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
-	if err != nil {
-		scopedLog.Error(err, "Deployer types not found in namespace", "namsespace", cr.GetNamespace())
-		return numOfObjects, err
-	}
-
-	return numOfObjects, nil
 }

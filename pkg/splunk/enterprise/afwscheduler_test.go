@@ -233,8 +233,10 @@ func TestCreateFanOutWorker(t *testing.T) {
 		t.Errorf("Unable to create a fanout worker")
 	}
 
-	if fanOutWorker.fanOut {
-		t.Errorf("FanOut flag should be false on the new worker")
+	if fanOutWorker != nil {
+		if fanOutWorker.fanOut {
+			t.Errorf("FanOut flag should be false on the new worker")
+		}
 	}
 
 	if fanOutWorker.targetPodName != "splunk-stack1-standalone-0" {

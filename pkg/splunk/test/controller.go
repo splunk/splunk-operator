@@ -215,19 +215,11 @@ type MockStatusWriter struct {
 
 // Update returns status writer's Err field
 func (c MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	c.Calls = append(c.Calls, MockFuncCall{
-		CTX: ctx,
-		Obj: obj,
-	})
 	return c.Err
 }
 
 // Patch returns status writer's Err field
 func (c MockStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	c.Calls = append(c.Calls, MockFuncCall{
-		CTX: ctx,
-		Obj: obj,
-	})
 	return c.Err
 }
 
@@ -464,37 +456,29 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 
 	// Create the CR. Having a CR instance helps to not to retry for the GET failures,
 	// that way, predictable number of CRUD function calls to satisfy the test cases.
-	switch resource.(type) {
+	switch cr := resource.(type) {
 	case *enterpriseApi.Standalone:
-		cr := resource.(*enterpriseApi.Standalone)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApiV3.LicenseMaster:
-		cr := resource.(*enterpriseApiV3.LicenseMaster)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.LicenseManager:
-		cr := resource.(*enterpriseApi.LicenseManager)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.IndexerCluster:
-		cr := resource.(*enterpriseApi.IndexerCluster)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApiV3.ClusterMaster:
-		cr := resource.(*enterpriseApiV3.ClusterMaster)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.ClusterManager:
-		cr := resource.(*enterpriseApi.ClusterManager)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.MonitoringConsole:
-		cr := resource.(*enterpriseApi.MonitoringConsole)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.SearchHeadCluster:
-		cr := resource.(*enterpriseApi.SearchHeadCluster)
 		c.Create(context.Background(), cr)
 	}
 

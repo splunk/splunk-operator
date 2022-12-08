@@ -22,14 +22,6 @@ spec:
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Desired number of deployer members
-      jsonPath: .status.replicas
-      name: Desired
-      type: integer
-    - description: Current number of deployer members
-      jsonPath: .status.readyReplicas
-      name: Ready
-      type: integer
     - description: Age of deployer
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -3546,11 +3538,6 @@ spec:
             description: DeployerStatus defines the observed state of a Splunk Enterprise
               Deployer
             properties:
-              SearchHeadClusterReplicas:
-                description: SearchHeadClusterReplicas stores search head cluster
-                  replicas
-                format: int32
-                type: integer
               appContext:
                 description: App Framework Context
                 properties:
@@ -3776,25 +3763,6 @@ spec:
                 type: string
               phase:
                 description: current phase of the deployer
-                enum:
-                - Pending
-                - Ready
-                - Updating
-                - ScalingUp
-                - ScalingDown
-                - Terminating
-                - Error
-                type: string
-              readyReplicas:
-                description: current number of ready deployer members
-                format: int32
-                type: integer
-              replicas:
-                description: desired number of deployer members
-                format: int32
-                type: integer
-              searchHeadClusterPhase:
-                description: SearchHeadClusterPhase stores search head cluster status
                 enum:
                 - Pending
                 - Ready

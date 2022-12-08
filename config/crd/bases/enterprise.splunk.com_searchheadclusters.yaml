@@ -7735,17 +7735,6 @@ spec:
                       description: Flag that indicates if this member can run scheduled
                         searches.
                       type: boolean
-                    deployer_phase:
-                      description: DeployerPhase maintains deployer phase
-                      enum:
-                      - Pending
-                      - Ready
-                      - Updating
-                      - ScalingUp
-                      - ScalingDown
-                      - Terminating
-                      - Error
-                      type: string
                     is_registered:
                       description: Indicates if this member is registered with the
                         searchhead cluster captain.

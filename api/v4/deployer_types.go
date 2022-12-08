@@ -57,12 +57,6 @@ type DeployerStatus struct {
 	// current phase of the deployer
 	Phase Phase `json:"phase"`
 
-	// desired number of deployer members
-	Replicas int32 `json:"replicas"`
-
-	// current number of ready deployer members
-	ReadyReplicas int32 `json:"readyReplicas"`
-
 	// selector for pods, used by HorizontalPodAutoscaler
 	Selector string `json:"selector"`
 
@@ -74,12 +68,6 @@ type DeployerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
-
-	// SearchHeadClusterPhase stores search head cluster status
-	SearchHeadClusterPhase Phase `json:"searchHeadClusterPhase,omitempty"`
-
-	// SearchHeadClusterReplicas stores search head cluster replicas
-	SearchHeadClusterReplicas int32 `json:"SearchHeadClusterReplicas,omitempty"`
 }
 
 // Deployer is the Schema for a Splunk Enterprise Deployer
@@ -89,8 +77,6 @@ type DeployerStatus struct {
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=deployers,scope=Namespaced,shortName=dep
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of deployer"
-// +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of deployer members"
-// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of deployer members"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of deployer"
 // +kubebuilder:storageversion
 type Deployer struct {

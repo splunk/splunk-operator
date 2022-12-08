@@ -551,6 +551,10 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("searchHeadClusterPodManager.updateStatus").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
+	scopedLog.Info("Arjun in updateStatus")
 	// populate members status using REST API to get search head cluster member info
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
@@ -560,6 +564,8 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
+		scopedLog.Info("Arjun in updateStatus", "replica", n)
+
 		c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
@@ -570,6 +576,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.Registered = memberInfo.Registered
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
+			scopedLog.Info("Arjun in updateStatus, updating memberStatus", "replica", n, "memberStatus", memberStatus)
 		} else {
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
 		}
@@ -583,6 +590,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.Initialized = captainInfo.Initialized
 				mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
+				scopedLog.Info("Arjun in updateStatus, updating captain status")
 				gotCaptainInfo = true
 			} else {
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
@@ -591,6 +599,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 		if n < int32(len(mgr.cr.Status.Members)) {
 			mgr.cr.Status.Members[n] = memberStatus
+			scopedLog.Info("Arjun in updateStatus, updating mgr.cr.Status.Members[n] ", "replica", n, "memberStatus", memberStatus)
 		} else {
 			mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
 		}
