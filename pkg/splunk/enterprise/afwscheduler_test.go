@@ -149,7 +149,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	var statefulSet *appsv1.StatefulSet = &appsv1.StatefulSet{}
 
 	// Test for createAndAddPipelineWorker
-	afwPpln := initAppInstallPipeline(ctx, &appFrameworkContext, client, &cr)
+	afwPpln, _ := initAppInstallPipeline(ctx, &appFrameworkContext, client, &cr)
 
 	afwPpln.createAndAddPipelineWorker(ctx, enterpriseApi.PhaseDownload, appDeployInfo, appSrcName, podName, appFrameworkConfig, client, &cr, statefulSet)
 	if len(afwPpln.pplnPhases[enterpriseApi.PhaseDownload].q) != 1 {
@@ -303,7 +303,7 @@ func TestInitAppInstallPipeline(t *testing.T) {
 	cr := enterpriseApi.ClusterManager{}
 	c := spltest.NewMockClient()
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 
 	if ppln == nil {
 		t.Errorf("Failed to create a new pipeline")
@@ -328,7 +328,7 @@ func TestDeleteWorkerFromPipelinePhase(t *testing.T) {
 		},
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 
 	if len(ppln.pplnPhases[enterpriseApi.PhaseDownload].q)+len(ppln.pplnPhases[enterpriseApi.PhasePodCopy].q)+len(ppln.pplnPhases[enterpriseApi.PhaseInstall].q) > 0 {
 		t.Errorf("Initially Pipeline must be empty, but found as non-empty")
@@ -422,7 +422,7 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	}
 
 	c := spltest.NewMockClient()
-	ppln := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 
 	var replicas int32 = 1
 	sts := &appsv1.StatefulSet{
@@ -609,7 +609,7 @@ func TestPhaseManagersTermination(t *testing.T) {
 		t.Errorf("unable to apply statefulset")
 	}
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(ctx, appDeployContext, c, cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, c, cr)
 
 	ppln.appDeployContext.AppsStatusMaxConcurrentAppDownloads = 1
 	ppln.phaseWaiter.Add(1)
@@ -731,7 +731,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 
 	// test  all the pipeline phases are able to send the worker to the downstreams
-	ppln := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 	// Make sure that the workers move from the download phase to the pod Copy phase
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q = append(ppln.pplnPhases[enterpriseApi.PhaseDownload].q, workerList...)
 
@@ -824,7 +824,7 @@ func TestIsPipelineEmpty(t *testing.T) {
 	}
 
 	appDeployContext := &enterpriseApi.AppDeploymentContext{}
-	ppln := initAppInstallPipeline(ctx, appDeployContext, c, cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, c, cr)
 
 	if !ppln.isPipelineEmpty() {
 		t.Errorf("Expected empty pipeline, but found some workers in pipeline")
@@ -1610,7 +1610,7 @@ func TestScheduleDownloads(t *testing.T) {
 	sts.Spec.Replicas = new(int32)
 	*sts.Spec.Replicas = 1
 
-	ppln = initAppInstallPipeline(ctx, appDeployContext, client, &cr)
+	ppln, _ = initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
 
 	testApps := []string{"app1.tgz", "app2.tgz", "app3.tgz"}
@@ -2094,7 +2094,7 @@ func TestPodCopyWorkerHandler(t *testing.T) {
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 5,
 	}
-	ppln := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 
 	var handlerWaiter sync.WaitGroup
 	handlerWaiter.Add(1)
@@ -2163,7 +2163,7 @@ func TestIDXCRunPlaybook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	afwPipeline := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
+	afwPipeline, _ := initAppInstallPipeline(ctx, appDeployContext, c, &cr)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(&cr, 0)
 
@@ -2515,7 +2515,7 @@ func TestSHCRunPlaybook(t *testing.T) {
 	appDeployContext.AppsSrcDeployStatus["appSrc1"] = appSrcDeployInfo
 
 	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushPending
-	afwPipeline := initAppInstallPipeline(ctx, appDeployContext, c, cr)
+	afwPipeline, _ := initAppInstallPipeline(ctx, appDeployContext, c, cr)
 	// get the target pod name
 	targetPodName := getApplicablePodNameForAppFramework(cr, 0)
 
@@ -3030,7 +3030,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 	}
 
 	cr.TypeMeta.Kind = "ClusterManager"
-	afwPipeline = initAppInstallPipeline(ctx, appDeployContext, client, cr)
+	afwPipeline, _ = initAppInstallPipeline(ctx, appDeployContext, client, cr)
 	podCopyWorker := &PipelineWorker{appDeployInfo: &enterpriseApi.AppDeploymentInfo{PhaseInfo: enterpriseApi.PhaseInfo{FailCount: 10}}}
 
 	afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q = append(afwPipeline.pplnPhases[enterpriseApi.PhasePodCopy].q, podCopyWorker)
@@ -3333,7 +3333,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 	var appDeployContext *enterpriseApi.AppDeploymentContext = &enterpriseApi.AppDeploymentContext{
 		AppsStatusMaxConcurrentAppDownloads: 5,
 	}
-	ppln := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
+	ppln, _ := initAppInstallPipeline(ctx, appDeployContext, client, &cr)
 
 	podInstallTracker := make([]chan struct{}, *sts.Spec.Replicas)
 	for i := range podInstallTracker {
@@ -3652,7 +3652,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Test non-shc
-	err := addTelApp(ctx, mockPodExecClient, 1, cmCr)
+	err := addTelApp(ctx, spltest.NewMockClient(), mockPodExecClient, 1, cmCr)
 	if err != nil {
 		t.Errorf("Tel app not added successfully, error: %v", err)
 	}
@@ -3666,7 +3666,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 	mockPodExecClient.Cr = shcCr
 
-	err = addTelApp(ctx, mockPodExecClient, 1, shcCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClient, 1, shcCr)
 	if err != nil {
 		t.Errorf("Tel app not added successfully, error: %v", err)
 	}
@@ -3687,7 +3687,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError1.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError1, 1, cmCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError1, 1, cmCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3699,7 +3699,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError2, 1, cmCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError2, 1, cmCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3712,7 +3712,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError3.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError3, 1, shcCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError3, 1, shcCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3724,7 +3724,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError4, 1, shcCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3765,7 +3765,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	// Test non-shc
-	err := addTelApp(ctx, mockPodExecClient, 1, cmCr)
+	err := addTelApp(ctx, spltest.NewMockClient(), mockPodExecClient, 1, cmCr)
 	if err != nil {
 		t.Errorf("Tel app not added successfully, error: %v", err)
 	}
@@ -3779,7 +3779,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 	mockPodExecClient.Cr = shcCr
 
-	err = addTelApp(ctx, mockPodExecClient, 1, shcCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClient, 1, shcCr)
 	if err != nil {
 		t.Errorf("Tel app not added successfully, error: %v", err)
 	}
@@ -3800,7 +3800,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	var mockPodExecClientError1 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError1.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError1, 1, cmCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError1, 1, cmCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3812,7 +3812,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError2, 1, cmCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError2, 1, cmCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3825,7 +3825,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError3.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError3, 1, shcCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError3, 1, shcCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -3837,7 +3837,7 @@ func TestAddTelAppCManager(t *testing.T) {
 	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
 
-	err = addTelApp(ctx, mockPodExecClientError4, 1, shcCr)
+	err = addTelApp(ctx, spltest.NewMockClient(), mockPodExecClientError4, 1, shcCr)
 	if err == nil {
 		t.Errorf("Expected error")
 	}

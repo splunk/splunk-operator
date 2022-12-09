@@ -968,7 +968,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// Mock the addTelApp function for unit tests
-	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+	addTelApp = func(ctx context.Context, c splcommon.ControllerClient, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
 

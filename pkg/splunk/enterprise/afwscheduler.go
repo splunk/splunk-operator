@@ -142,7 +142,7 @@ func getTelAppNameExtension(crKind string) (string, error) {
 }
 
 // addTelApp adds a telemetry app
-var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
+var addTelApp = func(ctx context.Context, c splcommon.ControllerClient, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 	var err error
 
 	reqLogger := log.FromContext(ctx)
@@ -163,19 +163,34 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 	var command1, command2 string
 
 	// Handle non SHC scenarios(Standalone, CM, LM)
-	if crKind != "SearchHeadCluster" {
-		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
+	if crKind != "Deployer" {
+		// For non-shc scenario
+		if crKind != "SearchHeadCluster" {
+			// Create dir on pods
+			command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
 
-		// App reload
-		command2 = telAppReloadString
-
+			// App reload
+			command2 = telAppReloadString
+		}
 	} else {
+		// Handle deployer + shc scenario with bundle push
+
+		// Get SHC connected to deployer
+		shcCr, err := getShcConnDeployer(ctx, c, cr)
+		if err != nil {
+			return err
+		}
+
+		// Make sure SHC is up before bundle push
+		if shcCr.Status.Phase != enterpriseApi.PhaseReady {
+			return fmt.Errorf("SHC connected to deployer is not up yet, wait till it comes up")
+		}
+
 		// Create dir on pods
 		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
 
 		// Bundle push
-		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
+		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt")
 	}
 
 	// Run the commands on Splunk pods
@@ -1202,7 +1217,7 @@ func isAppInstallationCompleteOnAllReplicas(auxPhaseInfo []enterpriseApi.PhaseIn
 
 // isClusterScoped checks whether current cr is a SHC or a CM
 func isClusterScoped(kind string) bool {
-	return kind == "ClusterMaster" || kind == "ClusterManager" || kind == "SearchHeadCluster"
+	return kind == "ClusterMaster" || kind == "ClusterManager" || kind == "Deployer"
 }
 
 // checkIfBundlePushIsDone checks if the bundle push is done, if there are cluster scoped apps
@@ -1222,7 +1237,7 @@ func initPipelinePhase(afwPipeline *AppInstallPipeline, phase enterpriseApi.AppP
 }
 
 // initAppInstallPipeline creates the AFW scheduler pipelines
-func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi.AppDeploymentContext, client splcommon.ControllerClient, cr splcommon.MetaObject) *AppInstallPipeline {
+func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi.AppDeploymentContext, client splcommon.ControllerClient, cr splcommon.MetaObject) (*AppInstallPipeline, error) {
 
 	afwPipeline := &AppInstallPipeline{}
 	afwPipeline.pplnPhases = make(map[enterpriseApi.AppPhaseType]*PipelinePhase, 3)
@@ -1233,6 +1248,15 @@ func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi
 	afwPipeline.client = client
 	afwPipeline.sts = afwGetReleventStatefulsetByKind(ctx, cr, client)
 
+	// Update name of SHC in case of deployer CRD
+	if cr.GetObjectKind().GroupVersionKind().Kind == "Deployer" {
+		shc, err := getShcConnDeployer(ctx, client, cr)
+		if err != nil {
+			return nil, err
+		}
+		afwPipeline.searchHeadClusterName = shc.GetName()
+	}
+
 	// Allocate the Download phase
 	initPipelinePhase(afwPipeline, enterpriseApi.PhaseDownload)
 
@@ -1242,7 +1266,7 @@ func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi
 	// Allocate the install phase
 	initPipelinePhase(afwPipeline, enterpriseApi.PhaseInstall)
 
-	return afwPipeline
+	return afwPipeline, nil
 }
 
 // deleteAppPkgFromOperator removes the app pkg from the Operator Pod
@@ -1314,7 +1338,7 @@ func getSHCPlaybookContext(ctx context.Context, client splcommon.ControllerClien
 		cr:                   cr,
 		afwPipeline:          afwPipeline,
 		targetPodName:        podName,
-		searchHeadCaptainURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
+		searchHeadCaptainURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, afwPipeline.searchHeadClusterName, 0, false),
 		podExecClient:        podExecClient,
 	}
 }
@@ -1502,7 +1526,7 @@ func (shcPlaybookContext *SHCPlaybookContext) runPlaybook(ctx context.Context) e
 
 	var err error
 	var ok bool
-	cr, ok := shcPlaybookContext.cr.(*enterpriseApi.SearchHeadCluster)
+	cr, ok := shcPlaybookContext.cr.(*enterpriseApi.Deployer)
 	if !ok {
 		return nil
 	}
@@ -1772,7 +1796,10 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 		return true, fmt.Errorf("failed to update storage tracker, error: %v", err)
 	}
 
-	afwPipeline := initAppInstallPipeline(ctx, appDeployContext, client, cr)
+	afwPipeline, err := initAppInstallPipeline(ctx, appDeployContext, client, cr)
+	if err != nil {
+		return true, err
+	}
 
 	// Start the download phase manager
 	afwPipeline.phaseWaiter.Add(1)

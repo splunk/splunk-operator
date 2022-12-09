@@ -200,6 +200,27 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// Set owner references for deployer statefulset if needed
+		if !cr.Status.DeployerOwnerRefConfigured {
+			// Get deployer statefulSet
+			deployerStsName := GetSplunkStatefulsetName(SplunkDeployer, cr.Spec.DeployerRef.Name)
+			namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: deployerStsName}
+			deployerSts, err := splctrl.GetStatefulSetByName(ctx, client, namespacedName)
+			if err != nil {
+				scopedLog.Error(err, "Unable to get the stateful set")
+				return result, err
+			}
+
+			// Update OwnerRef and the statefulSet
+			deployerSts.SetOwnerReferences(append(deployerSts.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
+			err = client.Update(ctx, deployerSts)
+			if err != nil {
+				return result, err
+			}
+			cr.Status.DeployerOwnerRefConfigured = true
+			scopedLog.Info("Arjun OwnerReference set for deployer", "deployer CR", cr.Spec.DeployerRef)
+		}
+
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -551,10 +572,6 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("searchHeadClusterPodManager.updateStatus").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
-
-	scopedLog.Info("Arjun in updateStatus")
 	// populate members status using REST API to get search head cluster member info
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
@@ -564,8 +581,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		scopedLog.Info("Arjun in updateStatus", "replica", n)
-
 		c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
@@ -576,7 +591,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.Registered = memberInfo.Registered
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
-			scopedLog.Info("Arjun in updateStatus, updating memberStatus", "replica", n, "memberStatus", memberStatus)
 		} else {
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
 		}
@@ -590,7 +604,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.Initialized = captainInfo.Initialized
 				mgr.cr.Status.MinPeersJoined = captainInfo.MinPeersJoined
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
-				scopedLog.Info("Arjun in updateStatus, updating captain status")
 				gotCaptainInfo = true
 			} else {
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
@@ -599,7 +612,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 		if n < int32(len(mgr.cr.Status.Members)) {
 			mgr.cr.Status.Members[n] = memberStatus
-			scopedLog.Info("Arjun in updateStatus, updating mgr.cr.Status.Members[n] ", "replica", n, "memberStatus", memberStatus)
 		} else {
 			mgr.cr.Status.Members = append(mgr.cr.Status.Members, memberStatus)
 		}

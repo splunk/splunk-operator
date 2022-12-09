@@ -24,6 +24,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -145,10 +146,7 @@ func ApplyDeployer(ctx context.Context, client splcommon.ControllerClient, cr *e
 	var finalResult *reconcile.Result
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		finalResult = handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-	}
 
-	// no need to requeue if everything is ready
-	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		/* TODO Arjun MC related
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
@@ -170,7 +168,7 @@ func ApplyDeployer(ctx context.Context, client splcommon.ControllerClient, cr *e
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			podExecClient := splutil.GetPodExecClient(client, cr, "")
-			err := addTelApp(ctx, podExecClient, numberOfDeployerReplicas, cr)
+			err := addTelApp(ctx, client, podExecClient, numberOfDeployerReplicas, cr)
 			if err != nil {
 				return result, err
 			}
@@ -190,6 +188,47 @@ func ApplyDeployer(ctx context.Context, client splcommon.ControllerClient, cr *e
 	}
 
 	return result, nil
+}
+
+// SHC connected to the deployer adds its owner reference on the deployer CR
+// getShcConnDeployer extracts the SHC owner reference, retrieve and return the SHC CR
+func getShcConnDeployer(ctx context.Context, c splcommon.ControllerClient, deployerCr splcommon.MetaObject) (*enterpriseApi.SearchHeadCluster, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getShcConnDeployer").WithValues("deployer CR", deployerCr.GetName(), "deployer CR namespace", deployerCr.GetNamespace())
+
+	var shcCr enterpriseApi.SearchHeadCluster
+
+	scopedLog.Info("Arjun in getShcConnDeployer")
+
+	deployerStsName := GetSplunkStatefulsetName(SplunkDeployer, deployerCr.GetName())
+	namespacedName := types.NamespacedName{Namespace: deployerCr.GetNamespace(), Name: deployerStsName}
+	deployerSts, err := splctrl.GetStatefulSetByName(ctx, c, namespacedName)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get the stateful set")
+		return nil, err
+	}
+
+	// Find the ownerRef added by SHC
+	depStsOwnRef := deployerSts.GetOwnerReferences()
+	for _, ow := range depStsOwnRef {
+		scopedLog.Info("Arjun in getShcConnDeployer found ownerReferences", "deployer Owner References", depStsOwnRef)
+
+		if ow.Kind == "SearchHeadCluster" {
+			// Found SHC with ownerRef to the deployer
+			scopedLog.Info("Arjun in getShcConnDeployer found SHC ownerRef", "SHC Owner Ref for deployer", ow)
+
+			namespacedName := types.NamespacedName{Namespace: deployerCr.GetNamespace(), Name: ow.Name}
+			err := c.Get(ctx, namespacedName, &shcCr)
+			if err != nil {
+				scopedLog.Info("Arjun in getShcConnDeployer couldn't find shc", "shc", shcCr.GetName())
+				return nil, err
+			}
+			scopedLog.Info("Arjun Found a SHC connected to deployer", "shc CR", shcCr.GetName(), "shc CR namespace", shcCr.GetNamespace())
+			return &shcCr, nil
+		}
+	}
+
+	return nil, fmt.Errorf("couldn't find the SHC connected to the deployer via ownerReferences")
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.

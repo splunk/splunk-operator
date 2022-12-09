@@ -122,6 +122,10 @@ type SearchHeadClusterStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Boolean to keep a track of ownerRef configuration
+	// +kubebuilder:default:=false
+	DeployerOwnerRefConfigured bool `json:"deployerOwnerRefConfigured"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster

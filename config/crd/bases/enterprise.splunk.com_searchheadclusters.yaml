@@ -7702,6 +7702,10 @@ spec:
                 description: true if the search head cluster's captain is ready to
                   service requests
                 type: boolean
+              deployerOwnerRefConfigured:
+                default: false
+                description: Boolean to keep a track of ownerRef configuration
+                type: boolean
               deployerPhase:
                 description: current phase of the deployer
                 enum:

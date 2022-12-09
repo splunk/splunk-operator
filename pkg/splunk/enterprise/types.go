@@ -165,6 +165,9 @@ type AppInstallPipeline struct {
 
 	// statefulset to know replicaset details
 	sts *appsv1.StatefulSet
+
+	// searchHeadClusterName in the case of SHC
+	searchHeadClusterName string
 }
 
 // PlaybookImpl is an interface to implement individual playbooks
