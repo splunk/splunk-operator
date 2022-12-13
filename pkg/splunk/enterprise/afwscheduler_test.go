@@ -2761,9 +2761,11 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	c.AddObject(pod)
 
 	podExecCommands := []string{
-		"test -f",
-		"/opt/splunk/bin/splunk install app",
-		"rm -f",
+		"test -f",                            //check if app archive is present
+		"tar tf",                             // gather installed app name
+		"/opt/splunk/bin/splunk list app",    // check if app is already installed
+		"/opt/splunk/bin/splunk install app", // install app
+		"rm -f",                              //remove app arhive
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -2773,10 +2775,20 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 			StdErr: "",
 			Err:    fmt.Errorf("some dummy error"),
 		},
+		// this is for getting installed app name
+		{
+			StdOut: "",
+			StdErr: "random dummy error1",
+		},
+		// this is for checking if app is already installed
+		{
+			StdOut: "",
+			StdErr: "random dummy error2",
+		},
 		// this is for installing the app
 		{
 			StdOut: "",
-			StdErr: "random dummy error",
+			StdErr: "random dummy error3",
 		},
 		// this is for removing the app package from pod
 		{
@@ -2825,26 +2837,58 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
 	}
 
-	// Test2: checkIfFileExistsOnPod passes but install command returns error
+	// Test2: checkIfFileExistsOnPod passes but get installed app name returns error
 	mockPodExecReturnContexts[0].Err = nil
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+		t.Errorf("Failed to detect that steps to get installed app failed: err: %s", err.Error())
 	}
 
-	// Test3: install command passes but removing app package from pod returns error
+	// Test3: get installed app name passes but getting installed app name failed
 	mockPodExecReturnContexts[1].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+		t.Errorf("Failed to detect not able to get installed app name: err: %s", err.Error())
 	}
 
-	// Test4: successful scenario where everything succeeds
-	mockPodExecReturnContexts[2].StdErr = ""
+	// Test4: get installed app command passes but installing app fails
+	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
+	mockPodExecReturnContexts[2].StdErr = ""  //no error thrown
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = localInstallCtxt.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Expected app install failed")
+	}
+
+	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
+	mockPodExecReturnContexts[2].StdErr = "Could not find object"
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = localInstallCtxt.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Expected app install failed")
+	}
+
+	// Test5: install app should be successful
+
+	mockPodExecReturnContexts[3].StdErr = "" //no error for app install
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = localInstallCtxt.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Expected app install succeeded but app arhive deletion failed")
+	}
+
+	// Test6: successful scenario where everything succeeds
+	mockPodExecReturnContexts[4].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
@@ -2942,10 +2986,12 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	c.AddObject(pod)
 
 	podExecCommands := []string{
-		"test -f",
-		"/opt/splunk/bin/splunk install app",
-		"/opt/splunk/bin/splunk search",
-		"rm -f",
+		"test -f",                            //check if app archive is present
+		"tar tf",                             // gather installed app name
+		"/opt/splunk/bin/splunk list app",    // check if app is already installed
+		"/opt/splunk/bin/splunk install app", // install app
+		"/opt/splunk/bin/splunk search",      // es post install : essinstall command
+		"rm -f",                              //remove app arhive
 	}
 
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
@@ -2955,20 +3001,30 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 			StdErr: "",
 			Err:    fmt.Errorf("some dummy error"),
 		},
+		// this is for getting installed app name
+		{
+			StdOut: "",
+			StdErr: "random dummy error1",
+		},
+		// this is for checking if app is already installed
+		{
+			StdOut: "",
+			StdErr: "random dummy error2",
+		},
 		// this is for installing the app
 		{
 			StdOut: "",
-			StdErr: "Random Error",
+			StdErr: "random dummy error3",
+		},
+		// this is for running es post install command
+		{
+			StdOut: "",
+			StdErr: "random dummy error4",
 		},
 		// this is for removing the app package from pod
 		{
 			StdOut: "",
 			StdErr: "dummyError",
-		},
-		// this is for es post install pod exec error
-		{
-			StdOut: "",
-			StdErr: "dummyError2",
 		},
 	}
 
@@ -3018,47 +3074,67 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	waiter.Add(1)
 	err := pCtx.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+		t.Errorf("Failed to detect missingApp pkg")
 	}
 
-	// Test2: checkIfFileExistsOnPod passes but install command returns error
+	// Test2: checkIfFileExistsOnPod passes but get installed app name returns error
 	mockPodExecReturnContexts[0].Err = nil
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
-	// Test3: failure in es post install pod exec command
+	// Test3: get installed app name passes but getting installed app name failed
 	mockPodExecReturnContexts[1].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
-	if !strings.Contains(err.Error(), "premium scoped app package install failed") {
-		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+	if err == nil {
+		t.Errorf("Failed to detect not able to get installed app name: err")
 	}
 
-	// Test4: install command passes but removing app package from pod returns error
-	mockPodExecReturnContexts[2].StdErr = ""
+	// Test4: get installed app command passes, it returns app is not enabled
+	// so app install will run and it should  fail
+	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
+	mockPodExecReturnContexts[2].StdErr = ""  //no error thrown
+
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("runPlayBook should have returned error")
+		t.Errorf("Expected app install failed")
 	}
 
+	// Test5: install app should be successful but es post install fails
+
+	mockPodExecReturnContexts[3].StdErr = "" //no error for app install
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("runPlayBook did not return `premium scoped app package install failed` got %v", err.Error())
+		t.Errorf("Expected app install succeeded but es post install failed")
+	}
+	// Test6: es post install is successfull but remove archive fails
+
+	mockPodExecReturnContexts[4].StdErr = "" //no error for es post install
+
+	localInstallCtxt.sem <- struct{}{}
+	waiter.Add(1)
+	err = pCtx.runPlaybook(ctx)
+	if err == nil {
+		t.Errorf("Expected es post  install succeeded but app arhive deletion failed")
 	}
 
-	// Test5: everything passes
-	mockPodExecReturnContexts[3].StdErr = ""
+	// Test7: successful scenario where everything succeeds
+	mockPodExecReturnContexts[5].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
 	if err != nil {
-		t.Errorf("runPlayBook should not have returned error")
+		t.Errorf("runPlayBook should not have returned error. err=%s", err.Error())
 	}
 
 	// Test 6: run for SHC
