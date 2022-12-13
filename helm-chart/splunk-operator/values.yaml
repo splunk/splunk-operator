@@ -23,7 +23,7 @@ kubeRbacProxy:
       memory: 64Mi
 
 # Splunk Operator configurations
-splunkOperator: 
+splunkOperator:
 
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
