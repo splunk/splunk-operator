@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v3 contains API Schema definitions for the enterprise v3 API group
-//+kubebuilder:object:generate=true
-//+groupName=enterprise.splunk.com
+// +kubebuilder:object:generate=true
+// +groupName=enterprise.splunk.com
 package v3
 
 import (

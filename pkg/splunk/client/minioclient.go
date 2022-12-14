@@ -71,7 +71,7 @@ func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, 
 	}, nil
 }
 
-//RegisterMinioClient will add the corresponding function pointer to the map
+// RegisterMinioClient will add the corresponding function pointer to the map
 func RegisterMinioClient() {
 	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewMinioClient, GetInitFunc: InitMinioClientWrapper}
 	RemoteDataClientsMap["minio"] = wrapperObject

@@ -17,7 +17,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//AppInfo Installation info on Apps
+// AppInfo Installation info on Apps
 var AppInfo = map[string]map[string]string{
 	"Splunk_SA_CIM":                     {"V1": "4.18.1", "V2": "4.19.0", "filename": "splunk-common-information-model-cim.tgz"},
 	"TA-LDAP":                           {"V1": "4.0.0", "V2": "4.0.0", "filename": "add-on-for-ldap.tgz"},
@@ -56,7 +56,7 @@ var AppInfo = map[string]map[string]string{
 	"100mb-app-15":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-15.tgz"},
 }
 
-//AppSourceInfo holds info related to app sources
+// AppSourceInfo holds info related to app sources
 type AppSourceInfo struct {
 	CrKind                string
 	CrName                string
@@ -73,19 +73,19 @@ type AppSourceInfo struct {
 	CrClusterPods         []string
 }
 
-//BasicApps Apps that require no restart to be installed
+// BasicApps Apps that require no restart to be installed
 var BasicApps = []string{"Splunk_SA_CIM", "DA-ESS-ContentUpdate", "Splunk_TA_paloalto", "TA-MS-AAD"}
 
-//RestartNeededApps Apps that require restart to be installed
+// RestartNeededApps Apps that require restart to be installed
 var RestartNeededApps = []string{"Splunk_TA_nix", "splunk_app_microsoft_exchange", "splunk_app_aws", "Splunk_ML_Toolkit", "Splunk_TA_microsoft-cloudservices", "splunk_app_stream", "Splunk_TA_stream", "Splunk_TA_stream_wire_data", "splunk_app_db_connect", "Splunk_Security_Essentials"}
 
-//NewAppsAddedBetweenPolls Apps to be installed as poll after
+// NewAppsAddedBetweenPolls Apps to be installed as poll after
 var NewAppsAddedBetweenPolls = []string{"TA-LDAP"}
 
-//BigSingleApp is 1 app with bigger size to perform tests while installation is in progress
+// BigSingleApp is 1 app with bigger size to perform tests while installation is in progress
 var BigSingleApp = []string{"test_app"}
 
-//ExtraApps is 2 apps to be added to app source during app installa in progress
+// ExtraApps is 2 apps to be added to app source during app installa in progress
 var ExtraApps = []string{"test_app2", "test_app3"}
 
 // PVTestApps is a group of 100MB-size apps used to test Operator PV

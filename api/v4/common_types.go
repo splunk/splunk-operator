@@ -391,8 +391,8 @@ type EsDefaults struct {
 	//     auto: Enables SSL in the etc/system/local/web.conf
 	//           configuration file.
 	//     ignore: Ignores whether SSL is enabled or disabled.
-	//             This is the DEFAULT mode used by the operator
-	//             if left empty.
+	//             This is the DEFAULT mode used by the operator if left empty.
+	//
 	// +optional
 	SslEnablement string `json:"sslEnablement,omitempty"`
 }
@@ -447,6 +447,8 @@ type AppFrameworkSpec struct {
 
 // AppDeploymentInfo represents a single App deployment information
 type AppDeploymentInfo struct {
+	// AppName is the name of app archive retrieved from the
+	// remote bucket e.g app1.tgz or app2.spl
 	AppName          string              `json:"appName"`
 	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
 	ObjectHash       string              `json:"objectHash"`
@@ -454,6 +456,11 @@ type AppDeploymentInfo struct {
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+
+	// AppPackageTopFolder is the name of top folder when we untar the
+	// app archive, which is also assumed to be same as the name of the
+	// app after it is installed.
+	AppPackageTopFolder string `json:"appPackageTopFolder"`
 
 	// App phase info to track download, copy and install
 	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
@@ -469,7 +476,7 @@ type AppSrcDeployInfo struct {
 	AppDeploymentInfoList []AppDeploymentInfo `json:"appDeploymentInfo,omitempty"`
 }
 
-//BundlePushStageType represents the bundle push status
+// BundlePushStageType represents the bundle push status
 type BundlePushStageType int
 
 const (

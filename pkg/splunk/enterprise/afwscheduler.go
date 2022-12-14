@@ -680,12 +680,12 @@ func markWorkerPhaseInstallationComplete(ctx context.Context, phaseInfo *enterpr
 	}
 }
 
-// installAppAndCleanup installs an app for an install worker and cleans up the package on operator and target pod
-func installAppAndCleanup(rctx context.Context, localCtx *localScopePlaybookContext, cr splcommon.MetaObject, phaseInfo *enterpriseApi.PhaseInfo) error {
+// installApp installs an app for an install worker
+func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr splcommon.MetaObject, phaseInfo *enterpriseApi.PhaseInfo) error {
 	worker := localCtx.worker
 
 	reqLogger := log.FromContext(rctx)
-	scopedLog := reqLogger.WithName("installAppAndCleanup").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+	scopedLog := reqLogger.WithName("installApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
 
 	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
 	appPkgFileName := getAppPackageName(worker)
@@ -700,11 +700,40 @@ func installAppAndCleanup(rctx context.Context, localCtx *localScopePlaybookCont
 		return fmt.Errorf("app pkg missing on Pod. app pkg path: %s", appPkgPathOnPod)
 	}
 
+	if worker.appDeployInfo.AppPackageTopFolder == "" {
+		appTopFolder, err := getAppTopFolderFromPackage(rctx, cr, appPkgPathOnPod, localCtx.podExecClient)
+		if err != nil {
+			scopedLog.Error(err, "local scoped app package install failed while getting name of installed app")
+			return err
+		}
+		scopedLog.Info("app top folder", "name", appTopFolder)
+
+		worker.appDeployInfo.AppPackageTopFolder = appTopFolder
+	}
+
 	var command string
 	if worker.appDeployInfo.IsUpdate {
 		// App was already installed, update scenario
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -update 1 -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	} else {
+		// install the app only if it was not already installed
+		// we can come to this block if post installation failed
+		// e.g. es post installation failed but es app was already installed
+
+		scopedLog.Info("Check if app is already installed ", "name", worker.appDeployInfo.AppPackageTopFolder)
+
+		appInstalled, err := isAppAlreadyInstalled(rctx, cr, localCtx.podExecClient, worker.appDeployInfo.AppPackageTopFolder)
+
+		if err != nil {
+			scopedLog.Error(err, "local scoped app package install failed while checking if app is already installed")
+			return err
+		}
+
+		if appInstalled {
+			scopedLog.Info("Not reinstalling app as it is already installed.")
+			return nil
+		}
+
 		command = fmt.Sprintf("/opt/splunk/bin/splunk install app %s -auth admin:`cat /mnt/splunk-secrets/password`", appPkgPathOnPod)
 	}
 
@@ -718,10 +747,82 @@ func installAppAndCleanup(rctx context.Context, localCtx *localScopePlaybookCont
 		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
 	}
 
+	return nil
+}
+
+// check if the given app is already installed and enabled.
+// the installed app name is supposed to be same as
+// name of top folder (AppTopFolder)
+func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExecClient splutil.PodExecClientImpl, appTopFolder string) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isAppAlreadyInstalled").WithValues("podName", podExecClient.GetTargetPodName(), "namespace", cr.GetNamespace()).WithValues("AppTopFolder", appTopFolder)
+
+	scopedLog.Info("check app's installation state")
+
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", appTopFolder)
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+
+	if strings.Contains(stdErr, "Could not find object") {
+		// when app is not installed you will see something like on StdErr:
+		// "Could not find object id=<app_name>"
+		// which mean app is not installed (no need to check enabled at this time)
+		return false, nil
+	}
+
+	if stdErr != "" || err != nil {
+		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	}
+
+	appInstallCheck, _ := strconv.Atoi(stdOut)
+
+	scopedLog.Info("Apps installation state", stdOut, stdOut)
+
+	return appInstallCheck == 0, nil
+}
+
+// get the name of top folder from the package.
+// this name is later used as installed app name
+func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
+
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("getAppTopFolderFromPackage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
+
+	command := fmt.Sprintf("tar tf %s|head -1|cut -d/ -f1", appPkgPathOnPod)
+
+	streamOptions := splutil.NewStreamOptionsObject(command)
+
+	stdOut, stdErr, err := podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	scopedLog.Info("Pod exec result", "stdOut", stdOut)
+
+	if stdErr != "" || err != nil {
+		return "", fmt.Errorf("could not get installed app name stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	}
+
+	//output contains a trailing \n also, something like "SplunkEnterpriseSecuritySuite\n"
+	stdOut = strings.Trim(stdOut, "\n")
+	return stdOut, nil
+}
+
+// cleanupApp cleans up the package on operator and target pod
+func cleanupApp(rctx context.Context, localCtx *localScopePlaybookContext, cr splcommon.MetaObject, phaseInfo *enterpriseApi.PhaseInfo) error {
+	worker := localCtx.worker
+
+	reqLogger := log.FromContext(rctx)
+	scopedLog := reqLogger.WithName("cleanupApp").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "pod", worker.targetPodName, "app name", worker.appDeployInfo.AppName)
+
+	// if the app name is app1.tgz and hash is "abcd1234", then appPkgFileName is app1.tgz_abcd1234
+	appPkgFileName := getAppPackageName(worker)
+
+	// if appsrc is "appSrc1", then appPkgPathOnPod is /operator-staging/appframework/appSrc1/app1.tgz_abcd1234
+	appPkgPathOnPod := filepath.Join(appBktMnt, worker.appSrcName, appPkgFileName)
+
 	// Delete the app package from the target pod /operator-staging/appframework/ location
-	command = fmt.Sprintf("rm -f %s", appPkgPathOnPod)
-	streamOptions = splutil.NewStreamOptionsObject(command)
-	stdOut, stdErr, err = localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+	command := fmt.Sprintf("rm -f %s", appPkgPathOnPod)
+	streamOptions := splutil.NewStreamOptionsObject(command)
+	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 	if stdErr != "" || err != nil {
 		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
 		return fmt.Errorf("app pkg deletion failed.  stdOut: %s, stdErr: %s, app pkg path: %s", stdOut, stdErr, appPkgPathOnPod)
@@ -749,11 +850,18 @@ func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) err
 	// Get phase info
 	phaseInfo := getPhaseInfoByPhaseType(rctx, worker, enterpriseApi.PhaseInstall)
 
-	// Call the API to install an app and cleanup
-	err := installAppAndCleanup(rctx, localCtx, cr, phaseInfo)
+	// Call the API to install an app
+	err := installApp(rctx, localCtx, cr, phaseInfo)
 	if err != nil {
 		scopedLog.Error(err, "app package installation error")
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
+	}
+
+	// Call the API to cleanup the app
+	err = cleanupApp(rctx, localCtx, cr, phaseInfo)
+	if err != nil {
+		scopedLog.Error(err, "app package cleanup error")
+		return fmt.Errorf("app pkg cleanup failed. error %s", err.Error())
 	}
 
 	// Mark the worker for install complete status
@@ -1888,8 +1996,8 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 	// Get phase info
 	phaseInfo := getPhaseInfoByPhaseType(rctx, worker, enterpriseApi.PhaseInstall)
 
-	// Call the API to install an app and clean up
-	err := installAppAndCleanup(rctx, preCtx.localCtx, cr, phaseInfo)
+	// Call the API to install an app
+	err := installApp(rctx, preCtx.localCtx, cr, phaseInfo)
 	if err != nil {
 		scopedLog.Error(err, "premium app package installation error")
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
@@ -1902,6 +2010,13 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 			scopedLog.Error(err, "app package post installation error")
 			return fmt.Errorf("app pkg post installation failed. error %s", err.Error())
 		}
+	}
+
+	// Call the API to clean up app
+	err = cleanupApp(rctx, preCtx.localCtx, cr, phaseInfo)
+	if err != nil {
+		scopedLog.Error(err, "premium app package installation error")
+		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
 	}
 
 	// Mark app package installation complete

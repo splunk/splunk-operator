@@ -18,9 +18,10 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -104,7 +105,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkLicenseMaster)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -198,7 +199,7 @@ func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 func validateLicenseMasterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) error {
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}

@@ -122,7 +122,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil)
+		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkSearchHead)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
@@ -643,7 +643,7 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, false, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
@@ -653,19 +653,17 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 }
 
 // helper function to get the list of SearchHeadCluster types in the current namespace
-func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getSearchHeadClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	objectList := enterpriseApi.SearchHeadClusterList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
 	if err != nil {
 		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
-		return numOfObjects, err
+		return objectList, err
 	}
 
-	return numOfObjects, nil
+	return objectList, nil
 }

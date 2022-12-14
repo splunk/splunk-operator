@@ -15,6 +15,22 @@
 
 package util
 
+// Suppression strings for certain splunk CLI commands
+// Splunk ES app has a lot of info strings marked as stderr, ignore them
+var splunkCliSuppressionStrings = []string{
+	"WARNING: Server Certificate Hostname Validation is disabled. Please see server.conf/[sslConfig]/cliVerifyServerName for details.\n",
+	"INFO: Initialization complete\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Installation complete\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Enabled SSL in system namespace\nINFO: Initialization complete\n",
+	"INFO: Enabled SSL in system namespace\nINFO: Installation complete\n",
+	"INFO: Initialization complete, please restart Splunk\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Installation complete, please restart Splunk\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Initialization complete\n",
+	"INFO: Installation complete\n",
+	"INFO: Init complete\n",
+	"App \"SplunkEnterpriseSecuritySuite\" already exists; use the \"update\" argument to install anyway\n",
+}
+
 const (
 	// Less than zero version error
 	lessThanOrEqualToZeroVersionError = "Versions shouldn't be <= 0"
@@ -39,14 +55,4 @@ const (
 
 	// emptySecretVolumeSource indicates an empty
 	emptySecretVolumeSource = "Didn't find secret volume source in any pod volume"
-
-	// splunkSSHWarningMessage Note: splunk 9.0 throws warning message "warning: server certificate hostname validation is disabled. please see server.conf/[sslconfig]/cliverifyservername for details.\n"
-	// we are supressing the message
-	splunkSSHWarningMessage = "WARNING: Server Certificate Hostname Validation is disabled. Please see server.conf/[sslConfig]/cliVerifyServerName for details.\n"
-
-	// splunkEsAppSSLWarning Note: The ES app post install spews out a harmless ES app message which can be ignored
-	splunkEsAppSSLWarning = "INFO: Installation complete\nINFO: SSL enablement set to ignore, continuing...\n"
-
-	// splunkEsAppSSLWarningRestart Note: The ES app post install spews out a harmless ES app message which can be ignored
-	splunkEsAppSSLWarningRestart = "INFO: Initialization complete, please restart Splunk\nINFO: SSL enablement set to ignore, continuing...\n"
 )

@@ -1,11 +1,10 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//  http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +15,7 @@ package azurem4appfw
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -581,6 +581,14 @@ var _ = Describe("m4appfw test", func() {
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
+			// Ingest data on Indexers
+			for i := 1; i <= siteCount; i++ {
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
+				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
+				testenv.CreateMockLogfile(logFile, 2000)
+				testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
+			}
+
 			//########### INITIAL VERIFICATIONS #########
 			var idxcPodNames, shcPodNames []string
 			idxcPodNames = testenv.GeneratePodNameSlice(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, true, siteCount)
@@ -634,11 +642,38 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure Indexer cluster go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
+			// Ingest data on  new Indexers
+			podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
+			logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
+			testenv.CreateMockLogfile(logFile, 2000)
+			testenv.IngestFileViaMonitor(ctx, logFile, "main", podName, deployment)
+
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Search for data on newly added indexer
+			searchPod := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 0)
+			indexerName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), 1, 1)
+			searchString := fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
+			searchResultsResp, err := testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
+
+			// Verify result.
+			searchResponse := strings.Split(searchResultsResp, "\n")[0]
+			var searchResults map[string]interface{}
+			jsonErr := json.Unmarshal([]byte(searchResponse), &searchResults)
+			Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON Search Results from response '%s'", searchResultsResp)
+
+			testcaseEnvInst.Log.Info("Search results :", "searchResults", searchResults["result"])
+			Expect(searchResults["result"]).ShouldNot(BeNil(), "No results in search response '%s' on pod %s", searchResults, searchPod)
+
+			resultLine := searchResults["result"].(map[string]interface{})
+			testcaseEnvInst.Log.Info("Sync Search results host count:", "count", resultLine["count"].(string), "host", resultLine["host"].(string))
+			testHostname := strings.Compare(resultLine["host"].(string), indexerName)
+			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######### SCALING UP VERIFICATIONS ########
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
@@ -692,6 +727,24 @@ var _ = Describe("m4appfw test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Search for data from removed indexer
+			searchString = fmt.Sprintf("index=%s host=%s | stats count by host", "main", indexerName)
+			searchResultsResp, err = testenv.PerformSearchSync(ctx, searchPod, searchString, deployment)
+			Expect(err).To(Succeed(), "Failed to execute search '%s' on pod %s", searchPod, searchString)
+
+			// Verify result.
+			searchResponse = strings.Split(searchResultsResp, "\n")[0]
+			jsonErr = json.Unmarshal([]byte(searchResponse), &searchResults)
+			Expect(jsonErr).To(Succeed(), "Failed to unmarshal JSON Search Results from response '%s'", searchResultsResp)
+
+			testcaseEnvInst.Log.Info("Search results :", "searchResults", searchResults["result"])
+			Expect(searchResults["result"]).ShouldNot(BeNil(), "No results in search response '%s' on pod %s", searchResults, searchPod)
+
+			resultLine = searchResults["result"].(map[string]interface{})
+			testcaseEnvInst.Log.Info("Sync Search results host count:", "count", resultLine["count"].(string), "host", resultLine["host"].(string))
+			testHostname = strings.Compare(resultLine["host"].(string), indexerName)
+			Expect(testHostname).To(Equal(0), "Incorrect search result hostname. Expect: %s Got: %s", indexerName, resultLine["host"].(string))
 
 			//######### SCALING DOWN VERIFICATIONS ######
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")

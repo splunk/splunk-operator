@@ -18,9 +18,10 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -125,7 +126,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 				return result, err
 			}
 		}
-		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore)
+		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore, SplunkStandalone)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
@@ -284,7 +285,7 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
@@ -294,19 +295,17 @@ func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, c
 }
 
 // helper function to get the list of Standalone types in the current namespace
-func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.StandaloneList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getStandaloneList")
 
 	objectList := enterpriseApi.StandaloneList{}
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
-	numOfObjects := len(objectList.Items)
-
 	if err != nil {
 		scopedLog.Error(err, "Standalone types not found in namespace", "namsespace", cr.GetNamespace())
-		return numOfObjects, err
+		return objectList, err
 	}
 
-	return numOfObjects, nil
+	return objectList, nil
 }

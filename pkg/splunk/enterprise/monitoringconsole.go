@@ -18,11 +18,12 @@ package enterprise
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -32,6 +33,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -188,10 +190,26 @@ func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.Contr
 	return ss, nil
 }
 
+// helper function to get the list of MonitoringConsole types in the current namespace
+func getMonitoringConsoleList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.MonitoringConsoleList, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getMonitoringConsoleList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	objectList := enterpriseApi.MonitoringConsoleList{}
+
+	err := c.List(context.TODO(), &objectList, listOpts...)
+	if err != nil {
+		scopedLog.Error(err, "MonitoringConsole types not found in namespace", "namsespace", cr.GetNamespace())
+		return objectList, err
+	}
+
+	return objectList, nil
+}
+
 // validateMonitoringConsoleSpec checks validity and makes default updates to a MonitoringConsole, and returns error if something is wrong.
 func validateMonitoringConsoleSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) error {
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
-		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true)
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
@@ -199,7 +217,7 @@ func validateMonitoringConsoleSpec(ctx context.Context, c splcommon.ControllerCl
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-//ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
+// ApplyMonitoringConsoleEnvConfigMap creates or updates a Kubernetes ConfigMap for extra env for monitoring console pod
 func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.ControllerClient, namespace string, crName string, monitoringConsoleRef string, newURLs []corev1.EnvVar, addNewURLs bool) (*corev1.ConfigMap, error) {
 
 	var current corev1.ConfigMap
@@ -263,7 +281,7 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 	return &current, nil
 }
 
-//AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
+// AddURLsConfigMap for adding new server peers to the monitoring console or scaling up
 func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar) {
 	for _, url := range newURLs {
 		_, ok := revised.Data[url.Name]
@@ -302,7 +320,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 	}
 }
 
-//DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
+// DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
 func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
 	for _, url := range newURLs {
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
