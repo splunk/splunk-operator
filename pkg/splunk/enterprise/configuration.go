@@ -1489,8 +1489,8 @@ func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec, crKind string
 	// SHC ES app cannot use ssl_enablement auto, product doesn't support it
 	if crKind == "SearchHeadCluster" {
 		if appSrc.PremiumAppsProps.Type == enterpriseApi.PremiumAppsTypeEs {
-			if appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement == enterpriseApi.SslEnablementAuto {
-				return fmt.Errorf("scope for app source: %s search head cluster cannot have an ES app installed with ssl_enablement auto", appSrc.Name)
+			if sslEnablementValue == enterpriseApi.SslEnablementAuto || sslEnablementValue == enterpriseApi.SslEnablementStrict {
+				return fmt.Errorf("scope for app source: %s search head cluster can have an ES app installed only with ssl_enablement ignore", appSrc.Name)
 			}
 		}
 	}
