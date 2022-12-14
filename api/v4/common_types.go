@@ -387,11 +387,11 @@ type EsDefaults struct {
 	//     strict: Ensure that SSL is enabled
 	//             in the web.conf configuration file to use
 	//             this mode. Otherwise, the installer exists
-	//	     	   with an error. This is the DEFAULT mode used
-	//             by the operator if left empty.
+	//	     	   with an error.
 	//     auto: Enables SSL in the etc/system/local/web.conf
 	//           configuration file.
 	//     ignore: Ignores whether SSL is enabled or disabled.
+	//             This is the DEFAULT mode used by the operator if left empty.
 	//
 	// +optional
 	SslEnablement string `json:"sslEnablement,omitempty"`
