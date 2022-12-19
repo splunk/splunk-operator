@@ -925,10 +925,10 @@ spec:
                                     app installation strict: Ensure that SSL is enabled
                                     in the web.conf configuration file to use this
                                     mode. Otherwise, the installer exists with an
-                                    error. auto: Enables SSL in the etc/system/local/web.conf
+                                    error. This is the DEFAULT mode used by the operator
+                                    if left empty. auto: Enables SSL in the etc/system/local/web.conf
                                     configuration file. ignore: Ignores whether SSL
-                                    is enabled or disabled. This is the DEFAULT mode
-                                    used by the operator if left empty.'
+                                    is enabled or disabled.'
                                   type: string
                               type: object
                             type:
@@ -973,11 +973,11 @@ spec:
                                 description: 'Sets the sslEnablement value for ES
                                   app installation strict: Ensure that SSL is enabled
                                   in the web.conf configuration file to use this mode.
-                                  Otherwise, the installer exists with an error. auto:
-                                  Enables SSL in the etc/system/local/web.conf configuration
-                                  file. ignore: Ignores whether SSL is enabled or
-                                  disabled. This is the DEFAULT mode used by the operator
-                                  if left empty.'
+                                  Otherwise, the installer exists with an error. This
+                                  is the DEFAULT mode used by the operator if left
+                                  empty. auto: Enables SSL in the etc/system/local/web.conf
+                                  configuration file. ignore: Ignores whether SSL
+                                  is enabled or disabled.'
                                 type: string
                             type: object
                           type:
@@ -3757,11 +3757,11 @@ spec:
                                         ES app installation strict: Ensure that SSL
                                         is enabled in the web.conf configuration file
                                         to use this mode. Otherwise, the installer
-                                        exists with an error. auto: Enables SSL in
-                                        the etc/system/local/web.conf configuration
-                                        file. ignore: Ignores whether SSL is enabled
-                                        or disabled. This is the DEFAULT mode used
-                                        by the operator if left empty.'
+                                        exists with an error. This is the DEFAULT
+                                        mode used by the operator if left empty. auto:
+                                        Enables SSL in the etc/system/local/web.conf
+                                        configuration file. ignore: Ignores whether
+                                        SSL is enabled or disabled.'
                                       type: string
                                   type: object
                                 type:
@@ -3808,10 +3808,11 @@ spec:
                                       ES app installation strict: Ensure that SSL
                                       is enabled in the web.conf configuration file
                                       to use this mode. Otherwise, the installer exists
-                                      with an error. auto: Enables SSL in the etc/system/local/web.conf
-                                      configuration file. ignore: Ignores whether
-                                      SSL is enabled or disabled. This is the DEFAULT
-                                      mode used by the operator if left empty.'
+                                      with an error. This is the DEFAULT mode used
+                                      by the operator if left empty. auto: Enables
+                                      SSL in the etc/system/local/web.conf configuration
+                                      file. ignore: Ignores whether SSL is enabled
+                                      or disabled.'
                                     type: string
                                 type: object
                               type:
@@ -5057,10 +5058,10 @@ spec:
                                     app installation strict: Ensure that SSL is enabled
                                     in the web.conf configuration file to use this
                                     mode. Otherwise, the installer exists with an
-                                    error. auto: Enables SSL in the etc/system/local/web.conf
+                                    error. This is the DEFAULT mode used by the operator
+                                    if left empty. auto: Enables SSL in the etc/system/local/web.conf
                                     configuration file. ignore: Ignores whether SSL
-                                    is enabled or disabled. This is the DEFAULT mode
-                                    used by the operator if left empty.'
+                                    is enabled or disabled.'
                                   type: string
                               type: object
                             type:
@@ -5105,11 +5106,11 @@ spec:
                                 description: 'Sets the sslEnablement value for ES
                                   app installation strict: Ensure that SSL is enabled
                                   in the web.conf configuration file to use this mode.
-                                  Otherwise, the installer exists with an error. auto:
-                                  Enables SSL in the etc/system/local/web.conf configuration
-                                  file. ignore: Ignores whether SSL is enabled or
-                                  disabled. This is the DEFAULT mode used by the operator
-                                  if left empty.'
+                                  Otherwise, the installer exists with an error. This
+                                  is the DEFAULT mode used by the operator if left
+                                  empty. auto: Enables SSL in the etc/system/local/web.conf
+                                  configuration file. ignore: Ignores whether SSL
+                                  is enabled or disabled.'
                                 type: string
                             type: object
                           type:
@@ -7889,11 +7890,11 @@ spec:
                                         ES app installation strict: Ensure that SSL
                                         is enabled in the web.conf configuration file
                                         to use this mode. Otherwise, the installer
-                                        exists with an error. auto: Enables SSL in
-                                        the etc/system/local/web.conf configuration
-                                        file. ignore: Ignores whether SSL is enabled
-                                        or disabled. This is the DEFAULT mode used
-                                        by the operator if left empty.'
+                                        exists with an error. This is the DEFAULT
+                                        mode used by the operator if left empty. auto:
+                                        Enables SSL in the etc/system/local/web.conf
+                                        configuration file. ignore: Ignores whether
+                                        SSL is enabled or disabled.'
                                       type: string
                                   type: object
                                 type:
@@ -7940,10 +7941,11 @@ spec:
                                       ES app installation strict: Ensure that SSL
                                       is enabled in the web.conf configuration file
                                       to use this mode. Otherwise, the installer exists
-                                      with an error. auto: Enables SSL in the etc/system/local/web.conf
-                                      configuration file. ignore: Ignores whether
-                                      SSL is enabled or disabled. This is the DEFAULT
-                                      mode used by the operator if left empty.'
+                                      with an error. This is the DEFAULT mode used
+                                      by the operator if left empty. auto: Enables
+                                      SSL in the etc/system/local/web.conf configuration
+                                      file. ignore: Ignores whether SSL is enabled
+                                      or disabled.'
                                     type: string
                                 type: object
                               type:

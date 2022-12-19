@@ -638,13 +638,6 @@ func TestValidatePremiumAppsInputs(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected to see an error for invalid ssl_enablement for SHC in ES")
 	}
-
-	appSrcSpec.PremiumAppsProps.EsDefaults.SslEnablement = enterpriseApi.SslEnablementStrict
-	// invalid case, for SHC cannot use ssl_enablement auto
-	err = validatePremiumAppsInputs(appSrcSpec, "SearchHeadCluster")
-	if err == nil {
-		t.Errorf("Expected to see an error for invalid ssl_enablement for SHC in ES")
-	}
 }
 
 func TestValidateAppFrameworkSpec(t *testing.T) {
