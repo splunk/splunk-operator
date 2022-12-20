@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -576,62 +577,60 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 }
 
 func TestGetShcConnDeployer(t *testing.T) {
-	/*
-		c := spltest.NewMockClient()
-		ctx := context.TODO()
-		deployerCr := enterpriseApi.Deployer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "stack1",
-				Namespace: "test",
-			},
-			Spec: enterpriseApi.DeployerSpec{},
-		}
+	c := spltest.NewMockClient()
+	ctx := context.TODO()
+	deployerCr := enterpriseApi.Deployer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.DeployerSpec{},
+	}
 
-		_, err := getShcConnDeployer(ctx, c, &deployerCr)
-		if err == nil {
-			t.Errorf("Expected error for not finding statefulSet")
-		}
+	_, err := getShcConnDeployer(ctx, c, &deployerCr)
+	if err == nil {
+		t.Errorf("Expected error for not finding statefulSet")
+	}
 
-		// Create statefulSet
-		ss := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "splunk-stack1-deployer",
-				Namespace: "test",
-			},
-		}
-		c.Create(ctx, ss)
+	// Create statefulSet
+	ss := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-deployer",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, ss)
 
-		// Owner reference is empty
-		_, err = getShcConnDeployer(ctx, c, &deployerCr)
-		if err == nil {
-			t.Errorf("expected error for not empty owner reference")
-		}
+	// Owner reference is empty
+	_, err = getShcConnDeployer(ctx, c, &deployerCr)
+	if err == nil {
+		t.Errorf("expected error for not empty owner reference")
+	}
 
-		// Update SHC CR owner reference
-		ss.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
-			{Kind: "SearchHeadCluster",
-				Name: "stack1"},
-		}
-		c.Update(ctx, ss)
-		_, err = getShcConnDeployer(ctx, c, &deployerCr)
-		if err == nil {
-			t.Errorf("expected error for empty SHC CR")
-		}
+	// Update SHC CR owner reference
+	ss.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+		{Kind: "SearchHeadCluster",
+			Name: "stack1"},
+	}
+	c.Update(ctx, ss)
+	_, err = getShcConnDeployer(ctx, c, &deployerCr)
+	if err == nil {
+		t.Errorf("expected error for empty SHC CR")
+	}
 
-		// Create SHC CR
-		shcCr := enterpriseApi.SearchHeadCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "stack1",
-				Namespace: "test",
-			},
-			Spec: enterpriseApi.SearchHeadClusterSpec{},
-		}
-		c.Create(context.TODO(), &shcCr)
+	// Create SHC CR
+	shcCr := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{},
+	}
+	c.Create(context.TODO(), &shcCr)
 
-		// Should pass
-		_, err = getShcConnDeployer(ctx, c, &deployerCr)
-		if err != nil {
-			t.Errorf("Unexpected error, should pass err %v", err)
-		}
-	*/
+	// Should pass
+	_, err = getShcConnDeployer(ctx, c, &deployerCr)
+	if err != nil {
+		t.Errorf("Unexpected error, should pass err %v", err)
+	}
 }
