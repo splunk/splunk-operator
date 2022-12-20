@@ -1462,7 +1462,7 @@ func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("shcPlaybookContext.setLivenessProbeLevel()")
 
-	shcStsName := GetSplunkStatefulsetName(SplunkSearchHead, shcPlaybookContext.cr.GetName())
+	shcStsName := GetSplunkStatefulsetName(SplunkSearchHead, shcPlaybookContext.afwPipeline.searchHeadClusterName)
 	shcStsNamespaceName := types.NamespacedName{Namespace: shcPlaybookContext.cr.GetNamespace(), Name: shcStsName}
 	shcSts, err := splctrl.GetStatefulSetByName(ctx, shcPlaybookContext.client, shcStsNamespaceName)
 	if err != nil {
@@ -1470,19 +1470,28 @@ func (shcPlaybookContext *SHCPlaybookContext) setLivenessProbeLevel(ctx context.
 		return err
 	}
 
+	// Get SHC CR
+	var shcCr enterpriseApi.SearchHeadCluster
+	shcCrNsName := types.NamespacedName{Namespace: shcPlaybookContext.cr.GetNamespace(), Name: shcPlaybookContext.afwPipeline.searchHeadClusterName}
+	err = shcPlaybookContext.client.Get(ctx, shcCrNsName, &shcCr)
+	if err != nil {
+		scopedLog.Error(err, "Unable to get SHC")
+		return err
+	}
+
 	err = func() error {
 		// playbook context uses fixed CR and target pod names, but, when it comes to the
 		// probes tuning, we are mostly dealing with different pods, and also CRs,
 		// so, backup and then restore
-		cr := shcPlaybookContext.podExecClient.GetCR()
+		depCr := shcPlaybookContext.podExecClient.GetCR()
 		targetPodname := shcPlaybookContext.podExecClient.GetTargetPodName()
 
 		defer func() {
-			shcPlaybookContext.podExecClient.SetCR(cr)
+			shcPlaybookContext.podExecClient.SetCR(depCr)
 			shcPlaybookContext.podExecClient.SetTargetPodName(ctx, targetPodname)
 		}()
 
-		err = setProbeLevelOnCRPods(ctx, shcPlaybookContext.cr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
+		err = setProbeLevelOnCRPods(ctx, &shcCr, *shcSts.Spec.Replicas, shcPlaybookContext.podExecClient, probeLevel)
 		if err != nil {
 			scopedLog.Error(err, "Unable to set the Liveness probe level")
 			return err

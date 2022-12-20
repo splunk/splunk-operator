@@ -2322,9 +2322,11 @@ func TestSetLivenessProbeLevelForSHC(t *testing.T) {
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
 	playbookContext := &SHCPlaybookContext{
-		client:               c,
-		cr:                   cr,
-		afwPipeline:          nil,
+		client: c,
+		cr:     cr,
+		afwPipeline: &AppInstallPipeline{
+			searchHeadClusterName: "stack1",
+		},
 		targetPodName:        targetPodName,
 		searchHeadCaptainURL: GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false),
 		podExecClient:        mockPodExecClient,
@@ -2348,6 +2350,23 @@ func TestSetLivenessProbeLevelForSHC(t *testing.T) {
 	}
 
 	c.AddObject(sts)
+
+	// Test: Should return an error for SHC not found
+	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
+	if err == nil {
+		t.Errorf("Should fail for not finding SHC")
+	}
+
+	shcCr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	c.AddObject(shcCr)
 
 	// Test: Should not return an error, when tried with proper context
 	err = playbookContext.setLivenessProbeLevel(ctx, livenessProbeLevelOne)
