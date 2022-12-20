@@ -75,6 +75,7 @@ api/v4/zz_generated.deepcopy.go
 api/v4/common_types.go
 #Below should be reviewed once CRDs have no bias lang
 tools/bias_lang_migration.sh
+tools/deployer_crd_upgrade.sh
 go.sum
 .github/
 .circleci/
