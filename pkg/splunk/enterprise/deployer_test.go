@@ -589,7 +589,7 @@ func TestGetShcConnDeployer(t *testing.T) {
 
 	_, err := getShcConnDeployer(ctx, c, &deployerCr)
 	if err == nil {
-		t.Errorf("Expected error for not finding statefulSet")
+		t.Errorf("Expected error for not finding statefulSet, error %v", err)
 	}
 
 	// Create statefulSet
@@ -604,7 +604,7 @@ func TestGetShcConnDeployer(t *testing.T) {
 	// Owner reference is empty
 	_, err = getShcConnDeployer(ctx, c, &deployerCr)
 	if err == nil {
-		t.Errorf("expected error for not empty owner reference")
+		t.Errorf("expected error for not empty owner reference, error %v", err)
 	}
 
 	// Update SHC CR owner reference
