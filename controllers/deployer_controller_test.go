@@ -34,7 +34,7 @@ var _ = Describe("Deployer Controller", func() {
 	Context("Deployer Management", func() {
 
 		It("Get Deployer custom resource should failed", func() {
-			namespace := "ns-splunk-st-1"
+			namespace := "ns-splunk-dep-1"
 			ApplyDeployer = func(ctx context.Context, client client.Client, instance *enterpriseApi.Deployer) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -47,7 +47,7 @@ var _ = Describe("Deployer Controller", func() {
 		})
 
 		It("Create Deployer custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-st-2"
+			namespace := "ns-splunk-dep-2"
 			ApplyDeployer = func(ctx context.Context, client client.Client, instance *enterpriseApi.Deployer) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -66,7 +66,7 @@ var _ = Describe("Deployer Controller", func() {
 		})
 
 		It("Create Deployer custom resource should succeeded", func() {
-			namespace := "ns-splunk-st-3"
+			namespace := "ns-splunk-dep-3"
 			ApplyDeployer = func(ctx context.Context, client client.Client, instance *enterpriseApi.Deployer) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
@@ -79,7 +79,7 @@ var _ = Describe("Deployer Controller", func() {
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-st-4"
+			namespace := "ns-splunk-dep-4"
 			ApplyDeployer = func(ctx context.Context, client client.Client, instance *enterpriseApi.Deployer) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
