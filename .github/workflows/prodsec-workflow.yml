@@ -4,6 +4,7 @@ on:
     branches:
     - main
     - develop
+    - es_appfw_doc
 name: Prodsec Workflow
 jobs:
   semgrep:
