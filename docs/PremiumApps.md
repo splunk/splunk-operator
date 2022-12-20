@@ -439,11 +439,40 @@ Splunk operator log:
 kubectl logs <operator_pod_name>
 ```
 
+Checking if there were any errors is ES install
+
+ES post install failures:
+Log shows one ore more entries with the following content:
+"premium scoped app package install failed" -- (specific failure reasons show up here)
+
+Example of error when you strict mode for sslEnablement and Splunk web is not SSL enabled 
+
+```
+2022-12-07T00:17:36.780549729Z  ERROR   handleEsappPostinstall  premium scoped app package install failed   {"controller": "searchheadcluster", "controllerGroup": "enterprise.splunk.com", "controllerKind": "SearchHeadCluster", "SearchHeadCluster": {"name":"shc1","namespace":"default"}, "namespace": "default", "name": "shc1", "reconcileID": "83133a29-ca0d-46cc-9ae5-6f26385d4506", "name": "shc1", "namespace": "default", "pod": "splunk-shc1-deployer-0", "app name": "splunk-enterprise-security_702.spl", "stdout": "", "stderr": "FATAL: Error in 'essinstall' command: You must have SSL enabled to continue\n", "post install command": "/opt/splunk/bin/splunk search '| essinstall --ssl_enablement strict --deployment_type shc_deployer' -auth admin:`cat /mnt/splunk-secrets/password`", "failCount": 1, "error": "command terminated with exit code 17"}
+```
+To fix this error, you have one of the following options:
+1) Enable splunk web SSL- details on the section [Special consideration while using ssl enabled mode of strict in SHC](#special-consideration-while-using-ssl-enabled-mode-of-strict-in-shc)
+2) Or, use sslEnablment=ignore
+
+Example of a connection timeout error:
+
+```
+2022-12-07T00:48:11.542927588Z	ERROR	handleEsappPostinstall	premium scoped app package install failed	{"controller": "searchheadcluster", "controllerGroup": "enterprise.splunk.com", "controllerKind": "SearchHeadCluster", "SearchHeadCluster": {"name":"shc1it","namespace":"default"}, "namespace": "default", "name": "shc1it", "reconcileID": "b34966a2-e716-428f-a0c6-7611812e6b24", "name": "shc1it", "namespace": "default", "pod": "splunk-shc1it-deployer-0", "app name": "splunk-enterprise-security_702.spl", "stdout": "", "stderr": "FATAL: Error in 'essinstall' command: (InstallException) \"install_apps\" stage failed - Splunkd daemon is not responding: ('Error connecting to /services/apps/shc/es_deployer: The read operation timed out',)\n", "post install command": "/opt/splunk/bin/splunk search '| essinstall --ssl_enablement ignore --deployment_type shc_deployer' -auth admin:`cat /mnt/splunk-secrets/password`", "failCount": 2, "error": "command terminated with exit code 17"}
+```
+
+To fix this error, check the following areas:
+1) Check the splunkd log in the deployer pod for any issues.
+2) Check the splunkdConnectionTimeout setting in web.conf. More details at [setting connnection timeouts](#splunkdconnectiontimeout)
+
+
 Logs of the respective pods:
 
 ```
 kubectl logs <pod_name>
 ```
+
+Check the pod log (e.g deployer pod) in case you want to monitor the pod while it is coming up to ready state or it has gone to an error state.
+
 
 Common issues that may be encountered are : 
 * ES installation failed as you used default sslEnablement mode ("strict") - enable Splunk Web SSL in web.conf. See the section [Special consideration while using ssl enabled mode of strict in SHC](#special-consideration-while-using-ssl-enabled-mode-of-strict-in-shc)
