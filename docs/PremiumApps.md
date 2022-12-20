@@ -13,7 +13,7 @@ Installing Enterprise Security in a Kubernetes cluster with the Splunk Operator 
 * Ability to utilize the Splunk Operator [app framework](https://splunk.github.io/splunk-operator/AppFramework.html) method of installation.
 * Access to the [Splunk Enterprise Security](https://splunkbase.splunk.com/app/263/) app package.
 * Splunk Enterprise Security version 6.4.1 or 6.6.0 as Splunk Operator requires Splunk Enterprise 8.2.2 or later. For more information regarding Splunk Enterprise and Enterprise Security compatibility, see the [version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix).
-* If installing to an Indexer Cluster, access to the corresponding Splunk_TA_ForIndexers app from the Enterprise Security package. This app can be extracted using the procedure available at [Splunk ES app installation on Indexer Cluster](https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons). After the Splunk_TA_ForIndexers is available, place it in a S3 bucket and use "cluster" scope in the YAML file to push the package via the cluster manager to the indexers. A Splunk_TA_ForIndexers package is also shipped with in the SplunkEnterpriseSecutitySuite package (can be found in the ES app package at SplunkEnterpriseSecuritySuite/install/splunkcloud/splunk_app_es/Splunk_TA_ForIndexers-\<version\>.spl).  
+* If installing to an Indexer Cluster, access to the corresponding Splunk_TA_ForIndexers app from the Enterprise Security package. This app can be extracted using the procedure available at [Splunk ES app installation on Indexer Cluster](https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons). After the Splunk_TA_ForIndexers is available, place it in a S3 bucket and use "cluster" scope in the YAML file to push the package via the cluster manager to the indexers.  
 * Pod resource specs that meet the [Enterprise Security hardware requirements](https://docs.splunk.com/Documentation/ES/latest/Install/DeploymentPlanning#Hardware_requirements).
 * In the following sections, aws s3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](https://splunk.github.io/splunk-operator/AppFramework.html), you can use Azure blob remote buckets also.
 
@@ -59,15 +59,18 @@ When crafting your Custom Resource to create a Splunk Enterprise Deployment it i
 
 #####  SSL Enablement
 
-When installing ES versions 6.3.0+ is necessary to supply a value for the parameter ssl_enablement that is required by the ES post installation command `essinstall`. By default the value of strict is used which requires Splunk to have SSL enabled in web.conf (refer to setting `enableSplunkWebSSL`). The below table can be used for reference of available values of ssl enablement. 
+When installing ES versions 6.3.0+ is necessary to supply a value for the parameter ssl_enablement that is required by the ES post installation command `essinstall`. By default, if you don't set any value for ssl_enablement, the value of `strict` is used which requires Splunk to have SSL enabled in web.conf (refer to setting `enableSplunkWebSSL`). The below table can be used for reference of available values of ssl enablement. 
 
 | SSL mode	| Description | 
 | --------- | ----------- | 
-|strict     |	Default mode. Ensure that SSL is enabled in the web.conf configuration file to use this mode. Otherwise, the installer exists with an error. Note that for the SHC, the ES post install command `essinstall` is run in deployer, and this command looks into web.conf files under etc/shcapps to validate that enableSplunkWebSSL is set to true or not.| 
+|strict     |	Default mode. Ensure that SSL is enabled in the web.conf configuration file to use this mode. Otherwise, the installer exists with an error. Note that for the SHC, the ES post install command `essinstall` is run on the deployer, and this command looks into web.conf files under etc/shcapps to validate that enableSplunkWebSSL is set to true or not. This is done with assumption that you have already pushed a web.conf through etc/shcapps to all the SHC members.| 
 | auto	   | Enables SSL in the etc/system/local/web.conf configuration file. This mode is not supported by SHC |
-| ignore	   | Ignores whether SSL is enabled or disabled. |
+| ignore	   | Ignores whether SSL is enabled or disabled. This option may be handy if you don't want operator and essinstall to check SSL is enabled for Splunk web and continue ES installation without intruption. For example, you may have some processes outside of operator where you are already checking that your Splunk deployement is web SSL enabled.|
 
-The Operator passes the ssl_enablement parameter through `sslEnablement` parameter withn `premiumAppsProps` configuration. The following snippet of a YAML file shows using `ignore` mode for ssl_enablement
+The operator passes the ES specific premium apps properties through the following properties:
+scope - use `premiumApps`
+premiumAppsProps --> type: use `enterpriseSecurity`
+esDefaults --> sslEnablement: possible value  `ignore`, `auto`, `strict` -- please see more details in the table above
 
 ```yaml
   appSources:
@@ -75,7 +78,7 @@ The Operator passes the ssl_enablement parameter through `sslEnablement` paramet
           location: es_app/
           scope: premiumApps             <-------- setting scope as premiumApps to install ES
           premiumAppsProps:
-            type: enterpriseSecurity
+            type: enterpriseSecurity     <-------- installing premiumApp Splunk Enterprise Security. 
             esDefaults:
               sslEnablement: ignore       <--------- setting ssl_enablement to ignore
 ```
@@ -113,13 +116,17 @@ Increasing the value of splunkdConnectionTimeout in web.conf will help ensure th
                 splunkdConnectionTimeout: 300
 ```
 
-### Example YAML
+### Example YAMLs
+
+In the following examples, you can find the YAML files for installing ES in a Splunk Standalone, Splunk SHC, and Indexer Cluster.
 
 #### Install ES on a standalone splunk deployment
 
-Here is an example of a standalone CR with the spec(scope=premiumApps, type=EnterpriseSecurity, sslEnablement=ignore)
+#### Install ES on a standalone splunk deployment with sslEnablement=ignore
 
-Assuming the ES app tarball exists in an s3 bucket folder named "es_app" under the parent folder "security-team-apps" in your s3 bucket
+Here is an example of a standalone CR with the `sslEnablement=ignore`
+
+Assumption: the ES app tarball exists in an s3 bucket folder named "es_app" under the parent folder "security-team-apps" in your s3 bucket.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -153,25 +160,137 @@ spec:
         secretRef: splunk-s3-secret
 ```
 
-#### Install ES on a Search Head Cluster splunk deployment
+#### Install ES on a standalone splunk deployment with sslEnablement value strict
 
-The below yaml will configure ES on a Search Head Cluster which searches an Indexer Cluster. 
+Here is example of a standalone CR with the `sslEnablement=strict`. 
 
- Assumptions made are that:
- 1. The ES app tarball exists in an s3 bucket folder named "es_app"
- 2. Optional: The Splunk_TA_ForIndexers app exists in an s3 bucket folder named "es_app_indexer_ta".  
- 
- If you choose to extract Splunk_TA_ForIndexers instead of using the pre-shipped Splunk_TA_ForIndexers package (SplunkEnterpriseSecuritySuite/install/splunkcloud/splunk_app_es/Splunk_TA_ForIndexers-\<version\>.spl), the SHC should be up and running with Splunk Enterprise Secutiry Suite first. Then, the steps given at https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons can be used to extract and deploy the Splunk_TA_ForIndexers to indexers.
+Assumption: the ES app tarball exists in an s3 bucket folder named "es_app" under the parent folder "security-team-apps" in your s3 bucket.
 
-Steps:
-1. Apply the following YAML file
-2. Wait for the SHC, CM and Indexers and up and running
-3. Login to a SH, and extract the Splunk_TA_ForIndexers (steps given here)[https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons]
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  extraEnv:
+    - name: SPLUNK_HTTP_ENABLESSL
+      value : "true"
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: esApp
+        location: es_app/
+        scope: premiumApps
+        premiumAppsProps:
+          type: enterpriseSecurity
+          esDefaults:
+             sslEnablement: ignore
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: security-team-apps/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: splunk-s3-secret
+```
+Following YAML file will also use sslEnablement as strict given you have not provided this parameter.
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  extraEnv:
+    - name: SPLUNK_HTTP_ENABLESSL
+      value : "true"
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: esApp
+        location: es_app/
+        scope: premiumApps
+        premiumAppsProps:
+          type: enterpriseSecurity
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: security-team-apps/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: splunk-s3-secret
+```
+
+#### Install ES on a standalone splunk deployment with sslEnablement value auto
+
+Here is example of a standalone CR with the `sslEnablement=auto`. 
+
+Assumption: the ES app tarball exists in an s3 bucket folder named "es_app" under the parent folder "security-team-apps" in your s3 bucket.
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: esApp
+        location: es_app/
+        scope: premiumApps
+        premiumAppsProps:
+          type: enterpriseSecurity
+          esDefaults:
+             sslEnablement: auto
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: security-team-apps/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: splunk-s3-secret
+```
+
+#### Install ES on a Search Head Cluster and Indexer Cluster splunk deployment
+
+Use the following steps to install ES on a Splunk deployment with a SHC integrated with Indexer Cluster:
+
+Assumption: you have downloaded ES app from https://splunkbase.splunk.com/app/263
+
+1. Place the ES app package at s3 path security-team-apps/es-app
+2. Apply the following YAML file
+2. Wait for the SHC, CM and Indexers to be up and running. 
+3. Verify that the ES app is installed in SH. 
+3. Login to a SH, and extract the Splunk_TA_ForIndexers using the steps given here: [https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons]
 4. Place the extracted Splunk_TA_ForIndexers package in the s3 bucket folder named "es_app_indexer_ta"
+
 The operator will poll this bucket after configured appsRepoPollIntervalSeconds and install the Splunk_TA_ForIndexers also.
  
-In this example scope=premiumApps, type=EnterpriseSecurity, sslEnablement=ignore
- 
+In this example for SHC, scope=premiumApps, type=EnterpriseSecurity, sslEnablement=ignore
+and for ClusterManager scope=cluster, type and sslEnablement are not applicable.
+
 ```yaml
 apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
@@ -201,11 +320,11 @@ spec:
         endpoint: https://s3-us-west-2.amazonaws.com
         region: us-west-2
         secretRef: splunk-s3-secret
-  clusterMasterRef:
+  ClusterManagerRef:
     name: cm-es
 ---
 apiVersion: enterprise.splunk.com/v4
-kind: ClusterMaster
+kind: ClusterManager
 metadata:
   name: cm-es
   finalizers:
@@ -236,20 +355,20 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  clusterMasterRef:
+  ClusterManagerRef:
     name: cm-es
   replicas: 3
 ```
 
-#### Special consideration while using ssl enabled mode of strict
+#### Special consideration while using ssl enabled mode of strict in SHC
 
-In this example scope=premiumApps, type=EnterpriseSecurity, sslEnablement=strict
+For using the strict mode, following additional steps are required so that SHC has Splunk Web SSL enabled. This step is necessary before you can install ES app with strict mode of sslEnablement. Alternatively, if you are managing enableSplunkWebSSL setting outside of Operator scope by pushing an app bundle through deployer, then you can skip all these steps.
 
-For using the strict mode, a SHC bootstrap step is required so the SHC has Splunk Web SSL enabled.
 Steps:
-1. Create a shc app that contain an app with its local/web.conf setting enableSplunkWebSSL=true
-2. Deploy this app through app framework cluster scope. 
-3. Use the extraEnv:SPLUNK_HTTP_ENABLESSL with value true
+1. Create a shc app (call it shccoreapp.spl) that contains a local/web.conf setting with `enableSplunkWebSSL=true`
+2. Plase this app under security-team-apps/coreapps in your s3 bucket.
+3. Use the following YAML file as an example to deploy this app through app framework. 
+4. Note: you also need to include the extraEnv:SPLUNK_HTTP_ENABLESSL with value true in the YAML. This step will be revised in upcoming releases so it may not be needed as you are already pushing a web.conf with ssl setting.
 
 Following is an example to enable Splunk Web SSL through operator on SHC:
 
@@ -334,9 +453,9 @@ kubectl logs <pod_name>
 
 
 Common issues that may be encountered are : 
-* ES installation failed as you used default sslEnablement mode ("strict") - enable Splunk Web SSL in web.conf.
+* ES installation failed as you used default sslEnablement mode ("strict") - enable Splunk Web SSL in web.conf. See the secton [Special consideration while using ssl enabled mode of strict in SHC](#special-consideration-while-using-ssl-enabled-mode-of-strict-in-shc)
 * Ansible task timeouts - raise associated timeout (splunkdConnectionTimeout, rcvTimeout, etc.)
-* Pod Recycles - raise livenessProbe value
+* Pod Recycles - raise livenessProbe value.
 
 
 ### Current Limitations
