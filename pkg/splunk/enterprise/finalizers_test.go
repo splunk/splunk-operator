@@ -99,18 +99,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			mockCalls["List"] = []spltest.MockFuncCall{
 				{ListOpts: listOptsB},
 			}
-			// account for extra calls in the shc case due to the deployer
-			if component == "search-head" {
-				labelsC := map[string]string{
-					"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-%s", cr.GetName(), "deployer"),
-				}
-				listOptsC := []client.ListOption{
-					client.InNamespace(cr.GetNamespace()),
-					client.MatchingLabels(labelsC),
-				}
-				mockCalls["Delete"] = append(mockCalls["Delete"], spltest.MockFuncCall{MetaName: "*v1.PersistentVolumeClaim-test-splunk-pvc-stack1-var"})
-				mockCalls["List"] = append(mockCalls["List"], spltest.MockFuncCall{ListOpts: listOptsC})
-			}
+
 			mockCalls["Get"] = []spltest.MockFuncCall{
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
 				{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -167,6 +156,11 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 				}...)
 
+			case "Deployer":
+				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+					{MetaName: "*v4.Deployer-test-stack1"},
+				}...)
 			case "ClusterMaster":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},

@@ -43,7 +43,7 @@ jobs:
           path: coverage.out
   build-operator-image:
     runs-on: ubuntu-latest
-    #needs: unit-tests
+    needs: unit-tests
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator

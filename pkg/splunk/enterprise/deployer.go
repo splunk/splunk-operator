@@ -192,13 +192,11 @@ func ApplyDeployer(ctx context.Context, client splcommon.ControllerClient, cr *e
 
 // SHC connected to the deployer adds its owner reference on the deployer CR
 // getShcConnDeployer extracts the SHC owner reference, retrieve and return the SHC CR
-func getShcConnDeployer(ctx context.Context, c splcommon.ControllerClient, deployerCr splcommon.MetaObject) (*enterpriseApi.SearchHeadCluster, error) {
+var getShcConnDeployer = func(ctx context.Context, c splcommon.ControllerClient, deployerCr splcommon.MetaObject) (*enterpriseApi.SearchHeadCluster, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getShcConnDeployer").WithValues("deployer CR", deployerCr.GetName(), "deployer CR namespace", deployerCr.GetNamespace())
 
 	var shcCr enterpriseApi.SearchHeadCluster
-
-	scopedLog.Info("Arjun in getShcConnDeployer")
 
 	deployerStsName := GetSplunkStatefulsetName(SplunkDeployer, deployerCr.GetName())
 	namespacedName := types.NamespacedName{Namespace: deployerCr.GetNamespace(), Name: deployerStsName}
@@ -211,19 +209,14 @@ func getShcConnDeployer(ctx context.Context, c splcommon.ControllerClient, deplo
 	// Find the ownerRef added by SHC
 	depStsOwnRef := deployerSts.GetOwnerReferences()
 	for _, ow := range depStsOwnRef {
-		scopedLog.Info("Arjun in getShcConnDeployer found ownerReferences", "deployer Owner References", depStsOwnRef)
-
 		if ow.Kind == "SearchHeadCluster" {
 			// Found SHC with ownerRef to the deployer
-			scopedLog.Info("Arjun in getShcConnDeployer found SHC ownerRef", "SHC Owner Ref for deployer", ow)
-
 			namespacedName := types.NamespacedName{Namespace: deployerCr.GetNamespace(), Name: ow.Name}
 			err := c.Get(ctx, namespacedName, &shcCr)
 			if err != nil {
-				scopedLog.Info("Arjun in getShcConnDeployer couldn't find shc", "shc", shcCr.GetName())
 				return nil, err
 			}
-			scopedLog.Info("Arjun Found a SHC connected to deployer", "shc CR", shcCr.GetName(), "shc CR namespace", shcCr.GetNamespace())
+			scopedLog.Info("Found a SHC connected to deployer", "shc CR", shcCr.GetName(), "shc CR namespace", shcCr.GetNamespace())
 			return &shcCr, nil
 		}
 	}

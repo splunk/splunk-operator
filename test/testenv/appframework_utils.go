@@ -337,7 +337,7 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 		appDeploymentInfo, err = GetAppDeploymentInfoStandalone(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "MonitoringConsole":
 		appDeploymentInfo, err = GetAppDeploymentInfoMonitoringConsole(ctx, deployment, testenvInstance, name, appSourceName, appName)
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		appDeploymentInfo, err = GetAppDeploymentInfoSearchHeadCluster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterManager":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
@@ -515,7 +515,7 @@ func GetIsDeploymentInProgressFlag(ctx context.Context, deployment *Deployment, 
 			return isDeploymentInProgress, err
 		}
 		isDeploymentInProgress = cr.Status.AppContext.IsDeploymentInProgress
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		cr := &enterpriseApi.Deployer{}
 		err := deployment.GetInstance(ctx, name, cr)
 		if err != nil {

@@ -1970,7 +1970,10 @@ func migrateAfwFromPhase2ToPhase3(ctx context.Context, client splcommon.Controll
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("migrateAfwFromPhase2ToPhase3").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	sts := afwGetReleventStatefulsetByKind(ctx, cr, client)
+	sts, err := afwGetReleventStatefulsetByKind(ctx, cr, client)
+	if err != nil {
+		return fmt.Errorf("couldn't get statefulSet for cr")
+	}
 
 	for _, appSrcDeployInfo := range afwStatusContext.AppsSrcDeployStatus {
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
@@ -2061,10 +2064,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 			// Status update successful
 			break
-		} else {
-			scopedLog.Error(err, "Arjun error updating CR")
 		}
-
 		time.Sleep(time.Duration(tryCnt) * 10 * time.Millisecond)
 	}
 

@@ -79,9 +79,9 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		podType = "license-manager"
 	case "LicenseMaster":
 		podType = "license-master"
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		podType = "deployer"
-	case "IndexerCluster":
+	case "IndexerCluster", "SearchHeadCluster":
 		return ""
 	case "ClusterMaster":
 		podType = "cluster-master"
@@ -126,7 +126,7 @@ func getTelAppNameExtension(crKind string) (string, error) {
 	switch crKind {
 	case "Standalone":
 		return "stdaln", nil
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		return "shc", nil
 	case "LicenseMaster":
 		return "lmaster", nil
@@ -1238,6 +1238,7 @@ func initPipelinePhase(afwPipeline *AppInstallPipeline, phase enterpriseApi.AppP
 
 // initAppInstallPipeline creates the AFW scheduler pipelines
 func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi.AppDeploymentContext, client splcommon.ControllerClient, cr splcommon.MetaObject) (*AppInstallPipeline, error) {
+	var err error
 
 	afwPipeline := &AppInstallPipeline{}
 	afwPipeline.pplnPhases = make(map[enterpriseApi.AppPhaseType]*PipelinePhase, 3)
@@ -1246,7 +1247,10 @@ func initAppInstallPipeline(ctx context.Context, appDeployContext *enterpriseApi
 	afwPipeline.afwEntryTime = time.Now().Unix()
 	afwPipeline.cr = cr
 	afwPipeline.client = client
-	afwPipeline.sts = afwGetReleventStatefulsetByKind(ctx, cr, client)
+	afwPipeline.sts, err = afwGetReleventStatefulsetByKind(ctx, cr, client)
+	if err != nil {
+		return nil, err
+	}
 
 	// Update name of SHC in case of deployer CRD
 	if cr.GetObjectKind().GroupVersionKind().Kind == "Deployer" {
@@ -1286,7 +1290,7 @@ func deleteAppPkgFromOperator(ctx context.Context, worker *PipelineWorker) {
 	releaseStorage(worker.appDeployInfo.Size)
 }
 
-func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient) *appsv1.StatefulSet {
+func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObject, client splcommon.ControllerClient) (*appsv1.StatefulSet, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getReleventStatefulsetByKind").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	var instanceID InstanceType
@@ -1298,7 +1302,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 		instanceID = SplunkLicenseManager
 	case "LicenseMaster":
 		instanceID = SplunkLicenseMaster
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
 		instanceID = SplunkClusterMaster
@@ -1307,7 +1311,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
 	default:
-		return nil
+		return nil, fmt.Errorf("invalid CR kind, unable to retrieve statefulSet")
 	}
 
 	statefulsetName := GetSplunkStatefulsetName(instanceID, cr.GetName())
@@ -1317,7 +1321,7 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 		scopedLog.Error(err, "Unable to get the stateful set")
 	}
 
-	return sts
+	return sts, nil
 }
 
 // getIdxcPlaybookContext returns the idxc playbook context
@@ -1358,7 +1362,7 @@ func getClusterScopePlaybookContext(ctx context.Context, client splcommon.Contro
 	switch kind {
 	case "ClusterManager", "ClusterMaster":
 		return getIdxcPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		return getSHCPlaybookContext(ctx, client, cr, afwPipeline, podName, podExecClient)
 	default:
 		return nil
@@ -1495,7 +1499,7 @@ func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
 	case "ClusterManager", "ClusterMaster":
 		return idxcAppsLocationOnClusterManager
-	case "SearchHeadCluster", "Deployer":
+	case "Deployer":
 		return shcAppsLocationOnDeployer
 	default:
 		return ""
@@ -1637,9 +1641,9 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 	scopedLog := reqLogger.WithName("idxcPlaybookContext.setLivenessProbeLevel()")
 	var err error
 
-	managerSts := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
-	if managerSts == nil {
-		return fmt.Errorf("not able to retrieve Cluster Manager STS")
+	managerSts, err := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
+	if managerSts == nil || err != nil {
+		return fmt.Errorf("not able to retrieve Cluster Manager STS %s", err)
 	}
 
 	err = func() error {
@@ -1819,7 +1823,10 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 
 		deployInfoList := appSrcDeployInfo.AppDeploymentInfoList
 
-		sts := afwGetReleventStatefulsetByKind(ctx, cr, client)
+		sts, err := afwGetReleventStatefulsetByKind(ctx, cr, client)
+		if err != nil {
+			return true, err
+		}
 		podName := getApplicablePodNameForAppFramework(cr, 0)
 
 		podExecClient := splutil.GetPodExecClient(client, cr, podName)

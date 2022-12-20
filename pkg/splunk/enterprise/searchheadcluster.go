@@ -148,12 +148,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	// create or update a deployer service
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
-	if err != nil {
-		return result, err
-	}
-
 	// Update deployerphase here
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
@@ -162,8 +156,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	deployer := &enterpriseApi.Deployer{}
 	err = client.Get(context.TODO(), namespacedName, deployer)
 	if err == nil {
-		// when user creates both cluster manager and index cluster yaml file at the same time
-		// cluser manager status is not yet set so it will be blank
+		// when user creates both SHC and deployer yaml file at the same time
+		// deployer status is not yet set so it will be blank
 		if deployer.Status.Phase == "" {
 			cr.Status.DeployerPhase = enterpriseApi.PhasePending
 		} else {
@@ -193,11 +187,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	cr.Status.Phase = phase
 
-	var finalResult *reconcile.Result
-	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
-		finalResult = handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
-	}
-
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		// Set owner references for deployer statefulset if needed
@@ -218,7 +207,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 				return result, err
 			}
 			cr.Status.DeployerOwnerRefConfigured = true
-			scopedLog.Info("Arjun OwnerReference set for deployer", "deployer CR", cr.Spec.DeployerRef)
+			scopedLog.Info("SHC CR OwnerReference set on deployer statefulSet", "deployer CR", cr.Spec.DeployerRef)
 		}
 
 		//upgrade fron automated MC to MC CRD
@@ -239,11 +228,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminSecretChanged = []bool{}
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 		cr.Status.NamespaceSecretResourceVersion = namespaceScopedSecret.ObjectMeta.ResourceVersion
-
-		// Update the requeue result as needed by the app framework
-		if finalResult != nil {
-			result = *finalResult
-		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.

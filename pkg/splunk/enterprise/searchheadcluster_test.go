@@ -70,14 +70,9 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
-		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+		{MetaName: "*v4.Deployer-test-stack1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
@@ -92,13 +87,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
-		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+		{MetaName: "*v4.Deployer-test-stack1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -122,9 +111,9 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[11], funcCalls[15], funcCalls[16]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[5], createFuncCalls[11]}, "List": {listmockCall[0], listmockCall[0]}}
-	statefulSet := enterpriseApi.SearchHeadCluster{
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[5], funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[8], funcCalls[10], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[5]}, "Update": {createFuncCalls[5]}, "List": {listmockCall[0]}}
+	shcCr := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
 		},
@@ -132,20 +121,38 @@ func TestApplySearchHeadCluster(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			DeployerRef: corev1.ObjectReference{
+				Name: "stack1",
+			},
+		},
 	}
 
 	// Set shc changed to true for testing
 	searchHeads := 3
 	for i := 0; i < searchHeads; i++ {
-		statefulSet.Status.ShcSecretChanged = append(statefulSet.Status.ShcSecretChanged, true)
+		shcCr.Status.ShcSecretChanged = append(shcCr.Status.ShcSecretChanged, true)
 	}
-	revised := statefulSet.DeepCopy()
+	revised := shcCr.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+		deployerCr := enterpriseApi.Deployer{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Deployer",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "stack1",
+				Namespace: "test",
+			},
+			Status: enterpriseApi.DeployerStatus{
+				Phase: enterpriseApi.PhaseReady,
+			},
+		}
+		c.Create(context.TODO(), &deployerCr)
 		_, err := ApplySearchHeadCluster(context.TODO(), c, cr.(*enterpriseApi.SearchHeadCluster))
 		return err
 	}
-	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySearchHeadCluster", &statefulSet, revised, createCalls, updateCalls, reconcile, true)
+	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySearchHeadCluster", &shcCr, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
@@ -633,6 +640,11 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			DeployerRef: corev1.ObjectReference{
+				Name: "stack1",
+			},
+		},
 	}
 
 	c := spltest.NewMockClient()
@@ -693,452 +705,6 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-search-head","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":6,"selector":{"matchLabels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-search-head-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_search_head"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-3.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-4.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-5.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_DEPLOYER_URL","value":"splunk-stack1-deployer-service"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack1-cluster-manager-service.test2.svc.cluster.local"},{"name":"TEST_ENV_VAR","value":"test_value"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-search-head"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-search-head-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 }
 
-func TestGetDeployerStatefulSet(t *testing.T) {
-	/*
-		ctx := context.TODO()
-		cr := enterpriseApi.Deployer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "stack1",
-				Namespace: "test",
-			},
-		}
-
-		c := spltest.NewMockClient()
-		_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
-		if err != nil {
-			t.Errorf("Failed to create namespace scoped object")
-		}
-
-		test := func(want string) {
-			f := func() (interface{}, error) {
-				if err := validateSearchHeadClusterSpec(ctx, c, &cr); err != nil {
-					t.Errorf("validateSearchHeadClusterSpec() returned error: %v", err)
-				}
-				return getDeployerStatefulSet(ctx, c, &cr)
-			}
-			configTester(t, "getDeployerStatefulSet()", f, want)
-		}
-
-		cr.Spec.Replicas = 3
-		test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-deployer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-deployer-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_deployer"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-deployer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-deployer-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
-		// Allow installation of apps via DefaultsURLApps on the SHCDeployer
-		cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-		test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-deployer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-deployer-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_deployer"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-deployer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-deployer-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
-		// Create a serviceaccount
-		current := corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "defaults",
-				Namespace: "test",
-			},
-		}
-		_ = splutil.CreateResource(ctx, c, &current)
-		cr.Spec.ServiceAccount = "defaults"
-
-		test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-deployer","namespace":"test","creationTimestamp":null,"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-deployer-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_deployer"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_SEARCH_HEAD_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local"},{"name":"SPLUNK_SEARCH_HEAD_CAPTAIN_URL","value":"splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent"}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-deployer"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-deployer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"deployer","app.kubernetes.io/part-of":"splunk-stack1-search-head"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-deployer-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-	*/
-}
-
-func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
-	ctx := context.TODO()
-	cr := enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "SearchHeadCluster",
-		},
-		Spec: enterpriseApi.SearchHeadClusterSpec{
-			Replicas: 3,
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "s3-secret", Type: "s3", Provider: "aws"},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "securityApps",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-					{Name: "authenticationApps",
-						Location: "authenticationAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	// Create S3 secret
-	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
-	client.AddObject(&s3Secret)
-
-	// to pass the validation stage, add the directory to download apps
-	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
-	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
-	if err != nil {
-		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
-	}
-
-	_, err = ApplySearchHeadCluster(ctx, client, &cr)
-	if err != nil {
-		t.Errorf("ApplySearchHeadCluster should be successful")
-	}
-}
-
-func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
-	ctx := context.TODO()
-	cr := enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.SearchHeadClusterSpec{
-			Replicas: 3,
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				Defaults: enterpriseApi.AppSourceDefaultSpec{
-					VolName: "msos_s2s3_vol2",
-					Scope:   enterpriseApi.ScopeLocal,
-				},
-				VolList: []enterpriseApi.VolumeSpec{
-					{
-						Name:      "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws",
-					},
-					{
-						Name:      "msos_s2s3_vol2",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london2",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws",
-					},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{
-						Name:     "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal,
-						},
-					},
-					{
-						Name:     "securityApps",
-						Location: "securityAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal,
-						},
-					},
-					{
-						Name:     "authenticationApps",
-						Location: "authenticationAppsRepo",
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create S3 secret
-	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
-	client.AddObject(&s3Secret)
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	splclient.RegisterRemoteDataClient(ctx, "aws")
-
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
-	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
-	Sizes := []int64{10, 20, 30}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAwsHandler := spltest.MockAWSS3Handler{}
-
-	mockAwsObjects := []spltest.MockAWSS3Client{
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[1],
-					Key:          &Keys[1],
-					LastModified: &randomTime,
-					Size:         &Sizes[1],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[2],
-					Key:          &Keys[2],
-					LastModified: &randomTime,
-					Size:         &Sizes[2],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	appFrameworkRef := cr.Spec.AppFrameworkConfig
-
-	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-	var allSuccess bool = true
-	for index, appSource := range appFrameworkRef.AppSources {
-
-		vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
-
-		remoteDataClientMgr := &RemoteDataClientManager{client: client,
-			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-			vol:      &vol,
-			location: appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-				cl := spltest.MockAWSS3Client{}
-				cl.Objects = mockAwsObjects[index].Objects
-				return cl
-			},
-			getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec, location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
-				c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-				return c, err
-			},
-		}
-
-		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-
-		var mockResponse spltest.MockRemoteDataClient
-		mockResponse, err = splclient.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
-		if err != nil {
-			allSuccess = false
-			continue
-		}
-		if mockAwsHandler.GotSourceAppListResponseMap == nil {
-			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
-		}
-
-		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
-	}
-
-	if allSuccess == false {
-		t.Errorf("Unable to get apps list for all the app sources")
-	}
-	method := "GetAppsList"
-	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
-}
-
-func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
-	ctx := context.TODO()
-	cr := enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.SearchHeadClusterSpec{
-			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
-				VolList: []enterpriseApi.VolumeSpec{
-					{Name: "msos_s2s3_vol",
-						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
-						Path:      "testbucket-rs-london",
-						SecretRef: "s3-secret",
-						Type:      "s3",
-						Provider:  "aws"},
-				},
-				AppSources: []enterpriseApi.AppSourceSpec{
-					{Name: "adminApps",
-						Location: "adminAppsRepo",
-						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
-							VolName: "msos_s2s3_vol",
-							Scope:   enterpriseApi.ScopeLocal},
-					},
-				},
-			},
-		},
-	}
-
-	client := spltest.NewMockClient()
-
-	// Create namespace scoped secret
-	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	splclient.RegisterRemoteDataClient(ctx, "aws")
-
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
-	Keys := []string{"admin_app.tgz"}
-	Sizes := []int64{10}
-	StorageClass := "STANDARD"
-	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
-	mockAwsHandler := spltest.MockAWSS3Handler{}
-
-	mockAwsObjects := []spltest.MockAWSS3Client{
-		{
-			Objects: []*spltest.MockRemoteDataObject{
-				{
-					Etag:         &Etags[0],
-					Key:          &Keys[0],
-					LastModified: &randomTime,
-					Size:         &Sizes[0],
-					StorageClass: &StorageClass,
-				},
-			},
-		},
-	}
-
-	appFrameworkRef := cr.Spec.AppFrameworkConfig
-
-	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
-	var vol enterpriseApi.VolumeSpec
-
-	appSource := appFrameworkRef.AppSources[0]
-	vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
-	if err != nil {
-		t.Errorf("Unable to get Volume due to error=%s", err)
-	}
-
-	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
-	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
-	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
-
-	remoteDataClientMgr := &RemoteDataClientManager{
-		client:          client,
-		cr:              &cr,
-		appFrameworkRef: &cr.Spec.AppFrameworkConfig,
-		vol:             &vol,
-		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-			// Purposefully return nil here so that we test the error scenario
-			return nil
-		},
-		getRemoteDataClient: func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-			appFrameworkRef *enterpriseApi.AppFrameworkSpec, vol *enterpriseApi.VolumeSpec,
-			location string, fn splclient.GetInitFunc) (splclient.SplunkRemoteDataClient, error) {
-			// Get the mock client
-			c, err := GetRemoteStorageClient(ctx, client, cr, appFrameworkRef, vol, location, fn)
-			return c, err
-		},
-	}
-
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
-	}
-
-	// Create empty S3 secret
-	s3Secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "s3-secret",
-			Namespace: "test",
-		},
-		Data: map[string][]byte{},
-	}
-
-	client.AddObject(&s3Secret)
-
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
-	}
-
-	s3AccessKey := []byte{'1'}
-	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
-	}
-
-	s3SecretKey := []byte{'2'}
-	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
-	}
-
-	// Create S3 secret
-	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
-
-	// This should return an error as we have initialized initFn for remoteDataClientMgr
-	// to return a nil client.
-	_, err = remoteDataClientMgr.GetAppsList(ctx)
-	if err == nil {
-		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
-	}
-
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-		// To test the error scenario, do no set the Objects member yet
-		cl := spltest.MockAWSS3Client{}
-		return cl
-	}
-
-	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
-	if err != nil {
-		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
-	}
-	if len(remoteDataClientResponse.Objects) != 0 {
-		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
-	}
-}
-
 func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	ctx := context.TODO()
 	shc := enterpriseApi.SearchHeadCluster{
@@ -1150,6 +716,9 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 			Kind: "SearchHeadCluster",
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
+			DeployerRef: corev1.ObjectReference{
+				Name: "stack1",
+			},
 			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
 				AppsRepoPollInterval: 0,
 				VolList: []enterpriseApi.VolumeSpec{
@@ -1230,7 +799,7 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 
 	_, err = ApplySearchHeadCluster(ctx, c, &shc)
 	if err != nil {
-		t.Errorf("ApplySearchHeadCluster should not have returned error here.")
+		t.Errorf("ApplySearchHeadCluster should not have returned error here. Error %v", err)
 	}
 }
 
@@ -1473,6 +1042,9 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
+			DeployerRef: corev1.ObjectReference{
+				Name: "stack1",
+			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
@@ -1792,17 +1364,18 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// update statefulset for deployer
-
-	stNamespacedName = types.NamespacedName{
-		Name:      "splunk-test-deployer",
-		Namespace: "default",
-	}
-	err = c.Get(ctx, stNamespacedName, statefulset)
-	if err != nil {
-		t.Errorf("Unexpected get searchhead cluster %v", err)
-		debug.PrintStack()
-	}
+	/*
+		// update statefulset for deployer
+		stNamespacedName = types.NamespacedName{
+			Name:      "splunk-test-deployer",
+			Namespace: "default",
+		}
+		err = c.Get(ctx, stNamespacedName, statefulset)
+		if err != nil {
+			t.Errorf("Unexpected get searchhead cluster %v", err)
+			debug.PrintStack()
+		}
+	*/
 
 	// update statefulset
 	statefulset.Status.ReadyReplicas = 1
