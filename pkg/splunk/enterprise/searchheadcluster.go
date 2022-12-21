@@ -223,6 +223,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			}
 		}
 
+		// No need of requeue after this
+		result.Requeue = false
+
 		// Reset secrets related status structs
 		cr.Status.ShcSecretChanged = []bool{}
 		cr.Status.AdminSecretChanged = []bool{}
