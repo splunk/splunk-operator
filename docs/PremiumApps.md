@@ -20,8 +20,8 @@ Currently there are only a subset of architectures that support automated deploy
 
 Supported Architectures Include:
 * Standalone Splunk Instance
-* Standalone Search Head with Indexer Cluster.
-* Search Head Cluster with Indexer Cluster.
+* Standalone Search Head with Indexer Cluster
+* Search Head Cluster with Indexer Cluster
 
 Notably, if deploying a distributed search environment, the use of indexer clustering is required to ensure that the necessary Enterprise Security specific configuration is pushed to the indexers via the Cluster Manager.
 
