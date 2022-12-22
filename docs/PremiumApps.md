@@ -1,6 +1,6 @@
 # Premium App Installation Guide
 
-The Splunk Operator currently provides support for automating the installation of Enterprise Security with support for other premium apps coming in the future. This page documents the prerequisites, installation steps, and limitations of deploying premium apps using the Splunk Operator.
+The Splunk Operator automates the installation of Enterprise Security with support for other premium apps coming in the future. This page documents the prerequisites, installation steps, and limitations of deploying premium apps using the Splunk Operator.
 
 ## Enterprise Security
 
@@ -27,14 +27,14 @@ Notably, if deploying a distributed search environment, the use of indexer clust
 
 ### What is and what is not automated by the Splunk Operator
 
-The Splunk Operator will install the necessary Enterprise Security components depending on the architecture specified by the applied CRDs.
+The Splunk Operator installs the necessary Enterprise Security components depending on the architecture specified by the applied CRDs.
 
-#### Standalone / Standalone Search Heads
-For standalones and standalone search heads the Operator will install Splunk Enterprise Security and all associated domain add-ons (DAs), and supporting add-ons (SAs).
+#### Standalone Splunk Instance/ Standalone Search Heads
+For standalone splunk instances and standalone search heads the Operator will install Splunk Enterprise Security and all associated domain add-ons (DAs), and supporting add-ons (SAs).
 
 #### Search Head Cluster
 When installing Enterprise Security in a Search Head Cluster, the Operator will perform the following tasks: 
-1) Install the splunk enterprise app in Deployer's etc/apps directory
+1) Install the splunk enterprise app in Deployer's etc/apps directory.
 2) Run the ES post install command `essinstall` that stages the Splunk Enterprise Security and all associated domain add-ons (DAs) and supporting add-ons (SAs) to the etc/shcapps.
 3) Push the shc cluster bundle from the deployer to all the SHs.
 
@@ -122,7 +122,7 @@ spec:
         secretRef: splunk-s3-secret
 ```
 
-In order to use strict mode of sslEnablment, you can enable SSL on splunkd using extraEnv variable SPLUNK_HTTP_ENABLESSL as given below: 
+In order to use strict mode of sslEnablment, you can enable SSL on splunkd using the extraEnv variable SPLUNK_HTTP_ENABLESSL as shown below: 
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -170,13 +170,13 @@ Assumption: you have downloaded ES app from https://splunkbase.splunk.com/app/26
 2. Apply the following YAML file
 2. Wait for the SHC, CM, and Indexers to be up and running. 
 3. Verify that the ES app is installed in SH. 
-3. Login to a SH, and extract the Splunk_TA_ForIndexers using the steps given here: [https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons]
+3. Login to an SH, and extract the Splunk_TA_ForIndexers using the steps given here: [https://docs.splunk.com/Documentation/ES/7.0.2/Install/InstallTechnologyAdd-ons]
 4. Place the extracted Splunk_TA_ForIndexers package in the s3 bucket folder named "es_app_indexer_ta"
 
 The operator will poll this bucket after configured appsRepoPollIntervalSeconds and install the Splunk_TA_ForIndexers also.
  
-In this example for SHC, scope=premiumApps, type=EnterpriseSecurity, sslEnablement=ignore
-and for ClusterManager, scope=cluster, type and sslEnablement are not applicable.
+Following example shows creating a Splunk deployment with a SHC, ClusterManager and a IndexerCluster.
+Note the difference between the values of "scope" property for the SHC and ClusterManager. For the SHC, scope is set to "premiumApps" whereas for the ClusterManager, scope is set to "cluster"
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -247,9 +247,9 @@ spec:
   replicas: 3
 ```
 
-#### Special consideration while using ssl enabled mode of strict in SHC
+#### Consideration when using strict mode for "sslEnablment" in SHC
 
-For using the strict mode, the following additional steps are required so that SHC has Splunk Web SSL enabled. These steps are necessary before you can install ES app with the strict mode of sslEnablement. Alternatively, if you are managing enableSplunkWebSSL setting outside of the Operator scope by pushing an app bundle through the deployer, then you can skip these steps.
+When using strict mode, the following additional steps are required so that the "splunk web ssl" is enabled for the SHC. These steps are necessary before you can install ES app with the strict mode of sslEnablement. Alternatively, if you are managing enableSplunkWebSSL setting outside of the Operator scope by pushing an app bundle through the deployer, then you can skip these steps.
 
 Steps:
 1. Create a shc app (e.g., shccoreapp.spl) that contains a local/web.conf setting with `enableSplunkWebSSL=true`
