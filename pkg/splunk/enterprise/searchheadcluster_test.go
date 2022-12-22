@@ -1364,19 +1364,6 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	/*
-		// update statefulset for deployer
-		stNamespacedName = types.NamespacedName{
-			Name:      "splunk-test-deployer",
-			Namespace: "default",
-		}
-		err = c.Get(ctx, stNamespacedName, statefulset)
-		if err != nil {
-			t.Errorf("Unexpected get searchhead cluster %v", err)
-			debug.PrintStack()
-		}
-	*/
-
 	// update statefulset
 	statefulset.Status.ReadyReplicas = 1
 	statefulset.Status.Replicas = 1
