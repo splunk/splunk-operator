@@ -201,7 +201,7 @@ spec:
         endpoint: https://s3-us-west-2.amazonaws.com
         region: us-west-2
         secretRef: splunk-s3-secret
-  ClusterManagerRef:
+  clusterManagerRef:
     name: cm-es
 ---
 apiVersion: enterprise.splunk.com/v4
@@ -236,7 +236,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  ClusterManagerRef:
+  clusterManagerRef:
     name: cm-es
   replicas: 3
 ```
