@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -464,7 +463,7 @@ func ListFilesonAzure(ctx context.Context, accountName, accountKey, containerNam
 		fmt.Println(err.Error(), "List apps on Azure failed auth:", "===== HTTP Forbidden status")
 	}
 
-	responseDownloadBody, err := ioutil.ReadAll(respDownloadWithKey.Body)
+	responseDownloadBody, err := io.ReadAll(respDownloadWithKey.Body)
 	if err != nil {
 		fmt.Println(err.Error(), "List apps on Azure, Error when reading response body")
 	}
@@ -567,7 +566,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 
 		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
-		input, err := ioutil.ReadFile(appConfFile)
+		input, err := os.ReadFile(appConfFile)
 		if err != nil {
 			log.Fatalln(err)
 			return nil, err
@@ -582,7 +581,7 @@ func DisableAppsOnAzure(ctx context.Context, downloadDir string, appFileList []s
 			}
 		}
 		output := strings.Join(lines, "\n")
-		err = ioutil.WriteFile(appConfFile, []byte(output), 0644)
+		err = os.WriteFile(appConfFile, []byte(output), 0644)
 		if err != nil {
 			log.Fatalln(err)
 		}

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"time"
@@ -144,15 +145,7 @@ func CreateMonitoringConsole(name string, namespace string, annotations map[stri
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterpriseApi.MonitoringConsole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-		},
-		Spec: enterpriseApi.MonitoringConsoleSpec{},
-	}
-	ssSpec = testutils.NewMonitoringConsole(name, namespace, "image")
+	ssSpec := testutils.NewMonitoringConsole(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 

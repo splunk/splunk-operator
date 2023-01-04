@@ -1823,7 +1823,7 @@ func (idxcPlaybookContext *IdxcPlaybookContext) setLivenessProbeLevel(ctx contex
 
 	managerSts := afwGetReleventStatefulsetByKind(ctx, idxcPlaybookContext.cr, idxcPlaybookContext.client)
 	if managerSts == nil {
-		return fmt.Errorf("Not able to retrieve Cluster Manager STS")
+		return fmt.Errorf("not able to retrieve Cluster Manager STS")
 	}
 
 	err = func() error {

@@ -236,6 +236,7 @@ func TestCreateFanOutWorker(t *testing.T) {
 	if fanOutWorker.fanOut {
 		t.Errorf("FanOut flag should be false on the new worker")
 	}
+
 	if fanOutWorker.targetPodName != "splunk-stack1-standalone-0" {
 		t.Errorf("Unexpected pod name: %v", fanOutWorker.targetPodName)
 	}

@@ -1,0 +1,10 @@
+# Entrypoint for helm automation
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+- ./kuttl/tests/helm
+parallel: 1
+timeout: 1000
+startKIND: false
+artifactsDir: kuttl-artifacts
+kindNodeCache: false

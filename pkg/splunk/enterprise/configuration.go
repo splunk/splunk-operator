@@ -36,7 +36,6 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -251,7 +250,6 @@ func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	switch *imagePullPolicy {
 	case "":
 		*imagePullPolicy = "IfNotPresent"
-		break
 	case "Always":
 		break
 	case "IfNotPresent":
@@ -596,7 +594,7 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	configMap.Data[GetStartupScriptName()] = data
 
 	// Apply the configured config map
-	_, err = controller.ApplyConfigMap(ctx, client, &configMap)
+	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
 	if err != nil {
 		return &configMap, err
 	}
@@ -995,9 +993,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	for _, envVar := range spec.ExtraEnv {
-		extraEnv = append(extraEnv, envVar)
-	}
+	extraEnv = append(extraEnv, spec.ExtraEnv...)
 
 	// append any extra variables
 	env = append(env, extraEnv...)
@@ -1141,7 +1137,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
-				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
+				*retError = fmt.Errorf("not able to access secret object = %s, reason: %s", volume.SecretRef, err)
 				return false
 			}
 
@@ -1536,7 +1532,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 	}
 
 	appDownloadVolume := splcommon.AppDownloadVolume
-	_, err = os.Stat(appDownloadVolume)
+	_, _ = os.Stat(appDownloadVolume)
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
 	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
@@ -1698,7 +1694,7 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 		if volumes[i].SecretRef != "" {
 			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volumes[i], client, cr, smartstore)
 			if err != nil {
-				return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+				return "", fmt.Errorf("unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
 			}
 
 			volumesConf = fmt.Sprintf(`%s
@@ -1779,7 +1775,7 @@ func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) st
 	}
 
 	var serverConfIni string
-	serverConfIni = fmt.Sprintf(`[cachemanager]`)
+	serverConfIni = `[cachemanager]`
 
 	emptyStanza := serverConfIni
 

@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -316,7 +315,7 @@ func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobC
 	}
 
 	// Read http response
-	responseBody, err := ioutil.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		scopedLog.Error(err, "Azure blob,Errored when reading resp body")
 		return err
@@ -404,7 +403,7 @@ func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDa
 	azureAppsRemoteData := RemoteDataListResponse{}
 
 	// Read response body
-	responseBody, err := ioutil.ReadAll(httpResponse.Body)
+	responseBody, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		scopedLog.Error(err, "Errored when reading resp body for app packages list rest call")
 		return azureAppsRemoteData, err

@@ -34,7 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -93,9 +92,9 @@ func TestApplyClusterMaster(t *testing.T) {
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
-	listOpts := []client.ListOption{
-		client.InNamespace("test"),
-		client.MatchingLabels(labels),
+	listOpts := []runtime.ListOption{
+		runtime.InNamespace("test"),
+		runtime.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
@@ -246,9 +245,9 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
-	listOpts := []client.ListOption{
-		client.InNamespace("test"),
-		client.MatchingLabels(labels),
+	listOpts := []runtime.ListOption{
+		runtime.InNamespace("test"),
+		runtime.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
@@ -1012,8 +1011,8 @@ func TestGetClusterMasterList(t *testing.T) {
 	ctx := context.TODO()
 	cm := enterpriseApiV3.ClusterMaster{}
 
-	listOpts := []client.ListOption{
-		client.InNamespace("test"),
+	listOpts := []runtime.ListOption{
+		runtime.InNamespace("test"),
 	}
 
 	client := spltest.NewMockClient()
@@ -1099,7 +1098,7 @@ func TestCheckIfMastersmartstoreConfigMapUpdatedToPod(t *testing.T) {
 func TestClusterMasterWitReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")
-	err := os.MkdirAll(newpath, os.ModePerm)
+	_ = os.MkdirAll(newpath, os.ModePerm)
 
 	// adding getapplist to fix test case
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
@@ -1212,7 +1211,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	// simulate create clustermaster instance before reconcilation
 	c.Create(ctx, clustermaster)
 
-	_, err = ApplyClusterMaster(ctx, c, clustermaster)
+	_, err := ApplyClusterMaster(ctx, c, clustermaster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermaster with app framework  %v", err)
 		debug.PrintStack()
