@@ -10,7 +10,7 @@ Installing Enterprise Security in a Kubernetes cluster with the Splunk Operator 
 
 * Ability to utilize the Splunk Operator [app framework](https://splunk.github.io/splunk-operator/AppFramework.html) method of installation.
 * Access to the [Splunk Enterprise Security](https://splunkbase.splunk.com/app/263/) app package.
-* Splunk Enterprise Security version 6.4.1 or 6.6.0 as Splunk Operator requires Splunk Enterprise 8.2.2 or later. For more information regarding Splunk Enterprise and Enterprise Security compatibility, see the [version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix).
+* Splunk Enterprise Security version compatible to the Splunk Enterprise version used in your Splunk Operator installation. For more information regarding Splunk Enterprise and Enterprise Security compatibility, see the [version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix). Note that Splunk Operator requires Splunk Enterprise 8.2.2 or later.
 * Pod resource specs that meet the [Enterprise Security hardware requirements](https://docs.splunk.com/Documentation/ES/latest/Install/DeploymentPlanning#Hardware_requirements).
 * In the following sections, aws s3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](https://splunk.github.io/splunk-operator/AppFramework.html), you can use Azure blob remote buckets also.
 
@@ -29,13 +29,13 @@ Notably, if deploying a distributed search environment, the use of indexer clust
 The Splunk Operator installs the necessary Enterprise Security components depending on the architecture specified by the applied CRDs.
 
 #### Standalone Splunk Instance/ Standalone Search Heads
-For standalone splunk instances and standalone search heads the Operator will install Splunk Enterprise Security and all associated domain add-ons (DAs), and supporting add-ons (SAs).
+For Standalone Splunk instances and standalone search heads the Operator will install Splunk Enterprise Security and all associated domain add-ons (DAs), and supporting add-ons (SAs).
 
 #### Search Head Cluster
 When installing Enterprise Security in a Search Head Cluster, the Operator will perform the following tasks: 
 1) Install the splunk enterprise app in Deployer's etc/apps directory.
 2) Run the ES post install command `essinstall` that stages the Splunk Enterprise Security and all associated domain add-ons (DAs) and supporting add-ons (SAs) to the etc/shcapps.
-3) Push the shc cluster bundle from the deployer to all the SHs.
+3) Push the Search Head Cluster bundle from the deployer to all the SHs.
 
 #### Indexer Cluster
 When installing ES in an indexer clustering environment through the Splunk Operator it is necessary to deploy the supplemental [Splunk_TA_ForIndexers](https://docs.splunk.com/Documentation/ES/latest/Install/InstallTechnologyAdd-ons#Create_the_Splunk_TA_ForIndexers_and_manage_deployment_manually) app from the ES package to the indexer cluster members. This can be achieved using the AppFramework app deployment steps using appSources scope of "cluster".
@@ -324,7 +324,7 @@ Splunk operator log:
 kubectl logs <operator_pod_name>
 ```
 
-Checking if there were any errors is ES install
+Checking if there were any errors during ES install
 
 ES post install failures:
 Log shows one or more entries with the following content:
