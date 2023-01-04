@@ -1,6 +1,6 @@
-# Premium App Installation Guide
+# Premium Apps Installation Guide
 
-The Splunk Operator automates the installation of Enterprise Security with support for other premium apps coming in the future. This page documents the prerequisites, installation steps, and limitations of deploying premium apps using the Splunk Operator.
+The Splunk Operator automates the installation of Enterprise Security with support for other premium apps coming in the future releases. This page documents the prerequisites, installation steps, troublshooting steps, and limitations of deploying premium apps using the Splunk Operator.
 
 ## Enterprise Security
 
@@ -283,7 +283,7 @@ spec:
         secretRef: splunk-s3-secret
 ```
 
-#### Installation steps
+#### Summary of Installation Steps
 
 1. Ensure that the Enterprise Security app package is present in the specified AppFramework S3 location with the correct appSources scope. Additionally, if configuring an indexer cluster, ensure that the Splunk_TA_ForIndexers app is present in the ClusterManager AppFramework S3 location with the appSources "cluster" scope.
    
