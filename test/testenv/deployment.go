@@ -44,10 +44,10 @@ import (
 
 // Deployment simply represents the deployment (standalone, clustered,...etc) we create on the testenv
 type Deployment struct {
-	name              string
-	testenv           *TestCaseEnv
-	cleanupFuncs      []cleanupFunc
-	testTimeoutInSecs time.Duration
+	name         string
+	testenv      *TestCaseEnv
+	cleanupFuncs []cleanupFunc
+	testTimeout  time.Duration
 }
 
 // GetName returns this deployment name
@@ -57,7 +57,7 @@ func (d *Deployment) GetName() string {
 
 // GetTimeout returns deployment name
 func (d *Deployment) GetTimeout() time.Duration {
-	return d.testTimeoutInSecs
+	return d.testTimeout
 }
 
 func (d *Deployment) pushCleanupFunc(fn cleanupFunc) {

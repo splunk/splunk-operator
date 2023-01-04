@@ -199,7 +199,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
 			return enterpriseApi.PhaseError, err
 		}
-		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || pod.Status.ContainerStatuses[0].Ready != true {
+		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
 			scopedLog.Error(err, "Waiting for Pod to become ready", "podName", podName)
 			return enterpriseApi.PhaseUpdating, err
 		}

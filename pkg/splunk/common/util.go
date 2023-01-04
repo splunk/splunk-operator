@@ -79,7 +79,7 @@ func ParseResourceQuantity(str string, useIfEmpty string) (resource.Quantity, er
 		var err error
 		result, err = resource.ParseQuantity(str)
 		if err != nil {
-			return result, fmt.Errorf("Invalid resource quantity \"%s\": %s", str, err)
+			return result, fmt.Errorf("invalid resource quantity \"%s\": %s", str, err)
 		}
 	}
 
@@ -178,7 +178,7 @@ func CompareByMarshall(a interface{}, b interface{}) bool {
 		return true
 	}
 
-	if bytes.Compare(aBytes, bBytes) != 0 {
+	if !bytes.Equal(aBytes, bBytes) {
 		return true
 	}
 
@@ -194,11 +194,7 @@ func CompareSortedStrings(a []string, b []string) bool {
 	sort.Strings(a)
 	sort.Strings(b)
 
-	if !reflect.DeepEqual(a, b) {
-		return true
-	}
-
-	return false
+	return !reflect.DeepEqual(a, b)
 }
 
 // GetIstioAnnotations returns a map of istio annotations for a pod template

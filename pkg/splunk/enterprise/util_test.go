@@ -468,8 +468,8 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	// prepare the configMap
 	crKindMap := make(map[string]string)
-	configMapData := fmt.Sprintf(`status: on
-	refCount: 2`)
+	configMapData := `status: on
+	refCount: 2`
 
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
@@ -990,8 +990,8 @@ func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
 	var turnOffManualChecking bool
 
 	crKindMap := make(map[string]string)
-	configMapData := fmt.Sprintf(`status: on
-refCount: 1`)
+	configMapData := `status: on
+refCount: 1`
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
@@ -1070,8 +1070,8 @@ func TestShouldCheckAppRepoStatus(t *testing.T) {
 	}
 
 	crKindMap := make(map[string]string)
-	configMapData := fmt.Sprintf(`status: on
-refCount: 1`)
+	configMapData := `status: on
+refCount: 1`
 	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
 
 	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
@@ -1152,8 +1152,7 @@ func TestValidateMonitoringConsoleRef(t *testing.T) {
 		t.Errorf("Failed to create owner reference  %s", current.GetName())
 	}
 
-	var serviceURLs []corev1.EnvVar
-	serviceURLs = []corev1.EnvVar{
+	serviceURLs := []corev1.EnvVar{
 		{
 			Name:  "A",
 			Value: "a",
@@ -1244,8 +1243,8 @@ func TestUpdateOrRemoveEntryFromConfigMapLocked(t *testing.T) {
 	crKindMap := make(map[string]string)
 
 	// now prepare the configMap and add it
-	configMapData := fmt.Sprintf(`status: off
-refCount: 1`)
+	configMapData := `status: off
+refCount: 1`
 
 	crKindMap[kind] = configMapData
 	configMapName := GetSplunkManualAppUpdateConfigMapName(stand1.GetNamespace())
@@ -1417,6 +1416,9 @@ func TestCopyFileToPod(t *testing.T) {
 
 	// Now create a file on the Pod
 	f, err := os.Create(fileOnOperator)
+	if err != nil {
+		t.Errorf("Unable to create file")
+	}
 	defer f.Close()
 	defer os.Remove(fileOnOperator)
 	if err != nil {
@@ -1429,7 +1431,6 @@ func TestCopyFileToPod(t *testing.T) {
 	if err == nil || !strings.HasPrefix(err.Error(), "relative paths are not supported for dest path") {
 		t.Errorf("Unable to reject relative destination path")
 	}
-	fileOnStandalonePod = fmt.Sprintf("/%s/appframework/splunkFwdApps/COPYING", appVolumeMntName)
 
 	podExecCommands := []string{
 		"test -d",

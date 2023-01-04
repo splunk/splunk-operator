@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"time"
@@ -145,15 +146,7 @@ func CreateSearchHeadCluster(name string, namespace string, annotations map[stri
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-		},
-		Spec: enterpriseApi.SearchHeadClusterSpec{},
-	}
-	ssSpec = testutils.NewSearchHeadCluster(name, namespace, "image")
+	ssSpec := testutils.NewSearchHeadCluster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
