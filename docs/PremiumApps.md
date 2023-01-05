@@ -118,7 +118,7 @@ spec:
         secretRef: splunk-s3-secret
 ```
 
-In order to use strict mode of sslEnablment, you can enable SSL on splunkd using the extraEnv variable SPLUNK_HTTP_ENABLESSL as shown below: 
+In order to use strict mode of sslEnablement, you can enable SSL on splunkd using the extraEnv variable SPLUNK_HTTP_ENABLESSL as shown below:
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -241,7 +241,7 @@ spec:
   replicas: 3
 ```
 
-#### Consideration when using strict mode for "sslEnablment" in SHC
+#### Consideration when using strict mode for "sslEnablement" in SHC
 
 When using strict mode, the following additional steps are required so that the "splunk web ssl" is enabled for the SHC. These steps are necessary before you can install ES app with the strict mode of sslEnablement. Alternatively, if you are managing enableSplunkWebSSL setting outside of the Operator scope by pushing an app bundle through the deployer, then you can skip these steps.
 
@@ -287,10 +287,7 @@ spec:
 
 1. Ensure that the Enterprise Security app package is present in the specified AppFramework S3 location with the correct appSources scope. Additionally, if configuring an indexer cluster, ensure that the Splunk_TA_ForIndexers app is present in the ClusterManager AppFramework S3 location with the appSources "cluster" scope.
    
-2. Apply the specified custom resource(s), the Splunk Operator will handle installation and the environment will be ready to use once all pods are in the "Ready" state. Please refer to the examples above for creating your YAML files.
-   
-**Important Considerations**
-* Installation may take upwards of 30 minutes.
+2. Apply the specified custom resource(s), the Splunk Operator will handle installation and the environment will be ready to use once all pods are in the "Ready" state which may take upto 30 minutes. Please refer to the examples above for creating your YAML files.
 
 #### Post Installation Configuration
 
@@ -337,7 +334,7 @@ Example of error when you strict mode for sslEnablement and Splunk web is not SS
 ```
 To fix this error, you have one of the following options:
 1) Enable splunk web SSL- details on the section [Special consideration while using ssl enabled mode of strict in SHC](#special-consideration-while-using-ssl-enabled-mode-of-strict-in-shc)
-2) Or, use sslEnablment=ignore
+2) Or, use sslEnablement=ignore
 
 Example of a connection timeout error:
 
