@@ -34,7 +34,7 @@ For Standalone Splunk instances and standalone search heads the Operator will in
 #### Search Head Cluster
 When installing Enterprise Security in a Search Head Cluster, the Operator will perform the following tasks: 
 1) Install the splunk enterprise app in Deployer's etc/apps directory.
-2) Run the ES post install command `essinstall` that stages the Splunk Enterprise Security and all associated domain add-ons (DAs) and supporting add-ons (SAs) to the etc/shcapps.
+2) Run the ES post install command `essinstall` that stages the Splunk Enterprise Security and all associated domain add-ons (DAs) and supporting add-ons (SAs) to the etc/shcluster/apps.
 3) Push the Search Head Cluster bundle from the deployer to all the SHs.
 
 #### Indexer Cluster
