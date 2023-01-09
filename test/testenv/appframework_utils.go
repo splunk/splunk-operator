@@ -306,8 +306,8 @@ func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployme
 	return appDeploymentInfo, err
 }
 
-// GetAppDeploymentInfoSearchHeadCluster returns AppDeploymentInfo for given Search Head Cluster, appSourceName and appName
-func GetAppDeploymentInfoSearchHeadCluster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+// GetAppDeploymentInfoDeployer returns AppDeploymentInfo for given Search Head Cluster, appSourceName and appName
+func GetAppDeploymentInfoDeployer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
 	cr := &enterpriseApi.Deployer{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
 	err := deployment.GetInstance(ctx, name, cr)
@@ -338,7 +338,7 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 	case "MonitoringConsole":
 		appDeploymentInfo, err = GetAppDeploymentInfoMonitoringConsole(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "Deployer":
-		appDeploymentInfo, err = GetAppDeploymentInfoSearchHeadCluster(ctx, deployment, testenvInstance, name, appSourceName, appName)
+		appDeploymentInfo, err = GetAppDeploymentInfoDeployer(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterManager":
 		appDeploymentInfo, err = GetAppDeploymentInfoClusterManager(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "ClusterMaster":
