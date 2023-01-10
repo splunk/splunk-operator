@@ -827,6 +827,7 @@ func cleanupApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		scopedLog.Error(err, "app pkg deletion failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod)
 		return fmt.Errorf("app pkg deletion failed.  stdOut: %s, stdErr: %s, app pkg path: %s", stdOut, stdErr, appPkgPathOnPod)
 	}
+	scopedLog.Info("App package deleted from target pod", "command", command)
 
 	// Try to remove the app package from the Operator Pod
 	tryAppPkgCleanupFromOperatorPod(rctx, worker)
@@ -857,15 +858,15 @@ func (localCtx *localScopePlaybookContext) runPlaybook(rctx context.Context) err
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
 	}
 
+	// Mark the worker for install complete status
+	markWorkerPhaseInstallationComplete(rctx, phaseInfo, worker)
+
 	// Call the API to cleanup the app
 	err = cleanupApp(rctx, localCtx, cr, phaseInfo)
 	if err != nil {
 		scopedLog.Error(err, "app package cleanup error")
 		return fmt.Errorf("app pkg cleanup failed. error %s", err.Error())
 	}
-
-	// Mark the worker for install complete status
-	markWorkerPhaseInstallationComplete(rctx, phaseInfo, worker)
 
 	return nil
 }
@@ -1426,6 +1427,7 @@ func deleteAppPkgFromOperator(ctx context.Context, worker *PipelineWorker) {
 		return
 	}
 
+	scopedLog.Info("Deleted app package from the operator", "App package path", appPkgLocalPath)
 	releaseStorage(worker.appDeployInfo.Size)
 }
 
@@ -2013,15 +2015,15 @@ func (preCtx *premiumAppScopePlaybookContext) runPlaybook(rctx context.Context) 
 		}
 	}
 
+	// Mark app package installation complete
+	markWorkerPhaseInstallationComplete(rctx, phaseInfo, worker)
+
 	// Call the API to clean up app
 	err = cleanupApp(rctx, preCtx.localCtx, cr, phaseInfo)
 	if err != nil {
 		scopedLog.Error(err, "premium app package installation error")
 		return fmt.Errorf("app pkg installation failed. error %s", err.Error())
 	}
-
-	// Mark app package installation complete
-	markWorkerPhaseInstallationComplete(rctx, phaseInfo, worker)
 
 	// Mark afw pipeline for bundle push on shc deployer
 	if cr.GetObjectKind().GroupVersionKind().Kind == "SearchHeadCluster" {
