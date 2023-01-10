@@ -10,7 +10,7 @@ Installing Enterprise Security in a Kubernetes cluster with the Splunk Operator 
 
 * Ability to utilize the Splunk Operator [app framework](https://splunk.github.io/splunk-operator/AppFramework.html) method of installation.
 * Access to the [Splunk Enterprise Security (ES)](https://splunkbase.splunk.com/app/263/) app package.
-* Splunk Enterprise Security version 7.1.0, 7.0.2, 7.0.1, 7.0.0 or 6.6.2 as ES support in Splunk Operator is starting from Splunk Operator Release 2.2.0 which requires Splunk Enterprise 9.0.3 or later. For more information regarding Splunk Enterprise and Enterprise Security compatibility, see the [version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix).
+* Splunk Enterprise Security version 7.1.0, 7.0.2, 7.0.1, 7.0.0 or 6.6.2 as ES support in Splunk Operator is starting from Splunk Operator Release 2.2.0 which requires Splunk Enterprise 9.0.3-a1 or later. For more information regarding Splunk Enterprise and Enterprise Security compatibility, see the [version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix).
 * Pod resource specs that meet the [Enterprise Security hardware requirements](https://docs.splunk.com/Documentation/ES/latest/Install/DeploymentPlanning#Hardware_requirements).
 * In the following sections, AWS S3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](https://splunk.github.io/splunk-operator/AppFramework.html), you can use Azure Blob remote buckets also.
 
@@ -248,8 +248,7 @@ When using strict mode, the following additional steps are required so that the 
 Steps:
 1. Create a SHC app (e.g., shccoreapp.spl) that contains a local/web.conf setting with `enableSplunkWebSSL=true`
 2. Place this app under security-team-apps/coreapps in your S3 bucket.
-3. Use the following YAML file as an example to deploy this app through app framework. 
-4. Note: you also need to include the extraEnv:SPLUNK_HTTP_ENABLESSL with the value true in the YAML. This step will be revised in upcoming releases so it may not be needed as you are already pushing a web.conf with ssl setting.
+3. Use the following YAML file as an example to deploy this app through app framework.
 
 Following is an example to enable Splunk Web SSL through operator on SHC:
 
