@@ -1,4 +1,4 @@
-# Image to use for Splunk pod containers 
+# Image to use for Splunk pod containers
 # Overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variable in Splunk Operator manager container
 image:
   repository: ""
@@ -12,7 +12,7 @@ splunk-operator:
 
 sva:
 
-  # Single Server Deployment (S1) 
+  # Single Server Deployment (S1)
   # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=9
   s1:
 
@@ -52,7 +52,7 @@ sva:
       # - name: idx2
       #   site: site2
       #   zone: us-west-1c
-        
+
     searchHeadClusters: []
       # - name: shc1
       #   site: site2
@@ -62,19 +62,19 @@ sva:
 # Namespace is optional, set if the resource exists outside of the release namespace
 existingClusterManager: {}
   # name:
-  # namespace: 
+  # namespace:
 
 # Set name reference if MonitoringConsole is already deployed
 # Namespace is optional, set if the resource exists outside of the release namespace
 existingMonitoringConsole: {}
-  # name: 
-  # namespace: 
+  # name:
+  # namespace:
 
 # Set name reference if LicenseManager is already deployed
 # Namespace is optional, set if the resource exists outside of the release namespace
 existingLicenseManager: {}
-  # name: 
-  # namespace: 
+  # name:
+  # namespace:
 
 # Configure a Splunk Cluster Manager instance
 clusterManager:
@@ -114,7 +114,7 @@ clusterManager:
     #     endpoint: https://s3-us-west-2.amazonaws.com
     #     region: us-west-2
     #     secretRef: s3-secret
-    
+
   # Splunk Smartstore configuration
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/SmartStore.md
   smartstore: {}
@@ -134,7 +134,7 @@ clusterManager:
     #   - name: <index_name_3>
     #     remotePath: $_index_name
     #     volumeName: <remote_volume_name>
-  
+
   # List volumes to be mounted in all pod containers
   # reference: https://kubernetes.io/docs/concepts/storage/volumes/
   volumes: []
@@ -145,7 +145,7 @@ clusterManager:
 
   # Full path or URL for one or more default.yml files, separated by commas
   defaultsUrl: ""
-  
+
   # Specify Splunk default.yaml to override intial environment config
   defaults: {}
     ## Example: Deploy a multi-site cluster manager
@@ -225,6 +225,8 @@ clusterManager:
     #         values:
     #         - zone-1a
 
+
+
 indexerCluster:
 
   enabled: false
@@ -297,6 +299,11 @@ searchHeadCluster:
     # appSources:
     #   - name:
     #     location:
+    #     scope: # options (local|cluster|premiumApps) default local
+    #      premiumAppsProps: #only if scope is set to premiumApps
+    #        type: enterpriseSecurity
+    #        esDefaults:
+    #          sslEnablement: # options are ignore, strict, auto. default value is strict
     # volumes:
     #   - name:
     #     storageType:
@@ -435,6 +442,11 @@ licenseManager:
     # appSources:
     #   - name:
     #     location:
+    #     scope: # options (local|cluster|premiumApps) default local
+    #      premiumAppsProps: #only if scope is set to premiumApps
+    #        type: enterpriseSecurity
+    #        esDefaults:
+    #          sslEnablement: # options are ignore, strict, auto. default value is strict
     # volumes:
     #   - name:
     #     storageType:
@@ -461,8 +473,8 @@ licenseManager:
   defaultsUrlApps: ""
 
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   livenessInitialDelaySeconds: 300
 
@@ -484,12 +496,12 @@ licenseManager:
     #   cpu: "4"
     # limits:
     #   memory: "12Gi"
-    #   cpu: "24"  
+    #   cpu: "24"
 
   serviceAccount: ""
 
   tolerations: []
-  
+
   affinity: {}
 
 standalone:
@@ -533,7 +545,6 @@ standalone:
     #     path:
     #     endpoint:
     #     secretRef:
-  
   volumes: []
 
   licenseUrl: ""
@@ -545,8 +556,8 @@ standalone:
   defaultsUrlApps: ""
 
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   livenessInitialDelaySeconds: 300
 
@@ -573,5 +584,5 @@ standalone:
   serviceAccount: ""
 
   tolerations: []
-  
+
   affinity: {}

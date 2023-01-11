@@ -231,3 +231,18 @@ func TestGetSetTargetPodName(t *testing.T) {
 		t.Errorf("invalid targetPodName, expected: %s, got: %s", podName, gotPodName)
 	}
 }
+
+func TestSuppressHarmlessErrorMessages(t *testing.T) {
+	var finalStr string
+
+	// Create string containing all suppression strings
+	for _, replStr := range splunkCliSuppressionStrings {
+		finalStr += replStr
+	}
+
+	// Test replacement of strings
+	suppressHarmlessErrorMessages(&finalStr)
+	if finalStr != "" {
+		t.Errorf("Known messages did not get suppressed.")
+	}
+}
