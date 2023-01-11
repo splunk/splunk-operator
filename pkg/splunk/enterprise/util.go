@@ -167,11 +167,19 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 
 		// Do we need to handle if IAM_ROLE is set in the secret as well?
 		if accessKeyID == "" {
-			err = fmt.Errorf("accessKey missing")
+			if vol.Provider == "azure" {				
+				err = fmt.Errorf("data['azure_sa_name'] missing")
+			} else {
+				err = fmt.Errorf("data['s3_access_key'] missing")
+			}
 			return remoteDataClient, err
 		}
 		if secretAccessKey == "" {
-			err = fmt.Errorf("s3 Secret Key is missing")
+			if vol.Provider == "azure" {				
+				err = fmt.Errorf("data['azure_sa_name'] missing")
+			} else {
+				err = fmt.Errorf("data['s3_secret_key'] missing")
+			}
 			return remoteDataClient, err
 		}
 	}
