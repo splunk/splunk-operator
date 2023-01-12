@@ -366,3 +366,5 @@ Common issues that may be encountered are :
 * Need to deploy add-ons to forwarders manually (or through your own methods).
 
 * Need to deploy Stream App Manually
+
+* If the version of the ES app used is 7.1 or higher, [Behavioral Analytics Service](https://docs.splunk.com/Documentation/ES/7.1.0/User/BehavioralAnalyticsIntro#Provision_behavioral_analytics_service_with_Splunk_Enterprise_Security_7.1.0_or_higher) is unavailable for containerized Splunk deployments(supported for cloud releases only)
