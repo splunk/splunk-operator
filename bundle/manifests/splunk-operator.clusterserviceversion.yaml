@@ -800,14 +800,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:9.0.2
+                  value: docker.io/splunk/splunk:9.0.3-a1
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:2.1.1
+                image: docker.io/splunk/splunk-operator:2.2.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -912,6 +912,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: docker.io/splunk/splunk:9.0.2
+  - image: docker.io/splunk/splunk:9.0.3-a1
     name: splunk-enterprise
-  version: 2.1.1
+  replaces: splunk-operator.v2.0.0
+  version: 2.1.0
