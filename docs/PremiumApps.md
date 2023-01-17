@@ -1,6 +1,6 @@
 # Premium Apps Installation Guide
 
-The Splunk Operator automates the installation of Enterprise Security(ES) with support for other premium apps coming in the future releases. This page documents the prerequisites, installation steps, troublshooting steps, and limitations of deploying premium apps using the Splunk Operator.
+The Splunk Operator automates the installation of Enterprise Security (ES) with support for other premium apps coming in the future releases. This page documents the prerequisites, installation steps, troublshooting steps, and limitations of deploying premium apps using the Splunk Operator.
 
 ## Enterprise Security
 
