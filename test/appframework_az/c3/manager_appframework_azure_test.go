@@ -3197,15 +3197,15 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("integration, c3: can deploy a C3 SVA and a Standalone, then add that Standalone as a Search Head to the cluster", func() {
 
 			/* Test Steps
 			   ################## SETUP ###################
 			   * Deploy C3 CRD
-			   * Deploy Standalone with clusterMasterRef
+			   * Deploy Standalone with ClusterManagerRef
 			   ############# VERIFICATION #################
-			   * Verify clusterMasterRef is present in Standalone's server.conf file
+			   * Verify ClusterManagerRef is present in Standalone's server.conf file
 			*/
 			//################## SETUP ####################
 			// Deploy C3 CRD
@@ -3214,23 +3214,23 @@ var _ = Describe("c3appfw test", func() {
 			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, false, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
-			// Create spec with clusterMasterRef for Standalone
+			// Create spec with ClusterManagerRef for Standalone
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
 					},
 					Volumes: []corev1.Volume{},
-					ClusterMasterRef: corev1.ObjectReference{
+					ClusterManagerRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},
 				},
 			}
 
-			// Deploy Standalone with clusterMasterRef
-			testcaseEnvInst.Log.Info("Deploy Standalone with clusterMasterRef")
+			// Deploy Standalone with ClusterManagerRef
+			testcaseEnvInst.Log.Info("Deploy Standalone with ClusterManagerRef")
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
-			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with clusterMasterRef")
+			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with ClusterManagerRef")
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
