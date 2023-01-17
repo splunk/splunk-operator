@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
@@ -1353,6 +1354,16 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
 			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
 			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			if err != nil {
+				for i := 1; i < 10; i++ {
+					_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+					if err == nil {
+						continue
+					} else {
+						time.Sleep(1 * time.Second)
+					}
+				}
+			}
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 
 			// Verify App installation is in progress on Standalone
