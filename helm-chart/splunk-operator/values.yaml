@@ -8,7 +8,7 @@ image:
 kubeRbacProxy:
 
   # Specify kube-rbac-proxy image
-  image: 
+  image:
     repository: gcr.io/kubebuilder/kube-rbac-proxy
     pullPolicy: IfNotPresent
     tag: "v0.11.0"
@@ -23,7 +23,7 @@ kubeRbacProxy:
       memory: 64Mi
 
 # Splunk Operator configurations
-splunkOperator: 
+splunkOperator:
 
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator

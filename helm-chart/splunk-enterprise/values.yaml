@@ -238,7 +238,7 @@ indexerCluster:
   additionalLabels: {}
 
   replicaCount: 1
-  
+
   volumes: []
 
   licenseUrl: ""
@@ -248,8 +248,8 @@ indexerCluster:
   defaults: {}
 
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   livenessInitialDelaySeconds: 300
 
@@ -276,7 +276,7 @@ indexerCluster:
   serviceAccount: ""
 
   tolerations: []
-  
+ 
   affinity: {}
 
 searchHeadCluster:
@@ -312,9 +312,9 @@ searchHeadCluster:
     #     endpoint:
     #     region:
     #     secretRef:
-  
+ 
   volumes: []
-  
+ 
   licenseUrl: ""
 
   defaultsUrl: ""
