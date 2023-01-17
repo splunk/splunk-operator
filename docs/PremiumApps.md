@@ -12,8 +12,8 @@ The Splunk Operator automates the installation of Enterprise Security (ES) with 
 * You need to make sure pod resource specs meet the [ES hardware requirements](https://docs.splunk.com/Documentation/ES/latest/Install/DeploymentPlanning#Hardware_requirements).
 * In the following sections, AWS S3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](https://splunk.github.io/splunk-operator/AppFramework.html), you can use Azure Blob remote buckets also.
 * You need to deploy add-ons to forwarders manually (or through your own methods).
-* You need to deploy Stream App Manually
-* For ES version 7.1 or higher, [Behavioral Analytics Service](https://docs.splunk.com/Documentation/ES/7.1.0/User/BehavioralAnalyticsIntro#Provision_behavioral_analytics_service_with_Splunk_Enterprise_Security_7.1.0_or_higher) is unavailable for containerized Splunk deployments(supported for cloud releases only)
+* You need to deploy Stream App manually
+* For ES version 7.1 or higher, [Behavioral Analytics Service](https://docs.splunk.com/Documentation/ES/7.1.0/User/BehavioralAnalyticsIntro#Provision_behavioral_analytics_service_with_Splunk_Enterprise_Security_7.1.0_or_higher) is unavailable for containerized Splunk deployments (supported for cloud releases only)
 
 ### Supported Deployment Types
 
@@ -23,7 +23,7 @@ The architectures that support automated deployment of ES by using the Splunk Op
 * Standalone Search Head with Indexer Cluster
 * Search Head Cluster with Indexer Cluster
 
-Notably, if deploying a distributed search environment, the use of indexer clustering is required to ensure that the necessary ES specific configuration is pushed to the indexers via the Cluster Manager.
+Notably, if deploying a distributed search environment, the use of indexer clustering is required to ensure that the necessary ES-specific configuration is pushed to the indexers via the Cluster Manager.
 
 ### What is and what is not automated by the Splunk Operator
 
