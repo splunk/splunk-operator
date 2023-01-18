@@ -119,7 +119,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.25.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.1.0
+  name: splunk-operator.v2.2.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
