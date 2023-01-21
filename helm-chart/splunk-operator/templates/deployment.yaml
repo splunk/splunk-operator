@@ -68,7 +68,7 @@ spec:
 {{- end }}
           env:
           - name: WATCH_NAMESPACE
-{{- if .Values.splunkOperator.clusterWideAccess  }}          
+{{- if .Values.splunkOperator.clusterWideAccess  }}
             value: {{ .Values.splunkOperator.watchNamespaces }}
 {{- else }}
             value: {{ .Release.Namespace }}
@@ -77,11 +77,11 @@ spec:
           - name: POD_NAME
             valueFrom:
               fieldRef:
-                fieldPath: metadata.name          
+                fieldPath: metadata.name
           - name: OPERATOR_NAME
-            value: {{ include "splunk-operator.operator.fullname" . }}     
+            value: {{ include "splunk-operator.operator.fullname" . }}
           - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-            value: "{{ .Values.image.repository }}"   
+            value: "{{ .Values.image.repository }}"
           ports:
             {{- range .Values.splunkOperator.service.ports }}
             - containerPort: {{ .port }}
@@ -108,7 +108,7 @@ spec:
 {{- toYaml . | nindent 8 }}
 {{- end }}
       terminationGracePeriodSeconds: {{ .Values.splunkOperator.terminationGracePeriodSeconds }}
-{{- with .Values.splunkOperator.volumes }}      
+{{- with .Values.splunkOperator.volumes }}
       volumes:
 {{- toYaml . | nindent 8 }}
 {{- end }}

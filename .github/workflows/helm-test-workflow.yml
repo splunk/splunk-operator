@@ -14,6 +14,7 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
+    - uses: chrisdickinson/setup-yq@latest
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -68,6 +69,7 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: "helm"
+      HELM_REPO_PATH: "../../../../helm-chart"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -164,7 +166,7 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run helm test
         env:
-          KUTTL_SPLUNK_ENT_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }} 
+          KUTTL_SPLUNK_ENT_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           KUTTL_SPLUNK_OPERATOR_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA 
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml

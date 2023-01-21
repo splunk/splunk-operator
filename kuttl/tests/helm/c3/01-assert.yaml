@@ -11,7 +11,7 @@ status:
 # check if stateful sets are created
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: 
+metadata:
   name: splunk-cm-cluster-manager
 status:
   replicas: 1
@@ -20,7 +20,7 @@ status:
 # check if secret object are created
 apiVersion: v1
 kind: Secret
-metadata: 
+metadata:
   name: splunk-cm-cluster-manager-secret-v1
 
 ---
@@ -36,7 +36,7 @@ status:
 # check for stateful set and replicas as configured
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: 
+metadata:
   name: splunk-idxc-indexer
 status:
   replicas: 3
@@ -45,7 +45,7 @@ status:
 # check if secret object are created
 apiVersion: v1
 kind: Secret
-metadata: 
+metadata:
   name: splunk-idxc-indexer-secret-v1
 
 ---
@@ -61,21 +61,21 @@ status:
 # check if secret object are created
 apiVersion: v1
 kind: Secret
-metadata: 
+metadata:
   name: splunk-shc-deployer-secret-v1
 
 ---
 # check if secret object are created
 apiVersion: v1
 kind: Secret
-metadata: 
+metadata:
   name: splunk-shc-search-head-secret-v1
 
 ---
 # check for stateful set and replicas as configured
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: 
+metadata:
   name: splunk-shc-search-head
 status:
   replicas: 3
@@ -84,7 +84,7 @@ status:
 # check for statefull set
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: 
+metadata:
   name: splunk-shc-deployer
 status:
   replicas: 1
