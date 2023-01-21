@@ -15,6 +15,22 @@
 
 package util
 
+// Suppression strings for certain splunk CLI commands
+// Splunk ES app has a lot of info strings marked as stderr, ignore them
+var splunkCliSuppressionStrings = []string{
+	"WARNING: Server Certificate Hostname Validation is disabled. Please see server.conf/[sslConfig]/cliVerifyServerName for details.\n",
+	"INFO: Initialization complete\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Installation complete\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Enabled SSL in system namespace\nINFO: Initialization complete\n",
+	"INFO: Enabled SSL in system namespace\nINFO: Installation complete\n",
+	"INFO: Initialization complete, please restart Splunk\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Installation complete, please restart Splunk\nINFO: SSL enablement set to ignore, continuing...\n",
+	"INFO: Initialization complete\n",
+	"INFO: Installation complete\n",
+	"INFO: Init complete\n",
+	"App \"SplunkEnterpriseSecuritySuite\" already exists; use the \"update\" argument to install anyway\n",
+}
+
 const (
 	// Less than zero version error
 	lessThanOrEqualToZeroVersionError = "versions shouldn't be <= 0"

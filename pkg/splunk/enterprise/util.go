@@ -1931,7 +1931,7 @@ func checkAndMigrateAppDeployStatus(ctx context.Context, client splcommon.Contro
 	// If needed, Migrate the app framework status
 	if isAppFrameworkMigrationNeeded(afwStatusContext) {
 		// Spec validation updates the status with some of the defaults, which may not be there in older app framework versions
-		err := ValidateAppFrameworkSpec(ctx, afwConf, afwStatusContext, isLocalScope)
+		err := ValidateAppFrameworkSpec(ctx, afwConf, afwStatusContext, isLocalScope, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}

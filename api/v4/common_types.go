@@ -52,6 +52,19 @@ const (
 	ScopeLocal                = "local"
 	ScopeCluster              = "cluster"
 	ScopeClusterWithPreConfig = "clusterWithPreConfig"
+	ScopePremiumApps          = "premiumApps"
+)
+
+// Values to represent the properties for the scope premiumApps
+const (
+	PremiumAppsTypeEs = "enterpriseSecurity"
+)
+
+// Values to represent the defaults of enterprise security app
+const (
+	SslEnablementStrict = "strict"
+	SslEnablementAuto   = "auto"
+	SslEnablementIgnore = "ignore"
 )
 
 // AppDeploymentStatus represents the status of an App on the Pod
@@ -348,9 +361,40 @@ type AppSourceDefaultSpec struct {
 	// +optional
 	VolName string `json:"volumeName,omitempty"`
 
-	// Scope of the App deployment: cluster, clusterWithPreConfig, local. Scope determines whether the App(s) is/are installed locally or cluster-wide
+	// Scope of the App deployment: cluster, clusterWithPreConfig, local, premiumApps. Scope determines whether the App(s) is/are installed locally, cluster-wide or its a premium app
 	// +optional
 	Scope string `json:"scope,omitempty"`
+
+	// Properties for premium apps, fill in when scope premiumApps is chosen
+	// +optional
+	PremiumAppsProps PremiumAppsProps `json:"premiumAppsProps,omitempty"`
+}
+
+// PremiumAppsProps represents properties for premium apps such as ES
+type PremiumAppsProps struct {
+	// Type: enterpriseSecurity for now, can accomodate itsi etc.. later
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Enterpreise Security App defaults
+	// +optional
+	EsDefaults EsDefaults `json:"esDefaults,omitempty"`
+}
+
+// EsDefaults captures defaults for the Enterprise Security App
+type EsDefaults struct {
+	// Sets the sslEnablement value for ES app installation
+	//     strict: Ensure that SSL is enabled
+	//             in the web.conf configuration file to use
+	//             this mode. Otherwise, the installer exists
+	//	     	   with an error. This is the DEFAULT mode used
+	//             by the operator if left empty.
+	//     auto: Enables SSL in the etc/system/local/web.conf
+	//           configuration file.
+	//     ignore: Ignores whether SSL is enabled or disabled.
+	//
+	// +optional
+	SslEnablement string `json:"sslEnablement,omitempty"`
 }
 
 // AppSourceSpec defines list of App package (*.spl, *.tgz) locations on remote volumes
@@ -403,6 +447,8 @@ type AppFrameworkSpec struct {
 
 // AppDeploymentInfo represents a single App deployment information
 type AppDeploymentInfo struct {
+	// AppName is the name of app archive retrieved from the
+	// remote bucket e.g app1.tgz or app2.spl
 	AppName          string              `json:"appName"`
 	LastModifiedTime string              `json:"lastModifiedTime,omitempty"`
 	ObjectHash       string              `json:"objectHash"`
@@ -410,6 +456,11 @@ type AppDeploymentInfo struct {
 	Size             uint64              `json:"Size,omitempty"`
 	RepoState        AppRepoState        `json:"repoState"`
 	DeployStatus     AppDeploymentStatus `json:"deployStatus"`
+
+	// AppPackageTopFolder is the name of top folder when we untar the
+	// app archive, which is also assumed to be same as the name of the
+	// app after it is installed.
+	AppPackageTopFolder string `json:"appPackageTopFolder"`
 
 	// App phase info to track download, copy and install
 	PhaseInfo PhaseInfo `json:"phaseInfo,omitempty"`
