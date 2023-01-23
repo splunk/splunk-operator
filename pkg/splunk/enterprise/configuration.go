@@ -1063,6 +1063,10 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		if derivedProbe.PeriodSeconds == 0 {
 			derivedProbe.PeriodSeconds = defaultProbe.PeriodSeconds
 		}
+		// CSPL-2242 - Default value for FailureThreshold not being set forces unnecessary statefulSet updates
+		if derivedProbe.FailureThreshold == 0 {
+			derivedProbe.FailureThreshold = defaultProbe.FailureThreshold
+		}
 		// Always use defaultProbe Exec. At this time customer supported scripts are not supported.
 		derivedProbe.Exec = defaultProbe.Exec
 		return &derivedProbe
