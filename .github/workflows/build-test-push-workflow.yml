@@ -229,7 +229,12 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml    
+      - name: Setup Kustomize
+        run: |
+          sudo snap install kustomize
+          mkdir -p ./bin
+          cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
         run: |
