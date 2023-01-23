@@ -211,17 +211,27 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 				result = true
 			}
 
+			// check probes
 			if hasProbeChanged(current.Containers[idx].LivenessProbe, revised.Containers[idx].LivenessProbe) {
+				scopedLog.Info("Pod Container Liveness Probe differ",
+					"current", current.Containers[idx].LivenessProbe,
+					"revised", revised.Containers[idx].LivenessProbe)
 				current.Containers[idx].LivenessProbe = revised.Containers[idx].LivenessProbe
 				result = true
 			}
 
 			if hasProbeChanged(current.Containers[idx].ReadinessProbe, revised.Containers[idx].ReadinessProbe) {
+				scopedLog.Info("Pod Container ReadinessProbe Probe differ",
+					"current", current.Containers[idx].ReadinessProbe,
+					"revised", revised.Containers[idx].ReadinessProbe)
 				current.Containers[idx].ReadinessProbe = revised.Containers[idx].ReadinessProbe
 				result = true
 			}
 
 			if hasProbeChanged(current.Containers[idx].StartupProbe, revised.Containers[idx].StartupProbe) {
+				scopedLog.Info("Pod Container StartupProbe Probe differ",
+					"current", current.Containers[idx].StartupProbe,
+					"revised", revised.Containers[idx].StartupProbe)
 				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
 				result = true
 			}
