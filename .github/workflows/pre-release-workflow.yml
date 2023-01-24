@@ -180,9 +180,6 @@ jobs:
        helm package helm-chart/splunk-operator
        cp splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
        mv splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz helm-chart/splunk-enterprise/charts
-       rm docs/splunk-operator-${{ github.event.inputs.old_enterprise_version }}.tgz
-       rm helm-chart/splunk-enterprise/charts/splunk-operator-${{ github.event.inputs.old_enterprise_version }}.tgz
-       rm docs/splunk-enterprise-${{ github.event.inputs.old_enterprise_version }}.tgz
        helm package helm-chart/splunk-enterprise
        mv splunk-enterprise-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
        helm repo index --url https://splunk.github.io/splunk-operator/ docs/
