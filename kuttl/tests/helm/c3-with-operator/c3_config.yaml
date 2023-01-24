@@ -1,0 +1,17 @@
+splunk-operator:
+  enabled: true
+  splunkOperator:
+    clusterWideAccess: false
+
+sva:
+    c3:
+      enabled: true
+
+      clusterManager:
+        name: cm
+
+      indexerClusters:
+        - name: idxc
+
+      searchHeadClusters:
+        - name: shc
