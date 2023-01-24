@@ -1,0 +1,11 @@
+---
+apiVersion: enterprise.splunk.com/v3
+kind: Standalone
+name: stdln
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+
