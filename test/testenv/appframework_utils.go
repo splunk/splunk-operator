@@ -167,11 +167,20 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string) (string, error) {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
-		return "", err
+	var stdout, stderr string
+	var err error
+	for i := 0; i < 10; i++ {
+		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		if err == nil {
+			continue
+		} else if err != nil && i == 9 {
+			logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
+			return "", err
+		} else {
+			time.Sleep(1 * time.Second)
+		}
 	}
+
 	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	return strings.TrimSuffix(stdout, "\n"), nil
