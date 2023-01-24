@@ -204,6 +204,11 @@ jobs:
           cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
           inlineScript: |
             kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+      - name: Setup Kustomize
+        run: |
+          sudo snap install kustomize
+          mkdir -p ./bin
+          cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
         run: |
             make int-test
