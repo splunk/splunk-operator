@@ -4,7 +4,7 @@
 
 * This is the 2.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
 
-* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a1 image with it
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a2 image with it
 
 * CSPL-1493 - Added support to automate the installation of the [Enterprise Security (ES) App](https://splunkbase.splunk.com/app/263) via appFramework phase 3
 

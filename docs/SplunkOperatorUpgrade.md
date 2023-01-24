@@ -101,7 +101,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: WATCH_NAMESPACE
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.3-a1
+          value: splunk/splunk:9.0.3-a2
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -136,7 +136,7 @@ To verify that a new Splunk Enterprise Docker image was applied to a pod, you ca
 ​
 ```bash
 kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
-image: splunk/splunk:9.0.3-a1
+image: splunk/splunk:9.0.3-a2
 imagePullPolicy: IfNotPresent
 ```
 ## Splunk Enterprise Cluster upgrade example
