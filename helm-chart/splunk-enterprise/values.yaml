@@ -166,8 +166,8 @@ clusterManager:
 
   # List additional environment variables to passed to the Splunk instance container
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   # Delay in seconds before probing liveness
   # refernece: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
@@ -201,7 +201,7 @@ clusterManager:
     #   cpu: "4"
     # limits:
     #   memory: "12Gi"
-    #   cpu: "24"  
+    #   cpu: "24"
 
   # Specify a service account used by the Splunk instance pods
   # Default uses the Default Service Account to access the API server
@@ -238,7 +238,7 @@ indexerCluster:
   additionalLabels: {}
 
   replicaCount: 1
-  
+
   volumes: []
 
   licenseUrl: ""
@@ -248,8 +248,8 @@ indexerCluster:
   defaults: {}
 
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   livenessInitialDelaySeconds: 300
 
@@ -276,7 +276,7 @@ indexerCluster:
   serviceAccount: ""
 
   tolerations: []
-  
+ 
   affinity: {}
 
 searchHeadCluster:
@@ -312,9 +312,9 @@ searchHeadCluster:
     #     endpoint:
     #     region:
     #     secretRef:
-  
+ 
   volumes: []
-  
+ 
   licenseUrl: ""
 
   defaultsUrl: ""

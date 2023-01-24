@@ -1,0 +1,18 @@
+splunk-operator:
+  enabled: true
+  operator:
+    serviceAccountName: helm-service-account
+  splunkOperator:
+    clusterWideAccess: false
+
+    volumes:
+    - name: app-staging
+      emptyDir:
+        sizeLimit: 10G
+
+    volumeMounts:
+    - name: app-staging
+      mountPath: /opt/splunk/appframework/
+
+standalone:
+  enabled: true

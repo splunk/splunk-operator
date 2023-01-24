@@ -11,7 +11,7 @@ status:
 # check for stateful sets and replicas updated
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: 
+metadata:
   name: splunk-idxc-indexer
 status:
   replicas: 4

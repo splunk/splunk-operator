@@ -1,0 +1,77 @@
+splunk-operator:
+  enabled: true
+  splunkOperator:
+    clusterWideAccess: false
+
+sva:
+  c3:
+    enabled: true
+    clusterManager:
+      name: cm
+    indexerClusters:
+      - name: idxc
+    searchHeadClusters:
+      - name: shc
+
+indexerClusters:
+  replicas: 3
+clusterManager:
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: apps
+        location: replaced-by-kuttl-test-case
+        scope: cluster
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: replaced-by-kuttl-test-case
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: replaced-by-kuttl-test-case
+        secretRef: s3-secret
+  smartstore:
+    defaults:
+      volumeName: replaced-by-kuttl-test-case
+    indexes:
+      - name: main
+        remotePath: $_index_name
+        volumeName: replaced-by-kuttl-test-case
+      - name: cloudwatch
+        remotePath: $_index_name
+        volumeName: replaced-by-kuttl-test-case
+    volumes:
+      - name: replaced-by-kuttl-test-case
+        path: replaced-by-kuttl-test-case/smartstore
+        endpoint: https://s3-us-west-2.amazonaws.com
+        secretRef: s3-secret
+    cacheManager:
+      hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
+      hotlistRecencySecs: 86400 # 24 hours - splunk defaults
+      evictionPadding: 1024 # 1Gi
+      evictionPolicy: lru # splunk defaults
+      maxCacheSize: 0 # Eviction will be based on the sum of 'minFreeSpace (5Gi)' and 'eviction_padding'
+      maxConcurrentDownloads: 8 # splunk defaults
+      maxConcurrentUploads: 8 # splunk defaults
+
+searchHeadCluster:
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: apps
+        location: replaced-by-kuttl-test-case
+        scope: cluster
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: replaced-by-kuttl-test-case
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: replaced-by-kuttl-test-case
+        secretRef: s3-secret
