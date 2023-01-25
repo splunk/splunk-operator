@@ -7,14 +7,3 @@ metadata:
 status:
   readyReplicas: 1
   availableReplicas: 1
-
----
-# assert for splunk operator pod to be ready
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    control-plane: controller-manager
-status:
-  running: true
-  ready: true

@@ -22,4 +22,28 @@ rules:
   - indexerclusters/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-indexercluster-editor-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - indexerclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - indexerclusters/status
+  verbs:
+  - get
 {{- end }}

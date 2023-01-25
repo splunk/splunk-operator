@@ -1,5 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - command: helm upgrade --set standalone.replicaCount=2 --reuse-values splunk-stdl splunk/splunk-enterprise
+  - command: helm upgrade --set standalone.replicaCount=2 --reuse-values splunk-stdl $HELM_REPO_PATH/splunk-enterprise
     namespaced: true
