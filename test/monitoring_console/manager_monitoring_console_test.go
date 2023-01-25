@@ -16,9 +16,10 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
+	"time"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -444,7 +445,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			deployerName := deployment.GetName()
+			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -455,6 +457,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
@@ -513,7 +518,7 @@ var _ = Describe("Monitoring Console test", func() {
 			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed to scale Indxer Cluster")
 
-			// Ensure Indxer cluster scales up and go to ScalingUp phase
+			// Ensure Indexer cluster scales up and go to ScalingUp phase
 			testenv.VerifyIndexerClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseScalingUp, idxcName)
 
 			// get revision number of the resource
@@ -539,6 +544,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure Indexer cluster go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Search Head Cluster go to Ready Phase
 			// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
@@ -619,7 +627,8 @@ var _ = Describe("Monitoring Console test", func() {
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName)
+			deployerName := deployment.GetName()
+			err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, true, mcName, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -630,6 +639,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
@@ -749,6 +761,9 @@ var _ = Describe("Monitoring Console test", func() {
 			// Ensure Search Head Cluster go to Ready Phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
+
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
@@ -773,7 +788,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC TWO after SHC Reconfig")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
 
-			// ############################  VERIFICATOIN FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
+			// ############################  VERIFICATION FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 
 			// Verify MC ONE is Ready and stays in ready state before running verfications
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc, testcaseEnvInst)
@@ -825,7 +840,8 @@ var _ = Describe("Monitoring Console test", func() {
 			defaultIndexerReplicas := 1
 			siteCount := 3
 			mcName := deployment.GetName()
-			err := deployment.DeployMultisiteClusterWithMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, mcName, true)
+			deployerName := deployment.GetName()
+			err := deployment.DeployMultisiteClusterWithMonitoringConsole(ctx, deployment.GetName(), defaultIndexerReplicas, siteCount, mcName, true, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -839,6 +855,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Check Cluster Manager in Monitoring Console Config Map
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, []string{fmt.Sprintf(testenv.ClusterManagerServiceName, deployment.GetName())}, splcommon.ClusterManagerURL, mcName, true)

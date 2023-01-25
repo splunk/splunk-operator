@@ -306,25 +306,25 @@ func GetAppDeploymentInfoClusterMaster(ctx context.Context, deployment *Deployme
 	return appDeploymentInfo, err
 }
 
-// GetAppDeploymentInfoDeployer returns AppDeploymentInfo for given Search Head Cluster, appSourceName and appName
+// GetAppDeploymentInfoDeployer returns AppDeploymentInfo for given deployer, appSourceName and appName
 func GetAppDeploymentInfoDeployer(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
-	cr := &enterpriseApi.Deployer{}
+	deployer := &enterpriseApi.Deployer{}
 	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
-	err := deployment.GetInstance(ctx, name, cr)
+	err := deployment.GetInstance(ctx, name, deployer)
 	if err != nil {
 		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
 		return appDeploymentInfo, err
 	}
-	appInfoList := cr.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	appInfoList := deployer.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
 	for _, appInfo := range appInfoList {
-		testenvInstance.Log.Info("Checking Search Head Cluster AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
+		testenvInstance.Log.Info("Checking Deployer AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Deployer Name", name, "AppDeploymentInfo", appInfo)
 		if strings.Contains(appName, appInfo.AppName) {
-			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "AppDeploymentInfo", appInfo)
+			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Deployer Name", name, "AppDeploymentInfo", appInfo)
 			appDeploymentInfo = appInfo
 			return appDeploymentInfo, nil
 		}
 	}
-	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Search Head Name Name", name, "App Info List", appInfoList)
+	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Deployer Name", name, "App Info List", appInfoList)
 	return appDeploymentInfo, err
 }
 

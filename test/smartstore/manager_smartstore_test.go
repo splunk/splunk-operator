@@ -172,7 +172,8 @@ var _ = Describe("Smartstore test", func() {
 			}
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
+			deployerName := deployment.GetName()
+			err := deployment.DeployMultisiteClusterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -186,6 +187,9 @@ var _ = Describe("Smartstore test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC Pod is Ready
 			// testenv.MCPodReady(testcaseEnvInst.GetName(), deployment)

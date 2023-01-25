@@ -88,7 +88,8 @@ var _ = Describe("DeleteCR test", func() {
 			// Deploy C3
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true, "")
+			deployerName := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), indexerReplicas, true, "", deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy C3 instance")
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -99,6 +100,9 @@ var _ = Describe("DeleteCR test", func() {
 
 			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			idxc := &enterpriseApi.IndexerCluster{}
 			idxcName := deployment.GetName() + "-idxc"

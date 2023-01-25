@@ -82,7 +82,8 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			}
 
 			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef)
+			deployerName := deployment.GetName()
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true, mcRef, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Wait for License Master to be in READY status
@@ -96,6 +97,9 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
@@ -139,6 +143,9 @@ var _ = Describe("Secret Test for SVA C3", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)

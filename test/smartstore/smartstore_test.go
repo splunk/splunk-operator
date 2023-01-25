@@ -172,7 +172,8 @@ var _ = Describe("Smartstore test", func() {
 			}
 
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec)
+			deployerName := deployment.GetName()
+			err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx, deployment.GetName(), 1, siteCount, testcaseEnvInst.GetIndexSecretName(), smartStoreSpec, deployerName)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -186,6 +187,9 @@ var _ = Describe("Smartstore test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Deployer goes to Ready phase
+			testenv.DeployerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC Pod is Ready
 			// testenv.MCPodReady(testcaseEnvInst.GetName(), deployment)
@@ -222,7 +226,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, smartstore: can deploy a Standalone instance with Epehemeral Etc storage", func() {
+		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Etc storage", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -258,7 +262,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, smartstore: can deploy a Standalone instance with Epehemeral Var storage", func() {
+		It("integration, s1, smartstore: can deploy a Standalone instance with Ephemeral Var storage", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################

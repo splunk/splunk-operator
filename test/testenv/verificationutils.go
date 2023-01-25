@@ -156,6 +156,32 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
+// DeployerReady verify Deployer is in READY status and does not flip-flop
+func DeployerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	deployer := &enterpriseApi.Deployer{}
+	instanceName := fmt.Sprintf("%s-shc-deployer", deployment.GetName())
+
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, instanceName, deployer)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Deployer phase to be ready", "instance", deployer.ObjectMeta.Name, "Phase", deployer.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-deployer-")
+		return deployer.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() enterpriseApi.Phase {
+		_ = deployment.GetInstance(ctx, deployment.GetName(), deployer)
+		testenvInstance.Log.Info("Check for Consistency Deployer phase to be ready", "instance", deployer.ObjectMeta.Name, "Phase", deployer.Status.Phase)
+		return deployer.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
 // SingleSiteIndexersReady verify single site indexers go to ready state
 func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	idc := &enterpriseApi.IndexerCluster{}
@@ -488,6 +514,23 @@ func VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, t
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
 }
 
+// VerifyDeployerPhase verify the phase of Deployer matches given phase
+func VerifyDeployerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase) {
+	gomega.Eventually(func() enterpriseApi.Phase {
+		deployer := &enterpriseApi.Deployer{}
+		deployerName := deployment.GetName() + "-shc-deployer"
+		err := deployment.GetInstance(ctx, deployerName, deployer)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+		testenvInstance.Log.Info("Waiting for Deployer Phase", "instance", deployer.ObjectMeta.Name, "Expected", phase, "Phase", deployer.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+		DumpGetTopPods(testenvInstance.GetName())
+		DumpGetTopNodes()
+		return deployer.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
+}
+
 // VerifyIndexerClusterPhase verify the phase of idxc matches the given phase
 func VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase, idxcName string) {
 	gomega.Eventually(func() enterpriseApi.Phase {
@@ -560,6 +603,9 @@ func GetResourceVersion(ctx context.Context, deployment *Deployment, testenvInst
 	case *enterpriseApi.SearchHeadCluster:
 		err = deployment.GetInstance(ctx, cr.Name, cr)
 		newResourceVersion = cr.ResourceVersion
+	case *enterpriseApi.Deployer:
+		err = deployment.GetInstance(ctx, cr.Name, cr)
+		newResourceVersion = cr.ResourceVersion
 	default:
 		return "-1"
 	}
@@ -614,6 +660,11 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 			newResourceVersion = cr.ResourceVersion
 			name = cr.Name
 		case *enterpriseApi.SearchHeadCluster:
+			err = deployment.GetInstance(ctx, cr.Name, cr)
+			newResourceVersion = cr.ResourceVersion
+			kind = cr.Kind
+			name = cr.Name
+		case *enterpriseApi.Deployer:
 			err = deployment.GetInstance(ctx, cr.Name, cr)
 			newResourceVersion = cr.ResourceVersion
 			kind = cr.Kind
@@ -854,7 +905,7 @@ func VerifyAppInstalled(ctx context.Context, deployment *Deployment, testenvInst
 
 			if versionCheck {
 				// For clusterwide install do not check for versions on deployer and cluster-manager as the apps arent installed there
-				if !(clusterWideInstall && (strings.Contains(podName, "-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
+				if !(clusterWideInstall && (strings.Contains(podName, "-shc-deployer-") || strings.Contains(podName, "-cluster-manager-") || strings.Contains(podName, splcommon.TestClusterManagerDashed))) {
 					var expectedVersion string
 					if checkupdated {
 						expectedVersion = AppInfo[appName]["V2"]
@@ -878,7 +929,7 @@ func VerifyAppsCopied(ctx context.Context, deployment *Deployment, testenvInstan
 		if scope == enterpriseApi.ScopeCluster {
 			if strings.Contains(podName, "cluster-manager") || strings.Contains(podName, splcommon.ClusterManager) {
 				path = splcommon.ManagerAppsLoc
-			} else if strings.Contains(podName, "-deployer-") {
+			} else if strings.Contains(podName, "-shc-deployer-") {
 				path = splcommon.SHClusterAppsLoc
 			} else if strings.Contains(podName, "-indexer-") {
 				path = splcommon.PeerAppsLoc
