@@ -3,14 +3,14 @@ entries:
   splunk-enterprise:
   - apiVersion: v2
     appVersion: 2.2.0
-    created: "2023-01-25T12:20:25.11504-08:00"
+    created: "2023-01-25T12:25:10.183288-08:00"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
       version: 2.2.0
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: baa9329240c1ffdd5d20e5a0ff8f69418fb3eee9069c70b48a530f69ff26c5f9
+    digest: 357827497e004661c69c9bd36da7764f76b4ff9b57a265a94bbbcee6a9f0ce8f
     name: splunk-enterprise
     type: application
     urls:
@@ -18,7 +18,7 @@ entries:
     version: 2.2.0
   - apiVersion: v2
     appVersion: 2.1.1
-    created: "2023-01-25T12:20:25.08496-08:00"
+    created: "2023-01-25T12:25:10.150664-08:00"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
@@ -34,9 +34,9 @@ entries:
   splunk-operator:
   - apiVersion: v2
     appVersion: 2.2.0
-    created: "2023-01-25T12:20:25.14687-08:00"
+    created: "2023-01-25T12:25:10.213494-08:00"
     description: A Helm chart for the Splunk Operator for Kubernetes
-    digest: 28bde2795ac090d771285b06f2aa6ecf99c71362477a4f0e48d56a954af9a5f1
+    digest: edbbe544393fea684628f73b325c985533aae07ead715e86719baafe46019549
     name: splunk-operator
     type: application
     urls:
@@ -44,7 +44,7 @@ entries:
     version: 2.2.0
   - apiVersion: v2
     appVersion: 2.1.1
-    created: "2023-01-25T12:20:25.131409-08:00"
+    created: "2023-01-25T12:25:10.19968-08:00"
     description: A Helm chart for the Splunk Operator for Kubernetes
     digest: b3f036aca44cae81f635f78e426ed2aa5d3350ccd37fd7bee9607c5e7847a180
     name: splunk-operator
@@ -52,4 +52,4 @@ entries:
     urls:
     - https://splunk.github.io/splunk-operator/splunk-operator-1.0.0.tgz
     version: 1.0.0
-generated: "2023-01-25T12:20:25.074353-08:00"
+generated: "2023-01-25T12:25:10.139569-08:00"
