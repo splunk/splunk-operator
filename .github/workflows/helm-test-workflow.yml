@@ -15,7 +15,6 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
-    - uses: chrisdickinson/setup-yq@latest
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -73,6 +72,10 @@ jobs:
       HELM_REPO_PATH: "../../../../helm-chart"
       INSTALL_OPERATOR: "true"
     steps:
+      - uses: chrisdickinson/setup-yq@3d931309f27270ebbafd53f2daee773a82ea1822
+      - name: Checking YQ installation
+        run: |
+           yq --help
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
