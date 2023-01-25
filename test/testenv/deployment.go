@@ -1053,7 +1053,9 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
   site: site0
 `, name, "cluster-manager")
 	_, err = d.DeployDeployer(ctx, name+"-shc-deployer", name, LicenseManager, siteDefaults, "")
-	return err
+	if err != nil {
+		return err
+	}
 	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "", deployerName)
 	return err
 
@@ -1111,7 +1113,9 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx co
   site: site0
 `, name, "cluster-master")
 	_, err = d.DeployDeployer(ctx, name+"-shc-deployer", name, LicenseManager, siteDefaults, "")
-	return err
+	if err != nil {
+		return err
+	}
 	_, err = d.DeploySearchHeadCluster(ctx, name+"-shc", name, LicenseManager, siteDefaults, "", deployerName)
 	return err
 }
@@ -1235,9 +1239,9 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 		//AppFrameworkConfig: appFrameworkSpecShc,
@@ -1262,7 +1266,6 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 				Name: mcName,
 			},
 		},
-		Replicas:           1,
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 
@@ -1339,9 +1342,9 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 		//AppFrameworkConfig: appFrameworkSpecShc,
@@ -1366,7 +1369,6 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 				Name: mcName,
 			},
 		},
-		Replicas:           1,
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 
@@ -1471,12 +1473,12 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
 			Defaults: siteDefaults,
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 		//AppFrameworkConfig: appFrameworkSpecShc,
@@ -1501,7 +1503,6 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
-		Replicas:           3,
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
@@ -1604,12 +1605,13 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+
 			Defaults: siteDefaults,
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 		//AppFrameworkConfig: appFrameworkSpecShc,
@@ -1633,7 +1635,6 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
-		Replicas:           1,
 		AppFrameworkConfig: appFrameworkSpecShc,
 	}
 	if shc {
@@ -1646,7 +1647,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 			return cm, idxc, sh, deployer, err
 		}
 	}
-	return cm, idxc, sh, nil
+	return cm, idxc, sh, deployer, nil
 }
 
 // DeploySingleSiteClusterWithGivenMonitoringConsole deploys indexer cluster (lm, shc optional) with given monitoring console
@@ -1706,9 +1707,9 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 	}
@@ -1728,7 +1729,6 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 				Name: monitoringConsoleName,
 			},
 		},
-		Replicas: 3,
 	}
 	if shc {
 		_, err = d.DeployDeployerWithGivenSpec(ctx, name+"-shc-deployer", deployerSpec)
@@ -1801,9 +1801,9 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 	}
@@ -1823,7 +1823,6 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 				Name: monitoringConsoleName,
 			},
 		},
-		Replicas: 3,
 	}
 	if shc {
 		_, err = d.DeployDeployerWithGivenSpec(ctx, name+"-shc-deployer", deployerSpec)
@@ -1924,9 +1923,9 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 	}
@@ -1947,7 +1946,6 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 				Name: monitoringConsoleName,
 			},
 		},
-		Replicas: 1,
 	}
 	if shc {
 		_, err = d.DeployDeployerWithGivenSpec(ctx, name+"-shc-deployer", deployerSpec)
@@ -2048,9 +2046,9 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
-			DeployerRef: corev1.ObjectReference{
-				Name: deployerName,
-			},
+		},
+		DeployerRef: corev1.ObjectReference{
+			Name: deployerName,
 		},
 		Replicas: 3,
 	}
@@ -2071,7 +2069,6 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 				Name: monitoringConsoleName,
 			},
 		},
-		Replicas: 1,
 	}
 	if shc {
 		_, err = d.DeployDeployerWithGivenSpec(ctx, name+"-shc-deployer", deployerSpec)

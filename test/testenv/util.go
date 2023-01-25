@@ -424,10 +424,10 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				DeployerRef: corev1.ObjectReference{
-					Name: deployerName,
-				},
 				Defaults: ansibleConfig,
+			},
+			DeployerRef: corev1.ObjectReference{
+				Name: deployerName,
 			},
 		},
 	}
@@ -450,7 +450,7 @@ func newDeployer(name, ns, clusterManagerRef, licenseManagerName string, ansible
 			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 		},
 
-		Spec: enterpriseApi.Deployer{
+		Spec: enterpriseApi.DeployerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
@@ -467,9 +467,6 @@ func newDeployer(name, ns, clusterManagerRef, licenseManagerName string, ansible
 				},
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
-				},
-				SearchHeadClusterRef: corev1.ObjectReference{
-					Name: SearchHeadClusterRef,
 				},
 				Defaults: ansibleConfig,
 			},

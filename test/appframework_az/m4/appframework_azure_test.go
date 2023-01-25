@@ -88,7 +88,7 @@ var _ = Describe("m4appfw test", func() {
 		}
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("smoke, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
 
 			/* Test Steps
@@ -302,7 +302,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and downgrade them", func() {
 
 			/* Test Steps
@@ -508,7 +508,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps, scale up clusters, install apps on new pods, scale down", func() {
 
 			/* Test Steps
@@ -779,7 +779,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
@@ -920,7 +920,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1128,7 +1128,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			config.Data["Deployer"] = strings.Replace(config.Data["Deployer"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1163,7 +1163,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["Deployer"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			// ############ VERIFY APPS UPDATED TO V2 #############
 			appVersion = "V2"
@@ -1184,7 +1184,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and have apps installed and updated locally on Cluster Manager and Deployer via manual poll", func() {
 
 			/* Test Steps
@@ -1339,7 +1339,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			config.Data["Deployer"] = strings.Replace(config.Data["Deployer"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1361,7 +1361,7 @@ var _ = Describe("m4appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["Deployer"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATIONS ############
 			cmAppSourceInfo.CrAppVersion = appVersion
@@ -1378,7 +1378,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multi Site Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multi Site Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("m4azure, integration, masterappframeworkazurem4, appframeworkazure: can deploy a m4 SVA with apps installed locally on Cluster Manager and Deployer, cluster-wide on Peers and Search Heads, then upgrade them via a manual poll", func() {
 
 			/* Test Steps
@@ -1564,7 +1564,7 @@ var _ = Describe("m4appfw test", func() {
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
 			config.Data["ClusterMaster"] = strings.Replace(config.Data["ClusterMaster"], "off", "on", 1)
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			config.Data["Deployer"] = strings.Replace(config.Data["Deployer"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
@@ -1594,7 +1594,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info("Verify config map set back to off after poll trigger for app", "version", appVersion)
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["Deployer"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//########## UPGRADE VERIFICATION #############
 			cmAppSourceInfoLocal.CrAppVersion = appVersion
@@ -1896,7 +1896,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
@@ -1993,7 +1993,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
@@ -2090,7 +2090,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
 
 			/* Test Steps
@@ -2297,7 +2297,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'OFF' in config map for Cluster Master and Search Head Cluster")
 			config, _ := testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["SearchHeadCluster"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: off") && strings.Contains(config.Data["Deployer"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//######### SWITCH FROM MANUAL TO PERIODIC POLLING ############
 			// Get instance of current Cluster Master CR with latest config
@@ -2332,7 +2332,7 @@ var _ = Describe("m4appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update config map for Cluster Master")
 
 			testcaseEnvInst.Log.Info("Change status to 'ON' in config map for Search Head Cluster")
-			config.Data["SearchHeadCluster"] = strings.Replace(config.Data["SearchHeadCluster"], "off", "on", 1)
+			config.Data["Deployer"] = strings.Replace(config.Data["Deployer"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map for Search Head Cluster")
 
@@ -2343,7 +2343,7 @@ var _ = Describe("m4appfw test", func() {
 			// Verify status is 'ON' in config map for Cluster Master and Search Head Cluster
 			testcaseEnvInst.Log.Info("Verify status is 'ON' in config map for Cluster Master and Search Head Cluster")
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["ClusterMaster"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["ClusterMaster"], "status: on") && strings.Contains(config.Data["Deployer"], "status: on")).To(Equal(true), "Config map update not complete")
 
 			//############### UPGRADE APPS ################
 			// Delete V1 apps on Azure
@@ -2394,7 +2394,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
@@ -2518,7 +2518,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("m4azure, integration, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
@@ -2610,7 +2610,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("integration, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
@@ -2710,7 +2710,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
 		It("smoke, m4azure, masterappframeworkazurem4, appframeworkazure: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", func() {
 
 			/* Test Steps
@@ -2748,20 +2748,20 @@ var _ = Describe("m4appfw test", func() {
 			siteCount := 3
 			indexersPerSite := 1
 			deployerName := deployment.GetName()
-			cm, _, shc, _, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "", deployerName)
+			cm, _, _, deployer, err := deployment.DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(ctx, deployment.GetName(), indexersPerSite, siteCount, appFrameworkSpecIdxc, appFrameworkSpecShc, true, "", "", deployerName)
 
 			Expect(err).To(Succeed(), "Unable to deploy Multisite Indexer Cluster and Search Head Cluster with App framework")
 
 			// Verify IsDeploymentInProgress Flag is set to true for Cluster Master CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for Cluster Manager")
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for Cluster Master")
 			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify IsDeploymentInProgress Flag is set to true for SHC CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for SHC")
-			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, shc.Name, shc.Kind)
+			// Verify IsDeploymentInProgress Flag is set to true for Deployer CR
+			testcaseEnvInst.Log.Info("Checking isDeploymentInProgress Flag for Deployer")
+			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, deployer.Name, deployer.Kind)
 
 			// Ensure the Indexers of all sites go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
