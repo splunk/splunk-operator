@@ -1,0 +1,25 @@
+splunk-operator:
+  enabled: true
+  splunkOperator:
+    clusterWideAccess: false
+
+sva:
+    c3:
+      enabled: true
+
+      clusterManager:
+        name: cm
+
+      indexerClusters:
+        - name: idxc
+
+      searchHeadClusters:
+        - name: shc
+
+licenseManager:
+  enabled: true
+  name: lm
+  etcVolumeStorageConfig:
+    storageCapacity: 5Gi
+  varVolumeStorageConfig:
+    storageCapacity: 20Gi

@@ -8,6 +8,8 @@
 
 * CSPL-1493 - Added support to automate the installation of the [Enterprise Security (ES) App](https://splunkbase.splunk.com/app/263) via appFramework phase 3
 
+* Fixed multiple helm chart issues
+
 ## 2.1.1 (2022-12-06)
 
 * This is the 2.1.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
