@@ -1,5 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - command: helm upgrade splunk-c3  splunk/splunk-enterprise --reuse-values -f c3_config.yaml --set indexerCluster.replicaCount=4
-    namespaced: true
