@@ -22,4 +22,28 @@ rules:
   - standalones/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-standalone-editor-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - standalones
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - standalones/status
+  verbs:
+  - get
 {{- end }}

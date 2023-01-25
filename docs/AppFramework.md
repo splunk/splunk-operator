@@ -558,7 +558,7 @@ spec:
         - name: OPERATOR_NAME
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: "docker.io/splunk/splunk:9.0.3-a1"
+          value: "docker.io/splunk/splunk:9.0.3-a2"
 
       volumes:
       - name: app-staging

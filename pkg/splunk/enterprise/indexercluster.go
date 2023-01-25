@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -397,7 +398,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// Note:
-	// This is a temporary fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
+	// This is a fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
 	// Splunk 9.0.0 bundle push uses encryption while transferring data. If any of the
 	// splunk instances were not able to support this option, then cluster master fails to transfer, this leads
 	// to splunkd restart at the peer level. For more information refer
@@ -407,7 +408,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller
 	// fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas
 	// are still in older version
-	// As a temporary fix for 9.0.0 , if the image version do not  match with pod image version we delete the
+	// As a fix for 9.0.0 , if the image version do not  match with pod image version we delete the
 	// splunk statefulset for indexer
 
 	var phase enterpriseApi.Phase
@@ -427,8 +428,11 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	for _, v := range statefulsetPods.Items {
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
+				previousImage := v.Spec.Containers[0].Image
+				currentImage := cr.Spec.Image
 				// get the pod image name
-				if v.Spec.Containers[0].Image != cr.Spec.Image {
+				if strings.HasPrefix(previousImage, "8") &&
+					strings.HasPrefix(currentImage, "9") {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break

@@ -18,4 +18,24 @@ rules:
   - clustermanagers/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-clustermanager-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - clustermanagers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - clustermanagers/status
+  verbs:
+  - get
 {{- end }}
