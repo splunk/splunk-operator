@@ -168,8 +168,8 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run helm test
         env:
-          SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA 
+          KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          KUTTL_SPLUNK_OPERATOR_IMAGE: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           INSTALL_OPERATOR: true
           S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
