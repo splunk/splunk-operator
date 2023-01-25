@@ -62,6 +62,7 @@ The Splunk Operator requires these docker images to be present or available to y
 * `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.2.0 or later)
 * `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.3-a2 or later)
 
+
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
 Review the [Change Log](ChangeLog.md) page for a history of changes and Splunk Enterprise compatibility for each release.
@@ -109,6 +110,7 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
 kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.2.0/splunk-operator-namespace.yaml
+
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
