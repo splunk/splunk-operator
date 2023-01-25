@@ -91,6 +91,9 @@ jobs:
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Set GITHUB SHA value
+        run: |
+          echo "HELM_GITHUB_SHA=$GITHUB_SHA" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:
@@ -169,7 +172,7 @@ jobs:
       - name: Run helm test
         env:
           KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          KUTTL_SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          KUTTL_SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.HELM_GITHUB_SHA }}
           INSTALL_OPERATOR: true
           S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
