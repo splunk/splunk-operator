@@ -1,9 +1,10 @@
 splunk-operator:
   enabled: true
-  splunkOperator:
-    clusterWideAccess: false
   operator:
     serviceAccountName: helm-service-account
+
+  splunkOperator:
+    clusterWideAccess: false
 
     volumes:
     - name: app-staging

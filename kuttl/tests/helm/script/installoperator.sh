@@ -8,12 +8,12 @@ if [ "${INSTALL_OPERATOR}" = true ]; then
         echo "operator installation failed"
         echo "Error"
         exit $retVal
-    else 
+    else
         kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n $NAMESPACE
         retVal=$?
         echo "operator installation success"
         exit $retVal
     fi
-else 
+else
     echo "INSTALL_OPERATOR env is not set, skip"
 fi
