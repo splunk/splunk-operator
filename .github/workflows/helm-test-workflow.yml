@@ -71,6 +71,7 @@ jobs:
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: "helm"
       HELM_REPO_PATH: "../../../../helm-chart"
+      INSTALL_OPERATOR: "true"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -167,8 +168,12 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run helm test
         env:
-          KUTTL_SPLUNK_ENT_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          KUTTL_SPLUNK_OPERATOR_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA 
+          SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA 
+          INSTALL_OPERATOR=: true
+          S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results

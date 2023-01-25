@@ -1,6 +1,0 @@
----
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - command: helm install splunk-c3 $HELM_REPO_PATH/splunk-enterprise --reuse-values -f c3_config.yaml --set splunk-operator.splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMG} --set splunk-operator.image.repository=${KUTTL_SPLUNK_ENT_IMG}
-    namespaced: true

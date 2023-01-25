@@ -1,5 +1,6 @@
 splunk-operator:
   enabled: false
+
 sva:
     c3:
       enabled: true

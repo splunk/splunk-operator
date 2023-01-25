@@ -432,7 +432,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				currentImage := cr.Spec.Image
 				// get the pod image name
 				if strings.HasPrefix(previousImage, "8") &&
-				   strings.HasPrefix(currentImage, "9") {
+					strings.HasPrefix(currentImage, "9") {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
