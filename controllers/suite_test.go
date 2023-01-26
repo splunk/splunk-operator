@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -32,17 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -80,22 +74,22 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApiV3.AddToScheme(scheme.Scheme)
+	err = enterpriseApiV3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApiV3.AddToScheme(scheme.Scheme)
+	err = enterpriseApiV3.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = enterpriseApi.AddToScheme(scheme.Scheme)
+	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
@@ -172,89 +166,3 @@ var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	testEnv.Stop()
 })
-
-func mainFunction(scheme *runtime.Scheme) (manager.Manager, error) {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	// Logging setup
-	opts := zap.Options{
-		Development: true,
-		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
-	}
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-	setupLog := ctrl.Log.WithName("setup")
-
-	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "270bec8c.splunk.com",
-	}
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), config.ManagerOptionsWithNamespaces(setupLog, options))
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		return nil, fmt.Errorf("unable to start manager")
-	}
-
-	if err = (&ClusterManagerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
-		return nil, fmt.Errorf("unable to start manager")
-	}
-	if err = (&IndexerClusterReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
-		return nil, fmt.Errorf("unable to start manager")
-	}
-	if err = (&LicenseManagerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
-		return nil, fmt.Errorf("unable to start manager")
-	}
-	if err = (&MonitoringConsoleReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
-		return nil, fmt.Errorf("unable to create controller")
-	}
-	if err = (&SearchHeadClusterReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
-		return nil, fmt.Errorf("unable to create controller")
-	}
-	if err = (&StandaloneReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
-		return nil, fmt.Errorf("unable to create controller")
-	}
-	//+kubebuilder:scaffold:builder
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		return nil, fmt.Errorf("unable to create controller")
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		return nil, fmt.Errorf("unable to create controller")
-	}
-
-	return mgr, nil
-}

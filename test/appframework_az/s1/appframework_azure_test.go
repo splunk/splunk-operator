@@ -720,7 +720,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			/* Test Steps
@@ -751,7 +751,13 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, azTestDir, 60)
+			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
+				Type: enterpriseApi.PremiumAppsTypeEs,
+				EsDefaults: enterpriseApi.EsDefaults{
+					SslEnablement: enterpriseApi.SslEnablementIgnore,
+				},
+			}
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -767,32 +773,50 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
-			// Verify App Downlaod State on CR
-			// testenv.VerifyAppListPhase(deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
-			// Verify Apps download on Operator Pod
-			// kind := standalone.Kind
-			// opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testcaseEnvInst.GetName(), kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
-			// opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
+			// ############ INITIAL VERIFICATION ###########
 			appVersion := "V1"
-			// testcaseEnvInst.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
-			// testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
+			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// Ensure Standalone goes to Ready phase
+			// ############## UPGRADE APPS #################
+
+			// Delete apps on Azure
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
+			azureBlobClient := &testenv.AzureBlobClient{}
+			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+
+			// Download ES App from Azure
+			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
+			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
+			Expect(err).To(Succeed(), "Unable to download ES app")
+
+			// Upload V2 apps to S3 for Standalone
+			appVersion = "V2"
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s ES app to Azure for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s ES app to Azure test directory for Standalone", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
+			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			//################## VERIFICATION #############
-			// Verify ES app is downloaded
-			testcaseEnvInst.Log.Info("Verify ES app is downloaded on Standalone")
-			initContDownloadLocation := testenv.AppStagingLocOnPod + appSourceName
-			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testcaseEnvInst.Log.Info("Verify Apps are downloaded on Pod", "version", appVersion, "Pod Name", podName)
-			testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{podName}, appFileList, initContDownloadLocation)
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
-			// Verify ES app is installed
-			testcaseEnvInst.Log.Info("Verify ES app is installed on Standalone")
-			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalonePod, esApp, false, "enabled", false, false)
+			//############ UPGRADE VERIFICATION ###########
+			standaloneAppSourceInfo.CrAppVersion = appVersion
+			standaloneAppSourceInfo.CrAppList = esApp
+			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(esApp)
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 

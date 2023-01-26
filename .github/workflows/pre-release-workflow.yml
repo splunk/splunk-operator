@@ -46,7 +46,7 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    
+
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
 
@@ -55,15 +55,42 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-    
+
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    
+
     - name: Install goveralls
       run: |
         go get github.com/mattn/goveralls@latest
+
+    - name: Update Operator Image name in Helm
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "splunk-operator:${{ github.event.inputs.old_operator_version }}"
+        replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: "values.yaml"
+
+    - name: Update Helm Version
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "version: ${{ github.event.inputs.old_operator_version }}"
+        replace: "version: ${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: "Chart.yaml"
+
+    - name: Update Helm App Version
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "appVersion: ${{ github.event.inputs.old_operator_version }}"
+        replace: "appVersion: ${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: "Chart.yaml"
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -118,6 +145,14 @@ jobs:
         replace: "${{ github.event.inputs.new_enterprise_version }}"
         include: "**operator.yaml"
 
+    - name: Update Splunk Enterprise Image in helm
+      if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "${{ github.event.inputs.old_enterprise_version }}"
+        replace: "${{ github.event.inputs.new_enterprise_version }}"
+        include: "**values.yaml"
+
     - name: Update Splunk Enterprise image in DOCS
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
@@ -139,6 +174,16 @@ jobs:
     - name: Run Bundle Creation for the release
       run: |
         make bundle IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=${{ github.event.inputs.release_version }} IMG=docker.io/splunk/splunk-operator:${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=docker.io/splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
+
+    - name: Run helm chart package creation
+      run: |
+       helm package helm-chart/splunk-operator
+       cp splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
+       mv splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz helm-chart/splunk-enterprise/charts
+       helm package helm-chart/splunk-enterprise
+       mv splunk-enterprise-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
+       helm repo index --url https://splunk.github.io/splunk-operator/ docs/
+
     - name: Reset go.mod and go.sum before creating Pull Request
       run: |
         git checkout go.sum

@@ -29,7 +29,7 @@ jobs:
         export OS=$(uname | awk '{print tolower($0)}')
         export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
         sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -68,7 +68,13 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: "helm"
+      HELM_REPO_PATH: "../../../../helm-chart"
+      INSTALL_OPERATOR: "true"
     steps:
+      - uses: chrisdickinson/setup-yq@3d931309f27270ebbafd53f2daee773a82ea1822
+      - name: Checking YQ installation
+        run: |
+           yq --help
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
@@ -82,11 +88,15 @@ jobs:
         if: github.ref == 'ref/head/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+          echo "HELM_REPO_PATH=splunk"  >> $GITHUB_ENV
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Set GITHUB SHA value
+        run: |
+          echo "HELM_GITHUB_SHA=$GITHUB_SHA" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v1
         with:
@@ -94,7 +104,7 @@ jobs:
       - name: Install kuttl
         run: |
           sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.12.0/kuttl_0.12.0_linux_x86_64.tar.gz
-          sudo tar -xvzf kuttl_0.12.0_linux_x86_64.tar.gz 
+          sudo tar -xvzf kuttl_0.12.0_linux_x86_64.tar.gz
           sudo chmod +x  kubectl-kuttl
           sudo mv kubectl-kuttl /usr/local/bin/kubectl-kuttl
       - name: Install Python
@@ -164,8 +174,12 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Run helm test
         env:
-          KUTTL_SPLUNK_ENT_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }} 
-          KUTTL_SPLUNK_OPERATOR_IMG: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA 
+          KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          KUTTL_SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.HELM_GITHUB_SHA }}
+          INSTALL_OPERATOR: true
+          S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results

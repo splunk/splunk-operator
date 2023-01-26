@@ -21,16 +21,10 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -38,7 +32,13 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // NewSplunkClientFunc funciton pointer type
@@ -398,7 +398,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// Note:
-	// This is a temporary fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
+	// This is a fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
 	// Splunk 9.0.0 bundle push uses encryption while transferring data. If any of the
 	// splunk instances were not able to support this option, then cluster master fails to transfer, this leads
 	// to splunkd restart at the peer level. For more information refer
@@ -408,7 +408,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// the splunk instance, but splunkd is not running due to above splunk enterprise 9.0.0 issue. So controller
 	// fail and returns. This goes on in a loop and we always try the same pod instance and rest of the replicas
 	// are still in older version
-	// As a temporary fix for 9.0.0 , if the image version do not  match with pod image version we delete the
+	// As a fix for 9.0.0 , if the image version do not  match with pod image version we delete the
 	// splunk statefulset for indexer
 
 	var phase enterpriseApi.Phase
@@ -428,8 +428,11 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	for _, v := range statefulsetPods.Items {
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
+				previousImage := v.Spec.Containers[0].Image
+				currentImage := cr.Spec.Image
 				// get the pod image name
-				if v.Spec.Containers[0].Image != cr.Spec.Image {
+				if strings.HasPrefix(previousImage, "8") &&
+					strings.HasPrefix(currentImage, "9") {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
@@ -948,7 +951,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.IndexingReady = false
 		mgr.cr.Status.ServiceReady = false
 		mgr.cr.Status.MaintenanceMode = false
-		return fmt.Errorf("Waiting for cluster manager to become ready")
+		return fmt.Errorf("waiting for cluster manager to become ready")
 	}
 
 	// get indexer cluster info from cluster manager if it's ready

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
@@ -740,7 +741,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("s1, integration, appframeworks1, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			/* Test Steps
@@ -769,7 +770,13 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, s3TestDir, 60)
+			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
+				Type: enterpriseApi.PremiumAppsTypeEs,
+				EsDefaults: enterpriseApi.EsDefaults{
+					SslEnablement: enterpriseApi.SslEnablementIgnore,
+				},
+			}
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -785,32 +792,53 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
-			// Verify App Downlaod State on CR
-			// testenv.VerifyAppListPhase(deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, enterpriseApi.PhaseDownload, appFileList)
-
-			// Verify Apps download on Operator Pod
-			// kind := standalone.Kind
-			// opLocalAppPathStandalone := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", testcaseEnvInst.GetName(), kind, deployment.GetName(), enterpriseApi.ScopeLocal, appSourceName)
-			// opPod := testenv.GetOperatorPodName(testcaseEnvInst.GetName())
-			appVersion := "V1"
-			// testcaseEnvInst.Log.Info("Verify Apps are downloaded on Splunk Operator container for apps", "version", appVersion)
-			// testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{opPod}, appFileList, opLocalAppPathStandalone)
-
 			// Ensure Standalone goes to Ready phase
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			//################## VERIFICATION #############
-			// Verify ES app is downloaded
-			testcaseEnvInst.Log.Info("Verify ES app is downloaded on Standalone")
-			initContDownloadLocation := testenv.AppStagingLocOnPod + appSourceName
-			podName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
-			testcaseEnvInst.Log.Info("Verify Apps are downloaded on Pod", "version", appVersion, "Pod Name", podName)
-			testenv.VerifyAppsDownloadedOnContainer(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), []string{podName}, appFileList, initContDownloadLocation)
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
-			// Verify ES app is installed
-			testcaseEnvInst.Log.Info("Verify ES app is installed on Standalone")
+			// ############ INITIAL VERIFICATION ###########
+			appVersion := "V1"
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			testenv.VerifyAppInstalled(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), standalonePod, esApp, false, "enabled", false, false)
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: esApp, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// ############## UPGRADE APPS #################
+
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			// Download ES App from S3
+			testcaseEnvInst.Log.Info("Download updated ES app from S3")
+			err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			Expect(err).To(Succeed(), "Unable to download ES app")
+
+			// Upload V2 apps to S3 for Standalone
+			appVersion = "V2"
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s Es app to S3 for Standalone and Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s Es app to S3 test directory for Standalone", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList)
+
+			// Wait for Standalone to be in READY status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############ UPGRADE VERIFICATION ###########
+			standaloneAppSourceInfo.CrAppVersion = appVersion
+			standaloneAppSourceInfo.CrAppList = esApp
+			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(esApp)
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 
@@ -1326,6 +1354,16 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
 			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
 			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			if err != nil {
+				for i := 1; i < 10; i++ {
+					_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+					if err == nil {
+						continue
+					} else {
+						time.Sleep(1 * time.Second)
+					}
+				}
+			}
 			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
 
 			// Verify App installation is in progress on Standalone

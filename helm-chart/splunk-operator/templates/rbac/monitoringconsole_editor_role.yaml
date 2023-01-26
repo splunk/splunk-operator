@@ -22,4 +22,28 @@ rules:
   - monitoringconsoles/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-monitoringconsole-editor-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - monitoringconsoles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - monitoringconsoles/status
+  verbs:
+  - get
 {{- end }}

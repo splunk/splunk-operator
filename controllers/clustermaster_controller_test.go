@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"time"
@@ -147,15 +148,7 @@ func CreateClusterMaster(name string, namespace string, annotations map[string]s
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := &enterpriseApiV3.ClusterMaster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Annotations: annotations,
-		},
-		Spec: enterpriseApiV3.ClusterMasterSpec{},
-	}
-	ssSpec = testutils.NewClusterMaster(name, namespace, "image")
+	ssSpec := testutils.NewClusterMaster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 

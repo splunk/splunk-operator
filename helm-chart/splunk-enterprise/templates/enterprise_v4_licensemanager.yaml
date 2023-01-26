@@ -76,6 +76,14 @@ spec:
 {{- if .Values.licenseManager.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.licenseManager.readinessInitialDelaySeconds }}
 {{- end }}
+{{- with .Values.licenseManager.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- with .Values.licenseManager.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.licenseManager.resources }}
   resources:
 {{ toYaml . | indent 4 }}

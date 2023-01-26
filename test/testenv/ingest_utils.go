@@ -112,7 +112,7 @@ func CreateAnIndexStandalone(ctx context.Context, indexName string, podName stri
 	fmt.Fprintf(&expectedResp, "Index \"%s\" added.", indexName)
 	if strings.Compare(addIndexResp, expectedResp.String()) == 0 {
 		logf.Log.Error(err, "Failed response to add index to splunk", "pod", podName, "addIndexResp", addIndexResp)
-		return errors.New("Failed response to add index to splunk")
+		return errors.New("failed response to add index to splunk")
 	}
 
 	logf.Log.Info("Added index to Splunk", "podName", podName, "addIndexResp", addIndexResp)

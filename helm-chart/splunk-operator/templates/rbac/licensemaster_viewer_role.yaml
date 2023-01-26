@@ -18,4 +18,24 @@ rules:
   - licensemasters/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-licensemaster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - licensemasters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - licensemasters/status
+  verbs:
+  - get
 {{- end }}

@@ -25,7 +25,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 1. Download the latest Splunk Operator installation yaml file.
 ​
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.1.1/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.2.0/splunk-operator-namespace.yaml
 ```
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install. 
@@ -101,7 +101,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: WATCH_NAMESPACE
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.2
+          value: splunk/splunk:9.0.3-a2
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -136,7 +136,7 @@ To verify that a new Splunk Enterprise Docker image was applied to a pod, you ca
 ​
 ```bash
 kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
-image: splunk/splunk:9.0.2
+image: splunk/splunk:9.0.3-a2
 imagePullPolicy: IfNotPresent
 ```
 ## Splunk Enterprise Cluster upgrade example

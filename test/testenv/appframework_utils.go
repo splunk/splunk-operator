@@ -35,6 +35,7 @@ var AppInfo = map[string]map[string]string{
 	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "filename": "splunk-db-connect.tgz"},
 	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "filename": "splunk-security-essentials.tgz"},
 	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "filename": "splunk-enterprise-security.spl"},
+	"Splunk_TA_ForIndexers":             {"V1": "1.0.0", "V2": "1.0.0", "filename": "TA_ForIndexers.spl"},
 	"test_app":                          {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app.tgz"},
 	"test_app2":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app2.tgz"},
 	"test_app3":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app3.tgz"},
@@ -166,11 +167,20 @@ func GetPodInstalledAppVersion(deployment *Deployment, podName string, ns string
 func GetPodAppInstallStatus(ctx context.Context, deployment *Deployment, podName string, ns string, appname string) (string, error) {
 	stdin := fmt.Sprintf("/opt/splunk/bin/splunk display app '%s' -auth admin:$(cat /mnt/splunk-secrets/password)", appname)
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
-	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
-		return "", err
+	var stdout, stderr string
+	var err error
+	for i := 0; i < 10; i++ {
+		stdout, stderr, err = deployment.PodExecCommand(ctx, podName, command, stdin, false)
+		if err == nil {
+			continue
+		} else if err != nil && i == 9 {
+			logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command, "stdin", stdin)
+			return "", err
+		} else {
+			time.Sleep(1 * time.Second)
+		}
 	}
+
 	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 
 	return strings.TrimSuffix(stdout, "\n"), nil

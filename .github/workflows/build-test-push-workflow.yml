@@ -66,7 +66,7 @@ jobs:
         export OS=$(uname | awk '{print tolower($0)}')
         export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
         sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -229,14 +229,19 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml 
+      - name: Setup Kustomize
+        run: |
+          sudo snap install kustomize
+          mkdir -p ./bin
+          cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
         run: |
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
-        run: | 
+        run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
@@ -288,5 +293,5 @@ jobs:
     - name: Change Operator Image Tag to latest
       run: |
         docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
-    - name: Push Splunk Operator Image to Docker Hub 
+    - name: Push Splunk Operator Image to Docker Hub
       run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}

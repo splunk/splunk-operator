@@ -17,9 +17,10 @@ package test
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"net/http"
 	"testing"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -83,7 +84,6 @@ func (mockClient MockMinioS3Client) ListObjects(ctx context.Context, bucketName 
 			}
 			objectCh <- object
 		}
-		return
 	}(objectCh)
 
 	return objectCh

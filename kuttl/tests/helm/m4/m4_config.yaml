@@ -1,6 +1,7 @@
 splunk-operator:
   enabled: false
-sva: 
+
+sva:
     m4:
       enabled: true
 

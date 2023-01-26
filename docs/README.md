@@ -59,8 +59,9 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.1.1 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.2 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.2.0 or later)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.3-a2 or later)
+
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
 
@@ -108,12 +109,12 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.1.1/splunk-operator-namespace.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.2.0/splunk-operator-namespace.yaml
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.1.1/splunk-operator-cluster.yaml
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.2.0/splunk-operator-cluster.yaml
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.

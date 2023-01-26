@@ -541,7 +541,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.1.1"
+        image: "docker.io/splunk/splunk-operator:2.2.0"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging
@@ -558,7 +558,7 @@ spec:
         - name: OPERATOR_NAME
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: "docker.io/splunk/splunk:9.0.2"
+          value: "docker.io/splunk/splunk:9.0.3-a2"
 
       volumes:
       - name: app-staging

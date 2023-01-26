@@ -29,7 +29,7 @@ jobs:
         export OS=$(uname | awk '{print tolower($0)}')
         export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
         sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -184,6 +184,11 @@ jobs:
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+      - name: Setup Kustomize
+        run: |
+          sudo snap install kustomize
+          mkdir -p ./bin
+          cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
         run: |
           make int-test

@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -234,16 +233,6 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	return namespaceScopedSecret, nil
 }
 
-// getIndexerExtraEnv returns extra environment variables used by indexer clusters
-func getIndexerExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  "SPLUNK_INDEXER_URL",
-			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkIndexer, cr.GetName(), replicas, false),
-		},
-	}
-}
-
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
 func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
@@ -370,34 +359,6 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 // and etag is "abcd1234", then it will be downloaded locally as sample_app.tgz_abcd1234
 func getLocalAppFileName(ctx context.Context, downloadPath, appName, etag string) string {
 	return downloadPath + appName + "_" + strings.Trim(etag, "\"")
-}
-
-// getObjectsAsPointers converts and returns a slice of pointers to objects.
-// For e.g., if we have a slice of ints as []int, then this API will return []*int
-func getObjectsAsPointers(v interface{}) interface{} {
-	in := reflect.ValueOf(v)
-	out := reflect.MakeSlice(reflect.SliceOf(reflect.PtrTo(in.Type().Elem())), in.Len(), in.Len())
-	for i := 0; i < in.Len(); i++ {
-		out.Index(i).Set(in.Index(i).Addr())
-	}
-	return out.Interface()
-}
-
-// extractAppNameFromKey extracts the app name from Key received from remote storage
-func extractAppNameFromKey(ctx context.Context, key string) string {
-	nameAt := strings.LastIndex(key, "/")
-	return key[nameAt+1:]
-}
-
-// getRemoteObjectFromRemoteDataListResponse returns the remote object for the app from RemoteDataListResponse
-func getRemoteObjectFromRemoteDataListResponse(ctx context.Context, appName string, RemoteDataListResponse splclient.RemoteDataListResponse) *splclient.RemoteObject {
-	for _, object := range RemoteDataListResponse.Objects {
-		rcvdAppName := extractAppNameFromKey(ctx, *object.Key)
-		if rcvdAppName == appName {
-			return object
-		}
-	}
-	return nil
 }
 
 // appPhaseStatusAsStr converts the state enum to corresponding string
@@ -1417,7 +1378,7 @@ func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerCl
 // Ex. '\"b38a8f911e2b43982b71a979fe1d3c3f\"' is converted to b38a8f911e2b43982b71a979fe1d3c3f
 func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 	// S3: In the case of multipart upload, '-' is an allowed character as part of the etag
-	reg, err := regexp.Compile("[^A-Fa-f0-9\\-]+")
+	reg, err := regexp.Compile("[^A-Fa-f0-9...-]+")
 	if err != nil {
 		return nil, err
 	}
@@ -1876,23 +1837,6 @@ func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *
 	}
 }
 
-// getAdminPasswordFromSecret retrieves the admin password from secret object
-func getAdminPasswordFromSecret(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) ([]byte, error) {
-	// get the admin password from the namespace scoped secret
-	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
-	if err != nil {
-		return nil, fmt.Errorf("could not access default secret object to fetch admin password. Reason %v", err)
-	}
-
-	//Get the admin password from the secret object
-	adminPwd, foundSecret := defaultSecret.Data["password"]
-	if !foundSecret {
-		return nil, fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
-	}
-	return adminPwd, nil
-}
-
 // isPersistantVolConfigured confirms if the Operator Pod is configured with storage
 func isPersistantVolConfigured() bool {
 	return operatorResourceTracker != nil && operatorResourceTracker.storage != nil
@@ -1987,7 +1931,7 @@ func checkAndMigrateAppDeployStatus(ctx context.Context, client splcommon.Contro
 	// If needed, Migrate the app framework status
 	if isAppFrameworkMigrationNeeded(afwStatusContext) {
 		// Spec validation updates the status with some of the defaults, which may not be there in older app framework versions
-		err := ValidateAppFrameworkSpec(ctx, afwConf, afwStatusContext, isLocalScope)
+		err := ValidateAppFrameworkSpec(ctx, afwConf, afwStatusContext, isLocalScope, cr.GetObjectKind().GroupVersionKind().Kind)
 		if err != nil {
 			return err
 		}
@@ -2215,7 +2159,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		return latestMcCR, nil
 	}
 
-	return nil, fmt.Errorf("Invalid CR Kind")
+	return nil, fmt.Errorf("invalid CR Kind")
 }
 
 // ReadFile reads the contents of the given file name passed as string
@@ -2223,7 +2167,7 @@ func ReadFile(ctx context.Context, fileLocation string) (string, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReadFile").WithValues("FileLocation", fileLocation)
 
-	byteString, err := ioutil.ReadFile(fileLocation)
+	byteString, err := os.ReadFile(fileLocation)
 	if err != nil {
 		scopedLog.Error(err, "Failed to read file")
 		return "", err
@@ -2247,7 +2191,7 @@ func setProbeLevelOnSplunkPod(ctx context.Context, podExecClient splutil.PodExec
 		command = fmt.Sprintf("mkdir -p %s; echo \"export %s=%d\" > %s", GetLivenessDriverFileDir(), livenessProbeLevelName, probeLevel, GetLivenessDriverFilePath())
 
 	default:
-		return fmt.Errorf("Invalid probe Level %d", probeLevel)
+		return fmt.Errorf("invalid probe Level %d", probeLevel)
 	}
 	streamOptions := splutil.NewStreamOptionsObject(command)
 	podExecClient.SetTargetPodName(ctx, podExecClient.GetTargetPodName())

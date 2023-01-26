@@ -36,7 +36,6 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -251,7 +250,6 @@ func ValidateImagePullPolicy(imagePullPolicy *string) error {
 	switch *imagePullPolicy {
 	case "":
 		*imagePullPolicy = "IfNotPresent"
-		break
 	case "Always":
 		break
 	case "IfNotPresent":
@@ -596,7 +594,7 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	configMap.Data[GetStartupScriptName()] = data
 
 	// Apply the configured config map
-	_, err = controller.ApplyConfigMap(ctx, client, &configMap)
+	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
 	if err != nil {
 		return &configMap, err
 	}
@@ -995,9 +993,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	for _, envVar := range spec.ExtraEnv {
-		extraEnv = append(extraEnv, envVar)
-	}
+	extraEnv = append(extraEnv, spec.ExtraEnv...)
 
 	// append any extra variables
 	env = append(env, extraEnv...)
@@ -1066,6 +1062,10 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		}
 		if derivedProbe.PeriodSeconds == 0 {
 			derivedProbe.PeriodSeconds = defaultProbe.PeriodSeconds
+		}
+		// CSPL-2242 - Default value for FailureThreshold not being set forces unnecessary statefulSet updates
+		if derivedProbe.FailureThreshold == 0 {
+			derivedProbe.FailureThreshold = defaultProbe.FailureThreshold
 		}
 		// Always use defaultProbe Exec. At this time customer supported scripts are not supported.
 		derivedProbe.Exec = defaultProbe.Exec
@@ -1141,7 +1141,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 			// Ideally, this should have been detected in Spec validation time
 			if err != nil {
-				*retError = fmt.Errorf("Not able to access secret object = %s, reason: %s", volume.SecretRef, err)
+				*retError = fmt.Errorf("not able to access secret object = %s, reason: %s", volume.SecretRef, err)
 				return false
 			}
 
@@ -1372,15 +1372,17 @@ func CheckIfAppSrcExistsInConfig(appFrameworkConf *enterpriseApi.AppFrameworkSpe
 
 // isAppSourceScopeValid checks for valid app source
 func isAppSourceScopeValid(scope string) bool {
-	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopeClusterWithPreConfig
+	return scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopeCluster || scope == enterpriseApi.ScopePremiumApps || scope == enterpriseApi.ScopeClusterWithPreConfig
 }
 
 // validateSplunkAppSources validates the App source config in App Framework spec
-func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localScope bool) error {
+func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, localOrPremScope bool, crKind string) error {
 
 	duplicateAppSourceStorageChecker := make(map[string]map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
-	if !localScope {
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
+
+	if !localOrPremScope {
 		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
 		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
 	}
@@ -1419,14 +1421,21 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 
 		var scope string
 		if appSrc.Scope != "" {
-			if localScope && appSrc.Scope != enterpriseApi.ScopeLocal {
-				return fmt.Errorf("invalid scope for App Source: %s. Only local scope is supported for this kind of CR", appSrc.Name)
+			if localOrPremScope && !(appSrc.Scope == enterpriseApi.ScopeLocal || appSrc.Scope == enterpriseApi.ScopePremiumApps) {
+				return fmt.Errorf("invalid scope for App Source: %s. Valid scopes are %s or %s for this kind of CR", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopePremiumApps)
 			}
 
 			if !isAppSourceScopeValid(appSrc.Scope) {
-				return fmt.Errorf("scope for App Source: %s should be either local or cluster or clusterWithPreConfig", appSrc.Name)
+				return fmt.Errorf("scope for App Source: %s should be either %s or %s or %s", appSrc.Name, enterpriseApi.ScopeLocal, enterpriseApi.ScopeCluster, enterpriseApi.ScopePremiumApps)
 			}
 
+			// Check for premium apps properties
+			if appSrc.Scope == enterpriseApi.ScopePremiumApps || appFramework.Defaults.Scope == enterpriseApi.ScopePremiumApps {
+				err := validatePremiumAppsInputs(appSrc, crKind)
+				if err != nil {
+					return err
+				}
+			}
 			scope = appSrc.Scope
 		} else {
 			if appFramework.Defaults.Scope == "" {
@@ -1442,7 +1451,8 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 		duplicateAppSourceStorageChecker[scope][vol+appSrc.Location] = true
 	}
 
-	if localScope && appFramework.Defaults.Scope != "" && appFramework.Defaults.Scope != enterpriseApi.ScopeLocal {
+	if localOrPremScope && appFramework.Defaults.Scope != "" &&
+		(appFramework.Defaults.Scope != enterpriseApi.ScopeLocal && appFramework.Defaults.Scope != enterpriseApi.ScopePremiumApps) {
 		return fmt.Errorf("invalid scope for defaults config. Only local scope is supported for this kind of CR")
 	}
 
@@ -1460,6 +1470,33 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	return nil
 }
 
+// validatePremiumAppsInputs validates premium app source spec
+func validatePremiumAppsInputs(appSrc enterpriseApi.AppSourceSpec, crKind string) error {
+
+	if appSrc.AppSourceDefaultSpec.PremiumAppsProps.Type != enterpriseApi.PremiumAppsTypeEs {
+		return fmt.Errorf("invalid PremiumAppsProps. Valid value is %s", enterpriseApi.PremiumAppsTypeEs)
+	}
+
+	// Check sslEnablement in ES defaults
+	sslEnablementValue := appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement
+	if sslEnablementValue != "" && !(sslEnablementValue == enterpriseApi.SslEnablementAuto ||
+		sslEnablementValue == enterpriseApi.SslEnablementIgnore ||
+		sslEnablementValue == enterpriseApi.SslEnablementStrict) {
+		return fmt.Errorf("invalid sslEnablement. Valid values are %s or %s or %s", enterpriseApi.SslEnablementAuto,
+			enterpriseApi.SslEnablementIgnore, enterpriseApi.SslEnablementStrict)
+	}
+
+	// SHC ES app cannot use ssl_enablement auto, product doesn't support it
+	if crKind == "SearchHeadCluster" {
+		if appSrc.PremiumAppsProps.Type == enterpriseApi.PremiumAppsTypeEs {
+			if appSrc.AppSourceDefaultSpec.PremiumAppsProps.EsDefaults.SslEnablement == enterpriseApi.SslEnablementAuto {
+				return fmt.Errorf("scope for app source: %s search head cluster cannot have an ES app installed with ssl_enablement auto", appSrc.Name)
+			}
+		}
+	}
+	return nil
+}
+
 // isAppFrameworkConfigured checks and returns true if App Framework is configured
 // App Repo config without any App sources will not cause any App Framework activity
 func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool {
@@ -1467,7 +1504,7 @@ func isAppFrameworkConfigured(appFramework *enterpriseApi.AppFrameworkSpec) bool
 }
 
 // ValidateAppFrameworkSpec checks and validates the Apps Frame Work config
-func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool) error {
+func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.AppFrameworkSpec, appContext *enterpriseApi.AppDeploymentContext, localScope bool, crKind string) error {
 	var err error
 	if !isAppFrameworkConfigured(appFramework) {
 		return nil
@@ -1499,7 +1536,7 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 	}
 
 	appDownloadVolume := splcommon.AppDownloadVolume
-	_, err = os.Stat(appDownloadVolume)
+	_, _ = os.Stat(appDownloadVolume)
 
 	// check whether the temporary volume to download apps is mounted or not on the operator pod
 	if _, err := os.Stat(appDownloadVolume); errors.Is(err, os.ErrNotExist) {
@@ -1512,11 +1549,11 @@ func ValidateAppFrameworkSpec(ctx context.Context, appFramework *enterpriseApi.A
 		return err
 	}
 
-	err = validateSplunkAppSources(appFramework, localScope)
-
+	err = validateSplunkAppSources(appFramework, localScope, crKind)
 	if err == nil {
 		scopedLog.Info("App framework configuration is valid")
 	}
+
 	return err
 }
 
@@ -1661,7 +1698,7 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 		if volumes[i].SecretRef != "" {
 			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volumes[i], client, cr, smartstore)
 			if err != nil {
-				return "", fmt.Errorf("Unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+				return "", fmt.Errorf("unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
 			}
 
 			volumesConf = fmt.Sprintf(`%s
@@ -1742,7 +1779,7 @@ func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) st
 	}
 
 	var serverConfIni string
-	serverConfIni = fmt.Sprintf(`[cachemanager]`)
+	serverConfIni = `[cachemanager]`
 
 	emptyStanza := serverConfIni
 

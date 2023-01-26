@@ -237,7 +237,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = nil
 
 			// get revision number of the resource
-			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			_ = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Upload V2 apps to S3 for Indexer Cluster
 			appVersion = "V2"
