@@ -85,7 +85,7 @@
 * CSPL-1768: Adding an annotation to define a default container
 
 * CSPL-1769: Change the naming of volumeMounts to adopt setup of init container
-  
+
 * CSPL-1727: Manifest files to differentiate namespace scoped and cluster scoped
 
 ## 1.1.0 (2022-04-12)
