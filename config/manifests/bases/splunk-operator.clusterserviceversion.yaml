@@ -111,7 +111,7 @@ spec:
     splunk/splunk-operator\n\n\n## Known Issues for the Splunk Operator\n\nReview
     the [Change Log](https://github.com/splunk/splunk-operator/blob/master/docs/ChangeLog.md)
     page for a history of changes in each release.\n\n## Prerequisites for the Splunk
-    Operator\n\n### Supported Kubernetes Versions\n\n- Kubernetes, version 1.16.2+
+    Operator\n\n### Supported Kubernetes Versions\n\n- Kubernetes, version 1.20+
     and later (x86 64-bit only).\n\nThe Splunk Operator should work with any [CNCF
     certified distribution](https://www.cncf.io/certification/software-conformance/)
     of Kubernetes. We do not have platform recommendations, but this is a table of
