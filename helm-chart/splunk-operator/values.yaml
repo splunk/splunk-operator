@@ -52,7 +52,7 @@ splunkOperator:
   containerSecurityContext:
     allowPrivilegeEscalation: false
 
-  # Set security context for Splunk Operator pod 
+  # Set security context for Splunk Operator pod
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#podsecuritycontext-v1-core
   securityContext:
     runAsUser: 1001
@@ -96,7 +96,7 @@ splunkOperator:
   #   port: 8080
   #   protocol: TCP
   #   targetPort: 8080
- 
+
   # Set resource requests and limits for manager container
   resources:
     limits:

@@ -110,7 +110,6 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
 kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.2.0/splunk-operator-namespace.yaml
-
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
