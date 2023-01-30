@@ -2,6 +2,7 @@ splunk-operator:
   enabled: true
   operator:
     serviceAccountName: helm-service-account
+
   splunkOperator:
     clusterWideAccess: false
 

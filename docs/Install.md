@@ -31,7 +31,7 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
         - name: WATCH_NAMESPACE
           value: "namespace1,namespace2"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.3-a1
+          value: splunk/splunk:9.0.3-a2
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -68,7 +68,7 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
         - name: WATCH_NAMESPACE
           value: "namespace1,namespace2"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.3-a1
+          value: splunk/splunk:9.0.3-a2
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME

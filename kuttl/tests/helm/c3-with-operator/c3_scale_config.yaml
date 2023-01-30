@@ -1,5 +1,8 @@
 splunk-operator:
   enabled: false
+  splunkOperator:
+    clusterWideAccess: false
+
 sva:
     c3:
       enabled: true

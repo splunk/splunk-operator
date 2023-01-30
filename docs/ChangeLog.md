@@ -1,12 +1,14 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 2.2.0 (2023-01-24)
+## 2.2.0 (2023-01-25)
 
 * This is the 2.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
 
-* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a1 image with it
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a2 image with it
 
 * CSPL-1493 - Added support to automate the installation of the [Enterprise Security (ES) App](https://splunkbase.splunk.com/app/263) via appFramework phase 3
+
+* Fixed multiple helm chart issues
 
 ## 2.1.1 (2022-12-06)
 
@@ -15,6 +17,9 @@
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.2 image with it
 
 * CSPL-2177: Fixed security vulnerability
+## 2.1.1 (2022-12-07)
+
+* CSPL-2177: Fixed CVE-2022-42898 vulnerability
 
 * CSPL-2171: Fixed namespace specific installation issue in Helm chart and in manifest files
 
@@ -39,11 +44,11 @@
 * CSPL-1407: Bias Language Support
 
 * Documentation Updates
-  
+
 * Security patches
-  
+
 * CSPL-2088: Fix for KVStore startup failure on a pod reset
-  
+
 * CSPL-2034: Fix for Operator crash when removing app source from the CR spec
 
 * Update required go version to 1.19.2 or later
@@ -56,7 +61,7 @@
 * This is the 2.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.0 image with it
-  
+
 * CSPL-935: Operator App Management Framework Phase 3
 
 * Operator SDK upgraded to version 1.18.1 Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/main/docs/SplunkOperatorUpgrade.md)
@@ -82,13 +87,13 @@
 * CSPL-1769: Change the naming of volumeMounts to adopt setup of init container
   
 * CSPL-1727: Manifest files to differentiate namespace scoped and cluster scoped
-  
+
 ## 1.1.0 (2022-04-12)
 
 * This is the 1.1.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.6 image with it
-  
+
 * Operator SDK upgraded to version 1.15.0. Operator upgrade steps with necessary script updated [here](https://github.com/splunk/splunk-operator/blob/master/docs/SplunkOperatorUpgrade.md)
 
 * Introducing Monitoring Console CRD

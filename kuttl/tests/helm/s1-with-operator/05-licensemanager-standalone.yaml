@@ -1,5 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - command: helm upgrade splunk-stdl splunk/splunk-enterprise --reuse-values --set licenseManager.enabled=true
+  - command: helm upgrade splunk-stdl $HELM_REPO_PATH/splunk-enterprise --reuse-values --set licenseManager.enabled=true
     namespaced: true
