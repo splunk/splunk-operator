@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - feature**
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -61,13 +62,6 @@ jobs:
             managermc,
             managercrcrud,
             licensemanager,
-            masterappframeworkc3,
-            masterappframeworkm4,
-            mastersecret,
-            mastersmartstore,
-            mastermc,
-            mastercrcrud,
-            licensemaster,
             managerdeletecr,
           ]
     runs-on: ubuntu-latest
@@ -104,7 +98,7 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Change splunk enterprise to release image on main branches
-        if: github.ref == 'ref/head/main'
+        if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Checkcout code
