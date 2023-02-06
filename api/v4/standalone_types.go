@@ -73,6 +73,9 @@ type StandaloneStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Boolean which indicates whether smartstore is configured
+	SmartStoreConfigured bool `json:"smartStoreConfigured"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

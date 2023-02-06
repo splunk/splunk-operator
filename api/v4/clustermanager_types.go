@@ -67,6 +67,9 @@ type ClusterManagerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Boolean which indicates whether smartstore is configured
+	SmartStoreConfigured bool `json:"smartStoreConfigured"`
 }
 
 // BundlePushInfo Indicates if bundle push required

@@ -65,6 +65,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterManager, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
+		if err != nil {
+			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			return result, err
+		}
+
+		// Set smartstore configured flag to true
+		cr.Status.SmartStoreConfigured = true
+
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
@@ -211,6 +219,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
+		}
+
+		// Reset symbolic links for clusterManager
+		if cr.Status.SmartStoreConfigured {
+			err = resetSymbolicLinks(ctx, client, cr)
+			if err != nil {
+				return result, err
+			}
 		}
 
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.

@@ -1338,6 +1338,28 @@ func isPhaseStatusComplete(phaseInfo *enterpriseApi.PhaseInfo) bool {
 	}
 }
 
+// validatePhaseInfo validates if phase and status in phaseInfo is valid
+func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validatePhaseInfo").WithValues("phaseInfo", phaseInfo)
+
+	// check phase in phaseInfo
+	if phaseInfo.Phase != enterpriseApi.PhaseDownload && phaseInfo.Phase != enterpriseApi.PhasePodCopy &&
+		phaseInfo.Phase != enterpriseApi.PhaseInstall {
+		scopedLog.Info("Invalid phase in phase info")
+		return false
+	}
+
+	// check status in phaseInfo
+	if phaseInfo.Status != enterpriseApi.AppPkgDownloadPending && phaseInfo.Status != enterpriseApi.AppPkgDownloadInProgress &&
+		phaseInfo.Status != enterpriseApi.AppPkgDownloadComplete && phaseInfo.Status != enterpriseApi.AppPkgDownloadError {
+		scopedLog.Info("Invalid status in phase info")
+		return false
+	}
+
+	return true
+}
+
 // isPhaseMaxRetriesReached confirms if the max retries reached
 func isPhaseMaxRetriesReached(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo, afwConfig *enterpriseApi.AppFrameworkSpec) bool {
 	return (afwConfig.PhaseMaxRetries < phaseInfo.FailCount)
@@ -2063,6 +2085,10 @@ func isPhaseInfoEligibleForSchedulerEntry(ctx context.Context, appSrcName string
 		return false
 	}
 
+	// check if phase, status in phaseInfo is valid
+	if !validatePhaseInfo(ctx, phaseInfo) {
+		return false
+	}
 	return true
 }
 

@@ -1052,6 +1052,37 @@ func TestIsPhaseStatusComplete(t *testing.T) {
 	}
 }
 
+func TestValidatePhaseInfo(t *testing.T) {
+	ctx := context.TODO()
+
+	// Invalid empty phase info
+	phaseInfo := &enterpriseApi.PhaseInfo{}
+	if validatePhaseInfo(ctx, phaseInfo) {
+		t.Errorf("Incorrectly marked as valid, incorrect phase and status")
+	}
+
+	// Invalid phase only
+	phaseInfo.Phase = "IncorrectPhase"
+	phaseInfo.Status = enterpriseApi.AppPkgDownloadPending
+	if validatePhaseInfo(ctx, phaseInfo) {
+		t.Errorf("Incorrectly marked as valid, incorrect phase")
+	}
+
+	// Invalid status only
+	phaseInfo.Phase = enterpriseApi.PhaseDownload
+	phaseInfo.Status = 99
+	if validatePhaseInfo(ctx, phaseInfo) {
+		t.Errorf("Incorrectly marked as valid, incorrect status")
+	}
+
+	// valid phase only
+	phaseInfo.Phase = enterpriseApi.PhaseDownload
+	phaseInfo.Status = enterpriseApi.AppPkgDownloadPending
+	if !validatePhaseInfo(ctx, phaseInfo) {
+		t.Errorf("Incorrectly marked as valid, incorrect phase")
+	}
+}
+
 func TestIsPhaseMaxRetriesReached(t *testing.T) {
 	ctx := context.TODO()
 	phaseInfo := &enterpriseApi.PhaseInfo{
