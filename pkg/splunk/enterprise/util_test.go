@@ -2713,3 +2713,96 @@ func TestCheckCmRemainingReferences(t *testing.T) {
 	}
 
 }
+
+func TestResetSymbolicLinks(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sa",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+		},
+	}
+
+	podExecCommands := []string{
+		setSymbolicLinkStdaln,
+	}
+	mockPodExecReturnCtxts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+	}
+
+	// now replace the pod exec client with our mock client
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
+
+	client := spltest.NewMockClient()
+
+	// SA should pass
+	err := resetSymbolicLinks(ctx, client, &cr, cr.Spec.Replicas, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Didn't expect error, err %v", err)
+	}
+
+	mockPodExecClient.CheckPodExecCommands(t, "ResetSymbolicLinks")
+
+	// Test CM
+	cmCr := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sa",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+	}
+
+	podExecCommands = []string{
+		setSymbolicLinkCmanager,
+	}
+	mockPodExecReturnCtxts = []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+	}
+
+	// now replace the pod exec client with our mock client
+	var mockPodExecClientCm *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	mockPodExecClientCm.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
+
+	// CM should pass
+	err = resetSymbolicLinks(ctx, client, &cmCr, 1, mockPodExecClientCm)
+	if err != nil {
+		t.Errorf("Didn't expect error, err %v", err)
+	}
+
+	mockPodExecClientCm.CheckPodExecCommands(t, "ResetSymbolicLinks")
+
+	// Invalid CR test
+	lmCr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lm",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+	}
+
+	err = resetSymbolicLinks(ctx, client, &lmCr, 1, mockPodExecClientCm)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	t.Errorf("err %v", err)
+}
