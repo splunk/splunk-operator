@@ -665,6 +665,8 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 		return err
 	}
 
+	scopedLog.Info("Reset symbolic links successfully")
+
 	// All good
 	return nil
 }
