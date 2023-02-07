@@ -233,9 +233,11 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
+		// Create podExecClient
+		podExecClient := splutil.GetPodExecClient(client, cr, "")
+
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
-			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
 				return result, err
@@ -246,7 +248,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		}
 
 		if cr.Status.SmartStoreConfigured {
-			err = resetSymbolicLinks(ctx, client, cr)
+			err = resetSymbolicLinks(ctx, client, cr, cr.Spec.Replicas, podExecClient)
 			if err != nil {
 				return result, err
 			}

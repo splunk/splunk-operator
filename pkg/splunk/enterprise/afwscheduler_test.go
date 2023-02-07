@@ -571,6 +571,9 @@ func TestTransitionWorkerPhase(t *testing.T) {
 	// Mark one pod for installation pending, all others as pod copy pending
 	for i := 0; i < int(replicas); i++ {
 		ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[i].Phase = enterpriseApi.PhasePodCopy
+
+		// Add dummy status doesn't matter
+		ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[i].Status = enterpriseApi.AppPkgDownloadComplete
 	}
 	ppln.pplnPhases[enterpriseApi.PhaseDownload].q[0].appDeployInfo.AuxPhaseInfo[2].Phase = enterpriseApi.PhaseInstall
 
@@ -1075,7 +1078,7 @@ func TestValidatePhaseInfo(t *testing.T) {
 		t.Errorf("Incorrectly marked as valid, incorrect status")
 	}
 
-	// valid phase only
+	// valid phase and status
 	phaseInfo.Phase = enterpriseApi.PhaseDownload
 	phaseInfo.Status = enterpriseApi.AppPkgDownloadPending
 	if !validatePhaseInfo(ctx, phaseInfo) {

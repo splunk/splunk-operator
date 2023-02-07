@@ -643,17 +643,14 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 // resetSymbolicLinks resets symbolic links on clustermanager, standalone pods.
 // In 9.0.x on a container start the symbolic links created by init container
 // are wiped out and hence we need to reinstate it in case of any smartstore changes.
-func resetSymbolicLinks(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) error {
+var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ResetSymbolicLinks").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	// Setup pod exec client
-	podExecClient := splutil.GetPodExecClient(client, cr, "")
-
 	// Create command for symbolic link creation
 	var command string
-	if crKind == "ClusterMaster" {
+	if crKind == "ClusterManager" {
 		command = setSymbolicLinkCmanager
 	} else if crKind == "Standalone" {
 		command = setSymbolicLinkStdaln
@@ -661,11 +658,10 @@ func resetSymbolicLinks(ctx context.Context, client splcommon.ControllerClient, 
 		return fmt.Errorf("Invalid CR kind to reset symbolic links")
 	}
 
-	// Execute command on pod
-	streamOptions := splutil.NewStreamOptionsObject(command)
-	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-	if stdErr != "" || err != nil {
-		scopedLog.Error(err, "error in resetting symbolic links on pod", "stdErr", stdErr, "stdOut", stdOut, "command", command)
+	// Run the commands on Splunk pods
+	err := runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
 		return err
 	}
 

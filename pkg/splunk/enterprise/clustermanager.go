@@ -209,9 +209,11 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
+		// Create podExecClient
+		podExecClient := splutil.GetPodExecClient(client, cr, "")
+
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
-			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
 			if err != nil {
 				return result, err
@@ -223,7 +225,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		// Reset symbolic links for clusterManager
 		if cr.Status.SmartStoreConfigured {
-			err = resetSymbolicLinks(ctx, client, cr)
+			err = resetSymbolicLinks(ctx, client, cr, 1, podExecClient)
 			if err != nil {
 				return result, err
 			}

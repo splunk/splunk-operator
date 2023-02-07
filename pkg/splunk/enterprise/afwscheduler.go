@@ -1343,20 +1343,39 @@ func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("validatePhaseInfo").WithValues("phaseInfo", phaseInfo)
 
-	// check phase in phaseInfo
-	if phaseInfo.Phase != enterpriseApi.PhaseDownload && phaseInfo.Phase != enterpriseApi.PhasePodCopy &&
-		phaseInfo.Phase != enterpriseApi.PhaseInstall {
-		scopedLog.Info("Invalid phase in phase info")
+	// Check for phase in phaseInfo
+	phases := string(
+		enterpriseApi.PhaseDownload +
+			enterpriseApi.PhasePodCopy +
+			enterpriseApi.PhaseInstall)
+
+	if !strings.Contains(phases, string(phaseInfo.Phase)) {
+		scopedLog.Info("Invalid phase in Phase Info")
 		return false
 	}
 
-	// check status in phaseInfo
-	if phaseInfo.Status != enterpriseApi.AppPkgDownloadPending && phaseInfo.Status != enterpriseApi.AppPkgDownloadInProgress &&
-		phaseInfo.Status != enterpriseApi.AppPkgDownloadComplete && phaseInfo.Status != enterpriseApi.AppPkgDownloadError {
-		scopedLog.Info("Invalid status in phase info")
-		return false
+	// Check for status in phaseInfo
+	statuses := map[enterpriseApi.AppPhaseStatusType]bool{
+		enterpriseApi.AppPkgDownloadPending:     true,
+		enterpriseApi.AppPkgDownloadInProgress:  true,
+		enterpriseApi.AppPkgDownloadComplete:    true,
+		enterpriseApi.AppPkgDownloadError:       true,
+		enterpriseApi.AppPkgPodCopyPending:      true,
+		enterpriseApi.AppPkgPodCopyInProgress:   true,
+		enterpriseApi.AppPkgPodCopyComplete:     true,
+		enterpriseApi.AppPkgMissingFromOperator: true,
+		enterpriseApi.AppPkgPodCopyError:        true,
+		enterpriseApi.AppPkgInstallPending:      true,
+		enterpriseApi.AppPkgInstallInProgress:   true,
+		enterpriseApi.AppPkgInstallComplete:     true,
+		enterpriseApi.AppPkgMissingOnPodError:   true,
+		enterpriseApi.AppPkgInstallError:        true,
 	}
 
+	if ok := statuses[phaseInfo.Status]; !ok {
+		scopedLog.Info("Invalid status in Phase Info")
+		return false
+	}
 	return true
 }
 
