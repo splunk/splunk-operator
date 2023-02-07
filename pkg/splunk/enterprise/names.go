@@ -128,9 +128,6 @@ const (
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p " + splcommon.OperatorClusterManagerAppsLocal + " && ln -sfn " + splcommon.OperatorMountLocalIndexesConf + " " + splcommon.OperatorClusterManagerAppsLocalIndexesConf + " && ln -sfn " + splcommon.OperatorMountLocalServerConf + " " + splcommon.OperatorClusterManagerAppsLocalServerConf
 
-	// setSymbolicLinkStdaln
-	setSymbolicLinkStdaln = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/apps/splunk-operator/local/server.conf"
-
 	// setSymbolicLinkCmanager
 	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
 

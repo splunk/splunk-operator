@@ -640,9 +640,9 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	return SplunkOperatorAppConfigMap, configMapDataChanged, nil
 }
 
-// resetSymbolicLinks resets symbolic links on clustermanager, standalone pods.
+// resetSymbolicLinks resets symbolic links on clustermanager pod.
 // In 9.0.x on a container start the symbolic links created by init container
-// are wiped out and hence we need to reinstate it in case of any smartstore changes.
+// are wiped out due to bundle push and hence we need to reinstate it in case of any smartstore changes.
 var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	reqLogger := log.FromContext(ctx)
@@ -652,8 +652,6 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 	var command string
 	if crKind == "ClusterManager" {
 		command = setSymbolicLinkCmanager
-	} else if crKind == "Standalone" {
-		command = setSymbolicLinkStdaln
 	} else {
 		return fmt.Errorf("Invalid CR kind to reset symbolic links")
 	}

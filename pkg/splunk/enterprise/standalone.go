@@ -76,9 +76,6 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			return result, err
 		}
 
-		// Set smartstore configured flag to true
-		cr.Status.SmartStoreConfigured = true
-
 		_, _, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
@@ -233,11 +230,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
-		// Create podExecClient
-		podExecClient := splutil.GetPodExecClient(client, cr, "")
-
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
 			if err != nil {
 				return result, err
@@ -246,15 +241,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
 		}
-
-		if cr.Status.SmartStoreConfigured {
-			err = resetSymbolicLinks(ctx, client, cr, cr.Spec.Replicas, podExecClient)
-			if err != nil {
-				return result, err
-			}
-		}
 	}
-
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
 	if !result.Requeue {
