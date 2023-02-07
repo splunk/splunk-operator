@@ -2722,7 +2722,7 @@ func TestResetSymbolicLinks(t *testing.T) {
 	// Test CM
 	cmCr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sa",
+			Name:      "example",
 			Namespace: "test",
 		},
 		TypeMeta: metav1.TypeMeta{

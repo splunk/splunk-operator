@@ -1350,7 +1350,7 @@ func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) 
 			enterpriseApi.PhaseInstall)
 
 	if !strings.Contains(phases, string(phaseInfo.Phase)) {
-		scopedLog.Info("Invalid phase in Phase Info")
+		scopedLog.Info("Invalid phase in PhaseInfo")
 		return false
 	}
 
@@ -1373,7 +1373,7 @@ func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) 
 	}
 
 	if ok := statuses[phaseInfo.Status]; !ok {
-		scopedLog.Info("Invalid status in Phase Info")
+		scopedLog.Info("Invalid status in PhaseInfo")
 		return false
 	}
 	return true
