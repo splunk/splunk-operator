@@ -70,9 +70,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
-		// Set smartstore configured flag to true
-		cr.Status.SmartStoreConfigured = true
-
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
@@ -223,14 +220,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			cr.Status.TelAppInstalled = true
 		}
 
-		// Reset symbolic links for clusterManager
-		if cr.Status.SmartStoreConfigured {
-			err = resetSymbolicLinks(ctx, client, cr, 1, podExecClient)
-			if err != nil {
-				return result, err
-			}
-		}
-
 		// Manager apps bundle push requires multiple reconcile iterations in order to reflect the configMap on the CM pod.
 		// So keep PerformCmBundlePush() as the last call in this block of code, so that other functionalities are not blocked
 		err = PerformCmBundlePush(ctx, client, cr)
@@ -364,6 +353,12 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
 	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
 	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
+	if err != nil {
+		return err
+	}
+
+	// Reset symbolic links for pod
+	err = resetSymbolicLinks(ctx, c, cr, 1, podExecClient)
 	if err != nil {
 		return err
 	}
