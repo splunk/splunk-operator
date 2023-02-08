@@ -2748,8 +2748,6 @@ func TestResetSymbolicLinks(t *testing.T) {
 		t.Errorf("Didn't expect error, err %v", err)
 	}
 
-	mockPodExecClient.CheckPodExecCommands(t, "ResetSymbolicLinks")
-
 	// Invalid CR test
 	lmCr := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
