@@ -53,8 +53,7 @@ Each Splunk Operator release has specific Splunk Enterprise compatibility requir
 
 ### Splunk Apps Installation
 
-Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](Examples.md#installing-splunk-apps).  Premium apps such as Enterprise Security and IT Service Intelligence are currently not supported.
-
+Apps and add-ons can be installed using the Splunk Operator by following the instructions given at [Installing Splunk Apps](Examples.md#installing-splunk-apps). For the installation of premium apps please refer to [Premium Apps Installation Guide](PremiumApps.md).
 
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
