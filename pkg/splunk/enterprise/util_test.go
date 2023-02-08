@@ -2747,4 +2747,20 @@ func TestResetSymbolicLinks(t *testing.T) {
 	if err != nil {
 		t.Errorf("Didn't expect error, err %v", err)
 	}
+
+	// Invalid CR test
+	lmCr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lm",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+	}
+
+	err = resetSymbolicLinks(ctx, client, &lmCr, 1, mockPodExecClient)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }

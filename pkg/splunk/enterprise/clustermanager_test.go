@@ -298,9 +298,6 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
-	resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
-		return nil
-	}
 
 	// Without S3 keys, ApplyClusterManager should fail
 	_, err := ApplyClusterManager(ctx, client, &current)
