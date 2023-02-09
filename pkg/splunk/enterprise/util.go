@@ -640,6 +640,35 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	return SplunkOperatorAppConfigMap, configMapDataChanged, nil
 }
 
+// resetSymbolicLinks resets symbolic links on clustermanager pod.
+// In 9.0.x on a container start the symbolic links created by init container
+// are wiped out due to bundle push and hence we need to reinstate it in case of any smartstore changes.
+var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, replicas int32, podExecClient splutil.PodExecClientImpl) error {
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ResetSymbolicLinks").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Create command for symbolic link creation
+	var command string
+	if crKind == "ClusterManager" {
+		command = setSymbolicLinkCmanager
+	} else {
+		return fmt.Errorf("Invalid CR kind to reset symbolic links")
+	}
+
+	// Run the commands on Splunk pods
+	err := runCustomCommandOnSplunkPods(ctx, cr, replicas, command, podExecClient)
+	if err != nil {
+		scopedLog.Error(err, "unable to run command on splunk pod")
+		return err
+	}
+
+	scopedLog.Info("Reset symbolic links successfully")
+
+	// All good
+	return nil
+}
+
 // setupInitContainer modifies the podTemplateSpec object
 func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, imagePullPolicy string, commandOnContainer string, isEtcVolEph bool) {
 	var volMntName string

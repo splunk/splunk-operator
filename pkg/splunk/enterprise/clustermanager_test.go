@@ -294,7 +294,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	client := spltest.NewMockClient()
 
-	// Mock the addTelApp function for unit tests
+	// Mock some functions for unit tests
 	addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 		return nil
 	}
