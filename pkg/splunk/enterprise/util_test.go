@@ -2713,3 +2713,54 @@ func TestCheckCmRemainingReferences(t *testing.T) {
 	}
 
 }
+
+func TestResetSymbolicLinks(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	// Test CM
+	cmCr := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "example",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+	}
+
+	podExecCommands := []string{
+		setSymbolicLinkCmanager,
+	}
+	mockPodExecReturnCtxts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+		},
+	}
+
+	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnCtxts...)
+
+	// CM should pass
+	err := resetSymbolicLinks(ctx, client, &cmCr, 1, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Didn't expect error, err %v", err)
+	}
+
+	// Invalid CR test
+	lmCr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lm",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+	}
+
+	err = resetSymbolicLinks(ctx, client, &lmCr, 1, mockPodExecClient)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
