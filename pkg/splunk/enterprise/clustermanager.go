@@ -65,6 +65,11 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
 		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkClusterManager, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
+		if err != nil {
+			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			return result, err
+		}
+
 		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
 		if err != nil {
 			return result, err
@@ -201,9 +206,11 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
+		// Create podExecClient
+		podExecClient := splutil.GetPodExecClient(client, cr, "")
+
 		// Add a splunk operator telemetry app
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
-			podExecClient := splutil.GetPodExecClient(client, cr, "")
 			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
 			if err != nil {
 				return result, err
@@ -346,6 +353,12 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	cmPodName := fmt.Sprintf("splunk-%s-%s-0", cr.GetName(), "cluster-manager")
 	podExecClient := splutil.GetPodExecClient(c, cr, cmPodName)
 	err := CheckIfsmartstoreConfigMapUpdatedToPod(ctx, c, cr, podExecClient)
+	if err != nil {
+		return err
+	}
+
+	// Reset symbolic links for pod
+	err = resetSymbolicLinks(ctx, c, cr, 1, podExecClient)
 	if err != nil {
 		return err
 	}
