@@ -148,6 +148,11 @@ func CompareTolerations(a []corev1.Toleration, b []corev1.Toleration) bool {
 	return sortAndCompareSlices(a, b, SortFieldKey)
 }
 
+// CompareTopologySpreadConstraints compares the 2 list of topologySpreadConstraints
+func CompareTopologySpreadConstraints(a []corev1.TopologySpreadConstraint, b []corev1.TopologySpreadConstraint) bool {
+	return sortAndCompareSlices(a, b, SortFieldKey)
+}
+
 // CompareImagePullSecrets compares the 2 list of imagePullSecrets
 func CompareImagePullSecrets(a []corev1.LocalObjectReference, b []corev1.LocalObjectReference) bool {
 	return sortAndCompareSlices(a, b, SortFieldName)

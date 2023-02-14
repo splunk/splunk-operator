@@ -109,6 +109,9 @@ type Spec struct {
 
 	// ServiceTemplate is a template used to create Kubernetes services
 	ServiceTemplate corev1.Service `json:"serviceTemplate"`
+
+	// TopologySpreadConstraint
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 }
 
 // Phase is used to represent the current phase of a custom resource
