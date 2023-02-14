@@ -1,0 +1,5 @@
+splunk-operator:
+  enabled: false
+sva:
+    s1:
+      enabled: true
