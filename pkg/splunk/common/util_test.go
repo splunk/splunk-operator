@@ -768,8 +768,8 @@ func TestCompareTopologySpreadConstraints(t *testing.T) {
 
 	// No change
 	test(false)
-	var nullTopologySpreadConstraint corev1.TopologySpreadConstraint
 
+	var nullTopologySpreadConstraint corev1.TopologySpreadConstraint
 	topologySpreadConstraint1 := corev1.TopologySpreadConstraint{
 		MaxSkew:           1,
 		TopologyKey:       "key1",
@@ -780,8 +780,8 @@ func TestCompareTopologySpreadConstraints(t *testing.T) {
 		//NodeTaintsPolicy:
 	}
 	topologySpreadConstraint2 := corev1.TopologySpreadConstraint{
-		MaxSkew:           2,
-		TopologyKey:       "key2",
+		MaxSkew:           1,
+		TopologyKey:       "key1",
 		WhenUnsatisfiable: "key2",
 		//LabelSelector: <object>
 		//MatchLabelKeys: <list> # optional; alpha since v1.25
@@ -806,7 +806,7 @@ func TestCompareTopologySpreadConstraints(t *testing.T) {
 	topologySpreadConstraint.MaxSkew = 1
 	a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
 	b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
-	test(true)
+	test(false)
 
 	// Change topologyKey
 	topologySpreadConstraint = topologySpreadConstraint2

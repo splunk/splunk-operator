@@ -72,6 +72,9 @@ const (
 	// SortFieldKey represents field name Key for sorting
 	SortFieldKey = "Key"
 
+	// SortFieldTopologyKey represents field name TopologyKey for sorting
+	SortFieldTopologyKey = "TopologyKey"
+
 	// Appframework specific polling intervals
 	// Need to make sure to change the comment in
 	// the spec section for AppFramework about the polling intervals.
