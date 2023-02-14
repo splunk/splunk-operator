@@ -110,7 +110,7 @@ type Spec struct {
 	// ServiceTemplate is a template used to create Kubernetes services
 	ServiceTemplate corev1.Service `json:"serviceTemplate"`
 
-	// TopologySpreadConstraint
+	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 }
 
