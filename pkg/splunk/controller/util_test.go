@@ -291,7 +291,7 @@ func TestSortStatefulSetSlices(t *testing.T) {
 		return reflect.DeepEqual(sorted.Containers[0].Env, unsorted.Containers[0].Env)
 	}
 	sortTester("Env variables")
-	
+
 }
 
 func TestHasProbeChanged(t *testing.T) {

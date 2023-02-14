@@ -1922,7 +1922,7 @@ spec:
                   type: object
                 type: array
               topologySpreadConstraints:
-                description: TopologySpreadConstraint
+                description: TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
                 items:
                   description: TopologySpreadConstraint specifies how to spread matching
                     pods among the given topology.
@@ -5639,7 +5639,7 @@ spec:
                   type: object
                 type: array
               topologySpreadConstraints:
-                description: TopologySpreadConstraint
+                description: TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
                 items:
                   description: TopologySpreadConstraint specifies how to spread matching
                     pods among the given topology.
