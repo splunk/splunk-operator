@@ -259,7 +259,7 @@ func SortStatefulSetSlices(ctx context.Context, current *corev1.PodSpec, name st
 	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
 
 	// Sort TopologySpreadConstraints
-	splcommon.SortSlice(current.TopologySpreadConstraints, splcommon.SortFieldKey)
+	splcommon.SortSlice(current.TopologySpreadConstraints, splcommon.SortFieldTopologyKey)
 
 	// Sort volumes
 	splcommon.SortSlice(current.Volumes, splcommon.SortFieldName)
