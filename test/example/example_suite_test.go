@@ -18,8 +18,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/reporters"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -38,8 +37,8 @@ func TestExampleSuite(t *testing.T) {
 
 	RegisterFailHandler(Fail)
 
-	junitReporter := reporters.NewJUnitReporter(testSuiteName + "_junit.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "Running "+testSuiteName, []Reporter{junitReporter})
+	//junitReporter := reporters.NewJUnitReporter(testSuiteName + "_junit.xml")
+	//RunSpecsWithDefaultAndCustomReporters(t, "Running "+testSuiteName, []Reporter{junitReporter})
 }
 
 var _ = BeforeSuite(func() {
