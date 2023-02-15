@@ -148,7 +148,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// create or update a regular service for indexer cluster (ingestion)
-	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterMaster, false))
+	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		return result, err
 	}
