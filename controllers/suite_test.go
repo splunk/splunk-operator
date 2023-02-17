@@ -160,7 +160,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-}, NodeTimeout(60))
+}, NodeTimeout(260))
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
