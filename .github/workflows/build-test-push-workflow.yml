@@ -61,6 +61,9 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+    - name: Install Ginkgo
+      run: |
+          make setup/ginkgo
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Install Operator SDK
