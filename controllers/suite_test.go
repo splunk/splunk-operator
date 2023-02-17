@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -160,7 +161,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-}, NodeTimeout(260))
+}, NodeTimeout(time.Second*500))
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
