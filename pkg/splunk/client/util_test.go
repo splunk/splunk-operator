@@ -88,6 +88,57 @@ func TestNewMockAWSS3Client(t *testing.T) {
 	}
 }
 
+
+func TestNewMockAWMinioClient(t *testing.T) {
+	ctx := context.TODO()
+	// Test 1. Test the valid case
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		cl := spltest.MockMinioS3Client{}
+		return cl
+	}
+
+	_, err := NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+
+	if err != nil {
+		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
+	}
+
+	// Test 2. Test the invalid case by returning nil client
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return nil
+	}
+	_, err = NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+
+	if err == nil {
+		t.Errorf("NewMockMinioS3Client should have returned an error since we passed nil client in init function.")
+	}
+}
+
+func TestNewMockAzureBlobClient(t *testing.T) {
+	ctx := context.TODO()
+	// Test 1. Test the valid case
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		cl := &spltest.MockHTTPClient{}
+		return cl
+	}
+
+	_, err := NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+
+	if err != nil {
+		t.Errorf("NewMockAzureBlobClient should have returned a Mock AWS client.")
+	}
+
+	// Test 2. Test the invalid case by returning nil client
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return nil
+	}
+	_, err = NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+
+	if err == nil {
+		t.Errorf("NewMockAzureBlobClient should have returned an error since we passed nil client in init function.")
+	}
+}
+
 func TestGetVolume(t *testing.T) {
 	ctx := context.TODO()
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
