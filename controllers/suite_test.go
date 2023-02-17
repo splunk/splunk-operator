@@ -48,9 +48,7 @@ var k8sManager ctrl.Manager
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	//RunSpecsWithDefaultAndCustomReporters(t,
-	//	"Controller Suite",
-	//	[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, "Controller Suite")
 
 }
 

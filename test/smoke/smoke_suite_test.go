@@ -43,7 +43,7 @@ func TestBasic(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	//junitReporter := reporters.NewJUnitReporter(testSuiteName + "_junit.xml")
-	//RunSpecsWithDefaultAndCustomReporters(t, "Running "+testSuiteName, []Reporter{junitReporter})
+	RunSpecs(t, "Running "+testSuiteName )
 }
 
 var _ = BeforeSuite(func() {
