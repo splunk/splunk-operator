@@ -126,8 +126,8 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test  -v -covermode=count -coverprofile=coverage.out --timeout=300s   ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers  2>&1 | tee coverage.out
-	# go-junit-report < coverage.out > report.xml
+	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test  -v -covermode=count -coverprofile=coverage.out --timeout=300s   ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers  2>&1 | tee coverage.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers
 
 
 ##@ Build
