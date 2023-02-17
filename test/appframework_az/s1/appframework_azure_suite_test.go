@@ -58,6 +58,7 @@ func TestBasic(t *testing.T) {
 
 	//junitReporter := reporters.NewJUnitReporter(testSuiteName + "_junit.xml")
 	RunSpecs(t, "Running "+testSuiteName)
+}
 
 var _ = BeforeSuite(func() {
 	ctx := context.TODO()
