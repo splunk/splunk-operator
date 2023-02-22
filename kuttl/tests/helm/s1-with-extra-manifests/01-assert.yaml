@@ -1,0 +1,24 @@
+---
+# assert for splunk operator deployment to be ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+status:
+  readyReplicas: 1
+  availableReplicas: 1
+
+---
+# check for standalone to be in ready state
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  phase: Ready
+
+---
+apiVersion: cloud.google.com/v1beta1
+kind: BackendConfig
+metadata:
+  name: 'splunk-operator-test'
