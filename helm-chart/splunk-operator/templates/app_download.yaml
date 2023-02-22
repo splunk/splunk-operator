@@ -10,10 +10,20 @@ metadata:
 spec:
   accessModes:
   - ReadWriteOnce
+{{- if and $volume.resources }}
+  resources:
+    {{- toYaml $volume.resources | default "" | nindent 4}}
+{{- else }}
   resources:
     requests:
       storage: 10Gi
+{{- end }}
   volumeMode: Filesystem
+{{- if $volume.storageClassName }}
+  storageClassName: {{ $volume.storageClassName }}
+{{- end }}
+
+---
 {{- end }}
 {{- end }}
 {{- end }}
