@@ -76,18 +76,6 @@ spec:
 {{- if .Values.licenseManager.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.licenseManager.readinessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.licenseManager.startupProbe }}
-  startupProbe:
-{{ toYaml .Values.licenseManager.startupProbe | indent 4 }}
-{{- end }}
-{{- if .Values.licenseManager.livenessProbe }}
-  livenessProbe:
-{{ toYaml .Values.licenseManager.livenessProbe | indent 4 }}
-{{- end }}
-{{- if .Values.licenseManager.readinessProbe }}
-  readinessProbe:
-{{ toYaml .Values.licenseManager.readinessProbe | indent 4 }}
-{{- end }}
 {{- with .Values.licenseManager.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
