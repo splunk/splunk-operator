@@ -109,18 +109,6 @@ items:
   {{- if $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
     readinessInitialDelaySeconds: {{ $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.startupProbe }}
-    startupProbe:
-{{ toYaml $.Values.searchHeadCluster.startupProbe | indent 6 }}
-  {{- end }}
-  {{- if $.Values.searchHeadCluster.livenessProbe }}
-    livenessProbe:
-{{ toYaml $.Values.searchHeadCluster.livenessProbe | indent 6 }}
-  {{- end }}
-  {{- if $.Values.searchHeadCluster.readinessProbe }}
-    readinessProbe:
-{{ toYaml $.Values.searchHeadCluster.readinessProbe | indent 6 }}
-  {{- end }}
   {{- with $.Values.searchHeadCluster.etcVolumeStorageConfig }}
     etcVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
