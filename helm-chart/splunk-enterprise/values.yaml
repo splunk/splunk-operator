@@ -177,6 +177,24 @@ clusterManager:
   # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   # Storage configuration for /opt/splunk/etc volume
   # To use a StorageClass other than your default StorageClass, specify the storageClassName
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/StorageClass.md
@@ -266,6 +284,24 @@ indexerCluster:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -354,6 +390,24 @@ searchHeadCluster:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -434,6 +488,24 @@ monitoringConsole:
   livenessInitialDelaySeconds: 300
 
   readinessInitialDelaySeconds: 10
+
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
 
   etcVolumeStorageConfig:
     ephemeralStorage: false
@@ -526,6 +598,24 @@ licenseManager:
   livenessInitialDelaySeconds: 300
 
   readinessInitialDelaySeconds: 10
+
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
 
   etcVolumeStorageConfig:
     ephemeralStorage: false
@@ -621,6 +711,24 @@ standalone:
   livenessInitialDelaySeconds: 300
 
   readinessInitialDelaySeconds: 10
+
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
 
   etcVolumeStorageConfig:
     ephemeralStorage: false

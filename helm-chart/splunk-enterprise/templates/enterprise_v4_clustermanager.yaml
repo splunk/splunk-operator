@@ -93,6 +93,18 @@ spec:
 {{- if .Values.clusterManager.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.clusterManager.readinessInitialDelaySeconds }}
 {{- end }}
+{{- if .Values.clusterManager.startupProbe }}
+  startupProbe:
+{{ toYaml .Values.clusterManager.startupProbe | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.livenessProbe }}
+  livenessProbe:
+{{ toYaml .Values.clusterManager.livenessProbe | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.readinessProbe }}
+  readinessProbe:
+{{ toYaml .Values.clusterManager.readinessProbe | indent 4 }}
+{{- end }}
 {{- with .Values.clusterManager.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
