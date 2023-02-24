@@ -9,8 +9,8 @@ standalone:
   enabled: true
   topologySpreadConstraints:
   - maxSkew: 1
-    topologyKey: app.kubernetes.io/managed-by
+    topologyKey: topology.kubernetes.io/region
     whenUnsatisfiable: DoNotSchedule
     labelSelector:
       matchLabels:
-        app.kubernetes.io/managed-by: splunk-operator
+        topology.kubernetes.io/region: us-west-2
