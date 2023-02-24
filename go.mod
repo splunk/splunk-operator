@@ -97,6 +97,6 @@ require (
 )
 
 replace (
-	github.com/prometheus/client_golang => github.com/prometheus/client_golang v1.11.1 //For CVE-2022-21698
-	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	golang.org/x/crypto => golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
+	golang.org/x/net => golang.org/x/net v0.7.0
 )
