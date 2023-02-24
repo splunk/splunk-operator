@@ -37,7 +37,6 @@ func TestExampleSuite(t *testing.T) {
 
 	RegisterFailHandler(Fail)
 
-	//junitReporter := reporters.NewJUnitReporter(testSuiteName + "_junit.xml")
 	RunSpecs(t, "Running "+testSuiteName)
 }
 
