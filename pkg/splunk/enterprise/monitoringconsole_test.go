@@ -325,6 +325,9 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		{Name: "A", Value: "test-b"},
 	}
 
+	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",

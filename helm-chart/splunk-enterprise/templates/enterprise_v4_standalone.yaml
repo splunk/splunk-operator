@@ -20,7 +20,7 @@ spec:
 {{- end }}
 {{- with .Values.standalone.smartstore }}
   smartstore:
-{{ toYaml .Values.standalone.smartstore | indent 4 }}
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- if .Values.existingClusterManager }}
   clusterManagerRef:
