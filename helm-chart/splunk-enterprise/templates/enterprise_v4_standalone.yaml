@@ -98,6 +98,18 @@ spec:
 {{- if .Values.standalone.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.standalone.readinessInitialDelaySeconds }}
 {{- end }}
+{{- if .Values.standalone.startupProbe }}
+  startupProbe:
+{{ toYaml .Values.standalone.startupProbe | indent 4 }}
+{{- end }}
+{{- if .Values.standalone.livenessProbe }}
+  livenessProbe:
+{{ toYaml .Values.standalone.livenessProbe | indent 4 }}
+{{- end }}
+{{- if .Values.standalone.readinessProbe }}
+  readinessProbe:
+{{ toYaml .Values.standalone.readinessProbe | indent 4 }}
+{{- end }}
 {{- with .Values.standalone.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
