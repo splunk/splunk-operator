@@ -111,15 +111,16 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
+    createdAt: "2023-02-24T01:36:38Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.25.0
+    operators.operatorframework.io/builder: operator-sdk-v1.27.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.2.0
+  name: splunk-operator.v2.1.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -248,16 +249,16 @@ spec:
     splunk/splunk-operator\n\n\n## Known Issues for the Splunk Operator\n\nReview
     the [Change Log](https://github.com/splunk/splunk-operator/blob/master/docs/ChangeLog.md)
     page for a history of changes in each release.\n\n## Prerequisites for the Splunk
-    Operator\n\n### Supported Kubernetes Versions\n\n- Kubernetes, version 1.20+
-    and later (x86 64-bit only).\n\nThe Splunk Operator should work with any [CNCF
-    certified distribution](https://www.cncf.io/certification/software-conformance/)
-    of Kubernetes. We do not have platform recommendations, but this is a table of
-    platforms that our developers, customers, and partners have used successfully
-    with the Splunk Operator.\n\n<table>\n<tr><td> Splunk Development & Testing Platforms
-    </td><td> Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE)
-    </td></tr>\n<tr><td> Customer Reported Platforms </td><td> Microsoft Azure Kubernetes
-    Service (AKS), Red Hat OpenShift </td></tr>\n<tr><td> Partner Tested Platforms</td><td>
-    HPE Ezmeral</td></tr>\n<tr><td> Other Platforms </td><td>CNCF certified distribution</td></tr>\n</table>\n\n###
+    Operator\n\n### Supported Kubernetes Versions\n\n- Kubernetes, version 1.20+ and
+    later (x86 64-bit only).\n\nThe Splunk Operator should work with any [CNCF certified
+    distribution](https://www.cncf.io/certification/software-conformance/) of Kubernetes.
+    We do not have platform recommendations, but this is a table of platforms that
+    our developers, customers, and partners have used successfully with the Splunk
+    Operator.\n\n<table>\n<tr><td> Splunk Development & Testing Platforms </td><td>
+    Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE) </td></tr>\n<tr><td>
+    Customer Reported Platforms </td><td> Microsoft Azure Kubernetes Service (AKS),
+    Red Hat OpenShift </td></tr>\n<tr><td> Partner Tested Platforms</td><td> HPE Ezmeral</td></tr>\n<tr><td>
+    Other Platforms </td><td>CNCF certified distribution</td></tr>\n</table>\n\n###
     Splunk Enterprise Compatibility\nEach Splunk Operator release has specific Splunk
     Enterprise compatibility requirements. Before installing or upgrading the Splunk
     Operator, review the [Change Log](https://github.com/splunk/splunk-operator/blob/master/docs/ChangeLog.md)
@@ -800,14 +801,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: splunk/splunk:9.0.3-a2
+                  value: docker.io/splunk/splunk:9.0.3-a2
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: splunk/splunk-operator:2.2.0
+                image: docker.io/splunk/splunk-operator:2.2.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -914,5 +915,5 @@ spec:
   relatedImages:
   - image: docker.io/splunk/splunk:9.0.3-a2
     name: splunk-enterprise
-  replaces: splunk-operator.v2.1.0
-  version: 2.2.0
+  replaces: splunk-operator.v2.0.0
+  version: 2.1.0

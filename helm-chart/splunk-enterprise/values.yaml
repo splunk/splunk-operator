@@ -225,6 +225,17 @@ clusterManager:
     #         values:
     #         - zone-1a
 
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 
 indexerCluster:
@@ -271,13 +282,25 @@ indexerCluster:
     #   cpu: "4"
     # limits:
     #   memory: "12Gi"
-    #   cpu: "24"  
+    #   cpu: "24"
 
   serviceAccount: ""
 
   tolerations: []
  
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 searchHeadCluster:
 
@@ -355,6 +378,18 @@ searchHeadCluster:
   
   affinity: {}
 
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
+
 monitoringConsole:
 
   enabled: false
@@ -423,6 +458,18 @@ monitoringConsole:
   tolerations: []
   
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 licenseManager:
 
@@ -504,6 +551,18 @@ licenseManager:
 
   affinity: {}
 
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
+
 standalone:
 
   enabled: false
@@ -532,7 +591,7 @@ standalone:
     #     endpoint:
     #     region:
     #     secretRef:
-    
+
   smartstore: {}
     # defaults:
     #   volumeName:
@@ -586,6 +645,18 @@ standalone:
   tolerations: []
 
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []

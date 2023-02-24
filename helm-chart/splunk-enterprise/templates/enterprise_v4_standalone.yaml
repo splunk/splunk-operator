@@ -117,6 +117,10 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with $.Values.standalone.topologySpreadConstraints }}
+  topologySpreadConstraints:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.standalone.affinity }}
   affinity:
 {{ toYaml . | indent 4 }}

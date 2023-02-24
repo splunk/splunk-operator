@@ -95,6 +95,10 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.monitoringConsole.topologySpreadConstraints }}
+  topologySpreadConstraints:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.monitoringConsole.affinity }}
   affinity:
 {{ toYaml . | indent 4 }}
