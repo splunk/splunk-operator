@@ -1887,19 +1887,19 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 		return fmt.Errorf("invalid Liveness Probe config. Reason: %s", err)
 	}
 
-	if livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
+	if livenessProbe.InitialDelaySeconds != 0 && livenessProbe.InitialDelaySeconds < livenessProbeDefaultDelaySec {
 		scopedLog.Info("Liveness Probe: Configured  InitialDelaySeconds is too small, recommended default minimum will be used", "configured", livenessProbe.InitialDelaySeconds, "recommended minimum", livenessProbeDefaultDelaySec)
 	}
 
-	if livenessProbe.TimeoutSeconds < livenessProbeTimeoutSec {
+	if livenessProbe.TimeoutSeconds != 0 && livenessProbe.TimeoutSeconds < livenessProbeTimeoutSec {
 		scopedLog.Info("Liveness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.TimeoutSeconds, "recommended minimum", livenessProbeTimeoutSec)
 	}
 
-	if livenessProbe.PeriodSeconds < livenessProbePeriodSec {
+	if livenessProbe.PeriodSeconds != 0 && livenessProbe.PeriodSeconds < livenessProbePeriodSec {
 		scopedLog.Info("Liveness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", livenessProbe.PeriodSeconds, "recommended minimum", livenessProbePeriodSec)
 	}
 
-	if livenessProbe.FailureThreshold < livenessProbeFailureThreshold {
+	if livenessProbe.FailureThreshold != 0 && livenessProbe.FailureThreshold < livenessProbeFailureThreshold {
 		scopedLog.Info("Liveness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", livenessProbe.FailureThreshold, "recommended minimum", livenessProbeFailureThreshold)
 	}
 
@@ -1922,19 +1922,19 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 		return fmt.Errorf("invalid Readiness Probe config. Reason: %s", err)
 	}
 
-	if readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
+	if readinessProbe.InitialDelaySeconds != 0 && readinessProbe.InitialDelaySeconds < readinessProbeDefaultDelaySec {
 		scopedLog.Info("Readiness Probe: Configured InitialDelaySeconds is too small, recommended default minimum will be used", "configured", readinessProbe.InitialDelaySeconds, "recommended minimum", readinessProbeDefaultDelaySec)
 	}
 
-	if readinessProbe.TimeoutSeconds < readinessProbeTimeoutSec {
+	if readinessProbe.TimeoutSeconds != 0 && readinessProbe.TimeoutSeconds < readinessProbeTimeoutSec {
 		scopedLog.Info("Readiness Probe: Configured TimeoutSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.TimeoutSeconds, "recommended minimum", readinessProbeTimeoutSec)
 	}
 
-	if readinessProbe.PeriodSeconds < readinessProbePeriodSec {
+	if readinessProbe.PeriodSeconds != 0 && readinessProbe.PeriodSeconds < readinessProbePeriodSec {
 		scopedLog.Info("Readiness Probe: Configured PeriodSeconds is too small, recommended default minimum will be used", "configured", readinessProbe.PeriodSeconds, "recommended minimum", readinessProbePeriodSec)
 	}
 
-	if readinessProbe.FailureThreshold < readinessProbeFailureThreshold {
+	if readinessProbe.FailureThreshold != 0 && readinessProbe.FailureThreshold < readinessProbeFailureThreshold {
 		scopedLog.Info("Readiness Probe: Configured FailureThreshold is too small, recommended default minimum will be used", "configured", readinessProbe.FailureThreshold, "recommended minimum", readinessProbeFailureThreshold)
 	}
 	return err
@@ -1956,15 +1956,15 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 		return fmt.Errorf("invalid Startup Probe config. Reason: %s", err)
 	}
 
-	if startupProbe.InitialDelaySeconds < startupProbeDefaultDelaySec {
+	if startupProbe.InitialDelaySeconds != 0 && startupProbe.InitialDelaySeconds < startupProbeDefaultDelaySec {
 		scopedLog.Info("Startup Probe: InitialDelaySeconds is too small, recommended default minimum will be used", "configured", startupProbe.InitialDelaySeconds, "recommended minimum", startupProbeDefaultDelaySec)
 	}
 
-	if startupProbe.TimeoutSeconds < startupProbeTimeoutSec {
+	if startupProbe.TimeoutSeconds != 0 && startupProbe.TimeoutSeconds < startupProbeTimeoutSec {
 		scopedLog.Info("Startup Probe: TimeoutSeconds is too small, recommended default minimum will be used", "configured", startupProbe.TimeoutSeconds, "recommended minimum", startupProbeTimeoutSec)
 	}
 
-	if startupProbe.PeriodSeconds < startupProbePeriodSec {
+	if startupProbe.PeriodSeconds != 0 && startupProbe.PeriodSeconds < startupProbePeriodSec {
 		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
 	return err
