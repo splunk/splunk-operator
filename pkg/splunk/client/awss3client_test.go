@@ -17,10 +17,13 @@ package client
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"crypto/tls"
+	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -31,8 +34,31 @@ func TestInitAWSClientWrapper(t *testing.T) {
 	if awsS3ClientSession == nil {
 		t.Errorf("We should have got a valid AWS S3 client session object")
 	}
+
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
+	if awsS3ClientSession == nil {
+		t.Errorf("Should receive an error")
+	}
 }
 
+func TestGetTLSVersion(t *testing.T) {
+	tr := http.Transport{
+		TLSClientConfig: &tls.Config{},
+	}
+
+	versions := []uint16{
+		tls.VersionTLS10,
+		tls.VersionTLS11,
+		tls.VersionTLS12,
+		tls.VersionTLS13,
+		14,
+	}
+
+	for _, val := range versions {
+		tr.TLSClientConfig.MinVersion = val
+		getTLSVersion(&tr)
+	}
+}
 func TestNewAWSS3Client(t *testing.T) {
 	ctx := context.TODO()
 	fn := InitAWSClientWrapper
