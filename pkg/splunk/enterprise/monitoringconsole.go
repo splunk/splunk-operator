@@ -289,22 +289,23 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			revised.Data[url.Name] = url.Value
 		} else {
 			newInsURLs := strings.Split(url.Value, ",")
-			currentURLs := strings.Split(revised.Data[url.Name], ",")
+			//1. Find number of URLs, that crname,  present in the current configmap
 			var crURLs string
-			for _, curr := range currentURLs {
-				if strings.Contains(curr, crName) {
+			for _, newURL := range newInsURLs {
+				if strings.Contains(revised.Data[url.Name], newURL) {
 					if crURLs == "" {
-						crURLs = curr
+						crURLs = newURL
 					} else {
-						str := []string{curr, crURLs}
+						str := []string{crURLs, newURL}
 						crURLs = strings.Join(str, ",")
 					}
 				}
 			}
+			//2. if length of both same then just reconcile
 			if len(crURLs) == len(url.Value) {
 				//reconcile
 				break
-			} else if len(crURLs) < len(url.Value) {
+			} else if len(crURLs) < len(url.Value) { //3. incoming URLs are more than current scaling up
 				//scaling UP
 				for _, newEntry := range newInsURLs {
 					if !strings.Contains(revised.Data[url.Name], newEntry) {
@@ -312,7 +313,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 						revised.Data[url.Name] = strings.Join(str, ",")
 					}
 				}
-			} else {
+			} else { //4. incoming URLs are less than current then scaling down
 				//scaling DOWN pods
 				DeleteURLsConfigMap(revised, crName, newURLs, false)
 			}
