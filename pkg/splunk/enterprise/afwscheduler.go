@@ -225,6 +225,7 @@ func getOrdinalValFromPodName(podName string) (int, error) {
 // canAppScopeHaveInstallWorker tells us if the given scope can have an install worker
 // Only local and premium app scopes can have install workers in pipeline q
 func canAppScopeHaveInstallWorker(scope string) bool {
+        // Check if scope is appropriate
 	if scope == enterpriseApi.ScopeLocal || scope == enterpriseApi.ScopePremiumApps {
 		return true
 	}
