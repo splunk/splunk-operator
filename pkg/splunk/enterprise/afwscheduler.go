@@ -35,6 +35,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
+	enterpriseApi.AppPkgDownloadPending:     true,
+	enterpriseApi.AppPkgDownloadInProgress:  true,
+	enterpriseApi.AppPkgDownloadComplete:    true,
+	enterpriseApi.AppPkgDownloadError:       true,
+	enterpriseApi.AppPkgPodCopyPending:      true,
+	enterpriseApi.AppPkgPodCopyInProgress:   true,
+	enterpriseApi.AppPkgPodCopyComplete:     true,
+	enterpriseApi.AppPkgMissingFromOperator: true,
+	enterpriseApi.AppPkgPodCopyError:        true,
+	enterpriseApi.AppPkgInstallPending:      true,
+	enterpriseApi.AppPkgInstallInProgress:   true,
+	enterpriseApi.AppPkgInstallComplete:     true,
+	enterpriseApi.AppPkgMissingOnPodError:   true,
+	enterpriseApi.AppPkgInstallError:        true,
+}
+
 // isFanOutApplicableToCR confirms if a given CR needs fanOut support
 func isFanOutApplicableToCR(cr splcommon.MetaObject) bool {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
@@ -1338,6 +1355,29 @@ func isPhaseStatusComplete(phaseInfo *enterpriseApi.PhaseInfo) bool {
 	}
 }
 
+// validatePhaseInfo validates if phase and status in phaseInfo is valid
+func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("validatePhaseInfo").WithValues("phaseInfo", phaseInfo)
+
+	// Check for phase in phaseInfo
+	phases := string(
+		enterpriseApi.PhaseDownload +
+			enterpriseApi.PhasePodCopy +
+			enterpriseApi.PhaseInstall)
+
+	if !strings.Contains(phases, string(phaseInfo.Phase)) {
+		scopedLog.Error(nil, "Invalid phase in PhaseInfo")
+		return false
+	}
+
+	if ok := appPhaseInfoStatuses[phaseInfo.Status]; !ok {
+		scopedLog.Error(nil, "Invalid status in PhaseInfo")
+		return false
+	}
+	return true
+}
+
 // isPhaseMaxRetriesReached confirms if the max retries reached
 func isPhaseMaxRetriesReached(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo, afwConfig *enterpriseApi.AppFrameworkSpec) bool {
 	return (afwConfig.PhaseMaxRetries < phaseInfo.FailCount)
@@ -2063,6 +2103,10 @@ func isPhaseInfoEligibleForSchedulerEntry(ctx context.Context, appSrcName string
 		return false
 	}
 
+	// check if phase, status in phaseInfo is valid
+	if !validatePhaseInfo(ctx, phaseInfo) {
+		return false
+	}
 	return true
 }
 

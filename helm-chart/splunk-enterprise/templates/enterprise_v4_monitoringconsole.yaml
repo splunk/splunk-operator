@@ -76,6 +76,18 @@ spec:
 {{- if .Values.monitoringConsole.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.monitoringConsole.readinessInitialDelaySeconds }}
 {{- end }}
+{{- if .Values.monitoringConsole.startupProbe }}
+  startupProbe:
+{{ toYaml .Values.monitoringConsole.startupProbe | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.livenessProbe }}
+  livenessProbe:
+{{ toYaml .Values.monitoringConsole.livenessProbe | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.readinessProbe }}
+  readinessProbe:
+{{ toYaml .Values.monitoringConsole.readinessProbe | indent 4 }}
+{{- end }}
 {{- with .Values.monitoringConsole.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
