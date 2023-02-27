@@ -41,7 +41,7 @@ var _ = Describe("Smartstore test", func() {
 		}
 	})
 
-	XContext("Standalone Deployment (S1)", func() {
+	Context("Standalone Deployment (S1)", func() {
 		It("managersmartstore, integration: Can configure multiple indexes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
@@ -92,7 +92,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 	})
 
-	XContext("Standalone Deployment (S1)", func() {
+	Context("Standalone Deployment (S1)", func() {
 		It("managersmartstore, integration: Can configure indexes which use default volumes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)

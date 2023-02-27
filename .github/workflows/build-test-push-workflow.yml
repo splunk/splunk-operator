@@ -127,7 +127,13 @@ jobs:
       fail-fast: false
       matrix:
         test: [
-                mastersmartstore,
+                basic,
+                appframeworks1,
+                managerappframeworkc3,
+                managerappframeworkm4,
+                managersecret,
+                managermc,
+                managersmartstore,
                ]
     runs-on: ubuntu-latest
     env:

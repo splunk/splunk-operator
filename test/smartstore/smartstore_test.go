@@ -42,7 +42,7 @@ var _ = Describe("Smartstore test", func() {
 		}
 	})
 
-	XContext("Standalone Deployment (S1)", func() {
+	Context("Standalone Deployment (S1)", func() {
 		It("mastersmartstore, integration: Can configure multiple indexes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexVolumeMap := map[string]string{"test-index-" + testenv.RandomDNSName(3): volName,
@@ -93,7 +93,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 	})
 
-	XContext("Standalone Deployment (S1)", func() {
+	Context("Standalone Deployment (S1)", func() {
 		It("mastersmartstore, integration: Can configure indexes which use default volumes through app", func() {
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
@@ -160,7 +160,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
-		It("mastersmartstore, m4, integration, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+		It("mastersmartstore, m4, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
@@ -217,6 +217,8 @@ var _ = Describe("Smartstore test", func() {
 				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
 			}
 
+			oldBundleHash := testenv.GetClusterManagerBundleHash(ctx, deployment, "ClusterMaster")
+
 			testcaseEnvInst.Log.Info("Adding new index to Cluster Manager CR")
 			indexNameTwo := "test-index-" + testenv.RandomDNSName(3)
 			indexList := []string{indexName, indexNameTwo}
@@ -240,6 +242,9 @@ var _ = Describe("Smartstore test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Verify new bundle is pushed
+			testenv.VerifyClusterManagerBundlePush(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), 1, oldBundleHash)
 
 			// Check index on pod
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
@@ -273,7 +278,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, smartstore: can deploy a Standalone instance with Epehemeral Etc storage", func() {
 
 			/* Test Steps
@@ -309,7 +314,7 @@ var _ = Describe("Smartstore test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
 		It("integration, s1, smartstore: can deploy a Standalone instance with Epehemeral Var storage", func() {
 
 			/* Test Steps
