@@ -8,6 +8,10 @@ metadata:
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.standalone.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 spec:
 {{- if and .Values.sva.s1.enabled .Values.sva.s1.standalones }}
   replicas: {{ .Values.sva.s1.standalones }}
@@ -124,6 +128,10 @@ spec:
 {{- end }}
 {{- if .Values.standalone.serviceAccount }}
   serviceAccount: {{ .Values.standalone.serviceAccount }}
+{{- end }}
+{{- with .Values.standalone.serviceTemplate }}
+  serviceTemplate:
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.standalone.tolerations }}
   tolerations:

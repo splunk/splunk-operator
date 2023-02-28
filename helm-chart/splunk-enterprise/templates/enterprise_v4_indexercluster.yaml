@@ -16,6 +16,10 @@ items:
     labels:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.indexerCluster.additionalAnnotations }}
+    annotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   spec:
   {{- if $.Values.indexerCluster.replicaCount }}
     replicas: {{ $.Values.indexerCluster.replicaCount }}
@@ -128,6 +132,10 @@ items:
   {{- end }}
   {{- if $.Values.indexerCluster.serviceAccount }}
     serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
+  {{- end }}
+  {{- with $.Values.indexerCluster.serviceTemplate }}
+    serviceTemplate:
+{{ toYaml . | indent 6 }}
   {{- end }}
   {{- with $.Values.indexerCluster.tolerations }}
     tolerations:

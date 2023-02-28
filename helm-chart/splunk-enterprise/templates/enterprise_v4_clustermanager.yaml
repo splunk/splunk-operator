@@ -8,6 +8,10 @@ metadata:
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.clusterManager.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 spec:
 {{- with .Values.clusterManager.appRepo }}
   appRepo: 
@@ -119,6 +123,10 @@ spec:
 {{- end }}
 {{- if .Values.clusterManager.serviceAccount }}
   serviceAccount: {{ .Values.clusterManager.serviceAccount }}
+{{- end }}
+{{- with .Values.clusterManager.serviceTemplate }}
+  serviceTemplate:
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.clusterManager.tolerations }}
   tolerations:
