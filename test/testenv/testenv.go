@@ -25,7 +25,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/go-logr/logr"
-	ginkgoconfig "github.com/onsi/ginkgo/config"
+	ginkgoconfig "github.com/onsi/ginkgo/v2/config"
 	"github.com/onsi/ginkgo/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
