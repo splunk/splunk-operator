@@ -59,11 +59,23 @@ associated with the instance when you delete it.
 apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
   name: example
 spec:
   imagePullPolicy: Always
   livenessInitialDelaySeconds: 400
   readinessInitialDelaySeconds: 390
+  serviceTemplate:
+    spec:
+      type: LoadBalancer
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        foo: bar
   extraEnv:
   - name: ADDITIONAL_ENV_VAR_1
     value: "test_value_1"
@@ -93,6 +105,7 @@ configuration parameters:
 | affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
 | resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#hardware-resources-requirements) for production values.|
 | serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
+| topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
 
 ## Common Spec Parameters for Splunk Enterprise Resources
 
