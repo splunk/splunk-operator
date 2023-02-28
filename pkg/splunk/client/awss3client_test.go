@@ -37,8 +37,13 @@ func TestInitAWSClientWrapper(t *testing.T) {
 
 	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
 	if awsS3ClientSession == nil {
-		t.Errorf("Should receive an error")
+		t.Errorf("Should receive an empty session")
 	}
+
+	// Invalid session test
+	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "abcde")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "abcd", "1234")
+	os.Unsetenv("AWS_STS_REGIONAL_ENDPOINTS")
 }
 
 func TestGetTLSVersion(t *testing.T) {
@@ -82,6 +87,15 @@ func TestNewAWSS3Client(t *testing.T) {
 	// Test for invalid scenario, where we return nil client
 	fn = func(context.Context, string, string, string) interface{} {
 		return nil
+	}
+	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	if err == nil {
+		t.Errorf("NewAWSS3Client should have returned error.")
+	}
+
+	// Test for invalid scenario, where we return invalid client
+	fn = func(context.Context, string, string, string) interface{} {
+		return "abcd"
 	}
 	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
