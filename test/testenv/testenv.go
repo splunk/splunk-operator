@@ -26,7 +26,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
-	ginkgoconfig "github.com/onsi/ginkgo/v2/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
