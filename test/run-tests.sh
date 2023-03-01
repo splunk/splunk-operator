@@ -94,10 +94,10 @@ fi
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then
   echo "ginkgo is not installed or in the PATH. Installing..."
-  go get github.com/onsi/ginkgo/ginkgo
+  go get github.com/onsi/ginkgo/ginkgo/v2
   go get github.com/onsi/gomega/...
 
-  go install github.com/onsi/ginkgo/ginkgo
+  go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
 fi 
 
 
@@ -191,4 +191,5 @@ fi
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-ginkgo -v -keepGoing --trace -progress -r -nodes=${CLUSTER_NODES} --noisyPendings=false --reportPassed --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
+echo "ginkgo --junit-report=inttest.xml -vv --keep-going --trace -r --timeout=3h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}"
+ginkgo --junit-report=inttest-junit.xml --output-dir=`pwd` -vv --keep-going --trace -r --timeout=3h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}

@@ -16,11 +16,12 @@ package monitoringconsoletest
 import (
 	"context"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
