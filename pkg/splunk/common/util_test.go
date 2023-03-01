@@ -755,6 +755,97 @@ func TestCompareTolerations(t *testing.T) {
 
 }
 
+func TestCompareTopologySpreadConstraints(t *testing.T) {
+	var a []corev1.TopologySpreadConstraint
+	var b []corev1.TopologySpreadConstraint
+
+	test := func(want bool) {
+		f := func() bool {
+			return CompareTopologySpreadConstraints(a, b)
+		}
+		compareTester(t, "CompareTopologySpreadConstraints", f, a, b, want)
+	}
+
+	// No change
+	test(false)
+
+	var nullTopologySpreadConstraint corev1.TopologySpreadConstraint
+	topologySpreadConstraint1 := corev1.TopologySpreadConstraint{
+		MaxSkew:           1,
+		TopologyKey:       "key1",
+		WhenUnsatisfiable: "key2",
+		//LabelSelector: <object>
+		//MatchLabelKeys: <list> # optional; alpha since v1.25
+		//NodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+		//NodeTaintsPolicy:
+	}
+	topologySpreadConstraint2 := corev1.TopologySpreadConstraint{
+		MaxSkew:           1,
+		TopologyKey:       "key1",
+		WhenUnsatisfiable: "key2",
+		//LabelSelector: <object>
+		//MatchLabelKeys: <list> # optional; alpha since v1.25
+		//NodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+		//NodeTaintsPolicy:
+	}
+
+	// No change
+	a = []corev1.TopologySpreadConstraint{nullTopologySpreadConstraint, nullTopologySpreadConstraint}
+	b = []corev1.TopologySpreadConstraint{nullTopologySpreadConstraint, nullTopologySpreadConstraint}
+	test(false)
+
+	// No change
+	a = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+	b = []corev1.TopologySpreadConstraint{topologySpreadConstraint2}
+	test(false)
+
+	// Change maxSkew
+	var topologySpreadConstraint corev1.TopologySpreadConstraint
+
+	topologySpreadConstraint = topologySpreadConstraint2
+	topologySpreadConstraint.MaxSkew = 1
+	a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
+	b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+	test(false)
+
+	// Change topologyKey
+	topologySpreadConstraint = topologySpreadConstraint2
+	topologySpreadConstraint.TopologyKey = ""
+	a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
+	b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+	test(true)
+
+	// Change labelSelector
+	topologySpreadConstraint = topologySpreadConstraint2
+	topologySpreadConstraint.LabelSelector = &metav1.LabelSelector{}
+	a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
+	b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+	test(true)
+
+	// Change matchLabelKeys
+	topologySpreadConstraint = topologySpreadConstraint2
+	topologySpreadConstraint.MatchLabelKeys = []string{"newValue"}
+	a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
+	b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+	test(true)
+
+	/*
+		// Change nodeAffinityPolicy
+		topologySpreadConstraint = topologySpreadConstraint2
+		topologySpreadConstraint.NodeAffinityPolicy = &corev1.NodeInclusionPolicy{}
+		a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
+		b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+		test(true)
+
+		// Change nodeTaintsPolicy
+		topologySpreadConstraint = topologySpreadConstraint2
+		topologySpreadConstraint.NodeTaintsPolicy = &corev1.NodeInclusionPolicy{}
+		a = []corev1.TopologySpreadConstraint{topologySpreadConstraint}
+		b = []corev1.TopologySpreadConstraint{topologySpreadConstraint1}
+		test(true)
+	*/
+}
+
 func TestCompareVolumes(t *testing.T) {
 	var a []corev1.Volume
 	var b []corev1.Volume
