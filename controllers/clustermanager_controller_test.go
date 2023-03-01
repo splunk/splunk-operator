@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -162,7 +162,7 @@ func CreateClusterManager(name string, namespace string, annotations map[string]
 			time.Sleep(2 * time.Second)
 		}
 		return true
-	}, timeout, interval).Should(BeTrue())
+	}, NodeTimeout(timeout), interval).Should(BeTrue())
 
 	return ss
 }
