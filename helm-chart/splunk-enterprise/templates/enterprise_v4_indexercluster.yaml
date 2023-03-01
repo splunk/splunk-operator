@@ -102,6 +102,18 @@ items:
   {{- if $.Values.indexerCluster.readinessInitialDelaySeconds }}
     readinessInitialDelaySeconds: {{ $.Values.indexerCluster.readinessInitialDelaySeconds }}
   {{- end }}
+  {{- if $.Values.indexerCluster.startupProbe }}
+    startupProbe:
+{{ toYaml $.Values.indexerCluster.startupProbe | indent 6 }}
+  {{- end }}
+  {{- if $.Values.indexerCluster.livenessProbe }}
+    livenessProbe:
+{{ toYaml $.Values.indexerCluster.livenessProbe | indent 6 }}
+  {{- end }}
+  {{- if $.Values.indexerCluster.readinessProbe }}
+    readinessProbe:
+{{ toYaml $.Values.indexerCluster.readinessProbe | indent 6 }}
+  {{- end }}
   {{- with $.Values.indexerCluster.etcVolumeStorageConfig }}
     etcVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
