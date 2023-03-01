@@ -25,8 +25,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	"github.com/go-logr/logr"
-	"github.com/onsi/ginkgo"
-	ginkgoconfig "github.com/onsi/ginkgo/config"
+	"github.com/onsi/ginkgo/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -248,7 +247,9 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.kubeAPIServer = cfg.Host
 	testenv.Log.Info("Using kube-apiserver\n", "kube-apiserver", cfg.Host)
 
-	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, metricsPort+ginkgoconfig.GinkgoConfig.ParallelNode)
+	suiteConfig, _ := ginkgo.GinkgoConfiguration()
+
+	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, metricsPort+suiteConfig.ParallelProcess)
 
 	kubeManager, err := manager.New(cfg, manager.Options{
 		Scheme:             scheme.Scheme,

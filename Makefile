@@ -122,11 +122,12 @@ scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...
 
-vet: ## Run go vet against code.
+vet: setup/ginkgo ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test  -v -covermode=count -coverprofile=coverage.out --timeout=300s   ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers 
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers
+
 
 ##@ Build
 
@@ -176,7 +177,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/default/kustomization.yaml
 	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/default/kustomization.yaml
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/default/kustomization.yaml
- 
+
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
@@ -363,7 +364,7 @@ setup/devsetup:
 	@echo Installing operator-sdk
 	@curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
 	@sudo chmod +x operator-sdk_${OS}_${ARCH} && sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
-	
+
 
 clean: stop_clair_scanner
 	@rm -rf ./build/_output
@@ -371,12 +372,13 @@ clean: stop_clair_scanner
 	@rm -f clair-scanner
 	@rm -rf clair-scanner-logs
 
-cleanup: 
+cleanup:
 	@./tools/cleanup.sh
 
 .PHONY: setup/ginkgo
 setup/ginkgo:
 	@echo Installing ginkgo
-	@go get github.com/onsi/ginkgo/ginkgo
+	@go get github.com/onsi/ginkgo/v2
+	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
 	@echo Installing gomega
 	@go get github.com/onsi/gomega/...

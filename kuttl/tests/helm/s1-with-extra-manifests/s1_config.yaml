@@ -9,10 +9,9 @@ standalone:
   enabled: true
 
 extraManifests:
-  - apiVersion: cloud.google.com/v1beta1
-    kind: BackendConfig
+  - apiVersion: v1
+    kind: ConfigMap
     metadata:
-      name: "{{ .Release.Name }}-test"
-    spec:
-     securityPolicy:
-     name: "gcp-cloud-armor-policy-test"
+      name: stdln-test
+    data:
+     name: "test"
