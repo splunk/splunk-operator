@@ -122,7 +122,7 @@ scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...
 
-vet: ## Run go vet against code.
+vet: setup/ginkgo ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
