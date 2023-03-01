@@ -35,6 +35,7 @@ jobs:
       - name: Install Ginkgo
         run: |
           make setup/ginkgo
+          go mod tidy
       - name: Run Unit Tests
         run: make test
       - name: Run Code Coverage
