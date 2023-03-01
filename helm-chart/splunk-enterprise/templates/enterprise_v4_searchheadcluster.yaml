@@ -148,6 +148,10 @@ items:
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with .Values.searchHeadCluster.topologySpreadConstraints }}
+    topologySpreadConstraints:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- if $.Values.sva.m4.enabled }}
     affinity:
       nodeAffinity:
