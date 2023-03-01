@@ -330,6 +330,22 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should return an empty list in response")
 	}
 
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		cl := spltest.MockAWSS3ClientError{}
+		// return empty objects list here to test the negative scenario
+		return cl
+	}
+
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+	getRemoteDataClientFn = getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3ClientError)
+
+	remoteDataClientResponse, err = awsClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error")
+	}
 }
 
 func TestAWSDownloadAppShouldNotFail(t *testing.T) {

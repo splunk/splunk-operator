@@ -88,7 +88,6 @@ func TestNewMockAWSS3Client(t *testing.T) {
 	}
 }
 
-
 func TestNewMockAWMinioClient(t *testing.T) {
 	ctx := context.TODO()
 	// Test 1. Test the valid case

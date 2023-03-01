@@ -175,6 +175,9 @@ func TestSetSearchHeadDetention(t *testing.T) {
 		return c.SetSearchHeadDetention(true)
 	}
 	splunkClientTester(t, "TestSetSearchHeadDetention", 200, "", wantRequest, test)
+
+	// Negative testing
+	splunkClientErrorTester(t, test)
 }
 
 func TestBundlePush(t *testing.T) {
@@ -185,6 +188,9 @@ func TestBundlePush(t *testing.T) {
 		return c.BundlePush(true)
 	}
 	splunkClientTester(t, "TestBundlePush", 200, "", wantRequest, test)
+
+	// Negative testing
+	splunkClientErrorTester(t, test)
 }
 
 func TestRemoveSearchHeadClusterMember(t *testing.T) {
@@ -227,6 +233,12 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 
 	// test bad response code
 	splunkClientTester(t, "TestRemoveSearchHeadClusterMember", 404, "", wantRequest, test)
+
+	// Negative testing
+	test = func(c SplunkClient) error {
+		return c.RemoveSearchHeadClusterMember()
+	}
+	splunkClientErrorTester(t, test)
 }
 
 func TestGetclusterManagerInfo(t *testing.T) {
@@ -363,6 +375,9 @@ func TestRemoveIndexerClusterPeer(t *testing.T) {
 		return c.RemoveIndexerClusterPeer("D39B1729-E2C5-4273-B9B2-534DA7C2F866")
 	}
 	splunkClientTester(t, "TestRemoveIndexerClusterPeer", 200, "", wantRequest, test)
+
+	// Negative testing
+	splunkClientErrorTester(t, test)
 }
 
 func TestDecommissionIndexerClusterPeer(t *testing.T) {
@@ -371,6 +386,9 @@ func TestDecommissionIndexerClusterPeer(t *testing.T) {
 		return c.DecommissionIndexerClusterPeer(true)
 	}
 	splunkClientTester(t, "TestDecommissionIndexerClusterPeer", 200, "", wantRequest, test)
+
+	// Negative testing
+	splunkClientErrorTester(t, test)
 }
 
 func TestAutomateMCApplyChanges(t *testing.T) {
@@ -420,6 +438,13 @@ func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	}
 	body := splcommon.TestGetClusterInfo
 	splunkClientTester(t, "TestGetMonitoringconsoleServerRoles", 200, body, wantRequest, test)
+
+	// Test negative conditions
+	url := string(invalidUrlByteArray)
+	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkHttpClient
+	c.GetMonitoringconsoleServerRoles()
 }
 func TestUpdateDMCGroups(t *testing.T) {
 	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/search/distributed/groups/indexer/edit", nil)
@@ -459,6 +484,13 @@ func TestGetMonitoringconsoleAssetTable(t *testing.T) {
 	}
 	body := splcommon.TestGetMCAssetTable
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
+
+	// Test negative conditions
+	url := string(invalidUrlByteArray)
+	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkHttpClient
+	c.GetMonitoringconsoleAssetTable()
 }
 
 func TestPostMonitoringConsoleAssetTable(t *testing.T) {
@@ -492,6 +524,13 @@ func TestGetMonitoringConsoleUISettings(t *testing.T) {
 	}
 	body := `{"links":{"create":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_new","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_reload","_acl":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/_acl"},"origin":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav","updated":"2020-09-23T23:50:25+00:00","generator":{"build":"a1a6394cc5ae","version":"8.0.5"},"entry":[{"name":"default.distributed","id":"https://localhost:8089/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","list":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed","_reload":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed/_reload","edit":"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed"},"author":"nobody","acl":{"app":"splunk_monitoring_console","can_change_perms":true,"can_list":true,"can_share_app":true,"can_share_global":true,"can_share_user":false,"can_write":true,"modifiable":true,"owner":"nobody","perms":{"read":["admin"],"write":["admin"]},"removable":false,"sharing":"app"},"fields":{"required":["eai:data"],"optional":[],"wildcard":[]},"content":{"disabled":false,"eai:acl":null,"eai:appName":"splunk_monitoring_console","eai:data":"<nav color=\"#3C444D\">\n  <view name=\"monitoringconsole_overview\" default=\"true\" />\n  <view name=\"monitoringconsole_landing\" />\n  <view name=\"monitoringconsole_check\" />\n  <view name=\"monitoringconsole_instances\" />\n  <collection label=\"Indexing\">\n    <collection label=\"Performance\">\n      <view name=\"indexing_performance_instance\" />\n      <view name=\"indexing_performance_advanced\" />\n      <view name=\"indexing_performance_deployment\" />\n    <\/collection>\n    <collection label=\"Indexer Clustering\">\n        <!--<a href=\"Clustering\">Indexer Clustering: Status<\/a>-->\n      <view name=\"indexer_clustering_status\" />\n      <view name=\"indexer_clustering_service_activity\" />\n    <\/collection>\n    <collection label=\"Indexes and Volumes\">\n      <view name=\"indexes_and_volumes_instance\" />\n      <view name=\"indexes_and_volumes_deployment\" />\n      <view name=\"index_detail_instance\" />\n      <view name=\"index_detail_deployment\" />\n      <view name=\"volume_detail_instance\" />\n      <view name=\"volume_detail_deployment\" />\n    <\/collection>\n    <collection label=\"Inputs\">\n      <view name=\"http_event_collector_instance\" />\n      <view name=\"http_event_collector_deployment\" />\n      <view name=\"splunk_tcpin_performance_instance\" />\n      <view name=\"splunk_tcpin_performance_deployment\" />\n      <view name=\"data_quality\" />\n    <\/collection>\n    <collection label=\"License Usage\">\n      <view name=\"license_usage_today\" />\n      <view name=\"license_usage_30days\" />\n    <\/collection>\n    <collection label=\"SmartStore\">\n      <view name=\"smartstore_activity_instance\" />\n      <view name=\"smartstore_activity_deployment\" />\n      <view name=\"smartstore_cache_performance_instance\" />\n      <view name=\"smartstore_cache_performance_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Search\">\n    <collection label=\"Activity\">\n      <view name=\"search_activity_instance\" />\n      <view name=\"search_activity_deployment\" />\n      <view name=\"search_usage_statistics_instance\" />\n      <view name=\"search_usage_statistics_deployment\" />\n    <\/collection>\n    <collection label=\"Distributed Search\">\n      <view name=\"distributed_search_instance\" />\n      <view name=\"distributed_search_deployment\" />\n    <\/collection>\n    <collection label=\"Search Head Clustering\">\n      <view name=\"shc_status_and_conf\" />\n      <view name=\"shc_conf_rep\" />\n      <view name=\"shc_artifact_replication\" />\n      <view name=\"shc_scheduler_delegation_statistics\" />\n      <view name=\"shc_app_deployment\" />\n    <\/collection>\n    <collection label=\"Scheduler Activity\">\n      <view name=\"scheduler_activity_instance\" />\n      <view name=\"scheduler_activity_deployment\" />\n    <\/collection>\n    <collection label=\"KV Store\">\n      <view name=\"kv_store_instance\" />\n      <view name=\"kv_store_deployment\" />\n    <\/collection>\n    <collection label=\"Knowledge Bundle Replication\">\n      <view name=\"bundle_replication\" />\n      <view name=\"cascading_replication\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Resource Usage\">\n    <view name=\"resource_usage_instance\" />\n    <view name=\"resource_usage_machine\" />\n    <view name=\"resource_usage_deployment\" />\n    <view name=\"resource_usage_cpu_instance\" />\n    <view name=\"resource_usage_cpu_deployment\" />\n    <collection label=\"Workload Management\">\n      <view name=\"workload_management\" />\n      <view name=\"workload_management_per_pool_instance\" />\n      <view name=\"workload_management_per_pool_deployment\" />\n    <\/collection>\n  <\/collection>\n  <collection label=\"Forwarders\">\n    <view name=\"forwarder_instance\" />\n    <view name=\"forwarder_deployment\" />\n  <\/collection>\n  <collection label=\"Settings\">\n    <view name=\"monitoringconsole_configure\" />\n    <view name=\"monitoringconsole_forwarder_setup\" />\n    <view name=\"monitoringconsole_alerts_setup\" />\n    <view name=\"monitoringconsole_overview_preferences\"/>\n    <view name=\"monitoringconsole_check_list\" />\n  <\/collection>\n  <a href=\"search\">Run a Search<\/a>\n<\/nav>","eai:digest":"31adb23c29a2d1402e5867ee6b9b5a92","eai:userName":"nobody","rootNode":"nav"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`
 	splunkClientTester(t, "TestGetMonitoringconsoleAssetTable", 200, body, wantRequest, test)
+
+	// Test negative conditions
+	url := string(invalidUrlByteArray)
+	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkHttpClient
+	c.GetMonitoringConsoleUISettings()
 }
 
 func TestUpdateLookupUISettings(t *testing.T) {
@@ -510,6 +549,13 @@ func TestUpdateLookupUISettings(t *testing.T) {
 		return c.UpdateLookupUISettings(wantconfiguredPeers, apiResponseUISettings)
 	}
 	splunkClientTester(t, "TestPostMonitoringconsoleAssetTable", 200, "", wantRequest, test)
+
+	// Test negative conditions
+	url := string(invalidUrlByteArray)
+	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkHttpClient
+	c.GetMonitoringConsoleUISettings()
 }
 
 func TestUpdateMonitoringConsoleApp(t *testing.T) {
@@ -517,11 +563,15 @@ func TestUpdateMonitoringConsoleApp(t *testing.T) {
 	test := func(c SplunkClient) error {
 		err := c.UpdateMonitoringConsoleApp()
 		if err != nil {
-			t.Errorf("MonitoringConsole App not updated")
+			t.Log("MonitoringConsole App not updated")
+			return err
 		}
 		return nil
 	}
 	splunkClientTester(t, "TestUpdateMonitoringConsoleApp", 200, "", wantRequest, test)
+
+	// Test invalid http request
+	splunkClientErrorTester(t, test)
 }
 
 func TestGetClusterInfo(t *testing.T) {
@@ -539,6 +589,18 @@ func TestGetClusterInfo(t *testing.T) {
 	}
 	body := splcommon.TestGetClusterInfo
 	splunkClientTester(t, "TestGetClusterInfo", 200, body, wantRequest, test)
+
+	// Test negative conditions
+	url := string(invalidUrlByteArray)
+
+	// Test mock call
+	mockSplunkHttpClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkHttpClient
+	c.GetClusterInfo(true)
+
+	// Test get call error
+	c.GetClusterInfo(false)
 }
 
 func TestSetIdxcSecret(t *testing.T) {
@@ -550,6 +612,9 @@ func TestSetIdxcSecret(t *testing.T) {
 		return c.SetIdxcSecret("changeme")
 	}
 	splunkClientTester(t, "TestSetIdxcSecret", 200, "", wantRequest, test)
+
+	// Test invalid http request
+	splunkClientErrorTester(t, test)
 }
 
 func TestRestartSplunk(t *testing.T) {
@@ -558,4 +623,18 @@ func TestRestartSplunk(t *testing.T) {
 		return c.RestartSplunk()
 	}
 	splunkClientTester(t, "TestRestartSplunk", 200, "", wantRequest, test)
+
+	// Test invalid http request
+	splunkClientErrorTester(t, test)
+}
+
+func splunkClientErrorTester(t *testing.T, test func(SplunkClient) error) {
+	url := string(invalidUrlByteArray)
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+	err := test(*c)
+	if err == nil {
+		t.Errorf("Expected error, err = %v", err)
+	}
 }

@@ -1,5 +1,7 @@
 package client
 
+var invalidUrlByteArray = []byte{0x7F}
+
 const (
 	// Azure token fetch URL
 	azureTokenFetchURL = "http://169.254.169.254/metadata/identity/oauth2/token"
