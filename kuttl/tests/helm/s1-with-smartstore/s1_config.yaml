@@ -8,17 +8,17 @@ sva:
 standalone:
   smartstore:
     defaults:
-      volumeName: helm-test-c3-with-apps-smartstore-kuttl-test-unbiased-midge
+      volumeName: helm-test-c3-with-apps-smartstore-test
     indexes:
       - name: main
         remotePath: $_index_name
-        volumeName: helm-test-c3-with-apps-smartstore-kuttl-test-unbiased-midge
+        volumeName: helm-test-c3-with-apps-smartstore-test
       - name: cloudwatch
         remotePath: $_index_name
-        volumeName: helm-test-c3-with-apps-smartstore-kuttl-test-unbiased-midge
+        volumeName: helm-test-c3-with-apps-smartstore-test
     volumes:
-      - name: helm-test-c3-with-apps-smartstore-kuttl-test-unbiased-midge
-        path: helm-test-c3-with-apps-smartstore-kuttl-test-unbiased-midge/smartstore
+      - name: helm-test-c3-with-apps-smartstore-test
+        path: helm-test-c3-with-apps-smartstore-test/smartstore
         endpoint: https://s3-us-west-2.amazonaws.com
         secretRef: s3-secret
     cacheManager:

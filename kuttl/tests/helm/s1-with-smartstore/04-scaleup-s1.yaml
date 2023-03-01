@@ -1,5 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - command: helm upgrade splunk-s1 $HELM_REPO_PATH/splunk-enterprise --reuse-values --set indexerCluster.replicaCount=4
-    namespaced: true
