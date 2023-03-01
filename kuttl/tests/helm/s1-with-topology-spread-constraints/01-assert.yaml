@@ -5,20 +5,26 @@ kind: Deployment
 metadata:
   name: splunk-operator-controller-manager
 status:
-  readyReplicas: 1
   availableReplicas: 1
 
 ---
 # check for standalone to be in ready state
+# check for standalone to be scaled
 apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: stdln
 status:
-  phase: Ready
+  readyReplicas: 0
 
 ---
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: stdln-test
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: splunk-stdln-standalone-0
+kind: Event
+reason: FailedScheduling
+source:
+  component: default-scheduler
+type: Warning

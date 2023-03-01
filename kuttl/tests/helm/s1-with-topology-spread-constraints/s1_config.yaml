@@ -7,11 +7,10 @@ splunk-operator:
 
 standalone:
   enabled: true
-
-extraManifests:
-  - apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: stdln-test
-    data:
-     name: "test"
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        foo: bar

@@ -110,6 +110,15 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		result = true
 	}
 
+	// check for changes in TopologySpreadConstraint
+	if splcommon.CompareTopologySpreadConstraints(current.TopologySpreadConstraints, revised.TopologySpreadConstraints) {
+		scopedLog.Info("Pod TopologySpreadConstraint differs",
+			"current", current.TopologySpreadConstraints,
+			"revised", revised.TopologySpreadConstraints)
+		current.TopologySpreadConstraints = revised.TopologySpreadConstraints
+		result = true
+	}
+
 	// check for changes in ImagePullSecrets
 	if splcommon.CompareImagePullSecrets(current.ImagePullSecrets, revised.ImagePullSecrets) {
 		scopedLog.Info("Pod ImagePullSecrets differs",
@@ -248,6 +257,9 @@ func SortStatefulSetSlices(ctx context.Context, current *corev1.PodSpec, name st
 
 	// Sort tolerations
 	splcommon.SortSlice(current.Tolerations, splcommon.SortFieldKey)
+
+	// Sort TopologySpreadConstraints
+	splcommon.SortSlice(current.TopologySpreadConstraints, splcommon.SortFieldTopologyKey)
 
 	// Sort volumes
 	splcommon.SortSlice(current.Volumes, splcommon.SortFieldName)

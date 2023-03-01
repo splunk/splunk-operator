@@ -258,6 +258,14 @@ func TestSortStatefulSetSlices(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(sorted.Tolerations, unsorted.Tolerations) }
 	sortTester("Tolerations")
 
+	// Check topologySpreadConstraints
+	unsorted.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{{TopologyKey: "bKey"}, {TopologyKey: "aKey"}}
+	sorted.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{{TopologyKey: "aKey"}, {TopologyKey: "bKey"}}
+	matcher = func() bool {
+		return reflect.DeepEqual(sorted.TopologySpreadConstraints, unsorted.TopologySpreadConstraints)
+	}
+	sortTester("TopologySpreadConstraints")
+
 	// Create a container
 	sorted.Containers = make([]corev1.Container, 1)
 	unsorted.Containers = make([]corev1.Container, 1)
@@ -283,6 +291,7 @@ func TestSortStatefulSetSlices(t *testing.T) {
 		return reflect.DeepEqual(sorted.Containers[0].Env, unsorted.Containers[0].Env)
 	}
 	sortTester("Env variables")
+
 }
 
 func TestHasProbeChanged(t *testing.T) {
