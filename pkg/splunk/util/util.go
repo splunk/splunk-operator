@@ -173,6 +173,7 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 	}
 	execReq := restClient.Post().Resource("pods").Name(podName).Namespace(namespace).SubResource("exec")
 	option := &corev1.PodExecOptions{
+		Container: "splunk",
 		Command: cmd,
 		Stdin:   true,
 		Stdout:  true,
@@ -220,6 +221,7 @@ var _ PodExecClientImpl = &PodExecClient{}
 type PodExecClient struct {
 	client        splcommon.ControllerClient
 	cr            splcommon.MetaObject
+	name 		  string
 	targetPodName string
 }
 
@@ -228,6 +230,7 @@ func GetPodExecClient(client splcommon.ControllerClient, cr splcommon.MetaObject
 	return &PodExecClient{
 		client:        client,
 		cr:            cr,
+		name: 		   "splunk",
 		targetPodName: targetPodName,
 	}
 }
