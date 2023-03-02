@@ -17,6 +17,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -60,6 +61,21 @@ func TestApplyStatefulSet(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
+
+	// Negative testing
+	c := spltest.NewMockClient()
+	ctx = context.TODO()
+	rerr := errors.New("randomerror")
+	current.Spec.Template.Spec.Containers = []corev1.Container{{Image: "abcd"}}
+	c.Create(ctx, current)
+
+	revised = current.DeepCopy()
+	revised.Spec.Template.Spec.Containers = []corev1.Container{{Image: "efgh"}}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	_, err := ApplyStatefulSet(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestDefaultStatefulSetPodManager(t *testing.T) {
