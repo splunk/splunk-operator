@@ -144,10 +144,13 @@ func GetMCConfigMap(ctx context.Context, client splcommon.ControllerClient, cr s
 	if err != nil {
 		return nil, err
 	}
-	err = client.Get(context.TODO(), namespacedName, &configMap)
-	if err != nil {
-		return nil, err
-	}
+	// Cleanup don't need two GET calls?
+	/*
+		err = client.Get(context.TODO(), namespacedName, &configMap)
+		if err != nil {
+			return nil, err
+		}
+	*/
 	return &configMap, nil
 }
 

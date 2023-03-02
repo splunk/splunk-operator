@@ -164,7 +164,47 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool {
 		return current.Spec.Containers[0].StartupProbe.InitialDelaySeconds == revised.Spec.Containers[0].StartupProbe.InitialDelaySeconds
 	}
-	podUpdateTester("Pod ReadinessProbe changed")
+	podUpdateTester("Pod StartupProbe changed")
+
+	// Check if the container image is updated
+	revised.Spec.Containers[0].Image = "newImage"
+	current.Spec.Containers[0].Image = "oldImage"
+	matcher = func() bool {
+		return current.Spec.Containers[0].Image == revised.Spec.Containers[0].Image
+	}
+	podUpdateTester("Pod container image changed")
+
+	// Check if the serviceaccount name is updated
+	revised.Spec.ServiceAccountName = "newSa"
+	current.Spec.ServiceAccountName = "oldSa"
+	matcher = func() bool {
+		return current.Spec.ServiceAccountName == revised.Spec.ServiceAccountName
+	}
+	podUpdateTester("Pod serviceaccount changed")
+
+	// Check if the tolerations is updated
+	revised.Spec.Tolerations = []corev1.Toleration{{Key: "newKey"}}
+	current.Spec.Tolerations = []corev1.Toleration{{Key: "oldKey"}}
+	matcher = func() bool {
+		return reflect.DeepEqual(current.Spec.Tolerations, revised.Spec.Tolerations)
+	}
+	podUpdateTester("Pod tolerations changed")
+
+	// Check if the imagePullSecrets is updated
+	revised.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "newIps"}}
+	current.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "oldIps"}}
+	matcher = func() bool {
+		return reflect.DeepEqual(current.Spec.ImagePullSecrets, revised.Spec.ImagePullSecrets)
+	}
+	podUpdateTester("Pod imagePullSecrets changed")
+
+	// Check if the TopologySpreadConstraints is updated
+	revised.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{{TopologyKey: "newTk"}}
+	current.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{{TopologyKey: "oldTk"}}
+	matcher = func() bool {
+		return reflect.DeepEqual(current.Spec.TopologySpreadConstraints, revised.Spec.TopologySpreadConstraints)
+	}
+	podUpdateTester("Pod TopologySpreadConstraints changed")
 
 	// check container removed
 	revised.Spec.Containers = []corev1.Container{}

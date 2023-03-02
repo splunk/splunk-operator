@@ -18,6 +18,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -25,6 +26,18 @@ import (
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
+
+// Error tester for client
+func splunkClientErrorTester(t *testing.T, test func(SplunkClient) error) {
+	url := string(invalidUrlByteArray)
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient(url, "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+	err := test(*c)
+	if err == nil {
+		t.Errorf("Expected error, err = %v", err)
+	}
+}
 
 func splunkClientTester(t *testing.T, testMethod string, status int, body string, wantRequest *http.Request, test func(SplunkClient) error) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
@@ -52,6 +65,18 @@ func splunkClientMultipleRequestTester(t *testing.T, testMethod string, status [
 	mockSplunkClient.CheckRequests(t, testMethod)
 }
 
+func TestSplunkClientDo(t *testing.T) {
+	// Test error in do
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+	hreq := http.Request{
+		Header: http.Header{},
+		URL:    &url.URL{},
+		Method: "abcd",
+	}
+	c.Do(&hreq, []int{200}, nil)
+}
 func TestGetSearchHeadCaptainInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/shcluster/captain/info?count=0&output_mode=json", nil)
 	wantCaptainLabel := "splunk-s2-search-head-0"
@@ -626,15 +651,4 @@ func TestRestartSplunk(t *testing.T) {
 
 	// Test invalid http request
 	splunkClientErrorTester(t, test)
-}
-
-func splunkClientErrorTester(t *testing.T, test func(SplunkClient) error) {
-	url := string(invalidUrlByteArray)
-	mockSplunkClient := &spltest.MockHTTPClient{}
-	c := NewSplunkClient(url, "admin", "p@ssw0rd")
-	c.Client = mockSplunkClient
-	err := test(*c)
-	if err == nil {
-		t.Errorf("Expected error, err = %v", err)
-	}
 }

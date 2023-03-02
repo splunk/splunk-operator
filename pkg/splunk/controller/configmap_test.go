@@ -17,9 +17,10 @@ package controller
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"testing"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +38,7 @@ func TestApplyConfigMap(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-defaults"},
 		{MetaName: "*v1.ConfigMap-test-defaults"},
 	}
+
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
 
@@ -53,6 +55,15 @@ func TestApplyConfigMap(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
+
+	// Update owner references test
+	c := spltest.NewMockClient()
+	c.AddObject(revised)
+	revisedWithOr := revised.DeepCopy()
+	revisedWithOr.OwnerReferences = append(revised.OwnerReferences, metav1.OwnerReference{
+		Name: "DummyOR",
+	})
+	_, _ = ApplyConfigMap(ctx, c, revisedWithOr)
 }
 
 func TestGetConfigMap(t *testing.T) {
