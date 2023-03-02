@@ -17,10 +17,13 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -82,5 +85,42 @@ func TestApplySecret(t *testing.T) {
 	_, err = ApplySecret(ctx, c, nil)
 	if err.Error() != splcommon.InvalidSecretObjectError {
 		t.Errorf("Didn't catch invalid secret object")
+	}
+
+	// Update failure
+	c = spltest.NewMockClient()
+	current = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "secrets",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &current)
+	current.Data = make(map[string][]byte)
+	revised = current.DeepCopy()
+	revised.Data["key"] = []byte{'a'}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New("randomerror")
+	_, err = ApplySecret(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New("randomerror")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = k8serrors.NewNotFound(appsv1.Resource("configmap"), current.GetName())
+	_, err = ApplySecret(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = nil
+	_, err = ApplySecret(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New("randomerror")
+	_, err = ApplySecret(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
 	}
 }

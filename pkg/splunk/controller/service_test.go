@@ -17,8 +17,10 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,4 +43,28 @@ func TestApplyService(t *testing.T) {
 		return ApplyService(context.TODO(), c, cr.(*corev1.Service))
 	}
 	spltest.ReconcileTester(t, "TestApplyService", &current, revised, createCalls, updateCalls, reconcile, false)
+
+	// Negative testing
+	c := spltest.NewMockClient()
+	rerr := errors.New("randomerror")
+	ctx := context.TODO()
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	err := ApplyService(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	current.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+	c.Create(ctx, &current)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	revised = current.DeepCopy()
+	revised.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
+	err = ApplyService(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = nil
+
 }

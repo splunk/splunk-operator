@@ -90,6 +90,21 @@ const (
 
 	// DefaultMaxConcurrentAppDownloads sets the default value for maximum concurrent app downloads
 	DefaultMaxConcurrentAppDownloads uint64 = 5
+
+	// MockClientInduceErrorGet represents an error for get Api
+	MockClientInduceErrorGet = "mockClientGetError"
+
+	// MockClientInduceErrorCreate represents an error for create Api
+	MockClientInduceErrorCreate = "mockClientCreateError"
+
+	// MockClientInduceErrorList represents an error for list Api
+	MockClientInduceErrorList = "mockClientListError"
+
+	// MockClientInduceErrorUpdate represents an error for update Api
+	MockClientInduceErrorUpdate = "mockClientUpdateError"
+
+	// MockClientInduceErrorDelete represents an error for delete Api
+	MockClientInduceErrorDelete = "mockClientDeleteError"
 )
 
 // AppDownloadVolume is the mount volume on the operator pod to temporarily download apps

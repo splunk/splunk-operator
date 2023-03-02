@@ -16,9 +16,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,6 +47,27 @@ func TestApplyServiceAccount(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyServiceAccount", &current, revised, createCalls, updateCalls, reconcile, false)
+
+	// Negative testing
+	c := spltest.NewMockClient()
+	ctx := context.TODO()
+	rerr := errors.New("randomerror")
+	c.Create(ctx, &current)
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	err := ApplyServiceAccount(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	revised = current.DeepCopy()
+	revised.Name = "defaultsNew"
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	err = ApplyServiceAccount(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestGetServiceAccount(t *testing.T) {

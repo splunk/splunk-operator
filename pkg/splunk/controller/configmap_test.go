@@ -17,11 +17,13 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -64,6 +66,16 @@ func TestApplyConfigMap(t *testing.T) {
 		Name: "DummyOR",
 	})
 	_, _ = ApplyConfigMap(ctx, c, revisedWithOr)
+
+	// Induce a get error
+	errorCm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "defaults",
+			Namespace: "test",
+		},
+	}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = k8serrors.NewNotFound(appsv1.Resource("configmap"), errorCm.GetName())
+	_, _ = ApplyConfigMap(ctx, c, &errorCm)
 }
 
 func TestGetConfigMap(t *testing.T) {
@@ -161,6 +173,26 @@ func TestGetMCConfigMap(t *testing.T) {
 	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
 	if err != nil {
 		t.Errorf("Should not return an error, when the configMap exists")
+	}
+
+	// Error testing
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New("randomerror")
+	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
+	if err == nil {
+		t.Errorf("Should return an error")
+	}
+
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = k8serrors.NewNotFound(appsv1.Resource("configmap"), current.GetName())
+	client.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New("randomerror")
+	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
+	if err == nil {
+		t.Errorf("Should return an error")
+	}
+
+	client.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = nil
+	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
+	if err == nil {
+		t.Errorf("Should return an error")
 	}
 }
 
