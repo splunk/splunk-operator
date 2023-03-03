@@ -73,13 +73,13 @@ else
 	SCANNER_FILE = clair-scanner_windows_amd64.exe
 endif
 
-SED := sed -i 
+SED := sed -i
 ifeq ($(shell uname), Linux)
-	SED = sed -i  
+	SED = sed -i
 else ifeq ($(shell uname), Darwin)
-	SED = sed -i "" 
+	SED = sed -i ""
 else
-	SED = sed -i  
+	SED = sed -i
 endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
@@ -131,7 +131,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 ##@ Build
 
-build: generate fmt vet ## Build manager binary.
+build: setup/ginkgo generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
