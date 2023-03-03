@@ -51,7 +51,7 @@ func TestApplyServiceAccount(t *testing.T) {
 	// Negative testing
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
-	rerr := errors.New("randomerror")
+	rerr := errors.New(splcommon.Rerr)
 	c.Create(ctx, &current)
 
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
@@ -61,7 +61,8 @@ func TestApplyServiceAccount(t *testing.T) {
 	}
 
 	revised = current.DeepCopy()
-	revised.Name = "defaultsNew"
+	delTs := metav1.Now()
+	revised.DeletionTimestamp = &delTs
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
 	err = ApplyServiceAccount(ctx, c, revised)

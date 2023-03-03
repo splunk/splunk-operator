@@ -99,13 +99,13 @@ func TestApplySecret(t *testing.T) {
 	current.Data = make(map[string][]byte)
 	revised = current.DeepCopy()
 	revised.Data["key"] = []byte{'a'}
-	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New("randomerror")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New(splcommon.Rerr)
 	_, err = ApplySecret(ctx, c, revised)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
 
-	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New("randomerror")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = k8serrors.NewNotFound(appsv1.Resource("configmap"), current.GetName())
 	_, err = ApplySecret(ctx, c, revised)
 	if err == nil {
@@ -118,7 +118,7 @@ func TestApplySecret(t *testing.T) {
 		t.Errorf("Expected error")
 	}
 
-	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New("randomerror")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
 	_, err = ApplySecret(ctx, c, revised)
 	if err == nil {
 		t.Errorf("Expected error")

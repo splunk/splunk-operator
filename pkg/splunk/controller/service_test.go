@@ -46,25 +46,22 @@ func TestApplyService(t *testing.T) {
 
 	// Negative testing
 	c := spltest.NewMockClient()
-	rerr := errors.New("randomerror")
+	rerr := errors.New(splcommon.Rerr)
 	ctx := context.TODO()
-	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
 	err := ApplyService(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
 
 	current.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-	c.Create(ctx, &current)
+	c.Update(ctx, &current)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
 	revised = current.DeepCopy()
 	revised.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeCluster
-	err = ApplyService(ctx, c, &current)
+	err = ApplyService(ctx, c, revised)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
-
-	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = nil
-
 }

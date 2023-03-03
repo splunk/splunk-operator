@@ -102,7 +102,7 @@ func TestCheckForDeletion(t *testing.T) {
 
 	// callback error
 	SplunkFinalizerRegistry[errorFin] = func(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
-		return errors.New("randomerror")
+		return errors.New(splcommon.Rerr)
 	}
 	_, err = CheckForDeletion(ctx, &cr, c)
 	if err == nil {
@@ -113,7 +113,7 @@ func TestCheckForDeletion(t *testing.T) {
 	SplunkFinalizerRegistry[errorFin] = func(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
 		return nil
 	}
-	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New("randomerror")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New(splcommon.Rerr)
 	_, err = CheckForDeletion(ctx, &cr, c)
 	if err == nil {
 		t.Errorf("Expected error")

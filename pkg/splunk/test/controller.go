@@ -272,7 +272,7 @@ func (c MockClient) Scheme() *runtime.Scheme {
 // Get returns mock client's Err field
 func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	// Check for induced errors
-	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorGet]; ok {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorGet]; ok && value != nil {
 		return value
 	}
 	c.Calls["Get"] = append(c.Calls["Get"], MockFuncCall{

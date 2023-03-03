@@ -176,14 +176,14 @@ func TestGetMCConfigMap(t *testing.T) {
 	}
 
 	// Error testing
-	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New("randomerror")
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
 	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
 	if err == nil {
 		t.Errorf("Should return an error")
 	}
 
 	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = k8serrors.NewNotFound(appsv1.Resource("configmap"), current.GetName())
-	client.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New("randomerror")
+	client.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New(splcommon.Rerr)
 	_, err = GetMCConfigMap(ctx, client, &cr, namespacedName)
 	if err == nil {
 		t.Errorf("Should return an error")

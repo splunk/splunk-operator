@@ -105,6 +105,9 @@ const (
 
 	// MockClientInduceErrorDelete represents an error for delete Api
 	MockClientInduceErrorDelete = "mockClientDeleteError"
+
+	// Rerr represents a random error strting
+	Rerr = "randomError"
 )
 
 // AppDownloadVolume is the mount volume on the operator pod to temporarily download apps

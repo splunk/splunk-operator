@@ -141,16 +141,18 @@ func TestApplyDeployment(t *testing.T) {
 			UpdatedReplicas: 1,
 		},
 	}
-	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New("randomerror")
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
 	gotPhase, err = ApplyDeployment(context.TODO(), c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
 
+	c.Create(context.TODO(), &current)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
-	current.Spec.Template.Labels = make(map[string]string)
-	current.Spec.Template.Labels["errkey"] = "errvalue"
-	gotPhase, err = ApplyDeployment(context.TODO(), c, &current)
+	revisedNew := *current.DeepCopy()
+	revisedNew.Spec.Template.Labels = make(map[string]string)
+	revisedNew.Spec.Template.Labels["errkey"] = "errvalue"
+	gotPhase, err = ApplyDeployment(context.TODO(), c, &revisedNew)
 	if err != nil {
 		t.Errorf("Expected update, got error")
 	}
