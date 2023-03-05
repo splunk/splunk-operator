@@ -17,6 +17,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -376,6 +378,20 @@ func TestRemoveSecretOwnerRef(t *testing.T) {
 		t.Errorf("Couldn't find secret not found error")
 	}
 
+	// Negative testing
+	current := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "stack1",
+			Namespace:       "test",
+			OwnerReferences: []metav1.OwnerReference{splcommon.AsOwner(&cr, false)},
+		},
+	}
+	c.Create(ctx, &current)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New(splcommon.Rerr)
+	_, err = RemoveSecretOwnerRef(ctx, c, current.GetName(), &cr)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 func TestRemoveUnwantedSecrets(t *testing.T) {
 	var current corev1.Secret
@@ -470,6 +486,13 @@ func TestRemoveUnwantedSecrets(t *testing.T) {
 		} else if err != nil {
 			t.Errorf("Didn't find secret %s, deleted incorrectly", secretName)
 		}
+	}
+
+	// Negative testing
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = errors.New(splcommon.Rerr)
+	err = RemoveUnwantedSecrets(ctx, c, versionedSecretIdentifier, "test")
+	if err == nil {
+		t.Errorf("Expected error")
 	}
 }
 
@@ -715,6 +738,25 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	if v2Secret.GetName() != "splunk-test-secret-v2" {
 		t.Errorf("Wrong version secret got %s want %s", v1Secret.GetName(), "splunk-test-secret-v2")
 	}
+
+	// Negative testing
+	cr := TestResource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	_, err = GetLatestVersionedSecret(ctx, c, &cr, "test", versionedSecretIdentifier)
+	if err != nil {
+		t.Errorf("Eror not expected")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
+	_, err = GetLatestVersionedSecret(ctx, c, &cr, "test", versionedSecretIdentifier)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
 }
 
 func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
@@ -839,6 +881,42 @@ func TestApplySplunkSecret(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplySplunkSecret", &cr, &cr, createCalls, updateCalls, reconcile, false, namespacescopedsecret, &v1Secret)
+
+	// Negative testing
+	c = spltest.NewMockClient()
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
+	_, err = ApplySplunkSecret(ctx, c, &cr, nil, "test", "test")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	secretDat := make(map[string][]byte)
+	secretDat["key"] = []byte{'v'}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New(splcommon.Rerr)
+	_, err = ApplySplunkSecret(ctx, c, &cr, secretDat, "test", "test")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New(splcommon.Rerr)
+	current := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Data: secretDat,
+	}
+	c.Create(ctx, &current)
+
+	newSecDat := make(map[string][]byte)
+	newSecDat["keyNew"] = []byte{'n'}
+	_, err = ApplySplunkSecret(ctx, c, &cr, newSecDat, "test", "test")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
 }
 
 func TestApplyNamespaceScopedSecretObject(t *testing.T) {
@@ -896,6 +974,39 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
+
+	c := spltest.NewMockClient()
+	negSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-secret",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &negSecret)
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	_, err := ApplyNamespaceScopedSecretObject(ctx, c, negSecret.GetNamespace())
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.Delete(ctx, &negSecret)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = rerr
+	_, err = ApplyNamespaceScopedSecretObject(ctx, c, negSecret.GetNamespace())
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = nil
+	dummySchemaResource := schema.GroupResource{
+		Group:    negSecret.GetObjectKind().GroupVersionKind().Group,
+		Resource: negSecret.GetObjectKind().GroupVersionKind().Kind,
+	}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = k8serrors.NewNotFound(dummySchemaResource, negSecret.GetName())
+	_, err = ApplyNamespaceScopedSecretObject(ctx, c, negSecret.GetNamespace())
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestGetNamespaceScopedSecretByName(t *testing.T) {

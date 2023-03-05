@@ -299,7 +299,7 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 // List returns mock client's Err field
 func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
 	// Check for induced errors
-	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorList]; ok {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorList]; ok && value != nil {
 		return value
 	}
 	c.Calls["List"] = append(c.Calls["List"], MockFuncCall{
@@ -319,7 +319,7 @@ func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...cli
 // Create returns mock client's Err field
 func (c MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	// Check for induced errors
-	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorCreate]; ok {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorCreate]; ok && value != nil {
 		return value
 	}
 	c.Calls["Create"] = append(c.Calls["Create"], MockFuncCall{
@@ -333,7 +333,7 @@ func (c MockClient) Create(ctx context.Context, obj client.Object, opts ...clien
 // Delete returns mock client's Err field
 func (c MockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	// Check for induced errors
-	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorDelete]; ok {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorDelete]; ok && value != nil {
 		return value
 	}
 	c.Calls["Delete"] = append(c.Calls["Delete"], MockFuncCall{
@@ -347,7 +347,7 @@ func (c MockClient) Delete(ctx context.Context, obj client.Object, opts ...clien
 // Update returns mock client's Err field
 func (c MockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	// Check for induced errors
-	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate]; ok {
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate]; ok && value != nil {
 		return value
 	}
 	c.Calls["Update"] = append(c.Calls["Update"], MockFuncCall{

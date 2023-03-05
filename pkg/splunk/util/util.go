@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"os"
 	"strings"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -142,8 +141,13 @@ func generateHECToken() []byte {
 	return hecToken
 }
 
+// Help for unit testing
+var podExecGetConfig = config.GetConfig
+var podExecRESTClientForGVK = apiutil.RESTClientForGVK
+var podExecNewSPDYExecutor = remotecommand.NewSPDYExecutor
+
 // PodExecCommand execute a shell command in the specified pod
-func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, streamOptions *remotecommand.StreamOptions, tty bool, mock bool) (string, string, error) {
+func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName string, namespace string, cmd []string, streamOptions *remotecommand.StreamOptions, tty bool, mock bool, mockKubPath string) (string, string, error) {
 	var pod corev1.Pod
 
 	// Get Pod
@@ -156,18 +160,17 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 	gvk, _ := apiutil.GVKForObject(&pod, scheme.Scheme)
 	var restConfig *rest.Config
 	if !mock {
-		restConfig, err = config.GetConfig()
+		restConfig, err = podExecGetConfig()
 		if err != nil {
 			return "", "", err
 		}
 	} else {
-		path := os.Getenv("PWD") + "/kubeconfig"
-		restConfig, err = clientcmd.BuildConfigFromFlags("", path)
+		restConfig, err = clientcmd.BuildConfigFromFlags("", mockKubPath)
 		if err != nil {
 			return "", "", err
 		}
 	}
-	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	restClient, err := podExecRESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
 	if err != nil {
 		return "", "", err
 	}
@@ -179,14 +182,14 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 		Stderr:  true,
 		TTY:     tty,
 	}
-	if streamOptions == nil {
+	if streamOptions.Stdin == nil {
 		option.Stdin = false
 	}
 	execReq.VersionedParams(
 		option,
 		scheme.ParameterCodec,
 	)
-	exec, err := remotecommand.NewSPDYExecutor(restConfig, http.MethodPost, execReq.URL())
+	exec, err := podExecNewSPDYExecutor(restConfig, http.MethodPost, execReq.URL())
 	if err != nil {
 		return "", "", err
 	}
@@ -249,7 +252,7 @@ func suppressHarmlessErrorMessages(values ...*string) {
 func (podExecClient *PodExecClient) RunPodExecCommand(ctx context.Context, streamOptions *remotecommand.StreamOptions, baseCmd []string) (string, string, error) {
 	reqLogger := log.FromContext(ctx)
 	errmsg := ""
-	stdOut, stdErr, err := PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false)
+	stdOut, stdErr, err := PodExecCommand(ctx, podExecClient.client, podExecClient.targetPodName, podExecClient.cr.GetNamespace(), baseCmd, streamOptions, false, false, "")
 	if err != nil {
 		errmsg = err.Error()
 	}
