@@ -51,6 +51,169 @@ func init() {
 	initGlobalResourceTracker()
 }
 
+func TestGetRemoteStorageClient(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol2",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:     "msos_s2s3_vol",
+						Endpoint: "https://s3-eu-west-2.amazonaws.com",
+						Path:     "testbucket-rs-london",
+						Type:     "s3",
+						Provider: "aws",
+					},
+					{
+						Name:      "msos_s2s3_vol2",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london-2",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{
+						Name:     "authenticationApps",
+						Location: "authenticationAppsRepo",
+					},
+				},
+			},
+		},
+	}
+
+	fn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return nil
+	}
+
+	splclient.RegisterRemoteDataClient(ctx, "aws")
+	getClientWrapper := splclient.RemoteDataClientsMap["aws"]
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, "aws", splclient.NewMockAWSS3Client)
+
+	// Cover no secret key, empty GetInitFunc case
+	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
+
+	fn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		return spltest.MockAWSS3Client{}
+	}
+	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
+
+	// With secretRef
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "s3-secret",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"s3_access_key": {'1', '2'},
+		},
+	}
+	c.Create(ctx, &secret)
+	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+
+	secret.Data["s3_access_key"] = []byte("")
+	c.Update(ctx, &secret)
+	_, err := GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+	if err == nil {
+		t.Errorf("Expeceted error")
+	}
+
+	cm.Spec.AppFrameworkConfig.VolList[1].Provider = "azure"
+	_, err = GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[1], "location", fn)
+	if err == nil {
+		t.Errorf("Expeceted error")
+	}
+}
+
+func TestGetRemoteObjectKey(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sa",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 2,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				Defaults: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol2",
+					Scope:   enterpriseApi.ScopeLocal,
+				},
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:     "msos_s2s3_vol",
+						Endpoint: "https://s3-eu-west-2.amazonaws.com",
+						Path:     "testbucket-rs-london",
+						Type:     "s3",
+						Provider: "aws",
+					},
+					{
+						Name:      "msos_s2s3_vol2",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london-2",
+						SecretRef: "s3-secret",
+						Type:      "s3",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{Name: "adminApps",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{Name: "securityApps",
+						Location: "securityAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "msos_s2s3_vol",
+							Scope:   enterpriseApi.ScopeLocal},
+					},
+					{
+						Name:     "authenticationApps",
+						Location: "authenticationAppsRepo",
+					},
+				},
+			},
+		},
+	}
+
+	// Goes through fine
+	_, err := getRemoteObjectKey(ctx, &cr, &cr.Spec.AppFrameworkConfig, cr.Spec.AppFrameworkConfig.AppSources[0].Name, "app1.tgz")
+	if err != nil {
+		t.Errorf("Should be a clean run, returned error")
+	}
+
+}
+
 func TestApplySplunkConfig(t *testing.T) {
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
@@ -110,6 +273,37 @@ func TestApplySplunkConfig(t *testing.T) {
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
+
+	// Negative testing
+	c := spltest.NewMockClient()
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	_, err := ApplySplunkConfig(ctx, c, &searchHeadCR, searchHeadCR.Spec.CommonSplunkSpec, SplunkSearchHead)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	_, err = ApplySplunkConfig(ctx, c, &searchHeadCR, searchHeadCR.Spec.CommonSplunkSpec, SplunkSearchHead)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	nsSec := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-secret",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &nsSec)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = rerr
+	searchHeadCR.Spec.Defaults = "defaults"
+	_, err = ApplySplunkConfig(ctx, c, &searchHeadCR, searchHeadCR.Spec.CommonSplunkSpec, SplunkSearchHead)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestGetLicenseManagerURL(t *testing.T) {
