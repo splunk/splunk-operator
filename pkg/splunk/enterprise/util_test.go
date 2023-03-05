@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	//"io"
@@ -146,6 +147,68 @@ func TestGetLicenseManagerURL(t *testing.T) {
 	//if differ then CompareEnvs returns true
 	if result == true {
 		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
+	}
+
+	cr = enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	want = []corev1.EnvVar{
+		{
+			Name:  splcommon.LicenseManagerURL,
+			Value: "splunk-stack1-license-manager-service",
+		},
+	}
+
+	got = getLicenseManagerURL(&cr, &cr.Spec.CommonSplunkSpec)
+	result = splcommon.CompareEnvs(got, want)
+	//if differ then CompareEnvs returns true
+	if result == true {
+		t.Errorf("getLicenseManagerURL(\"%s\") = %s; want %s", SplunkLicenseManager, got, want)
+	}
+}
+
+func TestGetClusterMasterExtraEnv(t *testing.T) {
+	cr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	got := getClusterMasterExtraEnv(&cr, &cr.Spec.CommonSplunkSpec)
+	want := []corev1.EnvVar{
+		{
+			Name:  splcommon.ClusterManagerURL,
+			Value: GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false),
+		},
+	}
+	result := splcommon.CompareEnvs(got, want)
+	//if differ then CompareEnvs returns true
+	if result == true {
+		t.Errorf("getClusterMasterExtraEnv(\"%s\") = %s; want %s", SplunkClusterManager, got, want)
+	}
+}
+
+func TestGetClusterManagerExtraEnv(t *testing.T) {
+	cr := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+	}
+	got := getClusterManagerExtraEnv(&cr, &cr.Spec.CommonSplunkSpec)
+	want := []corev1.EnvVar{
+		{
+			Name:  splcommon.ClusterManagerURL,
+			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
+		},
+	}
+	result := splcommon.CompareEnvs(got, want)
+	//if differ then CompareEnvs returns true
+	if result == true {
+		t.Errorf("getClusterManagerExtraEnv(\"%s\") = %s; want %s", SplunkClusterManager, got, want)
 	}
 }
 
@@ -342,6 +405,14 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 		t.Errorf("Missing S3 access key should return an error")
 	}
 
+	// Error condition
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
+	_, _, _, err = GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
+	if err == nil {
+		t.Errorf("Get should fail here")
+	}
+
+	client.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 
 	// Missing S3 secret key should return error
@@ -355,6 +426,13 @@ func TestGetSmartstoreRemoteVolumeSecrets(t *testing.T) {
 	accessKey, secretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, cr.Spec.SmartStore.VolList[0], client, &cr, &cr.Spec.SmartStore)
 	if accessKey == "" || secretKey == "" || err != nil {
 		t.Errorf("Missing S3 Keys / Error not expected, when the Secret object with the S3 specific keys are present")
+	}
+}
+
+func TestGetLocalAppFileName(t *testing.T) {
+	val := getLocalAppFileName(context.TODO(), "/opt/splunk/", "app1", "etag")
+	if val != "/opt/splunk/app1_etag" {
+		t.Errorf("Invalid file name")
 	}
 }
 
@@ -840,6 +918,54 @@ func TestAppPhaseStatusAsStr(t *testing.T) {
 	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallError)
 	if status != "Install Error" {
 		t.Errorf("Got wrong status. Expected status=\"Install Error\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(9999)
+	if status != "Invalid Status" {
+		t.Errorf("Got wrong status. Expected status=\"Install Error\", Got = %s", status)
+	}
+}
+
+func TestBundlePushStateAsStr(t *testing.T) {
+	bpsMap := map[enterpriseApi.BundlePushStageType]string{
+		enterpriseApi.BundlePushPending:    "Bundle Push Pending",
+		enterpriseApi.BundlePushInProgress: "Bundle Push In Progress",
+		enterpriseApi.BundlePushComplete:   "Bundle Push Complete",
+		4:                                  "Invalid bundle push state",
+	}
+	for k, v := range bpsMap {
+		got := bundlePushStateAsStr(context.TODO(), k)
+		if got != v {
+			t.Errorf("Invalid string for bundle push status got %s want %s", got, v)
+		}
+	}
+}
+
+func TestGetSetBundlePushStatusString(t *testing.T) {
+	afwPip := AppInstallPipeline{
+		appDeployContext: &enterpriseApi.AppDeploymentContext{
+			BundlePushStatus: enterpriseApi.BundlePushTracker{},
+		},
+	}
+	ctx := context.TODO()
+	setBundlePushState(ctx, &afwPip, enterpriseApi.BundlePushPending)
+
+	got := getBundlePushState(&afwPip)
+	if got != enterpriseApi.BundlePushPending {
+		t.Errorf("Incorrect bundle push state got %v want %v", got, enterpriseApi.BundlePushPending)
+	}
+}
+
+func TestCreateAppDownloadDir(t *testing.T) {
+	ctx := context.TODO()
+	err := createAppDownloadDir(ctx, "/tmp")
+	if err != nil {
+		t.Errorf("Didn't expect error")
+	}
+
+	err = createAppDownloadDir(ctx, "/xyzzz.txt")
+	if err == nil {
+		t.Errorf("Expected error")
 	}
 }
 
@@ -2762,5 +2888,70 @@ func TestResetSymbolicLinks(t *testing.T) {
 	err = resetSymbolicLinks(ctx, client, &lmCr, 1, mockPodExecClient)
 	if err == nil {
 		t.Errorf("Expected error")
+	}
+}
+
+func TestSetupInitContainer(t *testing.T) {
+	pts := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+	// etc pvc
+	setupInitContainer(&pts, "testimage", string(corev1.PullAlways), "/bin/sh ls", false)
+
+	// etc eph
+	setupInitContainer(&pts, "testimage", string(corev1.PullAlways), "/bin/sh ls", true)
+
+}
+
+func TestGetSearchHeadEnv(t *testing.T) {
+	cr := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas: 2,
+		},
+	}
+	envVar := getSearchHeadEnv(&cr)
+	if envVar == nil {
+		t.Errorf("Expected a valid return value")
+	}
+}
+
+func TestGetLicenseMasterURL(t *testing.T) {
+	cr := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			Replicas: 2,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				LicenseMasterRef: corev1.ObjectReference{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	// With LMRef
+	envVar := getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	if envVar == nil {
+		t.Errorf("Expected a valid return value")
+	}
+
+	cr = enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+	envVar = getLicenseMasterURL(&cr, &cr.Spec.CommonSplunkSpec)
+	if envVar == nil {
+		t.Errorf("Expected a valid return value")
 	}
 }
