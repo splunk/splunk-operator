@@ -27,11 +27,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -61,6 +64,86 @@ func init() {
 	GetStartupScriptLocation = func() string {
 		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
 		return fileLocation
+	}
+}
+
+func TestApplyIndexerClusterOld(t *testing.T) {
+	c := spltest.NewMockClient()
+	ctx := context.TODO()
+	idxCr := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+
+	// Initial run, invalid spec
+	_, err := ApplyIndexerCluster(ctx, c, &idxCr)
+	if err == nil {
+		t.Errorf("Expected error, cm missing")
+	}
+
+	// ApplySplunkConfigError
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+	if err == nil {
+		t.Errorf("Expected error, cm missing")
+	}
+
+	// Set CM Ref, but no CM
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	idxCr.Spec.CommonSplunkSpec.ClusterMasterRef = corev1.ObjectReference{
+		Name:      "test",
+		Namespace: "test",
+	}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+
+	// Set CM Ref, but with CM
+	cMasterCr := enterpriseApiV3.ClusterMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterMaster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &cMasterCr)
+	idxCr.Spec.CommonSplunkSpec.ClusterMasterRef = corev1.ObjectReference{
+		Name:      "test",
+		Namespace: "test",
+	}
+	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+
+	cMasterCr.Status.Phase = enterpriseApi.PhaseReady
+	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+	if err == nil {
+		t.Errorf("Expected error for verifyRFPeers")
+	}
+
+	cMasterCr.Status.Phase = enterpriseApi.PhasePending
+	cTs := metav1.Now()
+	idxCr.ObjectMeta.DeletionTimestamp = &cTs
+	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+	if err != nil {
+		t.Errorf("Not Expecting an error")
+	}
+
+	idxCr.ObjectMeta.DeletionTimestamp = nil
+	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+	if err != nil {
+		t.Errorf("Not expecting an error, listing empty")
 	}
 }
 
