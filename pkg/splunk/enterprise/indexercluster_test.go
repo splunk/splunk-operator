@@ -234,6 +234,93 @@ func TestApplyIndexerCluster(t *testing.T) {
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
+
+	// Negative testing
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	_, err := ApplyIndexerClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	cManager := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "manager1",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &cManager)
+	current.Spec.ClusterManagerRef = corev1.ObjectReference{
+		Name:      "manager1",
+		Namespace: "test",
+	}
+	_, err = ApplyIndexerClusterManager(ctx, c, &current)
+	if err != nil {
+		t.Errorf("Expected error")
+	}
+
+	newc := spltest.NewMockClient()
+	nsSec, err := splutil.ApplyNamespaceScopedSecretObject(ctx, newc, "test")
+	if err != nil {
+		t.Errorf("Error creating secret")
+	}
+	newc.Create(ctx, nsSec)
+	newc.Create(ctx, &cManager)
+	newc.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = rerr
+	_, err = ApplyIndexerClusterManager(ctx, newc, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
+
+func TestGetMonitoringConsoleClient(t *testing.T) {
+	current := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "manager1",
+				},
+				Mock: true,
+			},
+		},
+	}
+	scopedLog := logt.WithName("TestGetMonitoringConsoleClient")
+
+	secrets := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-manager1-indexer-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": {'1', '2', '3'},
+		},
+	}
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mgr := &indexerClusterPodManager{
+		log:     scopedLog,
+		cr:      &current,
+		secrets: secrets,
+		newSplunkClient: func(managementURI, username, password string) *splclient.SplunkClient {
+			c := splclient.NewSplunkClient(managementURI, username, password)
+			c.Client = mockSplunkClient
+			return c
+		},
+	}
+	mgr.getMonitoringConsoleClient(&current, "cManager")
 }
 
 func TestGetClusterManagerClient(t *testing.T) {
