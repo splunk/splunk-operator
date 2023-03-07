@@ -8,6 +8,10 @@ metadata:
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.monitoringConsole.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 spec:
 {{- with .Values.monitoringConsole.appRepo }}
   appRepo: 
@@ -102,6 +106,10 @@ spec:
 {{- end }}
 {{- if .Values.monitoringConsole.serviceAccount }}
   serviceAccount: {{ .Values.monitoringConsole.serviceAccount }}
+{{- end }}
+{{- with .Values.monitoringConsole.serviceTemplate }}
+  serviceTemplate:
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.monitoringConsole.tolerations }}
   tolerations:
