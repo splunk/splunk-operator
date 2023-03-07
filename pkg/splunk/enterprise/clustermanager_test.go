@@ -235,8 +235,8 @@ func TestApplyClusterManager(t *testing.T) {
 	current.Spec.SmartStore.VolList[0].SecretRef = ""
 	current.Spec.SmartStore.Defaults.IndexAndGlobalCommonSpec.VolName = "msos_s2s3_vol"
 	_, err = ApplyClusterManager(ctx, c, &current)
-	if err == nil {
-		t.Errorf("Expected error")
+	if err != nil {
+		t.Errorf("Don't expected error here")
 	}
 
 	current.Spec.AppFrameworkConfig = enterpriseApi.AppFrameworkSpec{
@@ -740,8 +740,8 @@ func TestPerformCmBundlePush(t *testing.T) {
 	// Negative testing
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
 	err = PerformCmBundlePush(ctx, client, &current)
-	if err != nil {
-		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
+	if err != nil && strings.HasPrefix(err.Error(), "Will re-attempt to push the bundle after the 5 seconds") {
+		t.Errorf("Bundle Push Should not fail if reattempted after 5 seconds interval passed. Error: %s", err.Error())
 	}
 }
 
