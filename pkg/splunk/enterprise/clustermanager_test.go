@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -130,6 +131,291 @@ func TestApplyClusterManager(t *testing.T) {
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
+
+	// Negative testing
+	current.Spec.CommonSplunkSpec.LivenessProbe = &enterpriseApi.Probe{
+		InitialDelaySeconds: -1,
+	}
+	c := spltest.NewMockClient()
+	_ = errors.New(splcommon.Rerr)
+	_, err := ApplyClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Smartstore spec
+	current.Spec.CommonSplunkSpec.LivenessProbe = &enterpriseApi.Probe{
+		InitialDelaySeconds: 5,
+	}
+	current.Spec.SmartStore = enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "splunk-test-secret",
+			},
+		},
+
+		IndexList: []enterpriseApi.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	current.Status.SmartStore = enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "splunk-test-secret",
+			},
+		},
+
+		IndexList: []enterpriseApi.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+		Defaults: enterpriseApi.IndexConfDefaultsSpec{
+			IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+				VolName: "msos_s2s3_vol",
+			},
+		},
+	}
+
+	_, err = ApplyClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	sec := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "s3-secret",
+			Namespace:       "test",
+			ResourceVersion: "v1",
+		},
+	}
+	c.Create(ctx, &sec)
+	current.Spec.SmartStore.VolList[0].SecretRef = "s3-secret"
+	current.Status.SmartStore.VolList[0].SecretRef = "s3-secret"
+	current.Status.ResourceRevMap["s3-secret"] = "v2"
+	_, err = ApplyClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	cmap := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-clustermanager-smartstore",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &cmap)
+	current.Spec.SmartStore.VolList[0].SecretRef = ""
+	current.Spec.SmartStore.Defaults.IndexAndGlobalCommonSpec.VolName = "msos_s2s3_vol"
+	_, err = ApplyClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	current.Spec.AppFrameworkConfig = enterpriseApi.AppFrameworkSpec{
+		AppsRepoPollInterval: 60,
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+	current.Status.AppContext.AppFrameworkConfig = current.Spec.AppFrameworkConfig
+	current.Status.AppContext.Version = 0
+	current.Status.AppContext.AppsSrcDeployStatus = make(map[string]enterpriseApi.AppSrcDeployInfo)
+	current.Status.AppContext.AppsSrcDeployStatus["key"] = enterpriseApi.AppSrcDeployInfo{
+		AppDeploymentInfoList: []enterpriseApi.AppDeploymentInfo{
+			{
+				AppName: "app1.tgz",
+			},
+		},
+	}
+	_, err = ApplyClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	current.Spec.AppFrameworkConfig.VolList = []enterpriseApi.VolumeSpec{
+		{
+			Name:      "msos_s2s3_vol",
+			Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+			Path:      "testbucket-rs-london",
+			SecretRef: "s3-secret",
+			Type:      "s3",
+			Provider:  "aws",
+		},
+	}
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	_, err = ApplyClusterManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+}
+
+func TestValidateClusterManagerSpec(t *testing.T) {
+	ctx := context.TODO()
+	current := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Mock: true,
+			},
+		},
+	}
+	current.Spec.AppFrameworkConfig = enterpriseApi.AppFrameworkSpec{
+		AppsRepoPollInterval: 60,
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+	current.Status.AppContext.AppFrameworkConfig = enterpriseApi.AppFrameworkSpec{
+		AppsRepoPollInterval: 60,
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps2",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+		},
+	}
+	c := spltest.NewMockClient()
+	err := validateClusterManagerSpec(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Didn't detect incorrect appframework config")
+	}
 }
 
 func TestGetClusterManagerStatefulSet(t *testing.T) {
@@ -446,6 +732,13 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	// When the CM Bundle push is not pending, should not return an error
 	current.Status.BundlePushTracker.NeedToPushManagerApps = false
+	err = PerformCmBundlePush(ctx, client, &current)
+	if err != nil {
+		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
+	}
+
+	// Negative testing
+	current.Status.BundlePushTracker.NeedToPushManagerApps = true
 	err = PerformCmBundlePush(ctx, client, &current)
 	if err != nil {
 		t.Errorf("Should not return an error when the Bundle push is not required. Error: %s", err.Error())
