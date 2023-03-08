@@ -137,8 +137,8 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if $.Values.standalone.topologySpreadConstraints }}
-{{- with $.Values.standalone.topologySpreadConstraints }}
+{{- if .Values.standalone.topologySpreadConstraints }}
+{{- with .Values.standalone.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}

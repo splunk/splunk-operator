@@ -141,13 +141,13 @@ items:
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
-{{- if $.Values.indexerCluster.topologySpreadConstraints }}
-  {{- with $.Values.indexerCluster.topologySpreadConstraints }}
+{{- if .Values.indexerCluster.topologySpreadConstraints }}
+  {{- with .Values.indexerCluster.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 6 }}
 {{- end }}
 {{- end }}
-  {{- if and $.Values.sva.m4.enabled $.Values.sva.m4.indexerCluster.zone }}
+  {{- if and .Values.sva.m4.enabled .Values.sva.m4.indexerCluster.zone }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -156,7 +156,7 @@ items:
             - key: topology.kubernetes.io/zone
               operator: In
               values:
-              - {{ $.Values.sva.m4.clusterManager.zone }}
+              - {{ .Values.sva.m4.indexerCluster.zone }}
   {{- else }}
     {{- with $.Values.indexerCluster.affinity }}
     affinity:

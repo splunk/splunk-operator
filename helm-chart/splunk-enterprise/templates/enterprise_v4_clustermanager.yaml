@@ -132,13 +132,13 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if $.Values.clusterManager.topologySpreadConstraints }}
-{{- with $.Values.clusterManager.topologySpreadConstraints }}
+{{- if .Values.clusterManager.topologySpreadConstraints }}
+{{- with .Values.clusterManager.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- end }}
-{{- if and $.Values.sva.m4.enabled $.Values.sva.m4.clusterManager.zone }}
+{{- if and .Values.sva.m4.enabled .Values.sva.m4.clusterManager.zone }}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -147,7 +147,7 @@ spec:
           - key: topology.kubernetes.io/zone
             operator: In
             values:
-            - {{ $.Values.sva.m4.clusterManager.zone }}
+            - {{ .Values.sva.m4.clusterManager.zone }}
 {{- else }}
   {{- with .Values.clusterManager.affinity }}
   affinity:

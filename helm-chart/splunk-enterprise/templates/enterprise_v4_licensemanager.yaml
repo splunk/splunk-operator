@@ -115,8 +115,8 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if $.Values.licenseManager.topologySpreadConstraints }}
-{{- with $.Values.licenseManager.topologySpreadConstraints }}
+{{- if .Values.licenseManager.topologySpreadConstraints }}
+{{- with .Values.licenseManager.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}
