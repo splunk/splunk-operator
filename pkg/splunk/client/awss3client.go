@@ -94,9 +94,13 @@ func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccess
 	var err error
 	var sess *session.Session
 	config := &aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(3),
-		HTTPClient: &httpClient,
+		Region:                        aws.String(region),
+		MaxRetries:                    aws.Int(3),
+		HTTPClient:                    &httpClient,
+		DisableSSL:                    aws.Bool(true),
+		LogLevel:                      aws.LogLevel(aws.LogDebug | aws.LogDebugWithHTTPBody | aws.LogDebugWithRequestErrors | aws.LogDebugWithRequestErrors | aws.LogDebugWithSigning),
+		Logger:                        aws.NewDefaultLogger(),
+		CredentialsChainVerboseErrors: aws.Bool(true),
 	}
 
 	if accessKeyID != "" && secretAccessKey != "" {
