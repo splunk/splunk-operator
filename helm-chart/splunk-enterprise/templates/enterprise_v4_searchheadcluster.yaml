@@ -154,7 +154,8 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   {{- end }}
-  {{- if  and ($.Values.sva.m4.enabled) ($.Values.sva.m4.searchHeadCluster.zone) }}
+  {{- if  and ($.Values.sva.m4.enabled) ($.Values.sva.m4.searchHeadClusters) }}
+  {{- if .zone }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -163,7 +164,8 @@ items:
             - key: topology.kubernetes.io/zone
               operator: In
               values:
-              - {{ $.Values.sva.m4.searchHeadCluster.zone }}
+              - {{ .zone }}
+  {{- end}}
   {{- else }}
     {{- with $.Values.searchHeadCluster.affinity }}
     affinity:
