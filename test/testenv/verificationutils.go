@@ -409,11 +409,11 @@ func VerifyServiceAccountConfiguredOnPod(deployment *Deployment, ns string, podN
 
 // VerifyIndexFoundOnPod verify index found on a given POD
 func VerifyIndexFoundOnPod(ctx context.Context, deployment *Deployment, podName string, indexName string) {
-	gomega.Consistently(func() bool {
+	gomega.Eventually(func() bool {
 		indexFound, _ := GetIndexOnPod(ctx, deployment, podName, indexName)
 		logf.Log.Info("Checking status of index on pod", "PODNAME", podName, "INDEX NAME", indexName, "STATUS", indexFound)
 		return indexFound
-	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(true))
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
 // VerifyIndexConfigsMatch verify index specific config

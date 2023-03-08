@@ -140,6 +140,7 @@ jobs:
                 managerappframeworkm4,
                 managersecret,
                 managermc,
+                managersmartstore,
                ]
     runs-on: ubuntu-latest
     env:

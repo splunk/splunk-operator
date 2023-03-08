@@ -16,6 +16,10 @@ items:
     labels:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.searchHeadCluster.additionalAnnotations }}
+    annotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   spec:
   {{- if $.Values.searchHeadCluster.replicaCount }}
     replicas: {{ $.Values.searchHeadCluster.replicaCount }}
@@ -73,7 +77,7 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.volumes }}      
+  {{- with $.Values.searchHeadCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}
   {{- end }}
@@ -135,6 +139,10 @@ items:
   {{- end }}
   {{- if $.Values.searchHeadCluster.serviceAccount }}
     serviceAccount: {{ $.Values.searchHeadCluster.serviceAccount }}
+  {{- end }}
+  {{- with $.Values.searchHeadCluster.serviceTemplate }}
+    serviceTemplate:
+{{ toYaml . | indent 6 }}
   {{- end }}
   {{- with $.Values.searchHeadCluster.tolerations }}
     tolerations:
