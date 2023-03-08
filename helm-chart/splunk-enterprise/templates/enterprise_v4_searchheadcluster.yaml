@@ -89,7 +89,7 @@ items:
   {{- end }}
   {{- if $.Values.sva.m4.enabled }}
     {{- $cm_name := $.Values.clusterManager.name -}}
-    {{- if $.Values.existingClusterManager }}
+    {{- if and ($.Values.existingClusterManager) ($.Values.existingClusterManager.name) }}
       {{- $cm_name = $.Values.existingClusterManager.name -}}
     {{- end }}
     defaults: |-
@@ -148,11 +148,13 @@ items:
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- if $.Values.searchHeadCluster.topologySpreadConstraints }}
   {{- with .Values.searchHeadCluster.topologySpreadConstraints }}
     topologySpreadConstraints:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.sva.m4.enabled }}
+  {{- end }}
+  {{- if  and ($.Values.sva.m4.enabled) ($.Values.sva.m4.searchHeadCluster.zone) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:

@@ -26,7 +26,7 @@ spec:
   smartstore:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.existingClusterManager }}
+{{- if and (.Values.existingClusterManager) (.Values.existingClusterManager.name) }}
   clusterManagerRef:
     name: {{ .Values.existingClusterManager.name }}
   {{- if .Values.existingClusterManager.namespace }}
@@ -39,7 +39,7 @@ spec:
     namespace: {{ .Values.clusterManager.namespaceOverride }}
   {{- end }}
 {{- end }}
-{{- if .Values.existingLicenseManager }}
+{{- if and (.Values.existingLicenseManager) (.Values.existingLicenseManager.name) }}
   licenseManagerRef:
     name: {{ .Values.existingLicenseManager.name }}
   {{- if .Values.existingLicenseManager.namespace }}
@@ -52,7 +52,7 @@ spec:
     namespace: {{ .Values.licenseManager.namespaceOverride }}
   {{- end }}
 {{- end }}
-{{- if .Values.existingMonitoringConsole }}
+{{- if and (.Values.existingMonitoringConsole) (.Values.existingMonitoringConsole.name) }}
   monitoringConsoleRef:
     name: {{ .Values.existingMonitoringConsole.name }}
   {{- if .Values.existingMonitoringConsole.namespace }}
@@ -75,7 +75,7 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.volumes }}      
+{{- with .Values.standalone.volumes }}
   volumes:
 {{ toYaml . | indent 4 }}
 {{- end }}
@@ -137,9 +137,11 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- if $.Values.standalone.topologySpreadConstraints }}
 {{- with $.Values.standalone.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
+{{- end }}
 {{- end }}
 {{- with .Values.standalone.affinity }}
   affinity:

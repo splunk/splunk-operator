@@ -115,9 +115,11 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- if $.Values.monitoringConsole.topologySpreadConstraints }}
 {{- with .Values.monitoringConsole.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
+{{- end }}
 {{- end }}
 {{- with .Values.monitoringConsole.affinity }}
   affinity:

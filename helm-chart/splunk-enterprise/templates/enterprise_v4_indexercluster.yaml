@@ -141,11 +141,13 @@ items:
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
+{{- if $.Values.indexerCluster.topologySpreadConstraints }}
   {{- with .Values.indexerCluster.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 6 }}
 {{- end }}
-  {{- if $.Values.sva.m4.enabled }}
+{{- end }}
+  {{- if and ($.Values.sva.m4.enabled) ($.Values.sva.m4.indexerCluster.zone) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
