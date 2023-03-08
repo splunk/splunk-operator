@@ -19,14 +19,14 @@ spec:
   replicas: {{ .Values.standalone.replicaCount }}
 {{- end }}
 {{- with .Values.standalone.appRepo }}
-  appRepo: 
+  appRepo:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.standalone.smartstore }}
   smartstore:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if and (.Values.existingClusterManager) (.Values.existingClusterManager.name) }}
+{{- if and .Values.existingClusterManager .Values.existingClusterManager.name }}
   clusterManagerRef:
     name: {{ .Values.existingClusterManager.name }}
   {{- if .Values.existingClusterManager.namespace }}
@@ -39,7 +39,7 @@ spec:
     namespace: {{ .Values.clusterManager.namespaceOverride }}
   {{- end }}
 {{- end }}
-{{- if and (.Values.existingLicenseManager) (.Values.existingLicenseManager.name) }}
+{{- if and .Values.existingLicenseManager .Values.existingLicenseManager.name }}
   licenseManagerRef:
     name: {{ .Values.existingLicenseManager.name }}
   {{- if .Values.existingLicenseManager.namespace }}
@@ -52,7 +52,7 @@ spec:
     namespace: {{ .Values.licenseManager.namespaceOverride }}
   {{- end }}
 {{- end }}
-{{- if and (.Values.existingMonitoringConsole) (.Values.existingMonitoringConsole.name) }}
+{{- if and .Values.existingMonitoringConsole .Values.existingMonitoringConsole.name }}
   monitoringConsoleRef:
     name: {{ .Values.existingMonitoringConsole.name }}
   {{- if .Values.existingMonitoringConsole.namespace }}
