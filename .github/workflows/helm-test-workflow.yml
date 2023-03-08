@@ -4,7 +4,7 @@ on:
     branches:
       - develop
       - main
-      - CSPL-2294
+      - CSPL-2319
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
