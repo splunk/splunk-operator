@@ -650,7 +650,7 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 
 	// Create command for symbolic link creation
 	var command string
-	if crKind == "ClusterManager" {
+	if crKind == "ClusterManager" || crKind == "ClusterMaster" {
 		command = setSymbolicLinkCmanager
 	} else {
 		return fmt.Errorf("Invalid CR kind to reset symbolic links")

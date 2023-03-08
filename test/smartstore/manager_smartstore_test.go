@@ -159,7 +159,7 @@ var _ = Describe("Smartstore test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4)", func() {
-		It("managersmartstore, integration: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
+		It("managersmartstore, smoke: Can configure indexes and volumes on Multisite Indexer Cluster through app", func() {
 
 			volName := "test-volume-" + testenv.RandomDNSName(3)
 			indexName := "test-index-" + testenv.RandomDNSName(3)
@@ -186,9 +186,6 @@ var _ = Describe("Smartstore test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Verify MC Pod is Ready
-			// testenv.MCPodReady(testcaseEnvInst.GetName(), deployment)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -217,6 +214,60 @@ var _ = Describe("Smartstore test", func() {
 			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
 				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexName, podName)
+			}
+
+			testcaseEnvInst.Log.Info("Adding new index to Cluster Manager CR")
+			indexNameTwo := "test-index-two" + testenv.RandomDNSName(3)
+			indexList := []string{indexName, indexNameTwo}
+			newIndex := []enterpriseApi.IndexSpec{testenv.GenerateIndexSpec(indexNameTwo, volName)}
+
+			cm := &enterpriseApi.ClusterManager{}
+			err = deployment.GetInstance(ctx, deployment.GetName(), cm)
+			Expect(err).To(Succeed(), "Failed to get instance of Cluster Master")
+			cm.Spec.SmartStore.IndexList = append(cm.Spec.SmartStore.IndexList, newIndex...)
+			err = deployment.UpdateCR(ctx, cm)
+			Expect(err).To(Succeed(), "Failed to add new index to cluster master")
+
+			// Ensure that the cluster-master goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure the indexers of all sites go to Ready phase
+			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
+
+			// Ensure search head cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// Check index on pod
+			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
+				for _, index := range indexList {
+					testenv.VerifyIndexFoundOnPod(ctx, deployment, podName, index)
+				}
+			}
+
+			// Ingest data to the index
+			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
+				logFile := fmt.Sprintf("test-log-%s.log", testenv.RandomDNSName(3))
+				testenv.CreateMockLogfile(logFile, 2000)
+				testenvInstance.Log.Info("Ingesting data on index", "Index Name", indexNameTwo)
+				testenv.IngestFileViaMonitor(ctx, logFile, indexNameTwo, podName, deployment)
+			}
+
+			// Roll Hot Buckets on the test index per indexer
+			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
+				testenv.RollHotToWarm(ctx, deployment, podName, indexNameTwo)
+			}
+
+			// Roll index buckets and Check for indexes on S3
+			for siteNumber := 1; siteNumber <= siteCount; siteNumber++ {
+				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), siteNumber, 0)
+				testenvInstance.Log.Info("Checking index on S3", "Index Name", indexNameTwo, "Pod Name", podName)
+				testenv.VerifyIndexExistsOnS3(ctx, deployment, indexNameTwo, podName)
 			}
 		})
 	})
