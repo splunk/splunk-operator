@@ -18,20 +18,20 @@ sva:
 indexerCluster:
    enabled: true
    additionalLabels:
-     label: true
+     label: "true"
    additionalAnnotations:
-      annotation: true
+      annotation: "true"
 
 clusterManager:
    enabled: true
    additionalLabels:
-     label: true
+     label: "true"
    additionalAnnotations:
-      annotation: true
+      annotation: "true"
 
 searchHeadCluster:
    enabled: true
    additionalLabels:
-     label: true
+     label: "true"
    additionalAnnotations:
-      annotation: true
+      annotation: "true"
