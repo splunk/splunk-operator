@@ -8,6 +8,10 @@ metadata:
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.licenseManager.additionalAnnotations }}
+    annotations:
+{{ toYaml . | indent 4 }}
+  {{- end }}
 spec:
 {{- with .Values.licenseManager.appRepo }}
   appRepo: 
@@ -102,6 +106,10 @@ spec:
 {{- end }}
 {{- if .Values.licenseManager.serviceAccount }}
   serviceAccount: {{ .Values.licenseManager.serviceAccount }}
+{{- end }}
+{{- with .Values.licenseManager.serviceTemplate }}
+  serviceTemplate:
+{{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.licenseManager.tolerations }}
   tolerations:

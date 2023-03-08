@@ -9,92 +9,24 @@ status:
   availableReplicas: 1
 
 ---
-# assert for cluster manager custom resource to be ready
+# check for standalone to be in ready state
+# check for standalone to be scaled
 apiVersion: enterprise.splunk.com/v4
-kind: ClusterManager
+kind: Standalone
 metadata:
-  name: cm
-status:
-  phase: Ready
-
----
-# check if stateful sets are created
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: splunk-cm-cluster-manager
+  name: stdln
 status:
   replicas: 1
 
 ---
-# check if secret object are created
-apiVersion: v1
-kind: Secret
-metadata:
-  name: splunk-cm-cluster-manager-secret-v1
-
----
-# assert for indexer cluster custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
-kind: IndexerCluster
+kind: Standalone
 metadata:
-  name: idxc
+  name: stdln
 status:
   phase: Ready
-
----
-# check for stateful set and replicas as configured
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: splunk-idxc-indexer
-status:
-  replicas: 3
-
----
-# check if secret object are created
-apiVersion: v1
-kind: Secret
-metadata:
-  name: splunk-idxc-indexer-secret-v1
-
----
-# assert for SearchHeadCluster custom resource to be ready
-apiVersion: enterprise.splunk.com/v4
-kind: SearchHeadCluster
-metadata:
-  name: shc
-status:
-  phase: Ready
-
----
-# check if secret object are created
-apiVersion: v1
-kind: Secret
-metadata:
-  name: splunk-shc-deployer-secret-v1
-
----
-# check if secret object are created
-apiVersion: v1
-kind: Secret
-metadata:
-  name: splunk-shc-search-head-secret-v1
-
----
-# check for stateful set and replicas as configured
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: splunk-shc-search-head
-status:
-  replicas: 3
-
----
-# check for statefull set
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: splunk-shc-deployer
-status:
+  readyReplicas: 1
   replicas: 1
+  smartstore:
+    cacheManager:
+      evictionPolicy: lru
