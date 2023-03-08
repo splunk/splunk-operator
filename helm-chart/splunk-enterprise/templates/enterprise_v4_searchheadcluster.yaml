@@ -154,8 +154,7 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   {{- end }}
-  {{- if  and ($.Values.sva.m4.enabled) ($.Values.sva.m4.searchHeadClusters) }}
-  {{- if .zone }}
+  {{- if  and ($.Values.sva.m4.enabled)  (.zone) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -165,7 +164,6 @@ items:
               operator: In
               values:
               - {{ .zone }}
-  {{- end}}
   {{- else }}
     {{- with $.Values.searchHeadCluster.affinity }}
     affinity:

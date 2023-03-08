@@ -138,8 +138,7 @@ spec:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- end }}
-{{- if and .Values.sva.m4.enabled .Values.sva.m4.clusterManager }}
-{{- if .zone }}
+{{- if and .Values.sva.m4.enabled  .Values.sva.m4.clusterManager.zone }}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -148,8 +147,7 @@ spec:
           - key: topology.kubernetes.io/zone
             operator: In
             values:
-            - {{ .zone }}
-{{- end}}
+            - {{ .Values.sva.m4.clusterManager.zone }}
 {{- else }}
   {{- with .Values.clusterManager.affinity }}
   affinity:
