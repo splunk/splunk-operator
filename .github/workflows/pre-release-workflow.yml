@@ -178,10 +178,10 @@ jobs:
     - name: Run helm chart package creation
       run: |
        helm package helm-chart/splunk-operator
-       cp splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
-       mv splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz helm-chart/splunk-enterprise/charts
+       cp splunk-operator-${{ github.event.inputs.new_operator_version }}.tgz docs/
+       mv splunk-operator-${{ github.event.inputs.new_operator_version }}.tgz helm-chart/splunk-enterprise/charts
        helm package helm-chart/splunk-enterprise
-       mv splunk-enterprise-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
+       mv splunk-enterprise-${{ github.event.inputs.new_operator_version }}.tgz docs/
        helm repo index --url https://splunk.github.io/splunk-operator/ docs/
 
     - name: Reset go.mod and go.sum before creating Pull Request
