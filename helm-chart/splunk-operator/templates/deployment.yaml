@@ -108,13 +108,7 @@ spec:
 {{- toYaml . | nindent 8 }}
 {{- end }}
       terminationGracePeriodSeconds: {{ .Values.splunkOperator.terminationGracePeriodSeconds }}
-{{- if .Values.splunkOperator.volumes }}
+{{- with .Values.splunkOperator.volumes }}
       volumes:
-{{- range $volume := .Values.splunkOperator.volumes }}
-{{- if and $volume.name $volume.persistentVolumeClaim  $volume.persistentVolumeClaim.claimName }}
-      - name: {{ $volume.name }}
-        persistentVolumeClaim:
-          claimName: {{ $volume.persistentVolumeClaim.claimName }}
-{{- end }}
-{{- end }}
+{{- toYaml .| nindent 8 }}
 {{- end }}
