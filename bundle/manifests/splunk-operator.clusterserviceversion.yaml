@@ -111,12 +111,13 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
+    createdAt: "2023-03-09T22:10:41Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.25.0
+    operators.operatorframework.io/builder: operator-sdk-v1.27.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
   name: splunk-operator.v2.2.0
