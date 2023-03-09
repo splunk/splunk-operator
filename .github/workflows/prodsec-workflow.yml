@@ -4,6 +4,7 @@ on:
     branches:
     - main
     - develop
+    - cspl-2322
 name: Prodsec Workflow
 jobs:
   semgrep:
