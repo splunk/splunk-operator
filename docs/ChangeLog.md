@@ -1,5 +1,15 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.2.1 (2023-03-09)
+
+* This is the 2.2.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.3-a2 image with it
+
+* CSPL-2301: Fixed security vulnerabilities
+
+* Fixed multiple helm chart issues
+
 ## 2.2.0 (2023-01-25)
 
 * This is the 2.2.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
@@ -10,16 +20,13 @@
 
 * Fixed multiple helm chart issues
 
-## 2.1.1 (2022-12-06)
+## 2.1.1 (2022-12-07)
 
 * This is the 2.1.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/master/docs/README.md#prerequisites-for-the-splunk-operator)
 
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.2 image with it
 
 * CSPL-2177: Fixed security vulnerability
-## 2.1.1 (2022-12-07)
-
-* CSPL-2177: Fixed CVE-2022-42898 vulnerability
 
 * CSPL-2171: Fixed namespace specific installation issue in Helm chart and in manifest files
 
