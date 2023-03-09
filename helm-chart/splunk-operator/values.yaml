@@ -22,6 +22,7 @@ kubeRbacProxy:
       cpu: 5m
       memory: 64Mi
 
+
 # Splunk Operator configurations
 splunkOperator:
 
@@ -139,3 +140,14 @@ splunkOperator:
     name: app-staging
 # - mountPath:
 #   name:
+
+# Array with extra yaml to deploy with the chart. Evaluated as a template
+extraManifests: []
+# extraManifests:
+#  - apiVersion: cloud.google.com/v1beta1
+#    kind: BackendConfig
+#    metadata:
+#      name: "{{ .Release.Name }}-test"
+#    spec:
+#      securityPolicy:
+#        name: "gcp-cloud-armor-policy-test"

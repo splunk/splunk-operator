@@ -16,6 +16,10 @@ items:
     labels:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.indexerCluster.additionalAnnotations }}
+    annotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   spec:
   {{- if $.Values.indexerCluster.replicaCount }}
     replicas: {{ $.Values.indexerCluster.replicaCount }}
@@ -102,6 +106,18 @@ items:
   {{- if $.Values.indexerCluster.readinessInitialDelaySeconds }}
     readinessInitialDelaySeconds: {{ $.Values.indexerCluster.readinessInitialDelaySeconds }}
   {{- end }}
+  {{- if $.Values.indexerCluster.startupProbe }}
+    startupProbe:
+{{ toYaml $.Values.indexerCluster.startupProbe | indent 6 }}
+  {{- end }}
+  {{- if $.Values.indexerCluster.livenessProbe }}
+    livenessProbe:
+{{ toYaml $.Values.indexerCluster.livenessProbe | indent 6 }}
+  {{- end }}
+  {{- if $.Values.indexerCluster.readinessProbe }}
+    readinessProbe:
+{{ toYaml $.Values.indexerCluster.readinessProbe | indent 6 }}
+  {{- end }}
   {{- with $.Values.indexerCluster.etcVolumeStorageConfig }}
     etcVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
@@ -117,11 +133,21 @@ items:
   {{- if $.Values.indexerCluster.serviceAccount }}
     serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
   {{- end }}
+  {{- with $.Values.indexerCluster.serviceTemplate }}
+    serviceTemplate:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.indexerCluster.tolerations }}
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.sva.m4.enabled }}
+{{- if $.Values.indexerCluster.topologySpreadConstraints }}
+  {{- with $.Values.indexerCluster.topologySpreadConstraints }}
+  topologySpreadConstraints:
+{{ toYaml . | indent 6 }}
+{{- end }}
+{{- end }}
+  {{- if and ($.Values.sva.m4.enabled) (.zone) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:

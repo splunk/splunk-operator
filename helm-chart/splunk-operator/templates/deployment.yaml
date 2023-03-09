@@ -110,5 +110,5 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.splunkOperator.terminationGracePeriodSeconds }}
 {{- with .Values.splunkOperator.volumes }}
       volumes:
-{{- toYaml . | nindent 8 }}
+{{- toYaml .| nindent 8 }}
 {{- end }}

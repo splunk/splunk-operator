@@ -8,6 +8,10 @@ metadata:
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.monitoringConsole.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 spec:
 {{- with .Values.monitoringConsole.appRepo }}
   appRepo: 
@@ -76,6 +80,18 @@ spec:
 {{- if .Values.monitoringConsole.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.monitoringConsole.readinessInitialDelaySeconds }}
 {{- end }}
+{{- if .Values.monitoringConsole.startupProbe }}
+  startupProbe:
+{{ toYaml .Values.monitoringConsole.startupProbe | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.livenessProbe }}
+  livenessProbe:
+{{ toYaml .Values.monitoringConsole.livenessProbe | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.readinessProbe }}
+  readinessProbe:
+{{ toYaml .Values.monitoringConsole.readinessProbe | indent 4 }}
+{{- end }}
 {{- with .Values.monitoringConsole.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
@@ -91,9 +107,19 @@ spec:
 {{- if .Values.monitoringConsole.serviceAccount }}
   serviceAccount: {{ .Values.monitoringConsole.serviceAccount }}
 {{- end }}
+{{- with .Values.monitoringConsole.serviceTemplate }}
+  serviceTemplate:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.monitoringConsole.tolerations }}
   tolerations:
 {{ toYaml . | indent 4 }}
+{{- end }}
+{{- if .Values.monitoringConsole.topologySpreadConstraints }}
+{{- with .Values.monitoringConsole.topologySpreadConstraints }}
+  topologySpreadConstraints:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- end }}
 {{- with .Values.monitoringConsole.affinity }}
   affinity:

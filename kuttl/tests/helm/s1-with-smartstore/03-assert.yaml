@@ -1,0 +1,32 @@
+---
+# assert for splunk operator deployment to be ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+status:
+  readyReplicas: 1
+  availableReplicas: 1
+
+---
+# check for standalone to be in ready state
+# check for standalone to be scaled
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  replicas: 1
+
+---
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  phase: Ready
+  readyReplicas: 1
+  replicas: 1
+  smartstore:
+    cacheManager:
+      evictionPolicy: lru

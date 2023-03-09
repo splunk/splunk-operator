@@ -32,6 +32,10 @@ jobs:
         run: |
           go version
           go install github.com/mattn/goveralls@latest
+      - name: Install Ginkgo
+        run: |
+          make setup/ginkgo
+          go mod tidy
       - name: Run Unit Tests
         run: make test
       - name: Run Code Coverage
@@ -58,6 +62,9 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+    - name: Install Ginkgo
+      run: |
+          make setup/ginkgo
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@v1
     - name: Install Operator SDK
@@ -169,6 +176,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+      - name: Change splunk enterprise to release image on main branches
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:
@@ -270,6 +281,13 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: Integration Tests          # Name of the check run which will be created
+          path: inttest-*.xml         # Path to test results
+          reporter: jest-junit        # Format of test results
   push-latest:
     needs: smoke-tests
     if: github.ref == 'refs/heads/main'
