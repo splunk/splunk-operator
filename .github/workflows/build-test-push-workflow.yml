@@ -140,7 +140,6 @@ jobs:
                 managerappframeworkm4,
                 managersecret,
                 managermc,
-                managersmartstore,
                ]
     runs-on: ubuntu-latest
     env:
@@ -177,8 +176,12 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+      - name: Change splunk enterprise to release image on main branches
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Install Kubectl
-        uses: Azure/setup-kubectl@v1
+        uses: Azure/setup-kubectl@v3
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python

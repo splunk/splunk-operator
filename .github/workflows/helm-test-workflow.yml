@@ -98,7 +98,7 @@ jobs:
         run: |
           echo "HELM_GITHUB_SHA=$GITHUB_SHA" >> $GITHUB_ENV
       - name: Install Kubectl
-        uses: Azure/setup-kubectl@v1
+        uses: Azure/setup-kubectl@v3
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install kuttl
