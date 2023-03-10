@@ -2,7 +2,7 @@
 
 if [ "${INSTALL_OPERATOR}" = true ]; then
     echo "installing operator"
-    helm install splunk-operator $HELM_REPO_PATH/splunk-operator --namespace $NAMESPACE --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMAGE} --set splunkOperator.image.repository=${KUTTL_SPLUNK_ENTERPRISE_IMAGE}
+    helm install splunk-operator $HELM_REPO_PATH/splunk-operator --namespace $NAMESPACE --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMAGE} --set image.repository=${KUTTL_SPLUNK_ENTERPRISE_IMAGE}
     retVal=$?
     if [ $retVal -ne 0 ]; then
         echo "operator installation failed"
