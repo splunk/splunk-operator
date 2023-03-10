@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - main
-      - helm-test-image-fix
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
