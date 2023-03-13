@@ -85,7 +85,7 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Change splunk enterprise to release on main branches
-        if: github.ref == 'ref/head/main'
+        if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
           echo "HELM_REPO_PATH=splunk"  >> $GITHUB_ENV
