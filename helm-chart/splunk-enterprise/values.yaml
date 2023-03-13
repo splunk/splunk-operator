@@ -92,6 +92,10 @@ clusterManager:
   # Specify additional labels
   additionalLabels: {}
 
+  additionalAnnotations: {}
+
+
+
   # Splunk Enterprise App repository
   # Specifies remote App location and scope for Splunk App management
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/AppFramework.md
@@ -177,6 +181,24 @@ clusterManager:
   # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   # Storage configuration for /opt/splunk/etc volume
   # To use a StorageClass other than your default StorageClass, specify the storageClassName
   # reference: https://github.com/splunk/splunk-operator/blob/develop/docs/StorageClass.md
@@ -208,6 +230,9 @@ clusterManager:
   # reference: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccount: ""
 
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: []
+
   # Specify Splunk instance pod tolerations
   # reference: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
@@ -225,6 +250,17 @@ clusterManager:
     #         values:
     #         - zone-1a
 
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 
 indexerCluster:
@@ -236,6 +272,8 @@ indexerCluster:
   namespaceOverride: ""
 
   additionalLabels: {}
+
+  additionalAnnotations: {}
 
   replicaCount: 1
 
@@ -255,6 +293,24 @@ indexerCluster:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -271,13 +327,28 @@ indexerCluster:
     #   cpu: "4"
     # limits:
     #   memory: "12Gi"
-    #   cpu: "24"  
+    #   cpu: "24"
 
   serviceAccount: ""
 
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: []
+
   tolerations: []
- 
+
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 searchHeadCluster:
 
@@ -288,6 +359,8 @@ searchHeadCluster:
   namespaceOverride: ""
 
   additionalLabels: {}
+
+  additionalAnnotations: {}
 
   replicaCount: 1
 
@@ -331,6 +404,24 @@ searchHeadCluster:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -351,9 +442,24 @@ searchHeadCluster:
 
   serviceAccount: ""
 
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: []
+
   tolerations: []
-  
+
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 monitoringConsole:
 
@@ -364,6 +470,8 @@ monitoringConsole:
   namespaceOverride: ""
 
   additionalLabels: {}
+
+  additionalAnnotations: {}
 
   appRepo: {}
     # appsRepoPollIntervalSeconds:
@@ -400,6 +508,24 @@ monitoringConsole:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -420,9 +546,24 @@ monitoringConsole:
 
   serviceAccount: ""
 
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: []
+
   tolerations: []
-  
+
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 licenseManager:
 
@@ -433,6 +574,8 @@ licenseManager:
   namespaceOverride: ""
 
   additionalLabels: {}
+
+  additionalAnnotations: {}
 
   appRepo: {}
     # appsRepoPollIntervalSeconds:
@@ -480,6 +623,24 @@ licenseManager:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -500,9 +661,24 @@ licenseManager:
 
   serviceAccount: ""
 
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: []
+
   tolerations: []
 
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 standalone:
 
@@ -513,6 +689,8 @@ standalone:
   namespaceOverride: ""
 
   additionalLabels: {}
+
+  additionalAnnotations: {}
 
   replicaCount: 1
 
@@ -532,7 +710,7 @@ standalone:
     #     endpoint:
     #     region:
     #     secretRef:
-    
+
   smartstore: {}
     # defaults:
     #   volumeName:
@@ -563,6 +741,24 @@ standalone:
 
   readinessInitialDelaySeconds: 10
 
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
   etcVolumeStorageConfig:
     ephemeralStorage: false
     storageCapacity: 10Gi
@@ -583,6 +779,32 @@ standalone:
 
   serviceAccount: ""
 
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: []
+
   tolerations: []
 
   affinity: {}
+
+  # Configure a topology spread constraint
+  #  https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  #  - maxSkew: <integer>
+  #    minDomains: <integer> # optional; beta since v1.25
+  #    topologyKey: <string>
+  #    whenUnsatisfiable: <string>
+  #    labelSelector: <object>
+  #    matchLabelKeys: <list> # optional; alpha since v1.25
+  #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
+  #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
+
+# Array with extra yaml to deploy with the chart. Evaluated as a template
+extraManifests: []
+# extraManifests:
+#  - apiVersion: cloud.google.com/v1beta1
+#    kind: BackendConfig
+#    metadata:
+#      name: "{{ .Release.Name }}-test"
+#    spec:
+#      securityPolicy:
+#        name: "gcp-cloud-armor-policy-test"

@@ -252,7 +252,7 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest R
 			IfMatch: aws.String(downloadRequest.Etag),
 		})
 	if err != nil {
-		scopedLog.Error(err, "Unable to download item %s", downloadRequest.RemoteFile)
+		scopedLog.Error(err, "Unable to download item", "RemoteFile", downloadRequest.RemoteFile)
 		os.Remove(downloadRequest.RemoteFile)
 		return false, err
 	}

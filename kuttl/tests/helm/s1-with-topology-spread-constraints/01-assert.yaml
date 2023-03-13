@@ -1,0 +1,30 @@
+---
+# assert for splunk operator deployment to be ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+status:
+  availableReplicas: 1
+
+---
+# check for standalone to be in ready state
+# check for standalone to be scaled
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+status:
+  readyReplicas: 0
+
+---
+#apiVersion: v1
+#involvedObject:
+#  apiVersion: v1
+#  kind: Pod
+#  name: splunk-stdln-standalone-0
+#kind: Event
+#reason: FailedScheduling
+#source:
+#  component: default-scheduler
+#type: Warning

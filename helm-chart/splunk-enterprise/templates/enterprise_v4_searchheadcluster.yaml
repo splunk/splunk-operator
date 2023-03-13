@@ -16,6 +16,10 @@ items:
     labels:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.searchHeadCluster.additionalAnnotations }}
+    annotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   spec:
   {{- if $.Values.searchHeadCluster.replicaCount }}
     replicas: {{ $.Values.searchHeadCluster.replicaCount }}
@@ -73,7 +77,7 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.volumes }}      
+  {{- with $.Values.searchHeadCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}
   {{- end }}
@@ -85,7 +89,7 @@ items:
   {{- end }}
   {{- if $.Values.sva.m4.enabled }}
     {{- $cm_name := $.Values.clusterManager.name -}}
-    {{- if $.Values.existingClusterManager }}
+    {{- if and $.Values.existingClusterManager $.Values.existingClusterManager.name }}
       {{- $cm_name = $.Values.existingClusterManager.name -}}
     {{- end }}
     defaults: |-
@@ -109,6 +113,18 @@ items:
   {{- if $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
     readinessInitialDelaySeconds: {{ $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
   {{- end }}
+  {{- if $.Values.searchHeadCluster.startupProbe }}
+    startupProbe:
+{{ toYaml $.Values.searchHeadCluster.startupProbe | indent 6 }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.livenessProbe }}
+    livenessProbe:
+{{ toYaml $.Values.searchHeadCluster.livenessProbe | indent 6 }}
+  {{- end }}
+  {{- if $.Values.searchHeadCluster.readinessProbe }}
+    readinessProbe:
+{{ toYaml $.Values.searchHeadCluster.readinessProbe | indent 6 }}
+  {{- end }}
   {{- with $.Values.searchHeadCluster.etcVolumeStorageConfig }}
     etcVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
@@ -124,11 +140,21 @@ items:
   {{- if $.Values.searchHeadCluster.serviceAccount }}
     serviceAccount: {{ $.Values.searchHeadCluster.serviceAccount }}
   {{- end }}
+  {{- with $.Values.searchHeadCluster.serviceTemplate }}
+    serviceTemplate:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.searchHeadCluster.tolerations }}
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.sva.m4.enabled }}
+  {{- if $.Values.searchHeadCluster.topologySpreadConstraints }}
+  {{- with $.Values.searchHeadCluster.topologySpreadConstraints }}
+    topologySpreadConstraints:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- end }}
+  {{- if  and ($.Values.sva.m4.enabled)  (.zone) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:

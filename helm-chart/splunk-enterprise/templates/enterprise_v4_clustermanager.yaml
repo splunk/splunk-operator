@@ -8,6 +8,10 @@ metadata:
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- with .Values.clusterManager.additionalAnnotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
 spec:
 {{- with .Values.clusterManager.appRepo }}
   appRepo: 
@@ -93,6 +97,18 @@ spec:
 {{- if .Values.clusterManager.readinessInitialDelaySeconds }}
   readinessInitialDelaySeconds: {{ .Values.clusterManager.readinessInitialDelaySeconds }}
 {{- end }}
+{{- if .Values.clusterManager.startupProbe }}
+  startupProbe:
+{{ toYaml .Values.clusterManager.startupProbe | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.livenessProbe }}
+  livenessProbe:
+{{ toYaml .Values.clusterManager.livenessProbe | indent 4 }}
+{{- end }}
+{{- if .Values.clusterManager.readinessProbe }}
+  readinessProbe:
+{{ toYaml .Values.clusterManager.readinessProbe | indent 4 }}
+{{- end }}
 {{- with .Values.clusterManager.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
@@ -108,11 +124,21 @@ spec:
 {{- if .Values.clusterManager.serviceAccount }}
   serviceAccount: {{ .Values.clusterManager.serviceAccount }}
 {{- end }}
+{{- with .Values.clusterManager.serviceTemplate }}
+  serviceTemplate:
+{{ toYaml . | indent 4 }}
+{{- end }}
 {{- with .Values.clusterManager.tolerations }}
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if $.Values.sva.m4.enabled }}
+{{- if .Values.clusterManager.topologySpreadConstraints }}
+{{- with .Values.clusterManager.topologySpreadConstraints }}
+  topologySpreadConstraints:
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}
+{{- if and .Values.sva.m4.enabled  .Values.sva.m4.clusterManager.zone }}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

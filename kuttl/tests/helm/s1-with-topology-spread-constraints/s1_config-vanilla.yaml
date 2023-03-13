@@ -1,0 +1,16 @@
+splunk-operator:
+  enabled: true
+  operator:
+    serviceAccountName: helm-service-account
+  splunkOperator:
+    clusterWideAccess: false
+
+standalone:
+  enabled: true
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/region
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        topology.kubernetes.io/region: us-west-2

@@ -4,10 +4,12 @@ metadata:
   name: {{ include "splunk-operator.operator.fullname" . }}-controller-manager-service
   labels:
 {{- include "splunk-operator.labels" . | nindent 4 }}
+  annotations:
+{{ toYaml .Values.splunkOperator.annotations | nindent 4 }}
 spec:
   type: {{ .Values.splunkOperator.service.type }}
 {{- with .Values.splunkOperator.service.ports }}
-  ports:   
+  ports:
 {{ toYaml . | indent 4 }}
 {{- end }}
   selector:

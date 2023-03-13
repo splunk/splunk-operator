@@ -15,3 +15,36 @@ sva:
 
       searchHeadClusters:
         - name: shc
+
+
+indexerCluster:
+  enabled: true
+
+  additionalLabels:
+    label: "true"
+
+  additionalAnnotations:
+    annotation: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+
+  serviceTemplate:
+    spec:
+      type: LoadBalancer
+
+clusterManager:
+  enabled: true
+
+  additionalLabels:
+    label: "true"
+
+  additionalAnnotations:
+    annotation: "true"
+
+searchHeadCluster:
+  enabled: true
+
+  additionalLabels:
+    label: "true"
+
+  additionalAnnotations:
+    annotation: "true"

@@ -1,0 +1,17 @@
+splunk-operator:
+  enabled: true
+  operator:
+    serviceAccountName: helm-service-account
+  splunkOperator:
+    clusterWideAccess: false
+
+standalone:
+  enabled: true
+
+extraManifests:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: stdln-test
+    data:
+     name: "test"

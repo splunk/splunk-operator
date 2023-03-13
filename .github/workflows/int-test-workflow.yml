@@ -107,7 +107,7 @@ jobs:
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Install Kubectl
-        uses: Azure/setup-kubectl@v1
+        uses: Azure/setup-kubectl@v3
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
@@ -206,3 +206,10 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()    # run this step even if previous step failed
+        with:
+          name: Integration Tests          # Name of the check run which will be created
+          path: inttest-*.xml         # Path to test results
+          reporter: jest-junit        # Format of test results
