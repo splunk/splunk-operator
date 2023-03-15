@@ -111,16 +111,16 @@ spec:
     splunk/splunk-operator\n\n\n## Known Issues for the Splunk Operator\n\nReview
     the [Change Log](https://github.com/splunk/splunk-operator/blob/master/docs/ChangeLog.md)
     page for a history of changes in each release.\n\n## Prerequisites for the Splunk
-    Operator\n\n### Supported Kubernetes Versions\n\n- Kubernetes, version 1.20+ and
-    later (x86 64-bit only).\n\nThe Splunk Operator should work with any [CNCF certified
-    distribution](https://www.cncf.io/certification/software-conformance/) of Kubernetes.
-    We do not have platform recommendations, but this is a table of platforms that
-    our developers, customers, and partners have used successfully with the Splunk
-    Operator.\n\n<table>\n<tr><td> Splunk Development & Testing Platforms </td><td>
-    Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE) </td></tr>\n<tr><td>
-    Customer Reported Platforms </td><td> Microsoft Azure Kubernetes Service (AKS),
-    Red Hat OpenShift </td></tr>\n<tr><td> Partner Tested Platforms</td><td> HPE Ezmeral</td></tr>\n<tr><td>
-    Other Platforms </td><td>CNCF certified distribution</td></tr>\n</table>\n\n###
+    Operator\n\n### Supported Kubernetes Versions\n\n- Kubernetes, version 1.20+
+    and later (x86 64-bit only).\n\nThe Splunk Operator should work with any [CNCF
+    certified distribution](https://www.cncf.io/certification/software-conformance/)
+    of Kubernetes. We do not have platform recommendations, but this is a table of
+    platforms that our developers, customers, and partners have used successfully
+    with the Splunk Operator.\n\n<table>\n<tr><td> Splunk Development & Testing Platforms
+    </td><td> Amazon Elastic Kubernetes Service (EKS), Google Kubernetes Engine (GKE)
+    </td></tr>\n<tr><td> Customer Reported Platforms </td><td> Microsoft Azure Kubernetes
+    Service (AKS), Red Hat OpenShift </td></tr>\n<tr><td> Partner Tested Platforms</td><td>
+    HPE Ezmeral</td></tr>\n<tr><td> Other Platforms </td><td>CNCF certified distribution</td></tr>\n</table>\n\n###
     Splunk Enterprise Compatibility\nEach Splunk Operator release has specific Splunk
     Enterprise compatibility requirements. Before installing or upgrading the Splunk
     Operator, review the [Change Log](https://github.com/splunk/splunk-operator/blob/master/docs/ChangeLog.md)
