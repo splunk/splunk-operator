@@ -85,7 +85,7 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Change splunk enterprise to release on main branches
-        if: github.ref == 'ref/head/main'
+        if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
           echo "HELM_REPO_PATH=splunk"  >> $GITHUB_ENV
@@ -172,6 +172,10 @@ jobs:
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+      - name: Add splunk helm repo for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          helm repo add splunk https://splunk.github.io/splunk-operator/
       - name: Run helm test
         env:
           KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
