@@ -54,7 +54,6 @@ jobs:
     needs: build-operator-image
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_CLUSTER_PLATFORM: eks
@@ -84,10 +83,10 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - name: Change splunk enterprise to release on main branches
-        if: github.ref == 'ref/head/main'
+      - name: Change splunk enterprise to release image on main branches
+        if: github.ref == 'refs/heads/main'
         run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
           echo "HELM_REPO_PATH=splunk"  >> $GITHUB_ENV
       - name: Checkout code
         uses: actions/checkout@v2
