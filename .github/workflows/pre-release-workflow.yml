@@ -144,6 +144,13 @@ jobs:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
         include: "**operator.yaml"
+    
+    - name: Update Splunk Enterprise Release Image in .env file
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "${{ github.event.inputs.old_enterprise_version }}"
+        replace: "${{ github.event.inputs.new_enterprise_version }}"
+        include: ".env"
 
     - name: Update Splunk Enterprise Image in helm
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
