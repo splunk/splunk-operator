@@ -132,11 +132,13 @@ spec:
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
+{{- if .Values.clusterManager.topologySpreadConstraints }}
 {{- with .Values.clusterManager.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if $.Values.sva.m4.enabled }}
+{{- end }}
+{{- if and .Values.sva.m4.enabled  .Values.sva.m4.clusterManager.zone }}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

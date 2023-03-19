@@ -131,7 +131,7 @@ jobs:
       - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'ref/head/main'
         run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Dotenv Action
@@ -142,7 +142,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Install Kubectl
-        uses: Azure/setup-kubectl@v1
+        uses: Azure/setup-kubectl@v3
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
