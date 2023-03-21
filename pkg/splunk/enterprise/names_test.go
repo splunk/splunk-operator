@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -118,4 +119,57 @@ func TestGetSplunkImage(t *testing.T) {
 
 	specImage = "splunk/splunk-test"
 	test("splunk/splunk-test")
+}
+
+func TestGetSplunkSmartstoreConfigMapName(t *testing.T) {
+	val := GetSplunkSmartstoreConfigMapName("iden", "Standalone")
+	if val != "splunk-iden-standalone-smartstore" {
+		t.Errorf("Incorrect name")
+	}
+}
+func TestGetSplunkManualAppUpdateConfigMapName(t *testing.T) {
+	val := GetSplunkManualAppUpdateConfigMapName("iden")
+	if val != "splunk-iden-manual-app-update" {
+		t.Errorf("Incorrect name")
+	}
+}
+
+func TestGetPortName(t *testing.T) {
+	val := GetPortName("8080", "TCP")
+	if val != "TCP-8080" {
+		t.Errorf("Incorrect name")
+	}
+}
+
+func TestGetProbeConfigMapName(t *testing.T) {
+	val := GetProbeConfigMapName("iden")
+	if val != "splunk-iden-probe-configmap" {
+		t.Errorf("Incorrect name")
+	}
+}
+
+func TestGetReadinessScriptName(t *testing.T) {
+	if GetReadinessScriptName() != readinessScriptName {
+		t.Errorf("Incorrect name")
+	}
+}
+
+func TestGetProbeVolumePermission(t *testing.T) {
+	if GetProbeVolumePermission() != probeVolumePermission {
+		t.Errorf("Incorrect value")
+	}
+}
+
+// GetLivenessDriverFilePath returns the location of liveness level drive file path
+func TestGetLivenessDriverFilePath(t *testing.T) {
+	if GetLivenessDriverFilePath() != filepath.Join(livenessDriverLocation, livenessDriverFile) {
+		t.Errorf("Incorrect value")
+	}
+}
+
+// GetLivenessDriverFileDir returns directory location for liveness drive file
+func TestGetLivenessDriverFileDir(t *testing.T) {
+	if GetLivenessDriverFileDir() != livenessDriverLocation {
+		t.Errorf("Incorrect value")
+	}
 }

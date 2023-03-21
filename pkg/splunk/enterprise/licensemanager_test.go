@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -101,6 +102,35 @@ func TestApplyLicenseManager(t *testing.T) {
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
+
+	// Negative testing
+	c := spltest.NewMockClient()
+	ctx := context.TODO()
+	current.Spec.LivenessInitialDelaySeconds = -1
+	_, err := ApplyLicenseManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	rerr := errors.New(splcommon.Rerr)
+	current.Spec.LivenessInitialDelaySeconds = 5
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	_, err = ApplyLicenseManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	nsSec, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Errorf("Creating secret shouldn't fail")
+	}
+	c.Create(ctx, nsSec)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = rerr
+	_, err = ApplyLicenseManager(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestGetLicenseManagerStatefulSet(t *testing.T) {

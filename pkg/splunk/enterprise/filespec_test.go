@@ -39,6 +39,11 @@ func TestLocalPath(t *testing.T) {
 		t.Errorf("unable to strip slashes")
 	}
 
+	value = src.String()
+	if value == "" {
+		t.Errorf("unable to get file name")
+	}
+
 	path := Path{
 		basepath: "testing",
 	}
@@ -52,6 +57,8 @@ func TestLocalPath(t *testing.T) {
 	if err != nil {
 		t.Errorf("unable to Glob")
 	}
+
+	// Further testing
 
 }
 
@@ -81,6 +88,10 @@ func TestRemotePath(t *testing.T) {
 	if value == "" {
 		t.Errorf("unable to strip slashes")
 	}
+	value = rp.String()
+	if value == "" {
+		t.Errorf("unable to get file name")
+	}
 
 	path := Path{
 		basepath: "testing",
@@ -94,5 +105,34 @@ func TestRemotePath(t *testing.T) {
 	rp = rp.StripShortcuts()
 	if rp.file == "" {
 		t.Errorf("unable to strip shortcuts")
+	}
+}
+
+func TestStripTrailingSlash(t *testing.T) {
+	val := stripTrailingSlash("")
+	if val != "" {
+		t.Errorf("Should return an empty string")
+	}
+
+	val = stripTrailingSlash("abc/")
+	if val != "abc" {
+		t.Errorf("Didn't return expected value")
+	}
+}
+
+func TestStripPathShortcuts(t *testing.T) {
+	val := stripPathShortcuts("/a/b/c")
+	if val != "a/b/c" {
+		t.Errorf("Didn't return expected value")
+	}
+
+	val = stripPathShortcuts("../a./b/c/")
+	if val != "a./b/c/" {
+		t.Errorf("Didn't return expected value")
+	}
+
+	val = stripPathShortcuts("../.")
+	if val != "" {
+		t.Errorf("Didn't return expected value")
 	}
 }
