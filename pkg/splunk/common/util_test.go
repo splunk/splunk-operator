@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"sync"
@@ -108,6 +109,11 @@ func TestAppendParentMeta(t *testing.T) {
 	if !reflect.DeepEqual(child.GetAnnotations(), want) {
 		t.Errorf("AppendParentMeta() child Annotations=%v; want %v", child.GetAnnotations(), want)
 	}
+
+	parent.Labels["abc"] = "def"
+	parent.Annotations["abc"] = "def"
+	AppendParentMeta(child.GetObjectMeta(), parent.GetObjectMeta())
+
 }
 
 func TestParseResourceQuantity(t *testing.T) {
@@ -215,6 +221,20 @@ func TestSortContainerPorts(t *testing.T) {
 	test()
 }
 
+func TestSortSlice(t *testing.T) {
+	type uintst struct {
+		value uint
+	}
+	sluint := []uintst{{1}, {2}, {3}}
+	SortSlice(sluint, "value")
+
+	type fltst struct {
+		value float32
+	}
+	slflt := []fltst{{1.0}, {2.0}, {3.0}}
+	SortSlice(slflt, "value")
+}
+
 func TestSortServicePorts(t *testing.T) {
 	var ports []corev1.ServicePort
 	var want []corev1.ServicePort
@@ -262,6 +282,21 @@ func compareTester(t *testing.T, method string, f func() bool, a interface{}, b 
 			t.Errorf("%s() failed: %v %s %v", method, a, cmp, b)
 		}
 	}
+}
+
+func TestCompareImagePullSecrets(t *testing.T) {
+	a := []corev1.LocalObjectReference{
+		{Name: "abc"},
+	}
+
+	b := []corev1.LocalObjectReference{
+		{Name: "abc"},
+	}
+
+	if CompareImagePullSecrets(a, b) {
+		t.Errorf("Unequal imagepullsecrets, should return a difference")
+	}
+
 }
 
 func TestCompareContainerPorts(t *testing.T) {
@@ -498,6 +533,14 @@ func TestCompareByMarshall(t *testing.T) {
 	a = corev1.ResourceRequirements{Requests: medium, Limits: high}
 	b = corev1.ResourceRequirements{Requests: low, Limits: high}
 	test(true)
+
+	// Negative testing
+	if !CompareByMarshall(math.Inf(1), 1) {
+		t.Errorf("Invalid marshall run also returns true")
+	}
+	if !CompareByMarshall(1, math.Inf(1)) {
+		t.Errorf("Invalid marshall run also returns true")
+	}
 }
 
 func TestCompareSortedStrings(t *testing.T) {
@@ -690,6 +733,12 @@ func TestAppendPodAffinity(t *testing.T) {
 			},
 		},
 	})
+
+	// Negative test
+	aff := AppendPodAntiAffinity(nil, "", "")
+	if aff == nil {
+		t.Errorf("Passing an empty affinity also should return some form of affinity")
+	}
 }
 
 func TestCompareTolerations(t *testing.T) {

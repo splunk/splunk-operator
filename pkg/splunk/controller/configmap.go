@@ -21,9 +21,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	errors "k8s.io/apimachinery/pkg/api/errors"
 
-	//k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -81,14 +80,19 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			scopedLog.Info("No changes for ConfigMap")
 		}
 
-	} else if errors.IsNotFound(err) {
+	} else if k8serrors.IsNotFound(err) {
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err == nil {
 			dataUpdated = true
+			retryCount := 0
 			gerr := client.Get(ctx, namespacedName, &current)
 			for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
 				scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "configmap", configMap.Name, "error", gerr.Error())
 				time.Sleep(10 * time.Microsecond)
+				retryCount++
+				if retryCount > 20 {
+					return false, gerr
+				}
 			}
 			configMap = &current
 		}
@@ -120,7 +124,7 @@ func GetConfigMapResourceVersion(ctx context.Context, client splcommon.Controlle
 func GetMCConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, namespacedName types.NamespacedName) (*corev1.ConfigMap, error) {
 	var configMap corev1.ConfigMap
 	err := client.Get(ctx, namespacedName, &configMap)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && k8serrors.IsNotFound(err) {
 		//if we don't find mc configmap create and return an empty configmap
 		configMap = corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -144,10 +148,13 @@ func GetMCConfigMap(ctx context.Context, client splcommon.ControllerClient, cr s
 	if err != nil {
 		return nil, err
 	}
-	err = client.Get(context.TODO(), namespacedName, &configMap)
-	if err != nil {
-		return nil, err
-	}
+	// Cleanup don't need two GET calls?
+	/*
+		err = client.Get(context.TODO(), namespacedName, &configMap)
+		if err != nil {
+			return nil, err
+		}
+	*/
 	return &configMap, nil
 }
 

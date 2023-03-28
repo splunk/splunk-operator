@@ -17,8 +17,13 @@ package enterprise
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"testing"
+
+	"github.com/pkg/errors"
+	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -37,8 +42,13 @@ func TestClusterManagerEventPublisher(t *testing.T) {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
 
-	k8sevent.Normal(context.TODO(), "testing", "normal message")
-	k8sevent.Warning(context.TODO(), "testing", "warning message")
+	ctx := context.TODO()
+	k8sevent.Normal(ctx, "testing", "normal message")
+	k8sevent.Warning(ctx, "testing", "warning message")
+
+	cmaster := enterpriseApiV3.ClusterMaster{}
+	k8sevent.instance = &cmaster
+	k8sevent.Normal(ctx, "", "")
 }
 
 func TestIndexerClusterEventPublisher(t *testing.T) {
@@ -99,6 +109,19 @@ func TestStandaloneEventPublisher(t *testing.T) {
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
+
+	// Negative testing
+	ctx := context.TODO()
+	k8sevent.client = nil
+	k8sevent.publishEvent(ctx, "", "", "")
+
+	mockClient := spltest.NewMockClient()
+	mockClient.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New(splcommon.Rerr)
+	k8sevent.client = mockClient
+	k8sevent.publishEvent(ctx, "", "", "")
+
+	k8sevent.instance = "randomString"
+	k8sevent.publishEvent(ctx, "", "", "")
 }
 
 func TestLicenseManagerEventPublisher(t *testing.T) {
@@ -106,12 +129,17 @@ func TestLicenseManagerEventPublisher(t *testing.T) {
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
 
-	cm := enterpriseApi.LicenseManager{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	lmanager := enterpriseApi.LicenseManager{}
+	k8sevent, err := newK8EventPublisher(c, &lmanager)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
 
-	k8sevent.Normal(context.TODO(), "testing", "normal message")
-	k8sevent.Warning(context.TODO(), "testing", "warning message")
+	ctx := context.TODO()
+	k8sevent.Normal(ctx, "testing", "normal message")
+	k8sevent.Warning(ctx, "testing", "warning message")
+
+	lmaster := enterpriseApiV3.LicenseMaster{}
+	k8sevent.instance = &lmaster
+	k8sevent.Normal(ctx, "", "")
 }
