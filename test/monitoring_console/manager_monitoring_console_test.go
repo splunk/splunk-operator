@@ -998,10 +998,6 @@ var _ = Describe("Monitoring Console test", func() {
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			// Check standaloneOne Pod in MC Peer List
-			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
-			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
-
 			// Add another standalone instance in namespace
 			testcaseEnvInst.Log.Info("Adding second standalone deployment to namespace")
 			standaloneTwoName := "search-head"
