@@ -22,7 +22,10 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: setup-docker
-      uses: docker-practice/actions-setup-docker@v1
+      uses: docker-practice/actions-setup-docker@1.0.11
+      with:
+          docker_version: 20.10
+          docker_channel: stable
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -130,7 +133,10 @@ jobs:
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: setup-docker
-        uses: docker-practice/actions-setup-docker@v1
+        uses: docker-practice/actions-setup-docker@1.0.11
+        with:
+            docker_version: 20.10
+            docker_channel: stable
       - name: Configure Docker Hub credentials
         uses: docker/login-action@v1
         with:

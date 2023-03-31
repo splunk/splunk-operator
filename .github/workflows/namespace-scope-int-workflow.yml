@@ -89,7 +89,10 @@ jobs:
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: setup-docker
-        uses: docker-practice/actions-setup-docker@v1
+        uses: docker-practice/actions-setup-docker@1.0.11
+        with:
+            docker_version: 20.10
+            docker_channel: stable
       - name: Install Operator SDK
         run: |
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
