@@ -49,7 +49,7 @@ jobs:
 
     - name: before_install
       run: |
-        sudo apt-get remove containerd.io
+        sudo apt-get install containerd=1.3.3-0ubuntu2
 
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11

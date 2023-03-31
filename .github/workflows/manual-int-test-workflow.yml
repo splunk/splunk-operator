@@ -83,7 +83,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
           make setup/ginkgo
       - name: Install EKS CTL
@@ -93,7 +93,7 @@ jobs:
           eksctl version
       - name: before_install
         run: |
-          sudo apt-get remove containerd.io
+          sudo apt-get install containerd=1.3.3-0ubuntu2
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@1.0.11
         with:
@@ -184,7 +184,7 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: before_install
       run: |
-        sudo apt-get remove containerd.io
+        sudo apt-get install containerd=1.3.3-0ubuntu2
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:
