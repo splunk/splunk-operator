@@ -22,20 +22,8 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    - name: before_install
-      run: |
-        sudo apt-get remove containerd
-        sudo apt-get remove docker docker-engine docker.io containerd runc
-        sudo apt install apt-transport-https ca-certificates curl software-properties-common
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-        sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu `lsb_release -cs` test
-        sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-    ##- name: setup-docker
-    #  uses: docker-practice/actions-setup-docker@1.0.11
-    #  with:
-    #      docker_version: 20.10
-    #      docker_channel: stable
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -147,19 +135,8 @@ jobs:
           curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
-      - name: before_install
-        run: |
-          sudo apt-get remove containerd
-          sudo apt-get remove docker docker-engine docker.io containerd runc
-          sudo apt install apt-transport-https ca-certificates curl software-properties-common
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu `lsb_release -cs` test
-          sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-      ##- name: setup-docker
-      #  uses: docker-practice/actions-setup-docker@1.0.11
-      #  with:
-      #      docker_version: 20.10
-      #      docker_channel: stable
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
       - name: Configure Docker Hub credentials
         uses: docker/login-action@v1
         with:
