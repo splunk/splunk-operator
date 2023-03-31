@@ -24,7 +24,7 @@ jobs:
     - name: before_install
       run: |
         sudo apt-get remove containerd
-        sudo apt-get remove runc
+        remove docker docker-engine docker.io containerd runc
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:
@@ -139,7 +139,7 @@ jobs:
       - name: before_install
         run: |
           sudo apt-get remove containerd
-          sudo apt-get remove runc
+          remove docker docker-engine docker.io containerd runc
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@1.0.11
         with:
