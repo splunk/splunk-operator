@@ -65,6 +65,9 @@ jobs:
     - name: Install Ginkgo
       run: |
           make setup/ginkgo
+    - name: before_install
+      run: |
+        sudo apt-get remove containerd.io
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:
