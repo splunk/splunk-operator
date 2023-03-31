@@ -67,7 +67,8 @@ jobs:
           make setup/ginkgo
     - name: before_install
       run: |
-        sudo apt-get install containerd=1.3.3-0ubuntu2
+        sudo apt-get remove containerd
+        sudo apt-get remove runc
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:
@@ -112,7 +113,8 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: before_install
       run: |
-        sudo apt-get install containerd=1.3.3-0ubuntu2
+        sudo apt-get remove containerd
+        sudo apt-get remove runc
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:

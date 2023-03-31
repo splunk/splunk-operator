@@ -31,7 +31,8 @@ jobs:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: before_install
       run: |
-        sudo apt-get install containerd=1.3.3-0ubuntu2
+        sudo apt-get remove containerd
+        sudo apt-get remove runc
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:
