@@ -29,7 +29,9 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-
+    - name: before_install
+      run: |
+        sudo apt-get remove containerd.io
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:

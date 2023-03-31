@@ -91,6 +91,9 @@ jobs:
           curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
+      - name: before_install
+        run: |
+          sudo apt-get remove containerd.io
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@1.0.11
         with:
@@ -179,6 +182,9 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: before_install
+      run: |
+        sudo apt-get remove containerd.io
     - name: setup-docker
       uses: docker-practice/actions-setup-docker@1.0.11
       with:
