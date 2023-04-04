@@ -457,7 +457,7 @@ Here is a typical App framework configuration in a Custom Resource definition:
     | ClusterManager    | cluster, local                         | Yes                   |
     | SearchHeadCluster | cluster, local                         | Yes                   |
     | Standalone        | local                                  | Yes                   |
-    | LicenceManager    | local                                  | Yes                   |
+    | LicenseManager    | local                                  | Yes                   |
     | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 
