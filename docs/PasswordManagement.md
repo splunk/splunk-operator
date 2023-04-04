@@ -12,6 +12,7 @@
   - [Information for Splunk Enterprise administrator](#information-for-splunk-enterprise-administrator)
   - [Secrets on Docker Splunk](#secrets-on-docker-splunk)
   - [Support for AWS IAM Role for Service Account for SmartStore Access](#support-for-aws-iam-role-for-service-account-for-smartstore-access)
+  - [Support for AWS IAM Role for Service Account for Splunk Operator Deployment](#support-for-aws-iam-role-for-service-account-for-splunk-operator-deployment)
 
 ## Global kubernetes secret object
 A global kubernetes secret object acts as the source of secret tokens for a kubernetes namespace used by all Splunk Enterprise CR's. It's name follows the format `splunk-<namespace>-secret` where `<namespace`> represents the namespace we are operating in. The contents of this object are volume mounted on all the pods within a kubernetes namespace.
@@ -110,3 +111,31 @@ spec:
 ```
 
 - When Splunk Pod runs AWS webhook service injects 2 new environment variables `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` along with JWS Token file. `splunk` pod reads these environment variables to get temporary AWS credentials from AWS IAM service to access smartstore buckets
+
+## Support for AWS IAM Role for Service Account for Splunk Operator Deployment
+
+Follow the steps mentioned above for creating AWS IAM Service Account. Once the service account is created, map this service account to `splunk-operator` deployment. Below is the example
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+  namespace: splunk-operator
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  ...
+  spec:
+    containers:
+    -
+      ...
+      serviceAccount: oidc-service-account serviceAccountName: oidc-service-account
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: app-staging
+        persistentVolumeClaim:
+          claimName: splunk-operator-app-download
+      ...
+```
