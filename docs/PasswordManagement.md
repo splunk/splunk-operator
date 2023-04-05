@@ -11,8 +11,8 @@
       - [SHC pass4Symmkey](#shc-pass4symmkey)
   - [Information for Splunk Enterprise administrator](#information-for-splunk-enterprise-administrator)
   - [Secrets on Docker Splunk](#secrets-on-docker-splunk)
-  - [Support for AWS IAM Role for Service Account for SmartStore Access](#support-for-aws-iam-role-for-service-account-for-smartstore-access)
-  - [Support for AWS IAM Role for Service Account for Splunk Operator Deployment](#support-for-aws-iam-role-for-service-account-for-splunk-operator-deployment)
+  - [SmartStore Access using AWS IAM Role for Service Account](#smartstore-access-using-aws-iam-role-for-service-account)
+  - [Support for AWS IAM Role for Service Account in Splunk Operator Deployment](#support-for-aws-iam-role-for-service-account-in-splunk-operator-deployment)
 
 ## Global kubernetes secret object
 A global kubernetes secret object acts as the source of secret tokens for a kubernetes namespace used by all Splunk Enterprise CR's. It's name follows the format `splunk-<namespace>-secret` where `<namespace`> represents the namespace we are operating in. The contents of this object are volume mounted on all the pods within a kubernetes namespace.
@@ -69,7 +69,7 @@ For examples of performing CRUD operations on the global secrets object, see [ex
 ## Secrets on Docker Splunk
 When Splunk Enterprise is deployed on a docker container, ansible playbooks are used to setup Splunk. Ansible playbooks interpret the environment variable SPLUNK_DEFAULTS_URL in the container as the location to read the Splunk Secret Tokens from. The tokens are used to setup Splunk Instances running on containers inside pods.
 
-## Support for AWS IAM Role for Service Account for SmartStore Access
+## SmartStore Access using AWS IAM Role for Service Account
 
 Splunk 9.0.4 Supports Smartstore Access using AWS IAM Role for Service Account.
 
@@ -84,6 +84,7 @@ Below Example explains the steps required for setting up IAM Service Account
 
 - Follow the steps defined [here to create IAM Role for Service Account](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)
 
+- Make sure IAM Role only has least amount of privilege necessary for smart storage to work.
 - Once the Service Account is created, make sure it is annotated with specific AIM Role. Once everything looks good, add service account to splunk custom resource. here is the example for adding it to `Standalone` instance
 
 
@@ -112,7 +113,7 @@ spec:
 
 - When Splunk Pod runs AWS webhook service injects 2 new environment variables `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` along with JWS Token file. `splunk` pod reads these environment variables to get temporary AWS credentials from AWS IAM service to access smartstore buckets
 
-## Support for AWS IAM Role for Service Account for Splunk Operator Deployment
+## Support for AWS IAM Role for Service Account in Splunk Operator Deployment
 
 Follow the steps mentioned above for creating AWS IAM Service Account. Once the service account is created, map this service account to `splunk-operator` deployment. Below is the example
 
