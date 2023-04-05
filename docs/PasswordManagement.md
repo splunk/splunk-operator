@@ -85,6 +85,7 @@ Below Example explains the steps required for setting up IAM Service Account
 - Follow the steps defined [here to create IAM Role for Service Account](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)
 
 - Make sure IAM Role only has least amount of privilege necessary for smartstore to work.
+
 - Once the Service Account is created, make sure it is annotated with specific AIM Role. Once everything looks good, add service account to splunk custom resource. here is the example for adding it to `Standalone` instance
 
 
