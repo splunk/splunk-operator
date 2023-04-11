@@ -71,12 +71,12 @@ When Splunk Enterprise is deployed on a docker container, ansible playbooks are 
 
 ## SmartStore Access using AWS IAM Role for Service Account
 
-Splunk 9.0.4 Supports Smartstore Access using AWS IAM Role for Service Account.
+Splunk 9.0.5 Supports Smartstore Access using AWS IAM Role for Service Account.
 
 - AWS Identity and Access Management (IAM) provides fine-grained access control where you can specify who can access which AWS service or resources, ensuring the principle of least privilege.
 - Kubernetes Pods are given an identity through a Kubernetes concept called a Kubernetes Service Account. When a Service Account is created, a JWT token is automatically created as a Kubernetes Secret. This Secret can then be mounted into Pods and used by that Service Account to authenticate to the Kubernetes API Server.
 - AWS introduced IAM Roles for Service Accounts (IRSA), leveraging AWS Identity APIs, an OpenID Connect (OIDC) identity provider, and Kubernetes Service Accounts to apply fine-grained access controls to Kubernetes pods.
-- In Kubernetes  ProjectedServiceAccountToken feature allows a fully compliant OIDC JWT token issued by the TokenRequest API of Kubernetes to be mounted into the Pod as a Projected Volume. The relevant Service Account Token Volume Projection flags are enabled by default on an EKS cluster. Therefore, fully compliant OIDC JWT Service Account tokens are being projected into each pod instead of the JWT token
+- In Kubernetes,  ProjectedServiceAccountToken feature allows a fully compliant OIDC JWT token issued by the TokenRequest API of Kubernetes to be mounted into the Pod as a Projected Volume. The relevant Service Account Token Volume Projection flags are enabled by default on an EKS cluster. Therefore, fully compliant OIDC JWT Service Account tokens are being projected into each pod instead of the JWT token
 - AWS has created an identity webhook that comes preinstalled in an EKS cluster.
 - This webhook listens to create pod API calls and can inject an additional Token into splunkd pods. This webhook can also be installed into self-managed Kubernetes clusters on AWS using [this guide](https://github.com/aws/amazon-eks-pod-identity-webhook/blob/master/SELF_HOSTED_SETUP.md)
 
@@ -86,7 +86,7 @@ Below Example explains the steps required for setting up IAM Service Account
 
 - Make sure IAM Role only has least amount of privilege necessary for smartstore to work.
 
-- Once the Service Account is created, make sure it is annotated with specific AIM Role. Once everything looks good, add service account to splunk custom resource. here is the example for adding it to `Standalone` instance
+- Once the Service Account is created, make sure it is annotated with specific IAM Role. Once everything looks good, add service account to splunk custom resource. here is the example for adding it to `Standalone` instance
 
 
 ```
@@ -112,7 +112,7 @@ spec:
         endpoint: https://s3-us-west-2.amazonaws.com
 ```
 
-- When Splunk Pod runs AWS webhook service injects 2 new environment variables `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` along with JWS Token file. `splunk` pod reads these environment variables to get temporary AWS credentials from AWS IAM service to access smartstore buckets
+- When Splunk pod is running AWS webhook service injects 2 new environment variables `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` along with JWS Token file. `splunk` pod reads these environment variables to get temporary AWS credentials from AWS IAM service to access smartstore buckets
 
 ## Support for AWS IAM Role for Service Account in Splunk Operator Deployment
 
