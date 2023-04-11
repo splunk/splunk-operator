@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -356,5 +357,108 @@ func TestDeleteSplunkClusterManagerPvc(t *testing.T) {
 	deleted, err := splctrl.CheckForDeletion(ctx, &cr, c)
 	if deleted != false || err == nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want false, (error)", deleted, err)
+	}
+}
+
+func TestDeleteSplunkPvcError(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApiV3.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1-sa",
+			Namespace: "test",
+		},
+	}
+
+	rerr := errors.New(splcommon.Rerr)
+	c := spltest.NewMockClient()
+	c.InduceErrorKind[splcommon.MockClientInduceErrorList] = rerr
+	err := DeleteSplunkPvc(ctx, &cr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorList] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = rerr
+	pvclist := corev1.PersistentVolumeClaimList{
+		Items: []corev1.PersistentVolumeClaim{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "splunk-pvc-stack1-sa-var",
+					Namespace: "test",
+				},
+			},
+		},
+	}
+	c.ListObj = &pvclist
+	err = DeleteSplunkPvc(ctx, &cr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Different CR types
+
+	// License Master
+	c.InduceErrorKind[splcommon.MockClientInduceErrorList] = rerr
+	lmasCr := &enterpriseApiV3.LicenseMaster{}
+	err = DeleteSplunkPvc(ctx, lmasCr, c)
+	if err != nil {
+		t.Errorf("Incorrect kind, but no expected error")
+	}
+
+	lmasCr = &enterpriseApiV3.LicenseMaster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseMaster",
+		},
+	}
+	err = DeleteSplunkPvc(ctx, lmasCr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// License Manager
+	lmanCr := &enterpriseApi.LicenseManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "LicenseManager",
+		},
+	}
+	err = DeleteSplunkPvc(ctx, lmanCr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Shc
+	shcCr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+	}
+	err = DeleteSplunkPvc(ctx, shcCr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Cluster Manager
+	cmanCr := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+	}
+	err = DeleteSplunkPvc(ctx, cmanCr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// MC
+	mcCr := &enterpriseApi.MonitoringConsole{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "MonitoringConsole",
+		},
+	}
+	err = DeleteSplunkPvc(ctx, mcCr, c)
+	if err == nil {
+		t.Errorf("Expected error")
 	}
 }

@@ -316,6 +316,11 @@ var GetLivenessScriptLocation = func() string {
 	return livenessScriptLocation
 }
 
+// GetStartupScriptLocation return the location of startup probe script
+var GetStartupScriptLocation = func() string {
+	return startupScriptLocation
+}
+
 // GetReadinessScriptName returns the name of liveness script on pod
 var GetReadinessScriptName = func() string {
 	return readinessScriptName
@@ -332,26 +337,21 @@ var GetProbeMountDirectory = func() string {
 }
 
 // GetProbeVolumePermission returns the permission for probe config map volume mount
-var GetProbeVolumePermission = func() int32 {
+func GetProbeVolumePermission() int32 {
 	return probeVolumePermission
 }
 
 // GetLivenessDriverFilePath returns the location of liveness level drive file path
-var GetLivenessDriverFilePath = func() string {
+func GetLivenessDriverFilePath() string {
 	return filepath.Join(livenessDriverLocation, livenessDriverFile)
 }
 
 // GetLivenessDriverFileDir returns directory location for liveness drive file
-var GetLivenessDriverFileDir = func() string {
+func GetLivenessDriverFileDir() string {
 	return livenessDriverLocation
 }
 
-// GetStartupScriptLocation return the location of startup probe script
-var GetStartupScriptLocation = func() string {
-	return startupScriptLocation
-}
-
 // GetStartupScriptName returns the name of startup probe script on pod
-var GetStartupScriptName = func() string {
+func GetStartupScriptName() string {
 	return startupScriptName
 }
