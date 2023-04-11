@@ -505,10 +505,17 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		return nil, err
 	}
 
+	retryCnt := 0
 	gerr := client.Get(ctx, namespacedName, &current)
 	for ; gerr != nil; gerr = client.Get(ctx, namespacedName, &current) {
 		scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", name, "error", gerr.Error())
 		time.Sleep(10 * time.Microsecond)
+
+		// Avoid infinite loop
+		retryCnt++
+		if retryCnt > 20 {
+			return nil, gerr
+		}
 	}
 	return &current, nil
 }

@@ -17,6 +17,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -33,6 +34,46 @@ import (
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
+
+// errTestPodManager is used for UT negative testing
+type errTestPodManager struct {
+	c splcommon.ControllerClient
+}
+
+// Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
+func (mgr *errTestPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
+	return enterpriseApi.PhaseInstall, nil
+}
+
+// PrepareScaleDown for DefaultStatefulSetPodManager does nothing and returns true
+func (mgr *errTestPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
+	// Induce not ready error
+	if ctx.Value("errKey") == "errVal" {
+		return false, nil
+	}
+
+	return true, errors.New(splcommon.Rerr)
+}
+
+// PrepareRecycle for DefaultStatefulSetPodManager does nothing and returns true
+func (mgr *errTestPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
+	// Induce not ready error
+	if ctx.Value("errKey") == "errVal" {
+		return false, nil
+	}
+
+	return true, errors.New(splcommon.Rerr)
+}
+
+// FinishRecycle for DefaultStatefulSetPodManager does nothing and returns false
+func (mgr *errTestPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
+	// Induce not ready error
+	if ctx.Value("errKey") == "errVal" {
+		return false, nil
+	}
+
+	return true, errors.New(splcommon.Rerr)
+}
 
 func TestApplyStatefulSet(t *testing.T) {
 	ctx := context.TODO()
@@ -60,6 +101,21 @@ func TestApplyStatefulSet(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
+
+	// Negative testing
+	c := spltest.NewMockClient()
+	ctx = context.TODO()
+	rerr := errors.New(splcommon.Rerr)
+	current.Spec.Template.Spec.Containers = []corev1.Container{{Image: "abcd"}}
+	c.Create(ctx, current)
+
+	revised = current.DeepCopy()
+	revised.Spec.Template.Spec.Containers = []corev1.Container{{Image: "efgh"}}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	_, err := ApplyStatefulSet(ctx, c, revised)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestDefaultStatefulSetPodManager(t *testing.T) {
@@ -155,6 +211,126 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	if err == nil && phase != enterpriseApi.PhaseScalingDown {
 		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
 	}
+
+	// Negative testing
+	ctx := context.TODO()
+	replicas = 3
+	rerr := errors.New(splcommon.Rerr)
+	c := spltest.NewMockClient()
+	statefulSet = &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   replicas,
+			UpdatedReplicas: replicas,
+			UpdateRevision:  "v1",
+		},
+	}
+	statefulSet.Status.ReadyReplicas = 3
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 1)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Prepare scale down errors
+	replicas = 3
+	errPodMgr := errTestPodManager{
+		c: c,
+	}
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 1)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+	replicas = 3
+	ctx = context.WithValue(ctx, "errKey", "errVal")
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 1)
+	if err != nil {
+		t.Errorf("scale down not ready, don't expect error")
+	}
+
+	// Scaling down errors
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 1)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	replicas = 3
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = rerr
+	pvc := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pvc-etc-splunk-stack1-2",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, &pvc)
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 1)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Pod revision different errors
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = nil
+	replicas = 3
+	pod.Name = "splunk-stack1-2"
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Name:  "splunkcontiner",
+			Ready: true,
+		},
+	}
+	pod.ObjectMeta.Labels = make(map[string]string)
+	pod.ObjectMeta.Labels["controller-revision-hash"] = "v2"
+	c.Create(ctx, pod)
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 3)
+	if err != nil {
+		t.Errorf("Ready fail for prepareRecycle pod revision hash different, no expected error")
+	}
+
+	ctx = context.WithValue(ctx, "errKey", "newVal")
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 3)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = rerr
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 3)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = nil
+	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
+	c.Update(ctx, pod)
+
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 3)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	ctx = context.WithValue(ctx, "errKey", "errVal")
+	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 3)
+	if err != nil {
+		t.Errorf("Don't expected error, finish recyle complete flag failure")
+	}
+
+	newCtx := context.WithValue(context.TODO(), "errVal", "newVal")
+	_, err = UpdateStatefulSetPods(newCtx, c, statefulSet, &mgr, 3)
+
 }
 
 func TestSetStatefulSetOwnerRef(t *testing.T) {
@@ -314,6 +490,40 @@ func TestDeleteReferencesToAutomatedMCIfExists(t *testing.T) {
 	if err != nil {
 		t.Errorf("Couldn't delete resource %s", current.GetName())
 	}
+
+	// Negative testing
+	c = spltest.NewMockClient()
+	err = DeleteReferencesToAutomatedMCIfExists(ctx, c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("MC ss doesn't exist, don't expected error")
+	}
+
+	c.Create(ctx, &current)
+	err = SetStatefulSetOwnerRef(ctx, c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("Couldn't set OR resource %s", current.GetName())
+	}
+
+	rerr := errors.New(splcommon.Rerr)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = rerr
+	err = DeleteReferencesToAutomatedMCIfExists(ctx, c, &cr, namespacedName)
+	if err == nil {
+		t.Errorf("expected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = nil
+	err = DeleteReferencesToAutomatedMCIfExists(ctx, c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("didn't expect error")
+	}
+
+	or := []metav1.OwnerReference{}
+	current.SetOwnerReferences(or)
+	c.Update(ctx, &current)
+	err = DeleteReferencesToAutomatedMCIfExists(ctx, c, &cr, namespacedName)
+	if err != nil {
+		t.Errorf("didn't expect error")
+	}
 }
 
 func TestIsStatefulSetScalingUp(t *testing.T) {
@@ -352,6 +562,17 @@ func TestIsStatefulSetScalingUp(t *testing.T) {
 	if err != nil {
 		t.Errorf("IsStatefulSetScalingUp should not have returned error")
 	}
+
+	var higherRep int32 = 3
+	var lowerRef int32 = 0
+	_, err = IsStatefulSetScalingUpOrDown(ctx, c, &cr, statefulSetName, higherRep)
+	if err != nil {
+		t.Errorf("IsStatefulSetScalingUp should not have returned error")
+	}
+	_, err = IsStatefulSetScalingUpOrDown(ctx, c, &cr, statefulSetName, lowerRef)
+	if err != nil {
+		t.Errorf("IsStatefulSetScalingUp should not have returned error")
+	}
 }
 
 func TestRemoveUnwantedOwnerRefSs(t *testing.T) {
@@ -381,5 +602,11 @@ func TestRemoveUnwantedOwnerRefSs(t *testing.T) {
 	err = RemoveUnwantedOwnerRefSs(ctx, c, namespacedName, &cr)
 	if err != nil {
 		t.Errorf("Unexpected error")
+	}
+
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New(splcommon.Rerr)
+	err = RemoveUnwantedOwnerRefSs(ctx, c, namespacedName, &cr)
+	if err == nil {
+		t.Errorf("Expected error")
 	}
 }
