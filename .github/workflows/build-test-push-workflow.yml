@@ -16,6 +16,8 @@ jobs:
       run: make fmt && if [[ $? -ne 0 ]]; then false; fi
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3.4.0
   unit-tests:
     runs-on: ubuntu-latest
     needs: check-formating
