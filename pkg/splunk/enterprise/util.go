@@ -440,10 +440,11 @@ func createAppDownloadDir(ctx context.Context, path string) error {
 func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 	var availDiskSpace uint64
 	var stat syscall.Statfs_t
+	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getAvailableDiskSpace").WithValues("volume mount", splcommon.AppDownloadVolume)
 
-	err := syscall.Statfs(splcommon.AppDownloadVolume, &stat)
+	syscall.Statfs(splcommon.AppDownloadVolume, &stat)
 	if err != nil {
 		scopedLog.Error(err, "There is no default volume configured for the App framework, use the temporary location", "dir", TmpAppDownloadDir)
 		splcommon.AppDownloadVolume = TmpAppDownloadDir
