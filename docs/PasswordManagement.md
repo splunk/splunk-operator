@@ -86,7 +86,8 @@ Below Example explains the steps required for setting up IAM Service Account
 
 - Make sure IAM Role only has least amount of privilege necessary for smartstore to work.
 
-- Once the Service Account is created, make sure it is annotated with specific IAM Role. Once everything looks good, add service account to splunk custom resource. here is the example for adding it to `Standalone` instance
+- Make sure the service account is used in custom resources where its required
+ Once the Service Account is created, make sure it is annotated with specific IAM Role. Once everything looks good, add service account to splunk custom resource. here is the example for adding it to `Standalone` instance
 
 
 ```
@@ -111,6 +112,8 @@ spec:
         path: test-cluster-bucket/smartstore
         endpoint: https://s3-us-west-2.amazonaws.com
 ```
+
+- Make sure the IAM service account is used only in required custom resources
 
 - When Splunk pod is running AWS webhook service injects 2 new environment variables `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` along with JWS Token file. `splunk` pod reads these environment variables to get temporary AWS credentials from AWS IAM service to access smartstore buckets
 
