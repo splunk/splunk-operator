@@ -120,15 +120,15 @@ spec:
 ***OIDC key management***
 The proper Key management of OIDC is outside of Splunk installation. The customer is responsible to use a properly configured OIDC using certificates from a trusted CA.
 
-***self signed certificate***
+***Self signed certificate***
 The OIDC should not use self-signed certificates but rather utilize an existing PKI infrastructure, e.g. have the OIDC certificate issued and signed by your organization's CA with proper certificate signature chains and key expiation policies.
 
-***sharing OIDC token file***
+***Sharing OIDC token file***
 Make sure the token file mentioned in AWS_WEB_IDENTITY_TOKEN_FILE location is only accessible inside of the pod and is not mapped or shared outside of the pod
 
 ## Support for AWS IAM Role for Service Account in Splunk Operator Deployment
 
-Follow the steps mentioned above for creating AWS IAM Service Account. Make sure IAM Role only has least amount of privilege necessary reading apps from s3 bucket. Once the service account is created, map this service account to `splunk-operator` deployment. Below is the example
+Follow the steps mentioned above for creating AWS IAM Service Account. Make sure IAM Role only has least amount of privilege necessary reading apps from S3 bucket. Once the service account is created, map this service account to `splunk-operator` deployment. Below is the example
 
 ```
 apiVersion: apps/v1
@@ -145,7 +145,8 @@ spec:
     containers:
     -
       ...
-      serviceAccount: oidc-service-account serviceAccountName: oidc-service-account
+      serviceAccount: oidc-service-account
+      serviceAccountName: oidc-service-account
       terminationGracePeriodSeconds: 10
       volumes:
       - name: app-staging
