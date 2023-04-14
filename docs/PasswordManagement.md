@@ -118,10 +118,13 @@ spec:
 - When Splunk pod is running AWS webhook service injects 2 new environment variables `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` along with JWS Token file. `splunk` pod reads these environment variables to get temporary AWS credentials from AWS IAM service to access smartstore buckets
 
 ***OIDC key management***
-The proper Key management of the OIDC is outside of Splunk installation. The customer is responsible to use a properly configured OIDC using certificates from a trusted root CA.
+The proper Key management of OIDC is outside of Splunk installation. The customer is responsible to use a properly configured OIDC using certificates from a trusted CA.
 
 ***self signed certificate***
-Disclaimer to Customer in documentation explaining the implication of using self-signed Identity provider and recommend to use an identity Provider that is tied to a PKI infrastructure (certificate chan and Key expiration policies).
+The OIDC should not use self-signed certificates but rather utilize an existing PKI infrastructure, e.g. have the OIDC certificate issued and signed by your organization's CA with proper certificate signature chains and key expiation policies.
+
+***sharing OIDC token file***
+Make sure the token file mentioned in AWS_WEB_IDENTITY_TOKEN_FILE location is only accessible inside of the pod and is not mapped or shared outside of the pod
 
 ## Support for AWS IAM Role for Service Account in Splunk Operator Deployment
 
