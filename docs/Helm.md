@@ -146,7 +146,7 @@ release "splunk-enterprise-test" uninstalled
 ```
 ```helm uninstall``` terminates all resources deployed by Helm including Persistent Volume Claims created for Splunk Enterprise resources.
 
-Note: helm by default do not cleanup Custom Resource Definitions and Persistent Volume Claims. user need to manually clean them
+Note: Helm by default does not cleanup Custom Resource Definitions and Persistent Volume Claims. Splunk Admin needs to manually clean them.
 
 ## Splunk Validated Architecture deployments
 
