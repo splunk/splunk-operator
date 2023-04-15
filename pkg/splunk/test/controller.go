@@ -250,6 +250,9 @@ type MockClient struct {
 
 	// error returned when an object is not found
 	NotFoundError error
+
+	// induceError is used to induce an error whenever required
+	InduceErrorKind map[string]error
 }
 
 // RESTMapper wrapper for REST Client
@@ -268,6 +271,10 @@ func (c MockClient) Scheme() *runtime.Scheme {
 
 // Get returns mock client's Err field
 func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	// Check for induced errors
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorGet]; ok && value != nil {
+		return value
+	}
 	c.Calls["Get"] = append(c.Calls["Get"], MockFuncCall{
 		CTX: ctx,
 		Key: key,
@@ -291,6 +298,10 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 
 // List returns mock client's Err field
 func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) error {
+	// Check for induced errors
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorList]; ok && value != nil {
+		return value
+	}
 	c.Calls["List"] = append(c.Calls["List"], MockFuncCall{
 		CTX:      ctx,
 		ListOpts: opts,
@@ -307,6 +318,10 @@ func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...cli
 
 // Create returns mock client's Err field
 func (c MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	// Check for induced errors
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorCreate]; ok && value != nil {
+		return value
+	}
 	c.Calls["Create"] = append(c.Calls["Create"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -317,6 +332,10 @@ func (c MockClient) Create(ctx context.Context, obj client.Object, opts ...clien
 
 // Delete returns mock client's Err field
 func (c MockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	// Check for induced errors
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorDelete]; ok && value != nil {
+		return value
+	}
 	c.Calls["Delete"] = append(c.Calls["Delete"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -327,6 +346,10 @@ func (c MockClient) Delete(ctx context.Context, obj client.Object, opts ...clien
 
 // Update returns mock client's Err field
 func (c MockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	// Check for induced errors
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate]; ok && value != nil {
+		return value
+	}
 	c.Calls["Update"] = append(c.Calls["Update"], MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -433,11 +456,12 @@ func (c *MockClient) CheckCalls(t *testing.T, testname string, wantCalls map[str
 }
 
 // NewMockClient is used to create and initialize a new mock client
-func NewMockClient() *MockClient {
-	c := &MockClient{
-		State:         make(map[string]interface{}),
-		Calls:         make(map[string][]MockFuncCall),
-		NotFoundError: errors.New("NotFound"),
+func NewMockClient() MockClient {
+	c := MockClient{
+		State:           make(map[string]interface{}),
+		Calls:           make(map[string][]MockFuncCall),
+		NotFoundError:   errors.New("NotFound"),
+		InduceErrorKind: make(map[string]error),
 	}
 	return c
 }
@@ -520,7 +544,7 @@ func ReconcileTester(t *testing.T, method string,
 
 	// test create new
 	methodPlus := fmt.Sprintf("%s(create)", method)
-	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
+	testReconcileForResource(t, &c, methodPlus, current, createCalls, reconcile)
 
 	// test no updates required for current
 	methodPlus = fmt.Sprintf("%s(update-no-change)", method)
@@ -538,11 +562,11 @@ func ReconcileTester(t *testing.T, method string,
 		updateNoChangecalls["Get"] = updateCalls["Get"]
 	}
 
-	testReconcileForResource(t, c, methodPlus, current, updateNoChangecalls, reconcile)
+	testReconcileForResource(t, &c, methodPlus, current, updateNoChangecalls, reconcile)
 
 	// test updates required
 	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
-	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
+	testReconcileForResource(t, &c, methodPlus, revised, updateCalls, reconcile)
 }
 
 // ReconcileTesterWithoutRedundantCheck is used to test create and update reconcile operations
@@ -559,11 +583,11 @@ func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
 
 	// test create new
 	methodPlus := fmt.Sprintf("%s(create)", method)
-	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
+	testReconcileForResource(t, &c, methodPlus, current, createCalls, reconcile)
 
 	// test updates required
 	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
-	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
+	testReconcileForResource(t, &c, methodPlus, revised, updateCalls, reconcile)
 }
 
 // PodManagerUpdateTester is used to a single reconcile update using a StatefulSetPodManager

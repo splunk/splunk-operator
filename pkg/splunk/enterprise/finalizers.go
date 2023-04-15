@@ -75,11 +75,6 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 			return err
 		}
 
-		if len(pvclist.Items) == 0 {
-			scopedLog.Info("No PVC found")
-			return nil
-		}
-
 		// delete each PVC
 		for _, pvc := range pvclist.Items {
 			scopedLog.Info("Deleting PVC", "name", pvc.ObjectMeta.Name)

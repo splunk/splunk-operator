@@ -26,7 +26,7 @@ jobs:
         export OS=$(uname | awk '{print tolower($0)}')
         export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ env.OPERATOR_SDK_VERSION }}
         sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: 'Login to ACR'
       uses: azure/docker-login@v1
@@ -129,7 +129,7 @@ jobs:
       - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'ref/head/main'
         run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ env.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Checkout code
         uses: actions/checkout@v3
       - name: Load .env file
@@ -153,7 +153,7 @@ jobs:
         run: |
           go version
           go get -u golang.org/x/lint/golint
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
           make setup/ginkgo
       - name: Configure Docker Hub credentials
@@ -183,13 +183,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }}
       - name: install metric server
         uses: Azure/aks-set-context@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }}
           inlineScript: |
             kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
@@ -197,7 +197,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          cluster-name: ${{ env.TEST_CLUSTER_NAME }} 
+          cluster-name: ${{ env.TEST_CLUSTER_NAME }}
           inlineScript: |
             kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Setup Kustomize

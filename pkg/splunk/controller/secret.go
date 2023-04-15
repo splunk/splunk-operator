@@ -18,12 +18,13 @@ package controller
 import (
 	"context"
 	"errors"
+	"reflect"
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -62,9 +63,16 @@ func ApplySecret(ctx context.Context, client splcommon.ControllerClient, secret 
 			return nil, err
 		}
 		gerr := client.Get(ctx, namespacedName, secret)
+		retryCount := 0
 		for ; gerr != nil; gerr = client.Get(ctx, namespacedName, secret) {
 			scopedLog.Error(gerr, "Newly created resource still not in cache sleeping for 10 micro second", "secret", namespacedName.Name, "error", gerr.Error())
 			time.Sleep(10 * time.Microsecond)
+
+			// Avoid infinite loop
+			retryCount++
+			if retryCount > 20 {
+				return secret, gerr
+			}
 		}
 		result = *secret
 	} else {

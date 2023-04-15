@@ -83,7 +83,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
           make setup/ginkgo
       - name: Install EKS CTL

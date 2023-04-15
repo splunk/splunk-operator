@@ -17,12 +17,15 @@ package controller
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"errors"
 	"testing"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
@@ -120,5 +123,37 @@ func TestApplyDeployment(t *testing.T) {
 	}
 	if err != nil {
 		t.Errorf("TestApplyDeployment() returned error = %v; want nil", err)
+	}
+
+	// Negative testing
+	c = spltest.NewMockClient()
+	current = appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-worker",
+			Namespace: "test",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+		},
+		Status: appsv1.DeploymentStatus{
+			Replicas:        1,
+			ReadyReplicas:   1,
+			UpdatedReplicas: 1,
+		},
+	}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = errors.New(splcommon.Rerr)
+	gotPhase, err = ApplyDeployment(context.TODO(), c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	c.Create(context.TODO(), &current)
+	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
+	revisedNew := *current.DeepCopy()
+	revisedNew.Spec.Template.Labels = make(map[string]string)
+	revisedNew.Spec.Template.Labels["errkey"] = "errvalue"
+	gotPhase, err = ApplyDeployment(context.TODO(), c, &revisedNew)
+	if err != nil {
+		t.Errorf("Expected update, got error")
 	}
 }

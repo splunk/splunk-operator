@@ -59,7 +59,7 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-    
+
     - name: Setup Go
       uses: actions/setup-go@v4
       with:
