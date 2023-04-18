@@ -1,6 +1,6 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method can still be used if the customer wants to store the secret and access keys within the Kubernetes Customer Resource Spec*
+*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method can still be used if the customer wants to avoid storing the S3 secret and access keys in the S3 buckets(via the App installation framework)*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
