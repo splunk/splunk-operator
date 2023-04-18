@@ -1,6 +1,6 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration.*
+*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method can still be used if the customer wants to avoid storing the S3 secret and access keys in the S3 buckets(via the App installation framework)*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
@@ -265,3 +265,7 @@ remote.s3.encryption = sse-s3
 ```
 2. Apply the CR with the necessary & supported Smartstore and Index related configs
 3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps) (*Note: This can be combined with the previous step*)
+
+## Special Internal Indexes
+
+The `_cluster` app sets the `repFactor` to `0` for internal indexes such as `_metrics`, `_introspection`, `_telemetry`, `_metrics_rollup`, `_configtracker`. If replication of these indexes are desired please use the method specified in [Additional Configuration section](#additional-configuration) to set the `repFactor` to `auto`
