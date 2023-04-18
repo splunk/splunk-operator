@@ -63,7 +63,7 @@ spec:
 
 The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In the case of a standalone deployment, the app is located at `/opt/splunk/etc/apps/`
 
-Note: Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
+Note: Splunk Operator sets a few parameters like the `repFactor`, `maxDataSize` in the `[default]` stanza of the `splunk-operator` app. Custom apps with higher precedence or default apps like `_cluster` can potentially overwrite the index and volume configuration in the `splunk-operator` app affecting some or all of the indexes/volumes. Hence, care should be taken to avoid conflicting SmartStore configuration in such apps. Please see [SmartStore configurations](https://docs.splunk.com/Documentation/Splunk/9.0.4/Indexer/ConfigureSmartStore) and  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order) for more details.
  
  
  
