@@ -18,13 +18,13 @@ status:
   readyReplicas: 0
 
 ---
-apiVersion: v1
-involvedObject:
-  apiVersion: v1
-  kind: Pod
-  name: splunk-stdln-standalone-0
-kind: Event
-reason: FailedScheduling
-source:
-  component: default-scheduler
-type: Warning
+#apiVersion: v1
+#involvedObject:
+#  apiVersion: v1
+#  kind: Pod
+#  name: splunk-stdln-standalone-0
+#kind: Event
+#reason: FailedScheduling
+#source:
+#  component: default-scheduler
+#type: Warning

@@ -47,8 +47,8 @@ jobs:
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
 
-    - name: setup-docker
-      uses: docker-practice/actions-setup-docker@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
 
     - name: Configure Docker Credentials
       uses: docker/login-action@v1
@@ -144,6 +144,13 @@ jobs:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
         include: "**operator.yaml"
+    
+    - name: Update Splunk Enterprise Release Image in .env file
+      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      with:
+        find: "${{ github.event.inputs.old_enterprise_version }}"
+        replace: "${{ github.event.inputs.new_enterprise_version }}"
+        include: ".env"
 
     - name: Update Splunk Enterprise Image in helm
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
@@ -178,10 +185,10 @@ jobs:
     - name: Run helm chart package creation
       run: |
        helm package helm-chart/splunk-operator
-       cp splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
-       mv splunk-operator-${{ github.event.inputs.new_enterprise_version }}.tgz helm-chart/splunk-enterprise/charts
+       cp splunk-operator-${{ github.event.inputs.new_operator_version }}.tgz docs/
+       mv splunk-operator-${{ github.event.inputs.new_operator_version }}.tgz helm-chart/splunk-enterprise/charts
        helm package helm-chart/splunk-enterprise
-       mv splunk-enterprise-${{ github.event.inputs.new_enterprise_version }}.tgz docs/
+       mv splunk-enterprise-${{ github.event.inputs.new_operator_version }}.tgz docs/
        helm repo index --url https://splunk.github.io/splunk-operator/ docs/
 
     - name: Reset go.mod and go.sum before creating Pull Request

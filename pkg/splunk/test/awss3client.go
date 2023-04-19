@@ -17,15 +17,22 @@ package test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
 	"os"
 	"testing"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
+
+// MockAWSS3ClientError is used to store all the objects for an app source
+type MockAWSS3ClientError struct {
+	Objects []*MockRemoteDataObject
+}
 
 // MockAWSS3Client is used to store all the objects for an app source
 type MockAWSS3Client struct {
@@ -77,6 +84,11 @@ func (mockClient MockAWSS3Client) ListObjectsV2(options *s3.ListObjectsV2Input) 
 	}
 
 	return output, nil
+}
+
+// ListObjectsV2 is a mock call to ListObjectsV2
+func (mockClient MockAWSS3ClientError) ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+	return &s3.ListObjectsV2Output{}, errors.New("Dummy Error")
 }
 
 // MockAWSDownloadClient is mock aws client for download

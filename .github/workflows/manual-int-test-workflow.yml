@@ -68,7 +68,7 @@ jobs:
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Install Kubectl
-        uses: Azure/setup-kubectl@v1
+        uses: Azure/setup-kubectl@v3
         with:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
@@ -83,7 +83,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
           make setup/ginkgo
       - name: Install EKS CTL
@@ -91,8 +91,8 @@ jobs:
           curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
       - name: Install Operator SDK
         run: |
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
@@ -176,8 +176,8 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: setup-docker
-      uses: docker-practice/actions-setup-docker@v1
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
