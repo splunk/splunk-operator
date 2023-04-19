@@ -94,7 +94,7 @@ If the operator is already installed then you will need to disable the dependenc
 ```
 helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
-Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise customer resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
+Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise custom resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
 
 ```
 clusterMaster:
