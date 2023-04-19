@@ -278,13 +278,13 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
-        with:
-          name: Integration Tests          # Name of the check run which will be created
-          path: inttest-*.xml         # Path to test results
-          reporter: jest-junit        # Format of test results
+      #- name: Test Report
+      #  uses: dorny/test-reporter@v1
+      #  if: success() || failure()    # run this step even if previous step failed
+      #  with:
+      #    name: Integration Tests          # Name of the check run which will be created
+      #    path: inttest-*.xml         # Path to test results
+      #    reporter: jest-junit        # Format of test results
   push-latest:
     needs: smoke-tests
     if: github.ref == 'refs/heads/main'
