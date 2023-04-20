@@ -32,7 +32,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	//"github.com/aws/aws-sdk-go/aws/endpoints"
 )
 
 // blank assignment to verify that AWSS3Client implements RemoteDataClient
@@ -50,7 +49,7 @@ type SplunkAWSDownloadClient interface {
 
 // AWSS3Client is a client to implement S3 specific APIs
 type AWSS3Client struct {
-	Endpoint 					 string
+	Endpoint           string
 	Region             string
 	BucketName         string
 	AWSAccessKeyID     string
@@ -96,31 +95,23 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 
 	var err error
 	var sess *session.Session
-	region := strings.Split(regionWithEndpoint, "|")[0]
-	endpoint := strings.Split(regionWithEndpoint, "|")[1]
-	//pathStyle := true
+	var region, endpoint string
 
-	/*myCustomResolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
-		if service == endpoints.S3ServiceID {
-				return endpoints.ResolvedEndpoint{
-						URL:           endpoint,
-						SigningRegion: region,
-				}, nil
-		}
-		return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
+	// Extract region and endpoint
+	regEndSl := strings.Split(regionWithEndpoint, awsRegionEndPointDemarcator)
+	if len(regEndSl) != 2 || strings.Count(regionWithEndpoint, "|") != 1 {
+		scopedLog.Error(err, "Unable to extract region and endpoint correctly for AWS client",
+			"regWithEndpoint", regionWithEndpoint)
+		return nil
 	}
-	*/
+	region = regEndSl[0]
+	endpoint = regEndSl[1]
 
 	config := &aws.Config{
 		Region:     aws.String(region),
 		MaxRetries: aws.Int(3),
 		HTTPClient: &httpClient,
-		//S3ForcePathStyle: &pathStyle,
-	}
-
-	if endpoint != "" {
-		config.WithEndpoint(endpoint)
-		//config.EndpointResolver = endpoints.ResolverFunc(myCustomResolver)
+		Endpoint:   aws.String(endpoint),
 	}
 
 	if accessKeyID != "" && secretAccessKey != "" {
@@ -165,7 +156,7 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 		}
 	}
 
-	endpointWithRegion := fmt.Sprintf("%s|%s", region, endpoint)
+	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDemarcator, endpoint)
 
 	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey)
 	if cl == nil {
