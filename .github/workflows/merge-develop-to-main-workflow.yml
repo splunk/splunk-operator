@@ -16,23 +16,23 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         ref: main
     - name: Reset main branch
       run: |
         git fetch origin develop:develop
         git reset --hard develop
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Load .env file
+      run: |
+        cat .env >> $GITHUB_ENV
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v3.10.1
       with:
         branch: "promote-develop-to-main-${{ github.event.inputs.release_version }}"
         base: "main"
         title: "Promote Develop to main for Splunk Operator Release ${{ github.event.inputs.release_version }}"
-        reviewers: "${{ steps.dotenv.outputs.REVIEWERS }}"
+        reviewers: "${{ env.REVIEWERS }}"
         body: |
           Automated Pull Request To Merge Develop To Main For Release Version ${{ github.event.inputs.release_version }}
   
@@ -42,7 +42,7 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: "promote-develop-to-main-${{ github.event.inputs.release_version }}"
 
@@ -50,23 +50,21 @@ jobs:
       run: |
         git fetch --prune --unshallow
 
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+    - name: Load .env file
+      run: |
+        cat .env >> $GITHUB_ENV
 
     - name: Configure Docker Credentials
-      uses: docker/login-action@v1
+      uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
 
     - name: Setup Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v4
       with:
-        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-
+        go-version: ${{ env.GO_VERSION }}
+    
     - name: Install goveralls
       run: |
         go get github.com/mattn/goveralls@latest
@@ -75,7 +73,7 @@ jobs:
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
         export OS=$(uname | awk '{print tolower($0)}')
-        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ env.OPERATOR_SDK_VERSION }}
         sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
         sudo chmod +x operator-sdk_${OS}_${ARCH} 
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
