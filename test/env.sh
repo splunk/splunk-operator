@@ -42,7 +42,7 @@
 : "${DEBUG_RUN:=False}"
 # Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"
 : "${DEPLOYMENT_TYPE:=manifest}"
-
+: "${TEST_FOCUS:=managermc}"
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then
     case ${CLUSTER_PROVIDER} in
