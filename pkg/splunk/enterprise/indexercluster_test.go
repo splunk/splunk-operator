@@ -1705,3 +1705,21 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 }
+
+func TestImageUpdatedTo9(t *testing.T) {
+	if !imageUpdatedTo9("splunk/splunk:8.2.6", "splunk/splunk:9.0.0") {
+		t.Errorf("Should have detected an upgrade from 8 to 9")
+	}
+	if imageUpdatedTo9("splunk/splunk:9.0.3", "splunk/splunk:9.0.4") {
+		t.Errorf("Should not have detected an upgrade from 8 to 9")
+	}
+	if imageUpdatedTo9("splunk/splunk:8.2.6", "splunk/splunk:latest") {
+		t.Errorf("Should not have detected an upgrade from 8 to 9, latest doesn't allow to know the version")
+	}
+	if imageUpdatedTo9("splunk/splunk", "splunk/splunk") {
+		t.Errorf("Should not have detected an upgrade from 8 to 9, there is no colon and version")
+	}
+	if imageUpdatedTo9("splunk/splunk:", "splunk/splunk:") {
+		t.Errorf("Should not have detected an upgrade from 8 to 9, there is no version")
+	}
+}
