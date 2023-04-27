@@ -10,9 +10,9 @@ sva:
     clusterManager:
       name: cm
     indexerClusters:
-      - name: idxc
+    - name: idxc
     searchHeadClusters:
-      - name: shc
+    - name: shc
 indexerClusters:
   replicas: 3
 clusterManager:
@@ -22,33 +22,33 @@ clusterManager:
       volumeName: volume_app_repo
       scope: local
     appSources:
-      - name: apps
-        location: appframework
-        scope: cluster
+    - name: apps
+      location: appframework
+      scope: cluster
     volumes:
-      - name: volume_app_repo
-        storageType: s3
-        provider: aws
-        path: helm-test-c3-with-apps-test
-        endpoint: https://bucket.vpce-0f5797c3553061351-ymcw0hvb.s3.us-west-2.vpce.amazonaws.com
-        region: us-west-2
-        secretRef: s3-secret
+    - name: volume_app_repo
+      storageType: s3
+      provider: aws
+      path: helm-test-c3-with-apps-testnew
+      endpoint: www.amazon.com
+      region: us-west-2
+      secretRef: s3-secret
   smartstore:
     defaults:
-      volumeName: helm-test-c3-with-apps-smartstore-test
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
     indexes:
-      - name: main
-        remotePath: $_index_name
-        volumeName: helm-test-c3-with-apps-smartstore-test
-      - name: cloudwatch
-        remotePath: $_index_name
-        volumeName: helm-test-c3-with-apps-smartstore-test
+    - name: main
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    - name: cloudwatch
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
     volumes:
-      - name: helm-test-c3-with-apps-smartstore-test
-        path: helm-test-c3-with-apps-smartstore-test/smartstore
-        endpoint: https://bucket.vpce-0f5797c3553061351-ymcw0hvb.s3.us-west-2.vpce.amazonaws.com
-        secretRef: s3-secret
-        region: us-west-2
+    - name: helm-test-c3-with-apps-smartstore-testnew
+      path: helm-test-c3-with-apps-smartstore-testnew/smartstore
+      endpoint: www.amazon.com
+      secretRef: s3-secret
+      region: us-west-2
     cacheManager:
       hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
       hotlistRecencySecs: 86400 # 24 hours - splunk defaults
@@ -64,14 +64,14 @@ searchHeadCluster:
       volumeName: volume_app_repo
       scope: local
     appSources:
-      - name: apps
-        location: appframework
-        scope: cluster
+    - name: apps
+      location: appframework
+      scope: cluster
     volumes:
-      - name: volume_app_repo
-        storageType: s3
-        provider: aws
-        path: helm-test-c3-with-apps-test
-        endpoint: https://bucket.vpce-0f5797c3553061351-ymcw0hvb.s3.us-west-2.vpce.amazonaws.com
-        region: us-west-2
-        secretRef: s3-secret
+    - name: volume_app_repo
+      storageType: s3
+      provider: aws
+      path: helm-test-c3-with-apps-testnew
+      endpoint: www.amazon.com
+      region: us-west-2
+      secretRef: s3-secret
