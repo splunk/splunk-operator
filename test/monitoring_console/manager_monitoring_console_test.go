@@ -937,4 +937,150 @@ var _ = Describe("Monitoring Console test", func() {
 
 		})
 	})
+
+	Context("Standalone deployment (S1)", func() {
+		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
+			/*
+				Test Steps
+				1.  Deploy Standalone with name "search-head-adhoc"
+				2.  Wait for Standalone to go to READY
+				3.  Deploy Monitoring Console
+				4.  Wait for Monitoring Console status to be READY
+				5.  Verify Standalone configured in Monitoring Console Config Map
+				6.  Verify Monitoring Console Pod has correct peers in Peer List
+				7.  Deploy 2nd Standalone with name "search-head"
+				8.  Wait for Second Standalone to be READY
+				9.  Wait for Monitoring Console status to go UPDATING then READY
+				10. Verify both Standalone configured in Monitoring Console Config Map
+				11. Verify both Standalone configured in Monitoring Console Pod Peers String
+				12. Delete 2nd Standalone
+				13. Wait for Monitoring Console to go to UPDATING then READY
+				14. Verify only first Standalone configured in Monitoring Console Config Map
+				15. Verify only first Standalone configured in Monitoring Console Pod Peers String
+			*/
+
+			standaloneOneName := "search-head-adhoc"
+			mcName := deployment.GetName()
+			spec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+			}
+			standaloneOne, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneOneName, spec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
+
+			// Wait for standaloneOne to be in READY Status
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne, testcaseEnvInst)
+
+			// Deploy MC and wait for MC to be READY
+			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Check standaloneOne is configure in MC Config Map
+			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
+
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+
+			// Check standaloneOne Pod in MC Peer List
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+
+			// Add another standalone instance in namespace
+			testcaseEnvInst.Log.Info("Adding second standalone deployment to namespace")
+			standaloneTwoName := "search-head"
+			// Configure Resources on second standalone CSPL-555
+			standaloneTwoSpec := enterpriseApi.StandaloneSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								"cpu":    resource.MustParse("2"),
+								"memory": resource.MustParse("4Gi"),
+							},
+							Requests: corev1.ResourceList{
+								"cpu":    resource.MustParse("0.2"),
+								"memory": resource.MustParse("256Mi"),
+							},
+						},
+					},
+					Volumes: []corev1.Volume{},
+					MonitoringConsoleRef: corev1.ObjectReference{
+						Name: mcName,
+					},
+				},
+			}
+			standaloneTwo, err := deployment.DeployStandaloneWithGivenSpec(ctx, standaloneTwoName, standaloneTwoSpec)
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance ")
+
+			// Wait for standalone two to be in READY status
+			testenv.StandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
+			// Vrify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Check standaloneTwo is configure in MC Config Map
+			standalonePods = append(standalonePods, fmt.Sprintf(testenv.StandalonePod, standaloneTwoName, 0))
+
+			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map after adding new standalone")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+
+			// Check standaloneTwo Pod in MC Peer List
+			testcaseEnvInst.Log.Info("Check standalone  instance in MC Peer list after adding new standalone")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
+
+			// get revision number of the resource
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+
+			// Delete standaloneTwo and ensure MC is updated
+			testcaseEnvInst.Log.Info("Deleting second standalone deployment to namespace", "Standalone Name", standaloneTwoName)
+			deployment.GetInstance(ctx, standaloneTwoName, standaloneTwo)
+			err = deployment.DeleteCR(ctx, standaloneTwo)
+			Expect(err).To(Succeed(), "Unable to delete standalone instance", "Standalone Name", standaloneTwo)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
+			// Verify MC is Ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Check Standalone is configure in MC Config Map
+			standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
+
+			testcaseEnvInst.Log.Info("Checking for Standalone One Pod in MC Config Map after deleting second standalone")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, true)
+
+			// Check Standalone Pod in MC Peer List
+			testcaseEnvInst.Log.Info("Check Standalone One Pod in MC Peer list after deleting second standalone")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, true, false)
+
+			// Check Standalone TWO NOT configured in MC Config Map
+			standalonePods = testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneTwoName, 1, false, 0)
+
+			testcaseEnvInst.Log.Info("Checking for Standalone Two Pod NOT in MC Config Map after deleting second standalone")
+			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, standalonePods, "SPLUNK_STANDALONE_URL", mcName, false)
+
+			// Check Standalone Pod TWO NOT configured MC Peer List
+			testcaseEnvInst.Log.Info("Check Standalone Two Pod NOT in MC Peer list after deleting second standalone")
+			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, standalonePods, mcName, false, false)
+
+		})
+	})
+
 })

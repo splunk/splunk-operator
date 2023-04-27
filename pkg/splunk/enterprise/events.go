@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -52,55 +53,16 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	}
 
 	// based on the custom resource instance type find name, type and create new event
-	switch k.instance.(type) {
+	switch v := k.instance.(type) {
 	case *enterpriseApi.Standalone:
-		cr, ok := k.instance.(*enterpriseApi.Standalone)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApiV3.LicenseMaster:
-		cr, ok := k.instance.(*enterpriseApiV3.LicenseMaster)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.LicenseManager:
-		cr, ok := k.instance.(*enterpriseApi.LicenseManager)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.IndexerCluster:
-		cr, ok := k.instance.(*enterpriseApi.IndexerCluster)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.ClusterManager:
-		cr, ok := k.instance.(*enterpriseApi.ClusterManager)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApiV3.ClusterMaster:
-		cr, ok := k.instance.(*enterpriseApiV3.ClusterMaster)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.MonitoringConsole:
-		cr, ok := k.instance.(*enterpriseApi.MonitoringConsole)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
 	case *enterpriseApi.SearchHeadCluster:
-		cr, ok := k.instance.(*enterpriseApi.SearchHeadCluster)
-		if ok {
-			return
-		}
-		event = cr.NewEvent(eventType, reason, message)
+		event = v.NewEvent(eventType, reason, message)
 	default:
 		return
 	}

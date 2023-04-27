@@ -94,7 +94,7 @@ If the operator is already installed then you will need to disable the dependenc
 ```
 helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
-Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise customer resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
+Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise custom resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
 
 ```
 clusterMaster:
@@ -145,6 +145,8 @@ helm uninstall splunk-enterprise-test -n splunk-operator
 release "splunk-enterprise-test" uninstalled
 ```
 ```helm uninstall``` terminates all resources deployed by Helm including Persistent Volume Claims created for Splunk Enterprise resources.
+
+Note: Helm by default does not cleanup Custom Resource Definitions and Persistent Volume Claims. Splunk Admin needs to manually clean them.
 
 ## Splunk Validated Architecture deployments
 
