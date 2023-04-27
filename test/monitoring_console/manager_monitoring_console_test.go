@@ -939,7 +939,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
+		It("managermc, arjun, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone with name "search-head-adhoc"
@@ -976,7 +976,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for standaloneOne to be in READY Status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standaloneOne, testcaseEnvInst)
+			testenv.StandaloneReady(ctx, deployment, standaloneOneName, standaloneOne, testcaseEnvInst)
 
 			// Deploy MC and wait for MC to be READY
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
@@ -985,7 +985,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify MC is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Check standaloneOne is configure in MC Config Map
+			// Check standaloneOne is configured in MC Config Map
 			standalonePods := testenv.GeneratePodNameSlice(testenv.StandalonePod, standaloneOneName, 1, false, 0)
 
 			testcaseEnvInst.Log.Info("Checking for Standalone Pod on MC Config Map")
@@ -1029,7 +1029,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Wait for standalone two to be in READY status
 			testenv.StandaloneReady(ctx, deployment, standaloneTwoName, standaloneTwo, testcaseEnvInst)
 
-			// wait for custom resource resource version to change
+			// wait for custom resource(CR) resource version to change
 			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Vrify MC is Ready and stays in ready state
