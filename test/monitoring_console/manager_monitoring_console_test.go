@@ -939,7 +939,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
+		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names arjun", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone with name "search-head-adhoc"
