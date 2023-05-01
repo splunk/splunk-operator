@@ -16,7 +16,6 @@
 package client
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,9 +56,9 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 		Username:      username,
 		Password:      password,
 		Client: &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout:   5 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
+				// TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
 			},
 		},
 	}

@@ -891,8 +891,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	clustermanager.Status.Phase = enterpriseApi.PhaseReady
 	clustermanager.Spec.ServiceTemplate.Annotations = map[string]string{
-		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
-		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+		"key": "value",
 	}
 	clustermanager.Spec.ServiceTemplate.Labels = map[string]string{
 		"app.kubernetes.io/instance":   "splunk-test-cluster-manager",
@@ -1079,8 +1078,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	// simulate Ready state
 	licensemanager.Status.Phase = enterpriseApi.PhaseReady
 	licensemanager.Spec.ServiceTemplate.Annotations = map[string]string{
-		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
-		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+		"key": "value",
 	}
 	licensemanager.Spec.ServiceTemplate.Labels = map[string]string{
 		"app.kubernetes.io/instance":   "splunk-test-license-manager",

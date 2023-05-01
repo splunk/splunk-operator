@@ -618,7 +618,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 	// prepare misc values
 	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
-	annotations := splcommon.GetIstioAnnotations(ports)
+	//annotations := splcommon.GetIstioAnnotations(ports)
+	annotations := make(map[string]string)
+	annotations["key"] = "value"
 	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.ClusterMasterRef.Name)
 	if len(spec.ClusterManagerRef.Name) > 0 && len(spec.ClusterMasterRef.Name) == 0 {
 		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.ClusterManagerRef.Name)

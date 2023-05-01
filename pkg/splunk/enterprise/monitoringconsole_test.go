@@ -879,8 +879,9 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	// simulate Ready state
 	monitoringconsole.Status.Phase = enterpriseApi.PhaseReady
 	monitoringconsole.Spec.ServiceTemplate.Annotations = map[string]string{
-		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
-		"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+		//"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+		//"traffic.sidecar.istio.io/includeInboundPorts":  "8000,8088",
+		"key": "value",
 	}
 	monitoringconsole.Spec.ServiceTemplate.Labels = map[string]string{
 		"app.kubernetes.io/instance":   "splunk-test-monitoring-console",
