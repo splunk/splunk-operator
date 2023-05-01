@@ -2,9 +2,6 @@ name: Nightly Integration Test WorkFlow
 on:
   schedule:
     - cron: "0 06 * * *"
-  push:
-    branches:
-      - CSPL_2354
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -16,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
       with:
-        ref: CSPL_2354
+        ref: develop
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -107,7 +104,7 @@ jobs:
           fi
       - uses: actions/checkout@v2
         with: 
-          ref: CSPL_2354
+          ref: develop
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
