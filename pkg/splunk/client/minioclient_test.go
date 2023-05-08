@@ -31,6 +31,18 @@ func TestInitMinioClientWrapper(t *testing.T) {
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
+
+	// Test case without access and secret keys
+	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "", "")
+	if minioS3ClientSession == nil {
+		t.Errorf("We should have got a valid Minio S3 client object")
+	}
+
+	// Test erroneous minio session
+	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com:-9000", "", "")
+	if minioS3ClientSession != nil {
+		t.Errorf("Should have gotten a nil session due to error in URL")
+	}
 }
 
 func TestNewMinioClient(t *testing.T) {

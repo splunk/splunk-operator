@@ -17,6 +17,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -60,5 +61,61 @@ func TestCheckForDeletion(t *testing.T) {
 	c.CheckCalls(t, "TestCheckForDeletion", mockCalls)
 	if !gotCallback {
 		t.Errorf("TestCheckForDeletion() did not call finalizer method")
+	}
+
+	// Negative testing
+	cr = corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "defaults",
+			Namespace: "test",
+		},
+	}
+	c = spltest.NewMockClient()
+
+	// Timestamps
+	cr.SetDeletionTimestamp(nil)
+	_, err = CheckForDeletion(ctx, &cr, c)
+	if err != nil {
+		t.Errorf("Deletion timestamp missing, returns without error")
+	}
+
+	futuretimestamp := metav1.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC)
+	cr.SetDeletionTimestamp(&futuretimestamp)
+	_, err = CheckForDeletion(ctx, &cr, c)
+	if err != nil {
+		t.Errorf("Future timestamp did not expect error")
+	}
+
+	cr.SetDeletionTimestamp(&currentTime)
+
+	// Finalizer without callback
+	errorFin := "test.splunk.com/errorFin"
+	cr.ObjectMeta.DeletionTimestamp = &currentTime
+	cr.ObjectMeta.Finalizers = []string{errorFin}
+	_, err = CheckForDeletion(ctx, &cr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// callback error
+	SplunkFinalizerRegistry[errorFin] = func(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
+		return errors.New(splcommon.Rerr)
+	}
+	_, err = CheckForDeletion(ctx, &cr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// client update error
+	SplunkFinalizerRegistry[errorFin] = func(ctx context.Context, cr splcommon.MetaObject, c splcommon.ControllerClient) error {
+		return nil
+	}
+	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = errors.New(splcommon.Rerr)
+	_, err = CheckForDeletion(ctx, &cr, c)
+	if err == nil {
+		t.Errorf("Expected error")
 	}
 }

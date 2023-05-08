@@ -1,6 +1,6 @@
 # SmartStore Resource Guide
 
-*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration.*
+*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method may still be used to specify the S3 access keys, which avoids storing them in the S3 buckets (via the App installation framework)*
 
 The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
@@ -25,8 +25,8 @@ Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=i
    * Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
-4. Create/Update the Standalone Customer Resource specification with volume and index configuration (see Example below)
-5. Apply the Customer Resource specification: kubectl -f apply Standalone.yaml
+4. Create/Update the Standalone custom resource specification with volume and index configuration (see Example below)
+5. Apply the custom resource specification: kubectl -f apply Standalone.yaml
 
 
 Example. Standalone.yaml:
@@ -73,8 +73,8 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
    * Create a Secret object with Secret & Access credentials, as explained in [Storing SmartStore Secrets](#storing-smartstore-secrets)
 2. Confirm your S3-based storage volume path and URL.
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
-4. Create/Update the Cluster Manager Customer Resource specification with volume and index configuration (see Example below)
-5. Apply the Customer Resource specification: kubectl -f apply Clustermanager.yaml
+4. Create/Update the Cluster Manager custom resource specification with volume and index configuration (see Example below)
+5. Apply the custom resource specification: kubectl -f apply Clustermanager.yaml
 6. Follow the rest of the steps to Create an Indexer Cluster. See [Examples](Examples.md)
 
 
@@ -265,3 +265,7 @@ remote.s3.encryption = sse-s3
 ```
 2. Apply the CR with the necessary & supported Smartstore and Index related configs
 3. Install the App created using the [currently supported methods](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps) (*Note: This can be combined with the previous step*)
+
+## RepFactor for Internal Indexes
+
+For Indexer Cluster, all Smartstore enabled indexes must have `repFactor` set to `auto`. However, by default, the Cluster Manager's `_cluster` app(by default) sets the repFactor to `0` for internal indexes like `_metrics`, `_introspection`, `_telemetry`, `_metrics_rollup`, and `_configtracker`. If you want to replicate these indexes, please follow the instructions in the [Additional Configuration section](#additional-configuration) to set the repFactor to `auto`.
