@@ -36,7 +36,7 @@ Following section shows examples of using App Framework for both remote data sto
 
 In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archive, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
 
-1. Confirm your remote storage volume path and URL. 
+1. Confirm your remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by:
    * s3 based remote storage: 
