@@ -99,6 +99,10 @@ func (f *fakeExecutor) Stream(options remotecommand.StreamOptions) error {
 	return nil
 }
 
+func (f *fakeExecutor) StreamWithContext(ctx context.Context, options remotecommand.StreamOptions) error {
+	return nil
+}
+
 func TestCreateResource(t *testing.T) {
 	ctx := context.TODO()
 	secret := corev1.Secret{

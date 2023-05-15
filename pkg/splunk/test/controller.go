@@ -214,7 +214,12 @@ type MockStatusWriter struct {
 }
 
 // Update returns status writer's Err field
-func (c MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (c MockStatusWriter) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	return nil
+}
+
+// Update returns status writer's Err field
+func (c MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	c.Calls = append(c.Calls, MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
@@ -223,12 +228,45 @@ func (c MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ..
 }
 
 // Patch returns status writer's Err field
-func (c MockStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c MockStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	c.Calls = append(c.Calls, MockFuncCall{
 		CTX: ctx,
 		Obj: obj,
 	})
 	return c.Err
+}
+
+// blank assignment to verify that MockSubResourceWriter implements client.SubResourceWriter
+var _ client.SubResourceReader = &MockSubResourceReader{}
+
+type MockSubResourceReader struct {
+}
+
+func (c MockSubResourceReader) Get(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceGetOption) error {
+	return nil
+}
+
+// blank assignment to verify that MockSubResourceWriter implements client.SubResourceWriter
+var _ client.SubResourceWriter = &MockSubResourceWriter{}
+
+type MockSubResourceWriter struct {
+}
+
+func (c MockSubResourceWriter) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	return nil
+}
+
+func (c MockSubResourceWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	return nil
+}
+
+func (c MockSubResourceWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	return nil
+}
+
+type MockSubResourceClient struct {
+	client.SubResourceReader
+	client.SubResourceWriter
 }
 
 // blank assignment to verify that MockClient implements client.Client
@@ -455,15 +493,21 @@ func (c *MockClient) CheckCalls(t *testing.T, testname string, wantCalls map[str
 	}
 }
 
+// AddObject adds an object to the MockClient's state
+func (c *MockClient) SubResource(subResource string) client.SubResourceClient {
+	src := MockSubResourceClient{}
+	return &src
+}
+
 // NewMockClient is used to create and initialize a new mock client
-func NewMockClient() MockClient {
+func NewMockClient() *MockClient {
 	c := MockClient{
 		State:           make(map[string]interface{}),
 		Calls:           make(map[string][]MockFuncCall),
 		NotFoundError:   errors.New("NotFound"),
 		InduceErrorKind: make(map[string]error),
 	}
-	return c
+	return &c
 }
 
 // getStateKeyFromObject returns a lookup key for the MockClient's state map
@@ -544,7 +588,7 @@ func ReconcileTester(t *testing.T, method string,
 
 	// test create new
 	methodPlus := fmt.Sprintf("%s(create)", method)
-	testReconcileForResource(t, &c, methodPlus, current, createCalls, reconcile)
+	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
 
 	// test no updates required for current
 	methodPlus = fmt.Sprintf("%s(update-no-change)", method)
@@ -562,11 +606,11 @@ func ReconcileTester(t *testing.T, method string,
 		updateNoChangecalls["Get"] = updateCalls["Get"]
 	}
 
-	testReconcileForResource(t, &c, methodPlus, current, updateNoChangecalls, reconcile)
+	testReconcileForResource(t, c, methodPlus, current, updateNoChangecalls, reconcile)
 
 	// test updates required
 	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
-	testReconcileForResource(t, &c, methodPlus, revised, updateCalls, reconcile)
+	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
 }
 
 // ReconcileTesterWithoutRedundantCheck is used to test create and update reconcile operations
@@ -583,11 +627,11 @@ func ReconcileTesterWithoutRedundantCheck(t *testing.T, method string,
 
 	// test create new
 	methodPlus := fmt.Sprintf("%s(create)", method)
-	testReconcileForResource(t, &c, methodPlus, current, createCalls, reconcile)
+	testReconcileForResource(t, c, methodPlus, current, createCalls, reconcile)
 
 	// test updates required
 	methodPlus = fmt.Sprintf("%s(update-with-change)", method)
-	testReconcileForResource(t, &c, methodPlus, revised, updateCalls, reconcile)
+	testReconcileForResource(t, c, methodPlus, revised, updateCalls, reconcile)
 }
 
 // PodManagerUpdateTester is used to a single reconcile update using a StatefulSetPodManager
