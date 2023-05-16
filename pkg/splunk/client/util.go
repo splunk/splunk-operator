@@ -33,7 +33,7 @@ func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID stri
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 
-	region = fmt.Sprintf("%s%s%s", region, awsRegionEndPointDemarcator, endpoint)
+	region = fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
 	cl := fn(ctx, region, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")

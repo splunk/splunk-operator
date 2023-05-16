@@ -44,5 +44,5 @@ const (
 	headerXmsDate            = "x-ms-date"
 	headerXmsVersion         = "x-ms-version"
 
-	awsRegionEndPointDemarcator = "|"
+	awsRegionEndPointDelimiter = "|"
 )

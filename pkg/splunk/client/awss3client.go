@@ -98,8 +98,8 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 	var region, endpoint string
 
 	// Extract region and endpoint
-	regEndSl := strings.Split(regionWithEndpoint, awsRegionEndPointDemarcator)
-	if len(regEndSl) != 2 || strings.Count(regionWithEndpoint, "|") != 1 {
+	regEndSl := strings.Split(regionWithEndpoint, awsRegionEndPointDelimiter)
+	if len(regEndSl) != 2 || strings.Count(regionWithEndpoint, awsRegionEndPointDelimiter) != 1 {
 		scopedLog.Error(err, "Unable to extract region and endpoint correctly for AWS client",
 			"regWithEndpoint", regionWithEndpoint)
 		return nil
@@ -156,7 +156,7 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 		}
 	}
 
-	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDemarcator, endpoint)
+	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
 
 	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey)
 	if cl == nil {
