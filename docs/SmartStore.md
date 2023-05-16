@@ -6,6 +6,7 @@ The Splunk Operator includes a method for configuring a SmartStore remote storag
 
  * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterManager.
  * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3 as described below."
+ * For Amazon S3, if you are using [interface VPC endpoints](https://docs.aws.amazon.com/vpc/latest/privatelink/create-interface-endpoint.html) with DNS enabled to access AWS S3, please update the corresponding volume endpoint URL with one of the `DNS names` from the endpoint. Please ensure that the endpoint has access to the S3 buckets using the credentials configured. Similarly other endpoint URLs with access to the S3 buckets can also be used.
  * Use of GCS with SmartStore is supported by using configuration via Splunk App.
  * Specification allows definition of SmartStore-enabled indexes only.
  * Already existing indexes data should be migrated from local storage to the remote store as a pre-requisite before configuring those indexes in the Custom Resource of the Splunk Operator. For more details, please see [Migrate existing data on an indexer cluster to SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/MigratetoSmartStore#Migrate_existing_data_on_an_indexer_cluster_to_SmartStore).

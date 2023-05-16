@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -48,6 +49,7 @@ type SplunkAWSDownloadClient interface {
 
 // AWSS3Client is a client to implement S3 specific APIs
 type AWSS3Client struct {
+	Endpoint           string
 	Region             string
 	BucketName         string
 	AWSAccessKeyID     string
@@ -78,7 +80,7 @@ func InitAWSClientWrapper(ctx context.Context, region, accessKeyID, secretAccess
 }
 
 // InitAWSClientSession initializes and returns a client session object
-func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
+func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("InitAWSClientSession")
 
@@ -93,10 +95,23 @@ func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccess
 
 	var err error
 	var sess *session.Session
+	var region, endpoint string
+
+	// Extract region and endpoint
+	regEndSl := strings.Split(regionWithEndpoint, awsRegionEndPointDelimiter)
+	if len(regEndSl) != 2 || strings.Count(regionWithEndpoint, awsRegionEndPointDelimiter) != 1 {
+		scopedLog.Error(err, "Unable to extract region and endpoint correctly for AWS client",
+			"regWithEndpoint", regionWithEndpoint)
+		return nil
+	}
+	region = regEndSl[0]
+	endpoint = regEndSl[1]
+
 	config := &aws.Config{
 		Region:     aws.String(region),
 		MaxRetries: aws.Int(3),
 		HTTPClient: &httpClient,
+		Endpoint:   aws.String(endpoint),
 	}
 
 	if accessKeyID != "" && secretAccessKey != "" {
@@ -114,7 +129,6 @@ func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccess
 		return nil
 	}
 
-	// Create the s3Client
 	s3Client := s3.New(sess)
 
 	// Validate transport
@@ -124,7 +138,7 @@ func InitAWSClientSession(ctx context.Context, region, accessKeyID, secretAccess
 	}
 
 	scopedLog.Info("AWS Client Session initialization successful.", "region", region, "TLS Version", tlsVersion)
-
+	s3Client.Endpoint = endpoint
 	return s3Client
 }
 
@@ -142,7 +156,9 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 		}
 	}
 
-	cl := fn(ctx, region, accessKeyID, secretAccessKey)
+	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
+
+	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
@@ -206,7 +222,7 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 	client := awsclient.Client
 	resp, err := client.ListObjectsV2(options)
 	if err != nil {
-		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName)
+		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName, "endpoint", awsclient.Endpoint)
 		return remoteDataClientResponse, err
 	}
 
