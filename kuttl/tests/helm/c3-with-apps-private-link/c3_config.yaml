@@ -1,0 +1,77 @@
+splunk-operator:
+  enabled: true
+  operator:
+    serviceAccountName: "splunk-enterprise-serviceaccount-staging"
+  splunkOperator:
+    clusterWideAccess: false
+sva:
+  c3:
+    enabled: true
+    clusterManager:
+      name: cm
+    indexerClusters:
+    - name: idxc
+    searchHeadClusters:
+    - name: shc
+indexerClusters:
+  replicas: 3
+clusterManager:
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+    - name: apps
+      location: appframework
+      scope: cluster
+    volumes:
+    - name: volume_app_repo
+      storageType: s3
+      provider: aws
+      path: helm-test-c3-with-apps-testnew
+      endpoint: www.amazon.com
+      region: us-west-2
+      secretRef: s3-secret
+  smartstore:
+    defaults:
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    indexes:
+    - name: main
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    - name: cloudwatch
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    volumes:
+    - name: helm-test-c3-with-apps-smartstore-testnew
+      path: helm-test-c3-with-apps-smartstore-testnew/smartstore
+      endpoint: www.amazon.com
+      secretRef: s3-secret
+      region: us-west-2
+    cacheManager:
+      hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
+      hotlistRecencySecs: 86400 # 24 hours - splunk defaults
+      evictionPadding: 1024 # 1Gi
+      evictionPolicy: lru # splunk defaults
+      maxCacheSize: 0 # Eviction will be based on the sum of 'minFreeSpace (5Gi)' and 'eviction_padding'
+      maxConcurrentDownloads: 8 # splunk defaults
+      maxConcurrentUploads: 8 # splunk defaults
+searchHeadCluster:
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+    - name: apps
+      location: appframework
+      scope: cluster
+    volumes:
+    - name: volume_app_repo
+      storageType: s3
+      provider: aws
+      path: helm-test-c3-with-apps-testnew
+      endpoint: www.amazon.com
+      region: us-west-2
+      secretRef: s3-secret

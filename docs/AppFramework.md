@@ -17,6 +17,7 @@ Utilizing the App Framework requires one of the following remote storage provide
 ### Prerequisites for S3 based remote object storage
 * Create role and role-binding for splunk-operator service account, to provide read-only access for S3 credentials.
 * The remote object storage credentials provided as a kubernetes secret, or in an IAM role.
+* If you are using [interface VPC endpoints](https://docs.aws.amazon.com/vpc/latest/privatelink/create-interface-endpoint.html) with DNS enabled to access AWS S3, please update the corresponding volume endpoint URL with one of the `DNS names` from the endpoint. Please ensure that the endpoint has access to the S3 buckets using the credentials configured. Similarly other endpoint URLs with access to the S3 buckets can also be used.
 
 ### Prerequisites for Azure Blob remote object storage
 * The remote object storage credentials provided as a kubernetes secret.
