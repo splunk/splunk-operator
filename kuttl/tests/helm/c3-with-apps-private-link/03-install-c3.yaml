@@ -4,6 +4,7 @@ kind: TestStep
 commands:
   - command: helm install splunk-c3 $HELM_REPO_PATH/splunk-enterprise -f c3_config.yaml --set splunk-operator.splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMAGE} --set splunk-operator.image.repository=${KUTTL_SPLUNK_ENTERPRISE_IMAGE}
     namespaced: true
+    timeout: 600
   - script: pwd; ls -ltr;
     background: false
   - command: cat c3_config.yaml
