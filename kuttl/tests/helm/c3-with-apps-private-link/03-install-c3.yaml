@@ -8,3 +8,7 @@ commands:
     background: false
   - command: cat c3_config.yaml
     background: false
+  - command: kubectl get idxc -o yaml
+    background: false
+  - command: kubectl get cmanager-idxc -o yaml
+    background: false
