@@ -10,9 +10,9 @@ commands:
     background: false
   - command: sleep 120
     background: false
-  - command: kubectl get idxc --namespace $NAMESPACE; kubectl get idxc -o yaml --namespace $NAMESPACE
+  - command: kubectl get idxc -o yaml --namespace $NAMESPACE
     background: false
-  - command: kubectl get cmanager-idxc --namespace $NAMESPACE; kubectl get cmanager-idxc -o yaml --namespace $NAMESPACE
+  - command: kubectl get cmanager-idxc -o yaml --namespace $NAMESPACE
     background: false
-  - command: kubectl get shc --namespace $NAMESPACE; kubectl get shc -o yaml --namespace $NAMESPACE
+  - command: kubectl get shc -o yaml --namespace $NAMESPACE
     background: false
