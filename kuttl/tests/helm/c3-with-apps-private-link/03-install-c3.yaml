@@ -8,11 +8,11 @@ commands:
     background: false
   - command: cat c3_config.yaml
     background: false
-  - command: sleep 600
+  - command: sleep 120
     background: false
-  - command: kubectl get idxc; kubectl get idxc -o yaml
+  - command: kubectl get idxc --namespace $NAMESPACE; kubectl get idxc -o yaml --namespace $NAMESPACE
     background: false
-  - command: kubectl get cmanager-idxc; kubectl get cmanager-idxc -o yaml
+  - command: kubectl get cmanager-idxc --namespace $NAMESPACE; kubectl get cmanager-idxc -o yaml --namespace $NAMESPACE
     background: false
-  - command: kubectl get shc; kubectl get shc -o yaml
+  - command: kubectl get shc --namespace $NAMESPACE; kubectl get shc -o yaml --namespace $NAMESPACE
     background: false
