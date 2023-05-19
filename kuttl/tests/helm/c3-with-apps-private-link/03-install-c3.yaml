@@ -8,7 +8,7 @@ commands:
     background: false
   - command: cat c3_config.yaml
     background: false
-  - command: sleep 180
+  - command: sleep 600
     background: false
   - command: kubectl get idxc; kubectl get idxc -o yaml
     background: false
