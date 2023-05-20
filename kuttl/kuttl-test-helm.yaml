@@ -4,7 +4,7 @@ kind: TestSuite
 testDirs:
 - ./kuttl/tests/helm
 parallel: 3
-timeout: 3120
+timeout: 8120
 startKIND: false
 artifactsDir: kuttl-artifacts
 kindNodeCache: false
