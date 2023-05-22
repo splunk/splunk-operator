@@ -187,7 +187,7 @@ jobs:
           TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
           TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
         run: |
-          kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml --test c3-with-apps-private-link
+          kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results
         uses: mikepenz/action-junit-report@v3
         if: always()
