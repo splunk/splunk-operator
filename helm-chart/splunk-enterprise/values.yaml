@@ -231,7 +231,7 @@ clusterManager:
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services
-  serviceTemplate: []
+  serviceTemplate: {}
 
   # Specify Splunk instance pod tolerations
   # reference: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
@@ -332,7 +332,7 @@ indexerCluster:
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services
-  serviceTemplate: []
+  serviceTemplate: {}
 
   tolerations: []
 
@@ -443,7 +443,7 @@ searchHeadCluster:
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services
-  serviceTemplate: []
+  serviceTemplate: {}
 
   tolerations: []
 
@@ -489,7 +489,7 @@ monitoringConsole:
     #     endpoint:
     #     region:
     #     secretRef:
-  
+
   volumes: []
 
   licenseUrl: ""
@@ -501,8 +501,8 @@ monitoringConsole:
   defaultsUrlApps: ""
 
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   livenessInitialDelaySeconds: 300
 
@@ -542,12 +542,12 @@ monitoringConsole:
     #   cpu: "4"
     # limits:
     #   memory: "12Gi"
-    #   cpu: "24"  
+    #   cpu: "24"
 
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services
-  serviceTemplate: []
+  serviceTemplate: {}
 
   tolerations: []
 
@@ -662,7 +662,7 @@ licenseManager:
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services
-  serviceTemplate: []
+  serviceTemplate: {}
 
   tolerations: []
 
@@ -780,7 +780,7 @@ standalone:
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services
-  serviceTemplate: []
+  serviceTemplate: {}
 
   tolerations: []
 
