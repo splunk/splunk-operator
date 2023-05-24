@@ -45,4 +45,7 @@ const (
 	headerXmsVersion         = "x-ms-version"
 
 	awsRegionEndPointDelimiter = "|"
+
+	// Timeout for http clients used with appFramework
+	appFrameworkHttpclientTimeout = 1000
 )
