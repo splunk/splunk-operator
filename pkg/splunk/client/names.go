@@ -43,4 +43,6 @@ const (
 	headerUserAgent          = "User-Agent"
 	headerXmsDate            = "x-ms-date"
 	headerXmsVersion         = "x-ms-version"
+
+	awsRegionEndPointDelimiter = "|"
 )

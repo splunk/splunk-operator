@@ -28,10 +28,10 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.2.1/splunk-operator-namespace.yaml
 ```
 ​
-2. (Optional) Review the file and update it with your specific customizations used during your install. 
+2. (Optional) Review the file and update it with your specific customizations used during your install.
+
 ​
-3. Upgrade the Splunk Operator.
-​
+3. Upgrade the Splunk Operator.​
 ```
 kubectl apply -f splunk-operator-namespace.yaml --server-side  --force-conflicts
 ```
@@ -42,7 +42,6 @@ After applying the yaml, a new operator pod will be created and the existing ope
 kubectl get pods
 NAME                                                  READY   STATUS    RESTARTS   AGE
 splunk-operator-controller-manager-75f5d4d85b-8pshn   1/1     Running   0          5s
-​
 ```
 ​
 If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.  
@@ -73,11 +72,11 @@ wget -O operator-upgarde.sh https://github.com/splunk/splunk-operator/releases/d
 wget -O splunk-operator-install.yaml https://github.com/splunk/splunk-operator/releases/download/1.1.0/splunk-operator-install.yaml
 ```
 
-3. (Optional) Review the file and update it with your specific customizations used during your install. 
+3. (Optional) Review the file and update it with your specific customizations used during your install.
 
 4. Upgrade the Splunk Operator.
 
-Set KUBECONFIG and run [operator-upgrade.sh](https://github.com/splunk/splunk-operator/releases/download/2.1.0/operator-upgrade.sh) script with the following mandatory arguments
+Set KUBECONFIG and run the already downloaded `operator-upgrade.sh` script with the following mandatory arguments
 
 * `current_namespace` current namespace where operator is installed
 * `manifest_file`: path to 1.1.0 Splunk Operator manifest file

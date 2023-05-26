@@ -1,0 +1,25 @@
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: aws s3 rm s3://helm-test-c3-with-apps-$NAMESPACE/ --recursive --region $AWS_DEFAULT_REGION || true
+    background: false
+    skipLogOutput: true
+  - script: sleep 5 || true
+    background: false
+    skipLogOutput: true
+  - script: aws s3 rb s3://helm-test-c3-with-apps-$NAMESPACE --force || true
+    background: false
+    skipLogOutput: true
+  - script: sleep 5 || true
+    background: false
+    skipLogOutput: true
+  - script: aws s3 rm s3://helm-test-c3-with-apps-smartstore-$NAMESPACE/ --recursive --region $AWS_DEFAULT_REGION || true
+    background: false
+    skipLogOutput: true
+  - script: sleep 5 || true
+    background: false
+    skipLogOutput: true
+  - script: aws s3 rb s3://helm-test-c3-with-apps-smartstore-$NAMESPACE --force || true
+    background: false
+    skipLogOutput: true

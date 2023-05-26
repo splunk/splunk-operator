@@ -30,19 +30,24 @@ import (
 
 func TestInitAWSClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2", "abcd", "1234")
+	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
 	if awsS3ClientSession == nil {
 		t.Errorf("We should have got a valid AWS S3 client session object")
 	}
 
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "", "")
 	if awsS3ClientSession == nil {
-		t.Errorf("Should receive an empty session")
+		t.Errorf("Case: Invalid secret/access keys, still returns a session")
+	}
+
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
+	if awsS3ClientSession != nil {
+		t.Errorf("Endpoint not resolved, should receive a nil session")
 	}
 
 	// Invalid session test
 	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "abcde")
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "abcd", "1234")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
 	os.Unsetenv("AWS_STS_REGIONAL_ENDPOINTS")
 }
 
