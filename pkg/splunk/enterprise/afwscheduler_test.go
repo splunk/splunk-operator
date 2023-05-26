@@ -1437,6 +1437,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 						Path:      "testbucket-rs-london",
 						SecretRef: "s3-secret",
 						Provider:  "aws",
+						Region:    "us-west-2",
 					},
 				},
 				AppSources: []enterpriseApi.AppSourceSpec{
