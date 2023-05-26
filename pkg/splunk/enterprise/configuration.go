@@ -1709,7 +1709,8 @@ path = s3://%s
 remote.s3.access_key = %s
 remote.s3.secret_key = %s
 remote.s3.endpoint = %s
-`, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint)
+remote.s3.auth_region = %s
+`, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint, volumes[i].Region)
 		} else {
 			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
 			volumesConf = fmt.Sprintf(`%s
@@ -1717,7 +1718,8 @@ remote.s3.endpoint = %s
 storageType = remote
 path = s3://%s
 remote.s3.endpoint = %s
-`, volumesConf, volumes[i].Name, volumes[i].Path, volumes[i].Endpoint)
+remote.s3.auth_region = %s
+`, volumesConf, volumes[i].Name, volumes[i].Path, volumes[i].Endpoint, volumes[i].Region)
 		}
 	}
 
