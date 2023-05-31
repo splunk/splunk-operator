@@ -69,6 +69,7 @@ jobs:
       DEPLOYMENT_TYPE: "helm"
       HELM_REPO_PATH: "../../../../helm-chart"
       INSTALL_OPERATOR: "true"
+      TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
     steps:
       - uses: chrisdickinson/setup-yq@3d931309f27270ebbafd53f2daee773a82ea1822
       - name: Checking YQ installation
@@ -183,6 +184,7 @@ jobs:
           S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
+          TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results
