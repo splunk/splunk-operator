@@ -47,5 +47,5 @@ const (
 	awsRegionEndPointDelimiter = "|"
 
 	// Timeout for http clients used with appFramework
-	appFrameworkHttpclientTimeout = 1000
+	appFrameworkHttpclientTimeout = 5000
 )
