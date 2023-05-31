@@ -199,7 +199,7 @@ jobs:
         run: |
           make cleanup
           make clean
-      #- name: Cleanup up EKS cluster
-      #  if: ${{ always() }}
-      #  run: |
-      #    make cluster-down
+      - name: Cleanup up EKS cluster
+        if: ${{ always() }}
+        run: |
+          make cluster-down
