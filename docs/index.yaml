@@ -2,29 +2,43 @@ apiVersion: v1
 entries:
   splunk-enterprise:
   - apiVersion: v2
-    appVersion: 2.2.1
-    created: "2023-03-24T09:53:40.701056-07:00"
+    appVersion: "2.3"
+    created: "2023-06-06T15:34:54.373383-07:00"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 2.2.1
+      version: "2.3"
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: 97681d3e1f28659abefdfb72cc0aad2c6855bb4851d747970813f292c609dbe1
+    digest: 3dbe5c65467cfef93e3f25e6bbc0e7ad7cdba79992c2c92f927e6577cb0945c6
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: akondur@splunk.com
+      name: Arjun Kondur
+    - email: gaurav@splunk.com
+      name: Gaurav Gupta
     name: splunk-enterprise
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.2.1.tgz
-    version: 2.2.1
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.3.tgz
+    version: "2.3"
   splunk-operator:
   - apiVersion: v2
-    appVersion: 2.2.1
-    created: "2023-03-24T09:53:40.717594-07:00"
+    appVersion: "2.3"
+    created: "2023-06-06T15:34:54.385835-07:00"
     description: A Helm chart for the Splunk Operator for Kubernetes
-    digest: b9c89a34037bf14db8938b8b56269486975b72821137420e1162387b1ae2404f
+    digest: 99a8d8ba655e9c7d905ecd21c984ca18fd304897404c5277d7e991e9920ba674
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: akondur@splunk.com
+      name: Arjun Kondur
+    - email: gaurav@splunk.com
+      name: Gaurav Gupta
     name: splunk-operator
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-operator-2.2.1.tgz
-    version: 2.2.1
-generated: "2023-03-24T09:53:40.681796-07:00"
+    - https://splunk.github.io/splunk-operator/splunk-operator-2.3.tgz
+    version: "2.3"
+generated: "2023-06-06T15:34:54.344739-07:00"

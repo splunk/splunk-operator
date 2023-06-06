@@ -15,16 +15,22 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 2.2.1
+version: 2.3
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "2.2.1"
-
+appVersion: "2.3"
+maintainers:
+  - name: Vivek Reddy
+    email: vivekr@splunk.com
+  - name: Arjun Kondur
+    email: akondur@splunk.com
+  - name: Gaurav Gupta
+    email: gaurav@splunk.com
 dependencies:
 - name: splunk-operator
-  version: "2.2.1"
+  version: "2.3"
   repository: "file://splunk-operator/helm-chart/splunk-operator"
   condition: splunk-operator.enabled
