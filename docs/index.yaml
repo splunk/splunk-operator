@@ -2,29 +2,43 @@ apiVersion: v1
 entries:
   splunk-enterprise:
   - apiVersion: v2
-    appVersion: 2.2.1
-    created: "2023-03-24T09:53:40.701056-07:00"
+    appVersion: 2.3.0
+    created: "2023-06-06T16:47:42.111237-07:00"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 2.2.1
+      version: 2.3.0
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: 97681d3e1f28659abefdfb72cc0aad2c6855bb4851d747970813f292c609dbe1
+    digest: f53ba25f0746513537061920a43236daf7ff8eca3e50aea0f8d9dfbf2f12060c
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: akondur@splunk.com
+      name: Arjun Kondur
+    - email: gaurav@splunk.com
+      name: Gaurav Gupta
     name: splunk-enterprise
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.2.1.tgz
-    version: 2.2.1
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.3.0.tgz
+    version: 2.3.0
   splunk-operator:
   - apiVersion: v2
-    appVersion: 2.2.1
-    created: "2023-03-24T09:53:40.717594-07:00"
+    appVersion: 2.3.0
+    created: "2023-06-06T16:47:42.122954-07:00"
     description: A Helm chart for the Splunk Operator for Kubernetes
-    digest: b9c89a34037bf14db8938b8b56269486975b72821137420e1162387b1ae2404f
+    digest: 6a8025075825cb7d1b8c575f844593afcb5eb99cdfc003d3e5219535e9377879
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: akondur@splunk.com
+      name: Arjun Kondur
+    - email: gaurav@splunk.com
+      name: Gaurav Gupta
     name: splunk-operator
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-operator-2.2.1.tgz
-    version: 2.2.1
-generated: "2023-03-24T09:53:40.681796-07:00"
+    - https://splunk.github.io/splunk-operator/splunk-operator-2.3.0.tgz
+    version: 2.3.0
+generated: "2023-06-06T16:47:42.082592-07:00"
