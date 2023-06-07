@@ -27,6 +27,9 @@ jobs:
   automated-release:
     name: Automated Pre Release
     runs-on: ubuntu-latest
+    permissions:
+      # Need the write permission because this job commits changes to some folders like dist
+      contents: write
     if:
       contains('
         refs/heads/develop
@@ -35,7 +38,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Deep Fetch 
+    - name: Deep Fetch
       run: |
         git fetch --prune --unshallow
 
@@ -144,7 +147,7 @@ jobs:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
         include: "**operator.yaml"
-    
+
     - name: Update Splunk Enterprise Release Image in .env file
       uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
       with:
