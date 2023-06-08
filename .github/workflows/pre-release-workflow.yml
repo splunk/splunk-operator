@@ -31,9 +31,6 @@ jobs:
       contents: write
       pull-requests: write
     runs-on: ubuntu-latest
-    permissions:
-      # Need the write permission because this job commits changes to some folders like dist
-      contents: write
     if:
       contains('
         refs/heads/develop
