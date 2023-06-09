@@ -26,10 +26,11 @@ on:
 jobs:
   automated-release:
     name: Automated Pre Release
-    runs-on: ubuntu-latest
     permissions:
       # Need the write permission because this job commits changes to some folders like dist
       contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
     if:
       contains('
         refs/heads/develop
