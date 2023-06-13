@@ -1002,7 +1002,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// check if there are any duplicate entries
 	if len(env) > 0 {
 		envMap := map[string]corev1.EnvVar{}
-		for _, val := range envMap {
+		for _, val := range env {
 			if val, ok := envMap[val.Name]; !ok {
 				envMap[val.Name] = val
 			}
