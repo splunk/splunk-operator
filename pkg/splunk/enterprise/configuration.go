@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1000,16 +1001,19 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	env = append(env, extraEnv...)
 
 	// check if there are any duplicate entries
+	// we use orderedmap so the test case can pass as json marshal
+	// expects order
 	if len(env) > 0 {
-		envMap := map[string]corev1.EnvVar{}
-		for _, val := range env {
-			if val, ok := envMap[val.Name]; !ok {
-				envMap[val.Name] = val
+		envMap := orderedmap.New[string, corev1.EnvVar]()
+		for i := 0; i < len(env); i++ {
+			cenv := env[i]
+			if _, ok := envMap.Get(cenv.Name); !ok {
+				envMap.Set(cenv.Name, cenv)
 			}
 		}
 		envList := []corev1.EnvVar{}
-		for _, val := range envMap {
-			envList = append(envList, val)
+		for pair := envMap.Oldest(); pair != nil; pair = pair.Next() {
+			envList = append(envList, pair.Value)
 		}
 		env = envList
 	}
