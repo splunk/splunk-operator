@@ -1,7 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
 ## 2.3.0 (2023-06-TODO)
-CSPL-2388 - Fix helm int tests
 CSPL-2341 - Enable private access links as endpoints for AWS client sessions
 CSPL-2331: documentation changes for OIDC support
 CSPL-2250 - Improve code coverage
