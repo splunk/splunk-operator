@@ -999,6 +999,21 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// append any extra variables
 	env = append(env, extraEnv...)
 
+	// check if there are any duplicate entries
+	if len(env) > 0 {
+		envMap := map[string]corev1.EnvVar{}
+		for _, val := range envMap {
+			if val, ok := envMap[val.Name]; !ok {
+				envMap[val.Name] = val
+			}
+		}
+		envList := []corev1.EnvVar{}
+		for _, val := range envMap {
+			envList = append(envList, val)
+		}
+		env = envList
+	}
+
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
