@@ -15,12 +15,15 @@ jobs:
   automated-release:
     name: Automated Release Workflow
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     if: github.ref == 'refs/heads/main'
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Deep Fetch 
+    - name: Deep Fetch
       run: |
         git fetch --prune --unshallow
 
@@ -41,20 +44,20 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-    
+
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
         export OS=$(uname | awk '{print tolower($0)}')
         export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
         sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH} 
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
 
     - name: Generate Release Artifacts
-      run: |    
+      run: |
         make generate-artifacts  IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
-    
+
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
       with:
@@ -74,11 +77,11 @@ jobs:
         bodyFile: "docs/ReleaseNotes.md"
         tag: "${{ github.event.inputs.release_version }}"
         draft: true
-  
+
     - name: Pull RC Splunk Operator Image
       run: |
         docker pull splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC
-    
+
     - name: Promote RC Image to Release
       run: |
         docker tag splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
