@@ -3,14 +3,14 @@ entries:
   splunk-enterprise:
   - apiVersion: v2
     appVersion: 2.3.0
-    created: "2023-06-06T16:47:42.111237-07:00"
+    created: "2023-06-09T21:59:15.331886957Z"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
       version: 2.3.0
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: f53ba25f0746513537061920a43236daf7ff8eca3e50aea0f8d9dfbf2f12060c
+    digest: b269dcf23087a8e881a64522ed5ed6a8c53c7983190ec3b365ebf39930e6ee27
     maintainers:
     - email: vivekr@splunk.com
       name: Vivek Reddy
@@ -26,9 +26,9 @@ entries:
   splunk-operator:
   - apiVersion: v2
     appVersion: 2.3.0
-    created: "2023-06-06T16:47:42.122954-07:00"
+    created: "2023-06-09T21:59:15.353820382Z"
     description: A Helm chart for the Splunk Operator for Kubernetes
-    digest: 6a8025075825cb7d1b8c575f844593afcb5eb99cdfc003d3e5219535e9377879
+    digest: 58d05af87644817af8829d9ba2b9e3d4017b4afc2c1458f18a4d9a76fc31d9db
     maintainers:
     - email: vivekr@splunk.com
       name: Vivek Reddy
@@ -41,4 +41,4 @@ entries:
     urls:
     - https://splunk.github.io/splunk-operator/splunk-operator-2.3.0.tgz
     version: 2.3.0
-generated: "2023-06-06T16:47:42.082592-07:00"
+generated: "2023-06-09T21:59:15.288976012Z"
