@@ -1,40 +1,17 @@
 ---
-# assert for SearchHeadCluster custom resource to be ready
+# assert for indexer cluster custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
-kind: SearchHeadCluster
+kind: IndexerCluster
 metadata:
-  name: shc
+  name: idxc
 status:
   phase: Ready
 
 ---
-# check if secret object are created
-apiVersion: v1
-kind: Secret
-metadata:
-  name: splunk-shc-deployer-secret-v1
-
----
-# check if secret object are created
-apiVersion: v1
-kind: Secret
-metadata:
-  name: splunk-shc-search-head-secret-v1
-
----
-# check for stateful set and replicas as configured
+# check for stateful sets and replicas updated
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: splunk-shc-search-head
+  name: splunk-idxc-indexer
 status:
-  replicas: 3
-
----
-# check for statefull set
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: splunk-shc-deployer
-status:
-  replicas: 1
+  replicas: 4

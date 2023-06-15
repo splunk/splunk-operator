@@ -1,4 +1,39 @@
 ---
+# assert for splunk operator pod to be ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+status:
+  readyReplicas: 1
+  availableReplicas: 1
+
+---
+# assert for cluster manager custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-cm-cluster-manager
+status:
+  replicas: 1
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-cm-cluster-manager-secret-v1
+
+---
 # assert for indexer cluster custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
@@ -22,3 +57,140 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: splunk-idxc-indexer-secret-v1
+
+---
+# assert for SearchHeadCluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+status:
+  phase: Ready
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-shc-deployer-secret-v1
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-shc-search-head-secret-v1
+
+---
+# check for stateful set and replicas as configured
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-shc-search-head
+status:
+  replicas: 3
+
+---
+# check for statefull set
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-shc-deployer
+status:
+  replicas: 1
+
+---
+# check for statefull set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-idxc-indexer-0
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for statefull set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-idxc-indexer-1
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for statefull set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-idxc-indexer-2
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for statefull set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-cm-cluster-manager-0
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for pod set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-shc-search-head-0
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for pod set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-shc-search-head-1
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for pod set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-shc-search-head-2
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
+
+---
+# check for pod set
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: splunk-shc-deployer-0
+status:
+  containerStatuses:
+  - image: splunk/splunk:9.0.5
+    name: splunk
+    ready: true
