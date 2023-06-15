@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -32,7 +33,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -510,11 +514,41 @@ func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *ente
 }
 
 func getClusterManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (string, error) {
-	statefulSet, err := getClusterManagerStatefulSet(ctx, c, cr)
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
 	if err != nil {
 		return "", err
 	}
-	image := statefulSet.Spec.Template.Spec.InitContainers[0].Image
+	labelSelector, err := metav1.LabelSelectorAsSelector(statefulSet.Spec.Selector)
+	if err != nil {
+		return "", err
+	}
 
-	return image, nil
+	statefulsetPods := &corev1.PodList{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+		rclient.MatchingLabelsSelector{Selector: labelSelector},
+	}
+
+	err = c.List(ctx, statefulsetPods, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	for _, v := range statefulsetPods.Items {
+		for _, container := range v.Spec.Containers {
+			if strings.Contains(container.Name, "splunk") {
+				image := container.Image
+				return image, nil
+			}
+
+		}
+	}
+
+	return "", nil
 }

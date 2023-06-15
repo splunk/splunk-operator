@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -26,8 +27,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -228,11 +231,40 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return objectList, nil
 }
 func getLicenseManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (string, error) {
-	statefulSet, err := getLicenseManagerStatefulSet(ctx, c, cr)
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
 	if err != nil {
 		return "", err
 	}
-	image := statefulSet.Spec.Template.Spec.InitContainers[0].Image
+	labelSelector, err := metav1.LabelSelectorAsSelector(statefulSet.Spec.Selector)
+	if err != nil {
+		return "", err
+	}
 
-	return image, nil
+	statefulsetPods := &corev1.PodList{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+		rclient.MatchingLabelsSelector{Selector: labelSelector},
+	}
+
+	err = c.List(ctx, statefulsetPods, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	for _, v := range statefulsetPods.Items {
+		for _, container := range v.Spec.Containers {
+			if strings.Contains(container.Name, "splunk") {
+				image := container.Image
+				return image, nil
+			}
+
+		}
+	}
+
+	return "", nil
 }
