@@ -1004,18 +1004,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// we use orderedmap so the test case can pass as json marshal
 	// expects order
 	if len(env) > 0 {
-		envMap := orderedmap.New[string, corev1.EnvVar]()
-		for i := 0; i < len(env); i++ {
-			cenv := env[i]
-			if _, ok := envMap.Get(cenv.Name); !ok {
-				envMap.Set(cenv.Name, cenv)
-			}
-		}
-		envList := []corev1.EnvVar{}
-		for pair := envMap.Oldest(); pair != nil; pair = pair.Next() {
-			envList = append(envList, pair.Value)
-		}
-		env = envList
+		env = removeDuplicate(env)
 	}
 
 	// update each container in pod
@@ -1026,6 +1015,18 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
 	}
+}
+
+func removeDuplicate(sliceList []corev1.EnvVar) []corev1.EnvVar {
+	allKeys := orderedmap.New[string, bool]()
+	list := []corev1.EnvVar{}
+	for _, item := range sliceList {
+		if _, value := allKeys.Get(item.Name); !value {
+			allKeys.Set(item.Name, true)
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 // getLivenessProbe the probe for checking the liveness of the Pod
