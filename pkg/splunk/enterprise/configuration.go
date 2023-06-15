@@ -1004,7 +1004,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	// we use orderedmap so the test case can pass as json marshal
 	// expects order
 	if len(env) > 0 {
-		env = removeDuplicate(env)
+		env = removeDuplicateEnvVars(env)
 	}
 
 	// update each container in pod
@@ -1017,7 +1017,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 }
 
-func removeDuplicate(sliceList []corev1.EnvVar) []corev1.EnvVar {
+func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
 	allKeys := orderedmap.New[string, bool]()
 	list := []corev1.EnvVar{}
 	for _, item := range sliceList {
