@@ -1021,7 +1021,7 @@ func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
 	allKeys := orderedmap.New[string, bool]()
 	list := []corev1.EnvVar{}
 	for _, item := range sliceList {
-		if _, value := allKeys.Get(item.Name); !value {
+		if _, ok := allKeys.Get(item.Name); !ok {
 			allKeys.Set(item.Name, true)
 			list = append(list, item)
 		}
