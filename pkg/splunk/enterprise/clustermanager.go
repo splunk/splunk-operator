@@ -178,6 +178,14 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
+	checkUpgradeReady, err := upgradeScenario(ctx, client, cr)
+	if err != nil {
+		return result, err
+	}
+	if !checkUpgradeReady {
+		return result, err
+	}
+
 	clusterManagerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := clusterManagerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -475,5 +483,38 @@ func changeClusterManagerAnnotations(ctx context.Context, client splcommon.Contr
 	}
 
 	return nil
+}
 
+func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
+
+	licenseManagerRef := cr.Spec.LicenseManagerRef
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
+
+	// create new object
+	licenseManager := &enterpriseApi.LicenseManager{}
+
+	// get the license manager referred in cluster manager
+	err := c.Get(ctx, namespacedName, licenseManager)
+	if err != nil {
+		return false, err
+	}
+
+	lmImage, err := getLicenseManagerCurrentImage(ctx, c, licenseManager)
+	cmImage, err := getClusterManagerCurrentImage(ctx, c, cr)
+
+	if cr.Spec.Image != cmImage && lmImage == cr.Spec.Image && licenseManager.Status.Phase == enterpriseApi.PhaseReady {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func getClusterManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (string, error) {
+	statefulSet, err := getClusterManagerStatefulSet(ctx, c, cr)
+	if err != nil {
+		return "", err
+	}
+	image := statefulSet.Spec.Template.Spec.InitContainers[0].Image
+
+	return image, nil
 }

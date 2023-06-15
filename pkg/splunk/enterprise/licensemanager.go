@@ -227,3 +227,12 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 
 	return objectList, nil
 }
+func getLicenseManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (string, error) {
+	statefulSet, err := getLicenseManagerStatefulSet(ctx, c, cr)
+	if err != nil {
+		return "", err
+	}
+	image := statefulSet.Spec.Template.Spec.InitContainers[0].Image
+
+	return image, nil
+}
