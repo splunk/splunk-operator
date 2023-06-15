@@ -26,7 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -179,6 +179,11 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+
+	err = changeClusterManagerAnnotations(ctx, client, cr)
+	if err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -224,6 +229,57 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return objectList, nil
 }
 
-func changeAnnotations(ctx context.Context, c client.Client, meta metav1.ObjectMeta) error {
+// func checkClusterManagerUpdate(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (bool, error) {
+
+// 	namespacedName := types.NamespacedName{
+// 		Namespace: cr.GetNamespace(),
+// 		Name:      cr.Spec.ClusterManagerRef.Name,
+// 	}
+// 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
+// 	err := client.Get(context.TODO(), namespacedName, clusterManagerInstance)
+// 	if err != nil && k8serrors.IsNotFound(err) {
+// 		return false, nil
+// 	}
+// 	if clusterManagerInstance.Spec.Image != clusterManagerInstance.Spec.Image {
+// 		return true, nil
+// 	}
+
+// 	return true, err
+
+// }
+
+// changeClusterManagerAnnotations updates the checkUpdateImage field of the CLuster Manager Annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong.
+func changeClusterManagerAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterManagerRef.Name,
+	}
+	clusterManagerInstance := &enterpriseApi.ClusterManager{}
+	err := client.Get(context.TODO(), namespacedName, clusterManagerInstance)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return nil
+	}
+	annotations := clusterManagerInstance.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	if _, ok := annotations["checkUpdateImage"]; ok {
+		if annotations["checkUpdateImage"] == clusterManagerInstance.Spec.Image {
+			return nil
+		}
+	}
+
+	annotations["checkUpdateImage"] = clusterManagerInstance.Spec.Image
+
+	clusterManagerInstance.SetAnnotations(annotations)
+	err = client.Update(ctx, clusterManagerInstance)
+	if err != nil {
+		fmt.Println("Error in Change Annotation UPDATE", err)
+		return err
+	}
+
 	return nil
+
 }
