@@ -257,7 +257,7 @@ func getLicenseManagerCurrentImage(ctx context.Context, c splcommon.ControllerCl
 	}
 
 	for _, v := range statefulsetPods.Items {
-		for _, container := range v.Spec.Containers {
+		for _, container := range v.Status.ContainerStatuses {
 			if strings.Contains(container.Name, "splunk") {
 				image := container.Image
 				return image, nil
