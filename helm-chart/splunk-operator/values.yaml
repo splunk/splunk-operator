@@ -42,6 +42,9 @@ splunkOperator:
   # Default watches the entire cluster
   watchNamespaces: ""
 
+  # Add labels to Splunk Operator deployment
+  labels: {}
+
   # Add annotations to Splunk Operator deployment
   annotations: {}
 
