@@ -355,3 +355,39 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 		}
 	}
 }
+
+// changeMonitoringConsoleAnnotations updates the checkUpdateImage field of the Monitoring Console Annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong.
+func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.MonitoringConsoleRef.Name,
+	}
+	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
+	err := client.Get(context.TODO(), namespacedName, monitoringConsoleInstance)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return nil
+	}
+	annotations := monitoringConsoleInstance.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	if _, ok := annotations["checkUpdateImage"]; ok {
+		if annotations["checkUpdateImage"] == monitoringConsoleInstance.Spec.Image {
+			return nil
+		}
+	}
+
+	annotations["checkUpdateImage"] = monitoringConsoleInstance.Spec.Image
+
+	monitoringConsoleInstance.SetAnnotations(annotations)
+	err = client.Update(ctx, monitoringConsoleInstance)
+	if err != nil {
+		fmt.Println("Error in Change Annotation UPDATE", err)
+		return err
+	}
+
+	return nil
+
+}
