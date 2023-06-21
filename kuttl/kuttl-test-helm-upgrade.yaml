@@ -4,7 +4,7 @@ kind: TestSuite
 testDirs:
 - ./kuttl/tests/upgrade
 parallel: 3
-timeout: 5000
+timeout: 500
 startKIND: false
 artifactsDir: kuttl-artifacts
 kindNodeCache: false
