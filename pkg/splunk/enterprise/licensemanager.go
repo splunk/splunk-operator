@@ -229,25 +229,6 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return objectList, nil
 }
 
-// func checkClusterManagerUpdate(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (bool, error) {
-
-// 	namespacedName := types.NamespacedName{
-// 		Namespace: cr.GetNamespace(),
-// 		Name:      cr.Spec.ClusterManagerRef.Name,
-// 	}
-// 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-// 	err := client.Get(context.TODO(), namespacedName, clusterManagerInstance)
-// 	if err != nil && k8serrors.IsNotFound(err) {
-// 		return false, nil
-// 	}
-// 	if clusterManagerInstance.Spec.Image != clusterManagerInstance.Spec.Image {
-// 		return true, nil
-// 	}
-
-// 	return true, err
-
-// }
-
 // changeClusterManagerAnnotations updates the checkUpdateImage field of the CLuster Manager Annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong.
 func changeClusterManagerAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
