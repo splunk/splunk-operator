@@ -25,6 +25,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -224,4 +225,40 @@ func getLicenseMasterList(ctx context.Context, c splcommon.ControllerClient, cr 
 	}
 
 	return numOfObjects, nil
+}
+
+// changeClusterMasterAnnotations updates the checkUpdateImage field of the CLuster Master Annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong.
+func changeClusterMasterAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) error {
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterManagerRef.Name,
+	}
+	clusterMasterInstance := &enterpriseApiV3.ClusterMaster{}
+	err := client.Get(context.TODO(), namespacedName, clusterMasterInstance)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return nil
+	}
+	annotations := clusterMasterInstance.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	if _, ok := annotations["checkUpdateImage"]; ok {
+		if annotations["checkUpdateImage"] == clusterMasterInstance.Spec.Image {
+			return nil
+		}
+	}
+
+	annotations["checkUpdateImage"] = clusterMasterInstance.Spec.Image
+
+	clusterMasterInstance.SetAnnotations(annotations)
+	err = client.Update(ctx, clusterMasterInstance)
+	if err != nil {
+		fmt.Println("Error in Change Annotation UPDATE", err)
+		return err
+	}
+
+	return nil
+
 }
