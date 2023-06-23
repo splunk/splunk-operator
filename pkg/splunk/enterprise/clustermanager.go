@@ -500,11 +500,17 @@ func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *ente
 	// get the license manager referred in cluster manager
 	err := c.Get(ctx, namespacedName, licenseManager)
 	if err != nil {
-		return false, err
+		return true, nil
 	}
 
 	lmImage, err := getLicenseManagerCurrentImage(ctx, c, licenseManager)
+	if err != nil {
+		return false, err
+	}
 	cmImage, err := getClusterManagerCurrentImage(ctx, c, cr)
+	if err != nil {
+		return false, err
+	}
 
 	// check conditions for upgrade
 	if cr.Spec.Image != cmImage && lmImage == cr.Spec.Image && licenseManager.Status.Phase == enterpriseApi.PhaseReady {
