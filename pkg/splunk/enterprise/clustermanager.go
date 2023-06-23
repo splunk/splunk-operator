@@ -436,6 +436,8 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, 
 	return extraEnv, err
 }
 
+// changeClusterMasterAnnotations updates the checkUpdateImage field of the CLuster Master Annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong.
 func changeClusterManagerAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 
 	namespacedName := types.NamespacedName{
