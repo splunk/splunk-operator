@@ -720,17 +720,6 @@ func TestLicenseManagerList(t *testing.T) {
 	}
 }
 
-func TestChangeClusterManagerAnnotations(t *testing.T) {
-	ctx := context.TODO()
-	lm := enterpriseApi.LicenseManager{}
-
-	client := spltest.NewMockClient()
-	err := changeClusterManagerAnnotations(ctx, client, &lm)
-	if err != nil {
-		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
-	}
-}
-
 func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
