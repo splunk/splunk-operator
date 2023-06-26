@@ -597,15 +597,20 @@ func getClusterManagerCurrentImage(ctx context.Context, c splcommon.ControllerCl
 // on update, and returns error if something is wrong
 func changeClusterManagerAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.ClusterManagerRef.Name,
 	}
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-	err := client.Get(context.TODO(), namespacedName, clusterManagerInstance)
+	err := client.Get(ctx, namespacedName, clusterManagerInstance)
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil
 	}
+
+	// fetch and check the annotation fields of the ClusterManager
 	annotations := clusterManagerInstance.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
@@ -616,12 +621,13 @@ func changeClusterManagerAnnotations(ctx context.Context, client splcommon.Contr
 		}
 	}
 
+	// create/update the checkUpdateImage annotation field
 	annotations["checkUpdateImage"] = clusterManagerInstance.Spec.Image
 
 	clusterManagerInstance.SetAnnotations(annotations)
 	err = client.Update(ctx, clusterManagerInstance)
 	if err != nil {
-		fmt.Println("Error in Change Annotation UPDATE", err)
+		scopedLog.Error(err, "ClusterManager types updated after changing annotations failed with", "error", err)
 		return err
 	}
 
