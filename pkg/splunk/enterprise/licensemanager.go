@@ -233,7 +233,7 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 func getLicenseManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (string, error) {
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
-		Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
+		Name:      GetSplunkStatefulsetName(SplunkLicenseManager, cr.GetName()),
 	}
 	statefulSet := &appsv1.StatefulSet{}
 	err := c.Get(ctx, namespacedName, statefulSet)
