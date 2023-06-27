@@ -1391,32 +1391,99 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 func TestUpgradeScenario(t *testing.T) {
 
 	ctx := context.TODO()
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
-			Namespace: "test",
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "clustermanager",
-		},
-	}
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// Create License Manager
 	lm := enterpriseApi.LicenseManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "stack1",
+			Name:      "test",
 			Namespace: "test",
 		},
-		TypeMeta: metav1.TypeMeta{
-			Kind: "LicenseManager",
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+			},
 		},
 	}
-	fmt.Println(ctx, cm, lm)
 
-}
+	err := client.Create(ctx, &lm)
+	_, err = ApplyLicenseManager(ctx, client, &lm)
+	if err != nil {
+		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
+	}
+	lm.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, &lm)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
 
-func TestGetClusterManagerCurrentImage(t *testing.T) {
+	// get StatefulSet labels
 
-	ctx := context.TODO()
-	current := enterpriseApi.ClusterManager{
+	namespacedName := types.NamespacedName{
+		Namespace: lm.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkLicenseManager, lm.GetName()),
+	}
+	lmstatefulSet := &appsv1.StatefulSet{}
+	err = client.Get(ctx, namespacedName, lmstatefulSet)
+	if err != nil {
+		t.Errorf("Unexpected get statefulset  %v", err)
+	}
+	labels := lmstatefulSet.Spec.Template.ObjectMeta.Labels
+
+	// create LM pod
+	lmstpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-license-manager-0",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	lmstpod.ObjectMeta.Labels = labels
+	// simulate create pod
+	err = client.Create(ctx, lmstpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update pod
+	lmstpod.Status.Phase = corev1.PodRunning
+	lmstpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = client.Status().Update(ctx, lmstpod)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+
+	// Create Cluster Manager
+	cm := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -1425,16 +1492,21 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
 				},
 				Volumes: []corev1.Volume{},
-				MonitoringConsoleRef: corev1.ObjectReference{
-					Name: "mcName",
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "test",
 				},
 			},
 		},
 	}
 	replicas := int32(1)
-	statefulset := &appsv1.StatefulSet{
+	labels = map[string]string{
+		"app":  "test",
+		"tier": "splunk",
+	}
+	cmstatefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-cluster-manager",
 			Namespace: "test",
@@ -1460,30 +1532,114 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 			Replicas: &replicas,
 		},
 	}
-	matchlabels := map[string]string{
-		"app":  "test",
-		"tier": "splunk",
+	cmstatefulset.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: labels,
 	}
-	statefulset.Spec.Selector = &metav1.LabelSelector{
-		MatchLabels: matchlabels,
+
+	err = client.Create(ctx, &cm)
+	err = client.Create(ctx, cmstatefulset)
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
-	/*service := &corev1.Service{
+
+	// Create CM pod
+	cmstpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-manager-headless",
+			Name:      "splunk-test-cluster-manager-0",
 			Namespace: "test",
 		},
-	} */
-	// current.Spec.Image = "splunk/test"
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	cmstpod.ObjectMeta.Labels = labels
+	// simulate create pod
+	err = client.Create(ctx, cmstpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update CM pod
+	cmstpod.Status.Phase = corev1.PodRunning
+	cmstpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = client.Status().Update(ctx, cmstpod)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+
+	cm.Spec.Image = "splunk2"
+	lmstpod.Status.ContainerStatuses[0].Image = "splunk2"
+	err = client.Status().Update(ctx, lmstpod)
+	check, err := upgradeScenario(ctx, client, &cm)
+
+	if err != nil {
+		t.Errorf("Unexpected upgradeScenario error %v", err)
+	}
+
+	if !check {
+		t.Errorf("upgradeScenario: CM should be ready for upgrade")
+	}
+
+}
+
+func TestGetClusterManagerCurrentImage(t *testing.T) {
+
+	ctx := context.TODO()
+	current := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
 	builder := fake.NewClientBuilder()
 	client := builder.Build()
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
-	//client := spltest.NewMockClient()
-	//err := client.Create(ctx, service)
-	//err = client.Create(ctx, statefulset)
 	err := client.Create(ctx, &current)
 	_, err = ApplyClusterManager(ctx, client, &current)
-	fmt.Println(err)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: current.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkClusterManager, current.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err = client.Get(ctx, namespacedName, statefulSet)
+	if err != nil {
+		t.Errorf("Unexpected get statefulset  %v", err)
+	}
+	labels := statefulSet.Spec.Template.ObjectMeta.Labels
 
 	stpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1505,7 +1661,8 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 			},
 		},
 	}
-	// simulate create stateful set
+	stpod.ObjectMeta.Labels = labels
+	// simulate create pod
 	err = client.Create(ctx, stpod)
 	if err != nil {
 		t.Errorf("Unexpected create pod failed %v", err)
@@ -1523,12 +1680,18 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 	}
 	err = client.Status().Update(ctx, stpod)
 	if err != nil {
-		t.Errorf("Unexpected update statefulset  %v", err)
+		t.Errorf("Unexpected update pod  %v", err)
 		debug.PrintStack()
 	}
+
 	image, err := getClusterManagerCurrentImage(ctx, client, &current)
-	fmt.Println(image)
-	fmt.Println(err)
+
+	if err != nil {
+		t.Errorf("Unexpected getClusterManagerCurrentImage error %v", err)
+	}
+	if image != stpod.Status.ContainerStatuses[0].Image {
+		t.Errorf("getClusterManagerCurrentImage does not return the current pod image")
+	}
 }
 
 func TestClusterManagerWitReadyState(t *testing.T) {

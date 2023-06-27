@@ -358,7 +358,7 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 
 // changeMonitoringConsoleAnnotations updates the checkUpdateImage field of the Monitoring Console Annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong.
-func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
+func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
@@ -369,17 +369,18 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil
 	}
+	image, _ := getClusterManagerCurrentImage(ctx, client, cr)
 	annotations := monitoringConsoleInstance.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
 	if _, ok := annotations["checkUpdateImage"]; ok {
-		if annotations["checkUpdateImage"] == monitoringConsoleInstance.Spec.Image {
+		if annotations["checkUpdateImage"] == image {
 			return nil
 		}
 	}
 
-	annotations["checkUpdateImage"] = monitoringConsoleInstance.Spec.Image
+	annotations["checkUpdateImage"] = image
 
 	monitoringConsoleInstance.SetAnnotations(annotations)
 	err = client.Update(ctx, monitoringConsoleInstance)

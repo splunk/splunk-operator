@@ -720,6 +720,98 @@ func TestLicenseManagerList(t *testing.T) {
 	}
 }
 
+func TestGetLicenseManagerCurrentImage(t *testing.T) {
+
+	ctx := context.TODO()
+	current := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	err := client.Create(ctx, &current)
+	_, err = ApplyLicenseManager(ctx, client, &current)
+	if err != nil {
+		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: current.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkLicenseManager, current.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err = client.Get(ctx, namespacedName, statefulSet)
+	if err != nil {
+		t.Errorf("Unexpected get statefulset  %v", err)
+	}
+	labels := statefulSet.Spec.Template.ObjectMeta.Labels
+
+	stpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-license-manager-0",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	stpod.ObjectMeta.Labels = labels
+	// simulate create pod
+	err = client.Create(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update statefulset
+	stpod.Status.Phase = corev1.PodRunning
+	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = client.Status().Update(ctx, stpod)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+
+	image, err := getLicenseManagerCurrentImage(ctx, client, &current)
+
+	if err != nil {
+		t.Errorf("Unexpected getLicenseManagerCurrentImage error %v", err)
+	}
+	if image != stpod.Status.ContainerStatuses[0].Image {
+		t.Errorf("getLicenseManagerCurrentImage does not return the current pod image")
+	}
+}
+
 func TestLicenseManagerWithReadyState(t *testing.T) {
 
 	mclient := &spltest.MockHTTPClient{}
