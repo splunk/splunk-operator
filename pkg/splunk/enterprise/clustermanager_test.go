@@ -1474,7 +1474,11 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 		},
 	}
 	// current.Spec.Image = "splunk/test"
-	client := spltest.NewMockClient()
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	//client := spltest.NewMockClient()
 	err := client.Create(ctx, service)
 	err = client.Create(ctx, statefulset)
 	err = client.Create(ctx, &current)
