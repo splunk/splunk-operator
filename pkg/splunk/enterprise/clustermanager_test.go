@@ -1467,21 +1467,21 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 	statefulset.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: matchlabels,
 	}
-	service := &corev1.Service{
+	/*service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-cluster-manager-headless",
 			Namespace: "test",
 		},
-	}
+	} */
 	// current.Spec.Image = "splunk/test"
 	builder := fake.NewClientBuilder()
 	client := builder.Build()
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	//client := spltest.NewMockClient()
-	err := client.Create(ctx, service)
-	err = client.Create(ctx, statefulset)
-	err = client.Create(ctx, &current)
+	//err := client.Create(ctx, service)
+	//err = client.Create(ctx, statefulset)
+	err := client.Create(ctx, &current)
 	_, err = ApplyClusterManager(ctx, client, &current)
 	fmt.Println(err)
 
