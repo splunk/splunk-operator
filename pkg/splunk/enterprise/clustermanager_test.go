@@ -1694,6 +1694,169 @@ func TestGetClusterManagerCurrentImage(t *testing.T) {
 	}
 }
 
+func TestChangeClusterManagerAnnotations(t *testing.T) {
+	ctx := context.TODO()
+
+	// define LM and CM
+	lm := &enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-lm",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test-cm",
+				},
+			},
+		},
+	}
+	replicas := int32(1)
+	labels := map[string]string{
+		"app":  "test",
+		"tier": "splunk",
+	}
+	lmstatefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-lm-license-manager",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "splunk-test-lm-license-manager-headless",
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+	lmstatefulset.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: labels,
+	}
+
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cm",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	lm.Spec.Image = "splunk/splunk:latest"
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// Create the instances
+	client.Create(ctx, lm)
+	client.Create(ctx, lmstatefulset)
+	_, err := ApplyLicenseManager(ctx, client, lm)
+	if err != nil {
+		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
+	}
+	lm.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, lm)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+	client.Create(ctx, cm)
+	_, err = ApplyClusterManager(ctx, client, cm)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+
+	// create LM pod
+	lmstpod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-license-manager-0",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "splunk",
+					Image: "splunk/splunk:latest",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "test",
+							Value: "test",
+						},
+					},
+				},
+			},
+		},
+	}
+	lmstpod.ObjectMeta.Labels = labels
+	// simulate create pod
+	err = client.Create(ctx, lmstpod)
+	if err != nil {
+		t.Errorf("Unexpected create pod failed %v", err)
+		debug.PrintStack()
+	}
+
+	// update pod
+	lmstpod.Status.Phase = corev1.PodRunning
+	lmstpod.Status.ContainerStatuses = []corev1.ContainerStatus{
+		{
+			Image: "splunk/splunk:latest",
+			Name:  "splunk",
+			Ready: true,
+		},
+	}
+	err = client.Status().Update(ctx, lmstpod)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+
+	err = changeClusterManagerAnnotations(ctx, client, lm)
+	if err != nil {
+		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
+	}
+	clusterManager := &enterpriseApi.ClusterManager{}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, clusterManager)
+	if err != nil {
+		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
+	}
+
+	annotations := clusterManager.GetAnnotations()
+	if annotations["checkUpdateImage"] != lm.Spec.Image {
+		t.Errorf("changeClusterManagerAnnotations should have set the checkUpdateImage annotation field to the current image")
+	}
+
+}
+
 func TestClusterManagerWitReadyState(t *testing.T) {
 	// create directory for app framework
 	newpath := filepath.Join("/tmp", "appframework")

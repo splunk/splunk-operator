@@ -191,7 +191,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// TODO: Right now if the CM is not ready for upgrade the reconcile loop goes into
 	// an infite loop and ives Time Out. We still want the other functions to run if
 	// a proper upgrade does not happen
-
 	if !checkUpgradeReady {
 		return result, err
 	}
@@ -595,20 +594,23 @@ func getClusterManagerCurrentImage(ctx context.Context, c splcommon.ControllerCl
 
 // changeClusterManagerAnnotations updates the checkUpdateImage field of the CLuster Manager Annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong
-func changeClusterManagerAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
+func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.ClusterManagerRef.Name,
 	}
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-	err := client.Get(ctx, namespacedName, clusterManagerInstance)
+	err := c.Get(ctx, namespacedName, clusterManagerInstance)
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil
 	}
+
+	image, _ := getLicenseManagerCurrentImage(ctx, c, cr)
 
 	// fetch and check the annotation fields of the ClusterManager
 	annotations := clusterManagerInstance.GetAnnotations()
@@ -616,18 +618,19 @@ func changeClusterManagerAnnotations(ctx context.Context, client splcommon.Contr
 		annotations = map[string]string{}
 	}
 	if _, ok := annotations["checkUpdateImage"]; ok {
-		if annotations["checkUpdateImage"] == clusterManagerInstance.Spec.Image {
+		if annotations["checkUpdateImage"] == image {
 			return nil
 		}
 	}
 
 	// create/update the checkUpdateImage annotation field
-	annotations["checkUpdateImage"] = clusterManagerInstance.Spec.Image
+	annotations["checkUpdateImage"] = image
 
 	clusterManagerInstance.SetAnnotations(annotations)
-	err = client.Update(ctx, clusterManagerInstance)
+	err = c.Update(ctx, clusterManagerInstance)
 	if err != nil {
-		scopedLog.Error(err, "ClusterManager types updated after changing annotations failed with", "error", err)
+		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		scopedLog.Error(err, "ClusterManager types update after changing annotations failed with", "error", err)
 		return err
 	}
 
