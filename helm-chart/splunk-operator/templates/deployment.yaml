@@ -5,6 +5,9 @@ metadata:
   namespace: {{ include "splunk-operator.namespace" . }}
   labels:
 {{- include "splunk-operator.labels" . | nindent 4 }}
+{{- if .Values.splunkOperator.labels }}
+{{ toYaml .Values.splunkOperator.labels | nindent 4 }}
+{{- end }}
 {{- if .Values.splunkOperator.annotations }}
   annotations:
 {{ toYaml .Values.splunkOperator.annotations | nindent 4 }}
@@ -14,7 +17,7 @@ spec:
   selector:
     matchLabels:
 {{- include "splunk-operator.selectorLabels" . | nindent 6 }}
-  strategy: 
+  strategy:
     type: Recreate
   template:
     metadata:
