@@ -1795,7 +1795,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	// create LM pod
 	lmstpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-license-manager-0",
+			Name:      "splunk-test-lm-license-manager-0",
 			Namespace: "test",
 		},
 		Spec: corev1.PodSpec{

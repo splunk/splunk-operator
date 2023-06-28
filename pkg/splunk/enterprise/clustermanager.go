@@ -34,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -453,47 +452,7 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, 
 	return extraEnv, err
 }
 
-// changeClusterMasterAnnotations updates the checkUpdateImage field of the Cluster Master Annotations to trigger the reconcile loop
-// on update, and returns error if something is wrong.
-func changeClusterManagerAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
-
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      cr.Spec.ClusterManagerRef.Name,
-	}
-	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-	err := client.Get(ctx, namespacedName, clusterManagerInstance)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return nil
-	}
-
-	// fetch and check the annotation fields of the ClusterManager
-	annotations := clusterManagerInstance.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	if _, ok := annotations["checkUpdateImage"]; ok {
-		if annotations["checkUpdateImage"] == clusterManagerInstance.Spec.Image {
-			return nil
-		}
-	}
-
-	// create/update the checkUpdateImage annotation field
-	annotations["checkUpdateImage"] = clusterManagerInstance.Spec.Image
-
-	clusterManagerInstance.SetAnnotations(annotations)
-	err = client.Update(ctx, clusterManagerInstance)
-	if err != nil {
-		scopedLog.Error(err, "ClusterManager types updated after changing annotations failed with", "error", err)
-		return err
-	}
-
-	return nil
-}
-
+// upgradeScenario checks if it is suitable to update the clusterManager based on the Status of the licenseManager, returns bool, err accordingly
 func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
 
 	reqLogger := log.FromContext(ctx)
