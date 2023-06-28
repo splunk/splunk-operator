@@ -17,6 +17,9 @@ package util
 
 import (
 	"context"
+	"errors"
+	"net/url"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -25,8 +28,80 @@ import (
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/client-go/util/flowcontrol"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
+
+// Faking APIs
+
+// Faking Rest GetConfig()
+var fakePodExecGetConfig = func() (*rest.Config, error) {
+	restConfig := rest.Config{}
+	return &restConfig, errors.New("fakeerror")
+}
+
+// Faking RESTClientForGVK
+var fakePodExecRESTClientForGVK = func(gvk schema.GroupVersionKind, isUnstructured bool, baseConfig *rest.Config, codecs serializer.CodecFactory) (rest.Interface, error) {
+	return &fakeRestInterface{}, errors.New("fakeerror")
+}
+
+type fakeRestInterface struct {
+	name string
+}
+
+func (fri fakeRestInterface) GetRateLimiter() flowcontrol.RateLimiter {
+	return flowcontrol.NewFakeAlwaysRateLimiter()
+}
+
+func (fri fakeRestInterface) Verb(verb string) *rest.Request {
+	return &rest.Request{}
+}
+
+func (fri fakeRestInterface) Post() *rest.Request {
+	return &rest.Request{}
+}
+
+func (fri fakeRestInterface) Put() *rest.Request {
+	return &rest.Request{}
+}
+
+func (fri fakeRestInterface) Patch(pt types.PatchType) *rest.Request {
+	return &rest.Request{}
+}
+
+func (fri fakeRestInterface) Get() *rest.Request {
+	return &rest.Request{}
+}
+
+func (fri fakeRestInterface) Delete() *rest.Request {
+	return &rest.Request{}
+}
+
+func (fri fakeRestInterface) APIVersion() schema.GroupVersion {
+	return schema.GroupVersion{}
+}
+
+// Faking SPDY executor
+
+var fakePodExecNewSPDYExecutor = func(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error) {
+	return &fakeExecutor{}, errors.New("FakeError")
+}
+
+type fakeExecutor struct{}
+
+func (f *fakeExecutor) Stream(options remotecommand.StreamOptions) error {
+	return nil
+}
+
+func (f *fakeExecutor) StreamWithContext(ctx context.Context, options remotecommand.StreamOptions) error {
+	return nil
+}
 
 func TestCreateResource(t *testing.T) {
 	ctx := context.TODO()
@@ -124,6 +199,16 @@ func TestDeepCopyObject(t *testing.T) {
 	if !reflect.DeepEqual(copy, &cr) {
 		t.Errorf("TestResource \n got = %+v; \n want %+v \n", copy, cr)
 	}
+
+	crPtr := &cr
+	crPtr = nil
+	copy = crPtr.DeepCopyObject()
+}
+
+func TestDeepCopy(t *testing.T) {
+	var cr *TestResource
+	cr = nil
+	_ = cr.DeepCopy()
 }
 
 func TestPodExecCommand(t *testing.T) {
@@ -167,14 +252,53 @@ func TestPodExecCommand(t *testing.T) {
 		Stdin: strings.NewReader("ls -ltr"),
 	}
 
-	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
+	mockKubPath := os.Getenv("PWD") + "/kubeconfig"
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true, mockKubPath)
 
 	// Add object
 	c.AddObject(pod)
-	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true, mockKubPath)
 
 	// Hit some error legs
-	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false)
+	_, _, _ = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false, "")
+
+	// Negative testing
+	streamOptions.Stdin = nil
+	_, _, err := PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false, "")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	_, _, err = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, true, "fakepath")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Faking functions
+
+	// Faking GetConfig()
+	podExecGetConfig = fakePodExecGetConfig
+	_, _, err = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false, "")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	podExecGetConfig = config.GetConfig
+
+	// Faking RestClientForGVK
+	podExecRESTClientForGVK = fakePodExecRESTClientForGVK
+	_, _, err = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false, "")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Faking SPDY executor
+	podExecRESTClientForGVK = apiutil.RESTClientForGVK
+	podExecNewSPDYExecutor = fakePodExecNewSPDYExecutor
+	_, _, err = PodExecCommand(ctx, c, "splunk-stack1-0", "test", []string{"/bin/sh"}, streamOptions, false, false, "")
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }
 
 func TestRunPodExecCommand(t *testing.T) {
@@ -230,6 +354,30 @@ func TestGetSetTargetPodName(t *testing.T) {
 	if gotPodName != podName {
 		t.Errorf("invalid targetPodName, expected: %s, got: %s", podName, gotPodName)
 	}
+}
+
+func TestGetSetCR(t *testing.T) {
+	cr := TestResource{}
+
+	var podExecClient PodExecClient = PodExecClient{}
+	podExecClient.SetCR(&cr)
+
+	if podExecClient.GetCR() != &cr {
+		t.Errorf("Retrieved CR is not the same")
+	}
+}
+
+func TestResetStringReader(t *testing.T) {
+	sop := remotecommand.StreamOptions{
+		Tty: true,
+	}
+	ResetStringReader(&sop, "testcommand")
+
+	sop = remotecommand.StreamOptions{
+		Tty:   true,
+		Stdin: strings.NewReader("test"),
+	}
+	ResetStringReader(&sop, "testcommand")
 }
 
 func TestSuppressHarmlessErrorMessages(t *testing.T) {

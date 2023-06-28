@@ -2,29 +2,43 @@ apiVersion: v1
 entries:
   splunk-enterprise:
   - apiVersion: v2
-    appVersion: 2.2.1
-    created: "2023-03-09T22:07:18.801029672Z"
+    appVersion: 2.3.0
+    created: "2023-06-15T11:57:34.729912-07:00"
     dependencies:
     - condition: splunk-operator.enabled
       name: splunk-operator
       repository: file://splunk-operator/helm-chart/splunk-operator
-      version: 2.2.1
+      version: 2.3.0
     description: A Helm chart for Splunk Enterprise managed by the Splunk Operator
-    digest: 92255e644355cf02d7a16411f3ce753585d53646f11c6116e30aeb7bbd634135
+    digest: c18bcc16332114dbc46abf2b809aa26ab8576a10dae3da4241d502b3fdd9079d
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: akondur@splunk.com
+      name: Arjun Kondur
+    - email: gaurav@splunk.com
+      name: Gaurav Gupta
     name: splunk-enterprise
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.2.1.tgz
-    version: 2.2.1
+    - https://splunk.github.io/splunk-operator/splunk-enterprise-2.3.0.tgz
+    version: 2.3.0
   splunk-operator:
   - apiVersion: v2
-    appVersion: 2.2.1
-    created: "2023-03-09T22:07:18.818008553Z"
+    appVersion: 2.3.0
+    created: "2023-06-15T11:57:34.756231-07:00"
     description: A Helm chart for the Splunk Operator for Kubernetes
-    digest: 8868b9ae2ebde0c667b13c97d71d904a31b5a9f2c803b199bc77324f1727e1fd
+    digest: a4eba8f2af1d624794bb37a75d462e26ea5dbbf729276f5c4e2b65610f397d8a
+    maintainers:
+    - email: vivekr@splunk.com
+      name: Vivek Reddy
+    - email: akondur@splunk.com
+      name: Arjun Kondur
+    - email: gaurav@splunk.com
+      name: Gaurav Gupta
     name: splunk-operator
     type: application
     urls:
-    - https://splunk.github.io/splunk-operator/splunk-operator-2.2.1.tgz
-    version: 2.2.1
-generated: "2023-03-09T22:07:18.783544682Z"
+    - https://splunk.github.io/splunk-operator/splunk-operator-2.3.0.tgz
+    version: 2.3.0
+generated: "2023-06-15T11:57:34.671074-07:00"

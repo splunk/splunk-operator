@@ -1,0 +1,95 @@
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: pwd
+    background: false
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.defaults.volumeName" "volume_app_repo"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.defaults.scope" "local"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.appSources[0].name" "apps"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.appSources[0].location" "appframework"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.appSources[0].scope" "cluster"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.volumes[0].name" "volume_app_repo"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.volumes[0].storageType" "s3"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.volumes[0].provider" "aws"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.volumes[0].path" "helm-test-c3-with-apps-$NAMESPACE"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.volumes[0].endpoint" $TEST_VPC_ENDPOINT_URL
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.appRepo.volumes[0].region" $S3_REGION
+    background: false
+    skipLogOutput: true
+  - script: pwd
+    background: false
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.defaults.volumeName" "volume_app_repo"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.defaults.scope" "local"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.appSources[0].name" "apps"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.appSources[0].location" "appframework"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.appSources[0].scope" "cluster"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.volumes[0].name" "volume_app_repo"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.volumes[0].storageType" "s3"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.volumes[0].provider" "aws"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.volumes[0].path" "helm-test-c3-with-apps-$NAMESPACE"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.volumes[0].endpoint" $TEST_VPC_ENDPOINT_URL
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "searchHeadCluster.appRepo.volumes[0].region" $S3_REGION
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.defaults.volumeName" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.indexes[0].volumeName" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.indexes[1].volumeName" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.volumes[0].name" "helm-test-c3-with-apps-smartstore-$NAMESPACE"
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.volumes[0].path" "helm-test-c3-with-apps-smartstore-$NAMESPACE"/smartstore
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.volumes[0].region" $S3_REGION
+    background: false
+    skipLogOutput: true
+  - script: yq w -i c3_config.yaml "clusterManager.smartstore.volumes[0].endpoint" $TEST_VPC_ENDPOINT_URL
+    background: false
+    skipLogOutput: true

@@ -128,13 +128,13 @@ const (
 	// PhaseUpdating means a custom resource is in the process of updating to a new desired state (spec)
 	PhaseUpdating Phase = "Updating"
 
-	// PhaseScalingUp means a customer resource is in the process of scaling up
+	// PhaseScalingUp means a custom resource is in the process of scaling up
 	PhaseScalingUp Phase = "ScalingUp"
 
-	// PhaseScalingDown means a customer resource is in the process of scaling down
+	// PhaseScalingDown means a custom resource is in the process of scaling down
 	PhaseScalingDown Phase = "ScalingDown"
 
-	// PhaseTerminating means a customer resource is in the process of being removed
+	// PhaseTerminating means a custom resource is in the process of being removed
 	PhaseTerminating Phase = "Terminating"
 
 	// PhaseError means an error occured with custom resource management

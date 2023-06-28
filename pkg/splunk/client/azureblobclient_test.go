@@ -19,8 +19,11 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -29,6 +32,13 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
+
+// Helpers for faulty http request/response
+type errReader int
+
+func (errReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("test error")
+}
 
 func TestInitAzureBlobClientWrapper(t *testing.T) {
 	ctx := context.TODO()
@@ -46,6 +56,69 @@ func TestNewAzureBlobClient(t *testing.T) {
 	if azureBlobClient == nil || err != nil {
 		t.Errorf("NewAzureBlobClient should have returned a valid Azure Blob client.")
 	}
+}
+
+func TestBuildStringToSign(t *testing.T) {
+	hd := make(map[string][]string)
+
+	hd["Content-Length"] = []string{"0"}
+	hreq := http.Request{
+		Header: hd,
+		URL: &url.URL{
+			Path:     "",
+			RawQuery: ";",
+		},
+	}
+	_, _ = buildStringToSign(hreq, "")
+
+	// Test invalid scenario
+	hreq = http.Request{
+		URL: &url.URL{
+			Path:     "",
+			RawQuery: ";",
+		},
+	}
+	_, _ = buildStringToSign(hreq, "")
+}
+
+func TestBuildCanonicalizedHeader(t *testing.T) {
+	hd := make(map[string][]string)
+	buildCanonicalizedHeader(hd)
+}
+
+func TestUpdateAzureHTTPRequestHeaderWithSecrets(t *testing.T) {
+	ctx := context.TODO()
+	hd := make(map[string][]string)
+
+	hd["Content-Length"] = []string{"0"}
+	hreq := http.Request{
+		Header: hd,
+		URL: &url.URL{
+			Path:     "",
+			RawQuery: ";",
+		},
+	}
+
+	azClient := &AzureBlobClient{
+		StorageAccountName: "saname",
+		SecretAccessKey:    "skey",
+	}
+	updateAzureHTTPRequestHeaderWithSecrets(ctx, azClient, &hreq)
+
+	hreq.URL.RawQuery = "validquery"
+	azClient.SecretAccessKey = "!;."
+	updateAzureHTTPRequestHeaderWithSecrets(ctx, azClient, &hreq)
+}
+
+func TestExtractResponse(t *testing.T) {
+	ctx := context.TODO()
+	testRequest := httptest.NewRequest(http.MethodPost, "/something", errReader(0))
+
+	httpRes := http.Response{
+		Body: testRequest.Body,
+	}
+
+	extractResponse(ctx, &httpRes)
 }
 
 func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
@@ -165,15 +238,22 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
 	// GetAppsList doesn't return error as we move onto the next blob
 	resp, err := azureBlobClient.GetAppsList(ctx)
-
 	if err != nil {
 		t.Errorf("Did not expect error but one blob should have been returned")
 	}
-
 	//check only one blob is returned as it has correct lastmodified date
-
 	if len(resp.Objects) != 1 {
 		t.Errorf("Expected only one blob to be returned")
+	}
+
+	// GetAppsList covering code for incorrect content length
+	respdata.Blobs.Blob[0].Properties.ContentLength = "09999999999999999999"
+	respdata.Blobs.Blob[0].Properties.LastModified = time.Now().UTC().Format(http.TimeFormat)
+	mrespdata, _ = xml.Marshal(respdata)
+	mclient.AddHandler(wantRequest, 200, string(mrespdata), nil)
+	resp, err = azureBlobClient.GetAppsList(ctx)
+	if err != nil {
+		t.Errorf("Did not expect error but one blob should have been returned")
 	}
 
 	// Test Listing Apps with IAM
@@ -272,6 +352,15 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 	// Test Listing apps with secrets but bad end point
 	azureBlobClient.StorageAccountName = vol.Path
 	azureBlobClient.SecretAccessKey = "abcd"
+	azureBlobClient.Endpoint = string(invalidUrlByteArray)
+	_, err = azureBlobClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("Expected error for invalid endpoint")
+	}
+
+	// Test Listing apps with secrets but bad end point
+	azureBlobClient.StorageAccountName = vol.Path
+	azureBlobClient.SecretAccessKey = "abcd"
 	azureBlobClient.Endpoint = "not-a-valid-end-point"
 	_, err = azureBlobClient.GetAppsList(ctx)
 	if err == nil {
@@ -303,7 +392,6 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error for incorrect http response from get apps list, unable to unmarshal")
 	}
-
 }
 
 func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
@@ -494,6 +582,13 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 
 	// Test error for http request to download
 	azureBlobClient.Endpoint = "dummy"
+	_, err = azureBlobClient.DownloadApp(ctx, downloadRequest)
+	if err == nil {
+		t.Errorf("Expected error for incorrect oauth request")
+	}
+
+	// Test error for http request to download
+	azureBlobClient.Endpoint = string(invalidUrlByteArray)
 	_, err = azureBlobClient.DownloadApp(ctx, downloadRequest)
 	if err == nil {
 		t.Errorf("Expected error for incorrect oauth request")

@@ -241,6 +241,16 @@ func TestCreateFanOutWorker(t *testing.T) {
 		t.Errorf("Unexpected pod name: %v", fanOutWorker.targetPodName)
 	}
 
+	// Negative testing
+	fanOutWorker = createFanOutWorker(nil, 0)
+	if fanOutWorker != nil {
+		t.Errorf("Expected empty worker")
+	}
+
+	fanOutWorker = createFanOutWorker(worker, 9999)
+	if fanOutWorker != nil {
+		t.Errorf("Expected empty worker")
+	}
 }
 
 func TestMarkWorkerPhaseInstallationComplete(t *testing.T) {
@@ -321,6 +331,13 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 
+	cr.TypeMeta.Kind = "ClusterMaster"
+	expectedPodName = "splunk-stack1-cluster-master-0"
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
 	cr.TypeMeta.Kind = "Standalone"
 	expectedPodName = "splunk-stack1-standalone-0"
 	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
@@ -330,6 +347,13 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 
 	cr.TypeMeta.Kind = "LicenseManager"
 	expectedPodName = "splunk-stack1-license-manager-0"
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "LicenseMaster"
+	expectedPodName = "splunk-stack1-license-master-0"
 	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
@@ -347,6 +371,13 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", "", getApplicablePodNameForAppFramework(&cr, 0))
+	}
+
+	cr.TypeMeta.Kind = "IndexerCluster"
+	expectedPodName = ""
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
 }
 
@@ -1243,6 +1274,22 @@ func TestGetPhaseInfoByPhaseType(t *testing.T) {
 		t.Errorf("Should get nil for invalid pod name of Standalone")
 	}
 }
+
+func TestGetSslCliOption(t *testing.T) {
+	appSrcSpec := &enterpriseApi.AppSourceSpec{
+		AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+			PremiumAppsProps: enterpriseApi.PremiumAppsProps{
+				EsDefaults: enterpriseApi.EsDefaults{
+					SslEnablement: "abc",
+				},
+			},
+		},
+	}
+	if getSslCliOption(appSrcSpec) != "abc" {
+		t.Errorf("Incorrect ssl enablement option returned")
+	}
+}
+
 func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 	ctx := context.TODO()
 	cr := enterpriseApi.ClusterManager{
@@ -1320,6 +1367,26 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
 
+	// Negative testing
+	cr.TypeMeta.Kind = "LicenseMaster"
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) != nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
+
+	cr.TypeMeta.Kind = "ClusterMaster"
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) != nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
+
+	cr.TypeMeta.Kind = "MonitoringConsole"
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) != nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
+
+	cr.TypeMeta.Kind = "FakeCr"
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) != nil {
+		t.Errorf("Unable to get the sts for SHC deployer")
+	}
 }
 
 func createOrTruncateAppFileLocally(appFileName string, size int64) error {
@@ -1370,6 +1437,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 						Path:      "testbucket-rs-london",
 						SecretRef: "s3-secret",
 						Provider:  "aws",
+						Region:    "us-west-2",
 					},
 				},
 				AppSources: []enterpriseApi.AppSourceSpec{
@@ -4272,4 +4340,13 @@ func TestAddTelAppCManager(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error")
 	}
+
+	crNew := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mc",
+			Namespace: "test",
+		},
+	}
+	// Negative testing
+	err = addTelApp(ctx, mockPodExecClient, 2, &crNew)
 }

@@ -17,22 +17,58 @@ package client
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"crypto/tls"
+	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
 
 func TestInitAWSClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2", "abcd", "1234")
+	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
 	if awsS3ClientSession == nil {
 		t.Errorf("We should have got a valid AWS S3 client session object")
 	}
+
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "", "")
+	if awsS3ClientSession == nil {
+		t.Errorf("Case: Invalid secret/access keys, still returns a session")
+	}
+
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
+	if awsS3ClientSession != nil {
+		t.Errorf("Endpoint not resolved, should receive a nil session")
+	}
+
+	// Invalid session test
+	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "abcde")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
+	os.Unsetenv("AWS_STS_REGIONAL_ENDPOINTS")
 }
 
+func TestGetTLSVersion(t *testing.T) {
+	tr := http.Transport{
+		TLSClientConfig: &tls.Config{},
+	}
+
+	versions := []uint16{
+		tls.VersionTLS10,
+		tls.VersionTLS11,
+		tls.VersionTLS12,
+		tls.VersionTLS13,
+		14,
+	}
+
+	for _, val := range versions {
+		tr.TLSClientConfig.MinVersion = val
+		getTLSVersion(&tr)
+	}
+}
 func TestNewAWSS3Client(t *testing.T) {
 	ctx := context.TODO()
 	fn := InitAWSClientWrapper
@@ -56,6 +92,15 @@ func TestNewAWSS3Client(t *testing.T) {
 	// Test for invalid scenario, where we return nil client
 	fn = func(context.Context, string, string, string) interface{} {
 		return nil
+	}
+	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
+	if err == nil {
+		t.Errorf("NewAWSS3Client should have returned error.")
+	}
+
+	// Test for invalid scenario, where we return invalid client
+	fn = func(context.Context, string, string, string) interface{} {
+		return "abcd"
 	}
 	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", fn)
 	if err == nil {
@@ -290,6 +335,22 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should return an empty list in response")
 	}
 
+	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
+	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		cl := spltest.MockAWSS3ClientError{}
+		// return empty objects list here to test the negative scenario
+		return cl
+	}
+
+	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
+	getRemoteDataClientFn = getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3ClientError)
+
+	remoteDataClientResponse, err = awsClient.GetAppsList(ctx)
+	if err == nil {
+		t.Errorf("GetAppsList should have returned error")
+	}
 }
 
 func TestAWSDownloadAppShouldNotFail(t *testing.T) {

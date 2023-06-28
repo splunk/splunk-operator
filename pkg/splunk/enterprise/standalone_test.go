@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -137,6 +138,61 @@ func TestApplyStandalone(t *testing.T) {
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
+
+	// Negative testing
+	current.Spec.CommonSplunkSpec.LivenessInitialDelaySeconds = -1
+	c := spltest.NewMockClient()
+	ctx := context.TODO()
+	_ = errors.New(splcommon.Rerr)
+	_, err := ApplyStandalone(ctx, c, &current)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
+
+	// Smartstore spec
+	current.Spec.CommonSplunkSpec.LivenessInitialDelaySeconds = 5
+	current.Spec.SmartStore = enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+		},
+
+		IndexList: []enterpriseApi.IndexSpec{
+			{Name: "salesdata1", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+
+	current.Status.SmartStore = enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{Name: "msos_s2s3_vol", Endpoint: "https://s3-eu-west-2.amazonaws.com", Path: "testbucket-rs-london", SecretRef: "splunk-test-secret"},
+		},
+
+		IndexList: []enterpriseApi.IndexSpec{
+			{Name: "salesdata4", RemotePath: "remotepath1",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata2", RemotePath: "remotepath2",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+			{Name: "salesdata3", RemotePath: "remotepath3",
+				IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
+					VolName: "msos_s2s3_vol"},
+			},
+		},
+	}
+	ApplyStandalone(ctx, c, &current)
 }
 
 func TestApplyStandaloneWithSmartstore(t *testing.T) {

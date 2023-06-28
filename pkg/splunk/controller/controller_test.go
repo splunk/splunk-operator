@@ -18,6 +18,9 @@ package controller
 import (
 	"context"
 	"errors"
+	"net/http"
+	"testing"
+
 	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -29,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"testing"
 	//"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -231,6 +232,16 @@ func TestAddToManager(t *testing.T) {
 	err := AddToManager(mgr, ctrl, c)
 	if err != nil {
 		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
+	}
+
+	gvk := metav1.GroupVersionKind{
+		Kind: "",
+	}
+
+	ctrl.state.instance.SetGroupVersionKind(schema.GroupVersionKind(gvk))
+	err = AddToManager(mgr, ctrl, c)
+	if err == nil {
+		t.Errorf("TestAddToManager: expected error")
 	}
 }
 

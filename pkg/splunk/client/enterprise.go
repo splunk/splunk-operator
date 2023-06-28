@@ -902,6 +902,7 @@ func (c *SplunkClient) GetClusterInfo(mockCall bool) (*ClusterInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Cleanup: The http get call itself will catch the zero length response?
 	if len(apiResponse.Entry) < 1 {
 		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
 	}
