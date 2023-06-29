@@ -11,7 +11,7 @@ helm repo update
 
 The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Splunk Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Enterprise custom resources.
 
-Currently only latest version splunk operator is hosted on `https://splunk.github.io/splunk-operator`. for previous version of helm chart checkout release branch code
+Currently only latest version splunk operator is hosted on `https://splunk.github.io/splunk-operator`. For previous version of helm chart, checkout release branch code. For example, for 2.0.0 release, follow the below steps -
 
 ```
 git clone https://github.com/splunk/splunk-operator.git .
