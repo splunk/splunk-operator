@@ -11,6 +11,14 @@ helm repo update
 
 The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Splunk Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Enterprise custom resources.
 
+Currently only latest version splunk operator is hosted on `https://splunk.github.io/splunk-operator`. For previous version of helm chart, checkout release branch code. For example, for 2.0.0 release, please follow the below steps:
+
+```
+git clone https://github.com/splunk/splunk-operator.git .
+git checkout release/2.0.0
+helm install splunk-s1 helm-chart/splunk-enterprise ...
+```
+
 Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
 
 ## Splunk Operator deployments
@@ -86,7 +94,7 @@ release "splunk-operator-test" uninstalled
 
 ## Splunk Enterprise deployments
 
-The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command: 
+The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command:
 ```
 helm dependency build splunk/splunk-enterprise
 ```
@@ -126,7 +134,7 @@ STATUS: deployed
 REVISION: 1
 TEST SUITE: None
 ```
-``` 
+```
 splunk-cm-test-cluster-master-0                       1/1     Running   0               11m
 splunk-idxc-test-indexer-0                            1/1     Running   0               5m49s
 splunk-idxc-test-indexer-1                            1/1     Running   0               5m49s
@@ -161,12 +169,3 @@ Install a Standalone deployment using the following command:
 helm install --set s1.enabled=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
 Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-operator/values.yaml) and [splunk/splunk-enterprise](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-enterprise/values.yaml).
-
-
-
-
-
-
-
-
-
