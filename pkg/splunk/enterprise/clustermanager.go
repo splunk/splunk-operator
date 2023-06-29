@@ -182,7 +182,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	checkUpgradeReady, err := upgradeScenario(ctx, client, cr)
+	checkUpgradeReady, err := upgradeScenarioClusterManager(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -453,7 +453,7 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, 
 }
 
 // upgradeScenario checks if it is suitable to update the clusterManager based on the Status of the licenseManager, returns bool, err accordingly
-func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
+func upgradeScenarioClusterManager(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("upgradeScenario").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())

@@ -1391,7 +1391,7 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 	mockPodExecClient.CheckPodExecCommands(t, "CheckIfsmartstoreConfigMapUpdatedToPod")
 }
 
-func TestUpgradeScenario(t *testing.T) {
+func TestUpgradeScenarioClusterManager(t *testing.T) {
 
 	ctx := context.TODO()
 
@@ -1593,7 +1593,7 @@ func TestUpgradeScenario(t *testing.T) {
 	cm.Spec.Image = "splunk2"
 	lmstpod.Status.ContainerStatuses[0].Image = "splunk2"
 	err = client.Status().Update(ctx, lmstpod)
-	check, err := upgradeScenario(ctx, client, &cm)
+	check, err := upgradeScenarioClusterManager(ctx, client, &cm)
 
 	if err != nil {
 		t.Errorf("Unexpected upgradeScenario error %v", err)

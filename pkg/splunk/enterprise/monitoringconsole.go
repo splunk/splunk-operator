@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -354,6 +355,105 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
+}
+
+// upgradeScenario checks if it is suitable to update the clusterManager based on the Status of the licenseManager, returns bool, err accordingly
+func upgradeScenarioMonitoringConsole(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (bool, error) {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("upgradeScenarioMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	clusterManagerRef := cr.Spec.ClusterManagerRef
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
+
+	// create new object
+	clusterManager := &enterpriseApi.ClusterManager{}
+
+	// get the license manager referred in cluster manager
+	err := c.Get(ctx, namespacedName, clusterManager)
+	if err != nil {
+		return true, nil
+	}
+
+	cmImage, err := getClusterManagerCurrentImage(ctx, c, clusterManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "upgradeScenarioMonitoringConsole", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get clusterManager current image")
+		return false, err
+	}
+	mcImage, err := getMonitoringConsoleCurrentImage(ctx, c, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "upgradeScenarioMonitoringConsole", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get monitoringConsole current image")
+		return false, err
+	}
+
+	// check conditions for upgrade
+	if cr.Spec.Image != mcImage && cmImage == cr.Spec.Image && clusterManager.Status.Phase == enterpriseApi.PhaseReady {
+		return true, nil
+	}
+
+	// Temporary workaround to keep the clusterManager method working only when the LM is ready
+	if clusterManager.Status.Phase == enterpriseApi.PhaseReady {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// getClusterManagerCurrentImage gets the image of the pods of the clusterManager before any upgrade takes place,
+// returns the image, and error if something goes wring
+func getMonitoringConsoleCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (string, error) {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getMonitoringConsoleCurrentImage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil {
+		eventPublisher.Warning(ctx, "getMonitoringConsoleCurrentImage", fmt.Sprintf("Could not get Stateful Set. Reason %v", err))
+		scopedLog.Error(err, "StatefulSet types not found in namespace", "namsespace", cr.GetNamespace())
+		return "", err
+	}
+	labelSelector, err := metav1.LabelSelectorAsSelector(statefulSet.Spec.Selector)
+	if err != nil {
+		eventPublisher.Warning(ctx, "getMonitoringConsoleCurrentImage", fmt.Sprintf("Could not get labels. Reason %v", err))
+		scopedLog.Error(err, "Unable to get labels")
+		return "", err
+	}
+
+	// get a list of all pods in the namespace with matching labels as the statefulset
+	statefulsetPods := &corev1.PodList{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+		rclient.MatchingLabelsSelector{Selector: labelSelector},
+	}
+
+	err = c.List(ctx, statefulsetPods, opts...)
+	if err != nil {
+		eventPublisher.Warning(ctx, "getMonitoringConsoleCurrentImage", fmt.Sprintf("Could not get Pod list. Reason %v", err))
+		scopedLog.Error(err, "Pods types not found in namespace", "namsespace", cr.GetNamespace())
+		return "", err
+	}
+
+	// find the container with the phrase 'splunk' in it
+	for _, v := range statefulsetPods.Items {
+		for _, container := range v.Status.ContainerStatuses {
+			if strings.Contains(container.Name, "splunk") {
+				image := container.Image
+				return image, nil
+			}
+
+		}
+	}
+
+	return "", nil
 }
 
 // changeMonitoringConsoleAnnotations updates the checkUpdateImage field of the Monitoring Console Annotations to trigger the reconcile loop
