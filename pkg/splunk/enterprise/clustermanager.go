@@ -459,14 +459,26 @@ func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *ente
 	scopedLog := reqLogger.WithName("upgradeScenario").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
+	}
+
+	// check if the stateful set is created at this instance
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+
 	licenseManagerRef := cr.Spec.LicenseManagerRef
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
 
 	// create new object
 	licenseManager := &enterpriseApi.LicenseManager{}
 
 	// get the license manager referred in cluster manager
-	err := c.Get(ctx, namespacedName, licenseManager)
+	err = c.Get(ctx, namespacedName, licenseManager)
 	if err != nil {
 		return true, nil
 	}
