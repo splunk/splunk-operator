@@ -506,6 +506,11 @@ func upgradeScenario(ctx context.Context, c splcommon.ControllerClient, cr *ente
 		return true, nil
 	}
 
+	// want ordered upgrade only for version/image upgrade
+	if cr.Spec.Image == cmImage {
+		return true, nil
+	}
+
 	return false, nil
 }
 
