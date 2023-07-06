@@ -137,6 +137,18 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	checkUpgradeReady, err := upgradeScenarioMonitoringConsole(ctx, client, cr)
+	if err != nil {
+		return result, err
+	}
+
+	// TODO: Right now if the MC is not ready for upgrade the reconcile loop goes into
+	// an infite loop and gives Time Out. We still want the other functions to run if
+	// a proper upgrade does not happen
+	if !checkUpgradeReady {
+		return result, err
+	}
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -364,14 +376,26 @@ func upgradeScenarioMonitoringConsole(ctx context.Context, c splcommon.Controlle
 	scopedLog := reqLogger.WithName("upgradeScenarioMonitoringConsole").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
+	}
+
+	// check if the stateful set is created at this instance
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+
 	clusterManagerRef := cr.Spec.ClusterManagerRef
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
 
 	// create new object
 	clusterManager := &enterpriseApi.ClusterManager{}
 
 	// get the license manager referred in cluster manager
-	err := c.Get(ctx, namespacedName, clusterManager)
+	err = c.Get(ctx, namespacedName, clusterManager)
 	if err != nil {
 		return true, nil
 	}
@@ -394,7 +418,7 @@ func upgradeScenarioMonitoringConsole(ctx context.Context, c splcommon.Controlle
 		return true, nil
 	}
 
-	// Temporary workaround to keep the clusterManager method working only when the LM is ready
+	// Temporary workaround to keep the monitoringConsole method working only when the CM is ready
 	if clusterManager.Status.Phase == enterpriseApi.PhaseReady {
 		return true, nil
 	}
@@ -460,16 +484,23 @@ func getMonitoringConsoleCurrentImage(ctx context.Context, c splcommon.Controlle
 // on update, and returns error if something is wrong.
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.MonitoringConsoleRef.Name,
 	}
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
-	err := client.Get(context.TODO(), namespacedName, monitoringConsoleInstance)
+	err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil
 	}
+
 	image, _ := getClusterManagerCurrentImage(ctx, client, cr)
+
+	// fetch and check the annotation fields of the ClusterManager
 	annotations := monitoringConsoleInstance.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
@@ -480,12 +511,14 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		}
 	}
 
+	// create/update the checkUpdateImage annotation field
 	annotations["checkUpdateImage"] = image
 
 	monitoringConsoleInstance.SetAnnotations(annotations)
 	err = client.Update(ctx, monitoringConsoleInstance)
 	if err != nil {
-		fmt.Println("Error in Change Annotation UPDATE", err)
+		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
 		return err
 	}
 

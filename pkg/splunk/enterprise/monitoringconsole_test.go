@@ -71,6 +71,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
@@ -88,6 +89,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
@@ -1422,7 +1424,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
-				ClusterManagerRef: corev1.ObjectReference{
+				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "test-mc",
 				},
 			},
@@ -1468,7 +1470,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 
 	mc := &enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cm",
+			Name:      "test-mc",
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
@@ -1491,7 +1493,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	client.Create(ctx, cmstatefulset)
 	_, err := ApplyClusterManager(ctx, client, cm)
 	if err != nil {
-		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, cm)
@@ -1502,7 +1504,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	client.Create(ctx, mc)
 	_, err = ApplyMonitoringConsole(ctx, client, mc)
 	if err != nil {
-		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
 
 	// create LM pod
@@ -1551,21 +1553,21 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 
 	err = changeMonitoringConsoleAnnotations(ctx, client, cm)
 	if err != nil {
-		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
 	}
 	monitoringConsole := &enterpriseApi.MonitoringConsole{}
 	namespacedName := types.NamespacedName{
-		Name:      cm.Name,
-		Namespace: cm.Namespace,
+		Name:      mc.Name,
+		Namespace: mc.Namespace,
 	}
 	err = client.Get(ctx, namespacedName, monitoringConsole)
 	if err != nil {
-		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
 	}
 
 	annotations := monitoringConsole.GetAnnotations()
 	if annotations["checkUpdateImage"] != cm.Spec.Image {
-		t.Errorf("changeClusterManagerAnnotations should have set the checkUpdateImage annotation field to the current image")
+		t.Errorf("changeMonitoringConsoleAnnotations should have set the checkUpdateImage annotation field to the current image")
 	}
 
 }
