@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/require"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -51,10 +52,10 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	if string(got) != want {
+	/*if string(got) != want {
 		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	}
-	//require.JSONEq(t, string(got), want)
+	} */
+	require.JSONEq(t, string(got), want)
 }
 
 func TestGetSplunkService(t *testing.T) {
