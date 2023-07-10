@@ -496,6 +496,8 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || licenseManager.Spec.Image != annotations["splunk/image-tag"]) {
 			return false, nil
 		}
+	} else {
+		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not find the annotations. Reason %v", err))
 	}
 
 	return true, nil
