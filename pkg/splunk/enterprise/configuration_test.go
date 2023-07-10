@@ -37,6 +37,28 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+func configTester2(t *testing.T, method string, f func() (interface{}, error), want string) {
+	result, err := f()
+	if err != nil {
+		t.Errorf("%s returned error: %v", method, err)
+	}
+
+	// Marshall the result and compare
+	marshalAndCompare2(t, result, method, want)
+}
+
+func marshalAndCompare2(t *testing.T, compare interface{}, method string, want string) {
+	got, err := json.Marshal(compare)
+	if err != nil {
+		t.Errorf("%s failed to marshall", err)
+	}
+
+	if string(got) != want {
+		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
+	}
+	require.JSONEq(t, string(got), want)
+}
+
 func configTester(t *testing.T, method string, f func() (interface{}, error), want string) {
 	result, err := f()
 	if err != nil {
@@ -52,9 +74,12 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	/*if string(got) != want {
+	actual := strings.ReplaceAll(string(got), " ", "")
+	want = strings.ReplaceAll(want, " ", "")
+
+	if actual != want {
 		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	} */
+	}
 	require.JSONEq(t, string(got), want)
 }
 

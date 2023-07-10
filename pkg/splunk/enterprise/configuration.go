@@ -995,7 +995,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	extraEnv = append(extraEnv, spec.ExtraEnv...)
+	extraEnv = append(spec.ExtraEnv, extraEnv...)
 
 	// append any extra variables adding environment variable from extraEnv in the first
 	// so when duplicates are removed the last ones are removed from the list
