@@ -179,6 +179,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
+	// check if the ClusterManager is ready for version upgrade, if required
 	continueReconcile, err := isClusterManagerReadyForUpgrade(ctx, client, cr)
 	if err != nil || !continueReconcile {
 		return result, err
@@ -495,8 +496,6 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || licenseManager.Spec.Image != annotations["splunk/image-tag"]) {
 			return false, nil
 		}
-	} else {
-		return false, nil
 	}
 
 	return true, nil

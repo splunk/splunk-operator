@@ -1447,37 +1447,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 			},
 		},
 	}
-	replicas := int32(1)
-
-	cmstatefulset := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-cluster-manager",
-			Namespace: "test",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-cluster-manager-headless",
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "splunk",
-							Image: "splunk/splunk:latest",
-							Env: []corev1.EnvVar{
-								{
-									Name:  "test",
-									Value: "test",
-								},
-							},
-						},
-					},
-				},
-			},
-			Replicas: &replicas,
-		},
-	}
 
 	err = client.Create(ctx, &cm)
-	err = client.Create(ctx, cmstatefulset)
 	_, err = ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -1530,43 +1501,6 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 			},
 		},
 	}
-	replicas := int32(1)
-	labels := map[string]string{
-		"app":  "test",
-		"tier": "splunk",
-	}
-	lmstatefulset := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-lm-license-manager",
-			Namespace: "test",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: "splunk-test-lm-license-manager-headless",
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "splunk",
-							Image: "splunk/splunk:latest",
-							Env: []corev1.EnvVar{
-								{
-									Name:  "test",
-									Value: "test",
-								},
-							},
-						},
-					},
-				},
-			},
-			Replicas: &replicas,
-		},
-	}
-	lmstatefulset.Spec.Selector = &metav1.LabelSelector{
-		MatchLabels: labels,
-	}
 
 	cm := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1590,7 +1524,6 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 
 	// Create the instances
 	client.Create(ctx, lm)
-	client.Create(ctx, lmstatefulset)
 	_, err := ApplyLicenseManager(ctx, client, lm)
 	if err != nil {
 		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
