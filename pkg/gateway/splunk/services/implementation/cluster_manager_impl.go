@@ -6,10 +6,10 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-resty/resty/v2"
-	splunkmodel "github.com/splunk/splunk-operator/pkg/splunk/model"
-	clustermodel "github.com/splunk/splunk-operator/pkg/splunk/model/services/cluster"
-	managermodel "github.com/splunk/splunk-operator/pkg/splunk/model/services/cluster/manager"
-	gateway "github.com/splunk/splunk-operator/pkg/splunk/services"
+	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
+	clustermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster"
+	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
+	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 )
 
 // splunkGateway implements the gateway.Gateway interface

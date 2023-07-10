@@ -3,8 +3,8 @@ package indexer
 import (
 	"context"
 
-	splunkmodel "github.com/splunk/splunk-operator/pkg/splunk/model"
-	managermodel "github.com/splunk/splunk-operator/pkg/splunk/model/services/cluster/manager"
+	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
+	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 )
 
 // EventPublisher is a function type for publishing events associated
