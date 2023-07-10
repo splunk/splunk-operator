@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -27,10 +26,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -229,55 +226,4 @@ func getLicenseManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	}
 
 	return objectList, nil
-}
-func getLicenseManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (string, error) {
-
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getLicenseManagerCurrentImage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
-
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      GetSplunkStatefulsetName(SplunkLicenseManager, cr.GetName()),
-	}
-	statefulSet := &appsv1.StatefulSet{}
-	err := c.Get(ctx, namespacedName, statefulSet)
-	if err != nil {
-		eventPublisher.Warning(ctx, "getLicenseManagerCurrentImage", fmt.Sprintf("Could not get Stateful Set. Reason %v", err))
-		scopedLog.Error(err, "StatefulSet types not found in namespace", "namsespace", cr.GetNamespace())
-		return "", err
-	}
-	labelSelector, err := metav1.LabelSelectorAsSelector(statefulSet.Spec.Selector)
-	if err != nil {
-		eventPublisher.Warning(ctx, "getLicenseManagerCurrentImage", fmt.Sprintf("Could not get labels. Reason %v", err))
-		scopedLog.Error(err, "Unable to get labels")
-		return "", err
-	}
-
-	// get a list of all pods in the namespace with matching labels as the statefulset
-	statefulsetPods := &corev1.PodList{}
-	opts := []rclient.ListOption{
-		rclient.InNamespace(cr.GetNamespace()),
-		rclient.MatchingLabelsSelector{Selector: labelSelector},
-	}
-
-	err = c.List(ctx, statefulsetPods, opts...)
-	if err != nil {
-		eventPublisher.Warning(ctx, "getLicenseManagerCurrentImage", fmt.Sprintf("Could not get Pod list. Reason %v", err))
-		scopedLog.Error(err, "Pods types not found in namespace", "namsespace", cr.GetNamespace())
-		return "", err
-	}
-
-	// find the container with the phrase 'splunk' in it
-	for _, v := range statefulsetPods.Items {
-		for _, container := range v.Status.ContainerStatuses {
-			if strings.Contains(container.Name, "splunk") {
-				image := container.Image
-				return image, nil
-			}
-
-		}
-	}
-
-	return "", nil
 }

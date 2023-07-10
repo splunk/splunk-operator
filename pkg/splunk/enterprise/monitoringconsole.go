@@ -360,32 +360,26 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 // on update, and returns error if something is wrong.
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.MonitoringConsoleRef.Name,
 	}
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
-	err := client.Get(context.TODO(), namespacedName, monitoringConsoleInstance)
+	err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil
 	}
-	image, _ := getClusterManagerCurrentImage(ctx, client, cr)
-	annotations := monitoringConsoleInstance.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	if _, ok := annotations["checkUpdateImage"]; ok {
-		if annotations["checkUpdateImage"] == image {
-			return nil
-		}
-	}
+	image, _ := getCurrentImage(ctx, client, cr, SplunkClusterManager)
 
-	annotations["checkUpdateImage"] = image
+	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 
-	monitoringConsoleInstance.SetAnnotations(annotations)
-	err = client.Update(ctx, monitoringConsoleInstance)
 	if err != nil {
-		fmt.Println("Error in Change Annotation UPDATE", err)
+		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
 		return err
 	}
 
