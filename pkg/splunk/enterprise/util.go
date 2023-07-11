@@ -2273,10 +2273,8 @@ func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) 
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }
 
-// getClusterManagerCurrentImage gets the image of the pods of the clusterManager before any upgrade takes place,
-// returns the image, and error if something goes wrong
+// getCurrentImage gets the image of the statefulset, returns the image, and error if something goes wrong
 func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (string, error) {
-
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
@@ -2287,16 +2285,17 @@ func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splco
 		return "", err
 	}
 
+	if statefulSet.Spec.Template.Spec.Containers == nil {
+		return "", nil
+	}
 	image := statefulSet.Spec.Template.Spec.Containers[0].Image
 
 	return image, nil
 
 }
 
-// changeAnnotations updates the checkUpdateImage field of the CLuster Manager Annotations to trigger the reconcile loop
-// on update, and returns error if something is wrong
+// changeAnnotations updates the splunk/image-tag field to trigger the reconcile loop, and returns error if something is wrong
 func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image string, cr splcommon.MetaObject) error {
-
 	annotations := cr.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}

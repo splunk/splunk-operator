@@ -67,7 +67,6 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 	}
@@ -81,7 +80,6 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-manager-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
@@ -499,7 +497,6 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
@@ -519,7 +516,6 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-cluster-manager-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
@@ -1389,7 +1385,6 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 }
 
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
-
 	ctx := context.TODO()
 
 	builder := fake.NewClientBuilder()
@@ -1424,7 +1419,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	lm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, &lm)
 	if err != nil {
-		t.Errorf("Unexpected update pod  %v", err)
+		t.Errorf("Unexpected status update  %v", err)
 		debug.PrintStack()
 	}
 
@@ -1475,9 +1470,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	}
 
 	if !check {
-		t.Errorf("upgradeScenario: CM should be ready for upgrade")
+		t.Errorf("isClusterManagerReadyForUpgrade: CM should be ready for upgrade")
 	}
-
 }
 
 func TestChangeClusterManagerAnnotations(t *testing.T) {
@@ -1558,7 +1552,6 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	if annotations["splunk/image-tag"] != lm.Spec.Image {
 		t.Errorf("changeClusterManagerAnnotations should have set the checkUpdateImage annotation field to the current image")
 	}
-
 }
 
 func TestClusterManagerWitReadyState(t *testing.T) {

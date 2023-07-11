@@ -356,10 +356,9 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 	}
 }
 
-// changeMonitoringConsoleAnnotations updates the checkUpdateImage field of the Monitoring Console Annotations to trigger the reconcile loop
+// changeMonitoringConsoleAnnotations updates the splunk/image-tag field of the MonitoringConsole annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong.
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
@@ -374,7 +373,6 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		return nil
 	}
 	image, _ := getCurrentImage(ctx, client, cr, SplunkClusterManager)
-
 	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 
 	if err != nil {

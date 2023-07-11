@@ -443,12 +443,18 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, 
 	return extraEnv, err
 }
 
-// isClusterManagerReadyForUpgrade checks if it is suitable to update the clusterManager based on the Status of the licenseManager, returns bool, err accordingly
+// isClusterManagerReadyForUpgrade checks if ClusterManager can be upgraded if a version upgrade is in-progress
+// No-operation otherwise; returns bool, err accordingly
 func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// check if a LicenseManager is attached to the instance
+	licenseManagerRef := cr.Spec.LicenseManagerRef
+	if licenseManagerRef.Name == "" {
+		return true, nil
+	}
 
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
@@ -462,14 +468,7 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return true, nil
 	}
 
-	licenseManagerRef := cr.Spec.LicenseManagerRef
-	if licenseManagerRef.Name == "" {
-		return true, nil
-	}
-
 	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
-
-	// create new object
 	licenseManager := &enterpriseApi.LicenseManager{}
 
 	// get the license manager referred in cluster manager
@@ -480,6 +479,13 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return true, err
 	}
 
+	lmImage, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not get the License Manager Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get licenseManager current image")
+		return false, err
+	}
+
 	cmImage, err := getCurrentImage(ctx, c, cr, SplunkClusterManager)
 	if err != nil {
 		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
@@ -487,26 +493,17 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return false, err
 	}
 
-	// check conditions for upgrade
-	annotations := cr.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	if _, ok := annotations["splunk/image-tag"]; ok {
-		if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || licenseManager.Spec.Image != annotations["splunk/image-tag"]) {
-			return false, nil
-		}
-	} else {
-		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not find the annotations. Reason %v", err))
+	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
+	if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != cr.Spec.Image) {
+		return false, nil
 	}
 
 	return true, nil
 }
 
-// changeClusterManagerAnnotations updates the checkUpdateImage field of the clusterManager annotations to trigger the reconcile loop
+// changeClusterManagerAnnotations updates the splunk/image-tag field of the ClusterManager annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong
 func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
@@ -520,9 +517,7 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	if err != nil && k8serrors.IsNotFound(err) {
 		return nil
 	}
-
 	image, _ := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
-
 	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
 
 	if err != nil {
@@ -532,5 +527,4 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	}
 
 	return nil
-
 }
