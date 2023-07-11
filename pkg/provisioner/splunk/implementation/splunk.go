@@ -8,8 +8,8 @@ import (
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // splunkProvisioner implements the provisioner.Provisioner interface
@@ -78,7 +78,7 @@ var callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner
 // }
 
 // SetClusterManagerStatus Access cluster node configuration details.
-func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) error {
+func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splcommon.MetaObject) error {
 
 	// peerlistptr, err := callGetClusterManagerPeersStatus(ctx, p)
 	// if err != nil {
@@ -138,42 +138,16 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 		hllist := *healthList
 		// prepare fields for conditions
 		for _, health := range hllist {
-			condition := metav1.Condition{
-				Type:    "Health",
-				Message: "all the peers of indexer cluster status",
-				Reason:  "PeersStatus",
-			}
 			if health.AllPeersAreUp == "1" {
-				condition.Status = metav1.ConditionTrue
+				continue
 			} else {
-				condition.Status = metav1.ConditionFalse
+				cr.Status.Phase = enterprise.PhaseWarning
 			}
+
 			// set condition to existing conditions list
-			meta.SetStatusCondition(conditions, condition)
+
 		}
 	}
-
-	// sclistptr, err := callGetClusterManagerSearchHeadStatus(ctx, p)
-	// if err != nil {
-	// 	return err
-	// } else {
-	// 	sclist := *sclistptr
-	// 	for _, sc := range sclist {
-	// 		condition := metav1.Condition{
-	// 			Type:    "SearchHead",
-	// 			Message: sc.Label,
-	// 			Reason:  sc.Site,
-	// 		}
-	// 		if sc.Label == "Connected" {
-	// 			condition.Status = metav1.ConditionTrue
-	// 		} else {
-	// 			condition.Status = metav1.ConditionFalse
-
-	// 		}
-	// 		// set condition to existing conditions list
-	// 		meta.SetStatusCondition(conditions, condition)
-	// 	}
-	// }
 
 	return nil
 }

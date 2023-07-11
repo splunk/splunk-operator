@@ -5,7 +5,7 @@ import (
 
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 // EventPublisher is a function type for publishing events associated
@@ -22,5 +22,5 @@ type Factory interface {
 type Provisioner interface {
 
 	// SetClusterManagerStatus set cluster manager status
-	SetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) error
+	SetClusterManagerStatus(ctx context.Context, cr splcommon.MetaObject) error
 }

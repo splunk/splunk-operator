@@ -22,10 +22,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
+	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -241,6 +243,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
+		err = SetClusterManagerStatus(ctx, client, cr, provisionerFactory)
+		if err != nil {
+			scopedLog.Error(err, "error while setting cluster health")
+		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -249,6 +255,51 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	return result, nil
+}
+
+// SetClusterManagerStatus
+func SetClusterManagerStatus(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, provisionerFactory provisioner.Factory) error {
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
+	if err != nil {
+		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
+		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)
+	}
+
+	//Get the admin password from the secret object
+	adminPwd, foundSecret := defaultSecret.Data["password"]
+	if !foundSecret {
+		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not find admin password "))
+		return fmt.Errorf("Could not find admin password ")
+	}
+
+	service := getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, false)
+
+	sad := &splunkmodel.SplunkCredentials{
+		Address:                        service.Name,
+		Port:                           8089,
+		ServicesNamespace:              "-",
+		User:                           "admin",
+		App:                            "-",
+		CredentialsName:                string(adminPwd[:]),
+		TrustedCAFile:                  "",
+		ClientCertificateFile:          "",
+		ClientPrivateKeyFile:           "",
+		DisableCertificateVerification: true,
+		Namespace:                      cr.Namespace,
+	}
+	prov, err := provisionerFactory.NewProvisioner(ctx, sad, eventPublisher.publishEvent)
+	if err != nil {
+		return errors.Wrap(err, "failed to create gateway")
+	}
+	err = prov.SetClusterManagerStatus(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to update cluster manager health status")
+	}
+
+	return nil
 }
 
 // clusterManagerPodManager is used to manage the cluster manager pod

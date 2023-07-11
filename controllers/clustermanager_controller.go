@@ -114,8 +114,8 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // ApplyClusterManager adding to handle unit test case
-var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
-	return enterprise.ApplyClusterManager(ctx, client, instance, r.ProvisionerFactory)
+var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, provisionerFactory provisioner.Factory) (reconcile.Result, error) {
+	return enterprise.ApplyClusterManager(ctx, client, instance, provisionerFactory)
 }
 
 // SetupWithManager sets up the controller with the Manager.
