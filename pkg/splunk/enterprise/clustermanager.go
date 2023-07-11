@@ -527,8 +527,8 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 		}
 		objectList := enterpriseApi.ClusterManagerList{}
 		err := c.List(ctx, &objectList, opts...)
-		if err != nil {
-			return err
+		if err != nil && k8serrors.IsNotFound(err) {
+			return nil
 		}
 
 		// check with instance has the required LicenseManagerRef

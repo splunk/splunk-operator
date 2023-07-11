@@ -382,8 +382,8 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		}
 		objectList := enterpriseApi.MonitoringConsoleList{}
 		err := client.List(ctx, &objectList, opts...)
-		if err != nil {
-			return err
+		if err != nil && k8serrors.IsNotFound(err) {
+			return nil
 		}
 
 		// check with instance has the required ClusterManagerRef
