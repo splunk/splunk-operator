@@ -517,8 +517,8 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 			Name:      cr.Spec.ClusterManagerRef.Name,
 		}
 		err := c.Get(ctx, namespacedName, clusterManagerInstance)
-		if err != nil {
-			return err
+		if err != nil && k8serrors.IsNotFound(err) {
+			return nil
 		}
 	} else {
 		// List out all the ClusterManager instances in the namespace

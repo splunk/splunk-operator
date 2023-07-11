@@ -372,8 +372,8 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 			Name:      cr.Spec.MonitoringConsoleRef.Name,
 		}
 		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
-		if err != nil {
-			return err
+		if err != nil && k8serrors.IsNotFound(err) {
+			return nil
 		}
 	} else {
 		// List out all the MonitoringConsole instances in the namespace
