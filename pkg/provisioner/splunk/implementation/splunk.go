@@ -3,13 +3,15 @@ package impl
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // splunkProvisioner implements the provisioner.Provisioner interface
@@ -27,15 +29,15 @@ type splunkProvisioner struct {
 	gateway gateway.Gateway
 }
 
-// var callGetClusterManagerInfo = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerInfoContent, error) {
-// 	cminfo, err := p.gateway.GetClusterManagerInfo(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	} else if cminfo == nil {
-// 		return nil, fmt.Errorf("cluster manager info data is empty")
-// 	}
-// 	return cminfo, err
-// }
+var callGetClusterManagerInfo = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerInfoContent, error) {
+	cminfo, err := p.gateway.GetClusterManagerInfo(ctx)
+	if err != nil {
+		return nil, err
+	} else if cminfo == nil {
+		return nil, fmt.Errorf("cluster manager info data is empty")
+	}
+	return cminfo, err
+}
 
 var callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerHealthContent, error) {
 	healthList, err := p.gateway.GetClusterManagerHealth(ctx)
@@ -57,77 +59,77 @@ var callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner
 // 	return sclist, err
 // }
 
-// var callGetClusterManagerPeersStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
-// 	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	} else if peerlist == nil {
-// 		return nil, fmt.Errorf("peer list is empty")
-// 	}
-// 	return peerlist, err
-// }
+var callGetClusterManagerPeersStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
+	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
+	if err != nil {
+		return nil, err
+	} else if peerlist == nil {
+		return nil, fmt.Errorf("peer list is empty")
+	}
+	return peerlist, err
+}
 
-// var callGetClusterManagerSitesStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
-// 	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	} else if peerlist == nil {
-// 		return nil, fmt.Errorf("peer list is empty")
-// 	}
-// 	return peerlist, err
-// }
+var callGetClusterManagerSitesStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
+	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
+	if err != nil {
+		return nil, err
+	} else if peerlist == nil {
+		return nil, fmt.Errorf("peer list is empty")
+	}
+	return peerlist, err
+}
 
 // SetClusterManagerStatus Access cluster node configuration details.
 func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splcommon.MetaObject) error {
 
-	// peerlistptr, err := callGetClusterManagerPeersStatus(ctx, p)
-	// if err != nil {
-	// 	return err
-	// } else {
-	// 	peerlist := *peerlistptr
-	// 	for _, peer := range peerlist {
-	// 		condition := metav1.Condition{
-	// 			Type:    "Peers",
-	// 			Message: fmt.Sprintf("%s with %s is %s ", peer.Site, peer.Label, peer.Status),
-	// 			Reason:  peer.Site,
-	// 		}
-	// 		if peer.Status == "Up" {
-	// 			condition.Status = metav1.ConditionTrue
-	// 		} else {
-	// 			condition.Status = metav1.ConditionFalse
+	peerlistptr, err := callGetClusterManagerPeersStatus(ctx, p)
+	if err != nil {
+		return err
+	} else {
+		peerlist := *peerlistptr
+		for _, peer := range peerlist {
+			condition := metav1.Condition{
+				Type:    "Peers",
+				Message: fmt.Sprintf("%s with %s is %s ", peer.Site, peer.Label, peer.Status),
+				Reason:  peer.Site,
+			}
+			if peer.Status == "Up" {
+				condition.Status = metav1.ConditionTrue
+			} else {
+				condition.Status = metav1.ConditionFalse
 
-	// 		}
-	// 		// set condition to existing conditions list
-	// 		meta.SetStatusCondition(conditions, condition)
-	// 	}
-	// }
+			}
+			// set condition to existing conditions list
+			// meta.SetStatusCondition(conditions, condition)
+		}
+	}
 
-	// cminfolistptr, err := callGetClusterManagerInfo(ctx, p)
-	// if err != nil {
-	// 	return err
-	// }
-	// cminfolist := *cminfolistptr
-	// if cminfolist[0].Multisite {
-	// 	var site string
-	// 	multiSiteStatus := metav1.ConditionTrue
-	// 	message := "multisite is up"
-	// 	peerlist := *peerlistptr
-	// 	for _, peer := range peerlist {
-	// 		if !strings.Contains(peer.Status, "Up") {
-	// 			site = peer.Site
-	// 			multiSiteStatus = metav1.ConditionFalse
-	// 			message = fmt.Sprintf("site %s with label %s status is %s", peer.Site, peer.Label, peer.Status)
-	// 			break
-	// 		} // set condition to existing conditions list
-	// 	}
-	// 	condition := metav1.Condition{
-	// 		Type:    "Multisite",
-	// 		Message: message,
-	// 		Reason:  site,
-	// 		Status:  multiSiteStatus,
-	// 	}
-	// 	meta.SetStatusCondition(conditions, condition)
-	// }
+	cminfolistptr, err := callGetClusterManagerInfo(ctx, p)
+	if err != nil {
+		return err
+	}
+	cminfolist := *cminfolistptr
+	if cminfolist[0].Multisite {
+		var site string
+		multiSiteStatus := metav1.ConditionTrue
+		message := "multisite is up"
+		peerlist := *peerlistptr
+		for _, peer := range peerlist {
+			if !strings.Contains(peer.Status, "Up") {
+				site = peer.Site
+				multiSiteStatus = metav1.ConditionFalse
+				message = fmt.Sprintf("site %s with label %s status is %s", peer.Site, peer.Label, peer.Status)
+				break
+			} // set condition to existing conditions list
+		}
+		condition := metav1.Condition{
+			Type:    "Multisite",
+			Message: message,
+			Reason:  site,
+			Status:  multiSiteStatus,
+		}
+		// meta.SetStatusCondition(conditions, condition)
+	}
 
 	// business logic starts here
 	//healthList, err := callGetClusterManagerHealth(ctx, p)
@@ -141,7 +143,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splc
 			if health.AllPeersAreUp == "1" {
 				continue
 			} else {
-				cr.Status.Phase = enterprise.PhaseWarning
+				cr.Status.Phase = enterpriseApi.PhaseWarning
 			}
 
 			// set condition to existing conditions list

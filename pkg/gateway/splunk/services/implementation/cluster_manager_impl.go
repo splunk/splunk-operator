@@ -27,6 +27,74 @@ type splunkGateway struct {
 	credentials *splunkmodel.SplunkCredentials
 }
 
+// Access information about cluster manager node.
+// get List cluster manager node details.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/info
+func (p *splunkGateway) GetClusterManagerInfo(context context.Context) (*[]managermodel.ClusterManagerInfoContent, error) {
+	url := clustermodel.GetClusterManagerInfoUrl
+
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &managermodel.ClusterManagerInfoHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		Get(url)
+	if err != nil {
+		p.log.Error(err, "get cluster manager info failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []managermodel.ClusterManagerInfoContent{}
+	for _, entry := range envelop.Entry {
+		contentList = append(contentList, entry.Content)
+	}
+	return &contentList, err
+}
+
+// Access cluster manager peers.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/peers
+func (p *splunkGateway) GetClusterManagerPeers(context context.Context) (*[]managermodel.ClusterManagerPeerContent, error) {
+	url := clustermodel.GetClusterManagerPeersUrl
+
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &managermodel.ClusterManagerPeerHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(url)
+	if err != nil {
+		p.log.Error(err, "get cluster manager peers failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []managermodel.ClusterManagerPeerContent{}
+	for _, entry := range envelop.Entry {
+		contentList = append(contentList, entry.Content)
+	}
+	return &contentList, err
+}
+
 // Performs health checks to determine the cluster health and search impact, prior to a rolling upgrade of the indexer cluster.
 // Authentication and Authorization:
 //

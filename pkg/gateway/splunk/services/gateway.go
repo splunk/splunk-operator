@@ -25,4 +25,13 @@ type Gateway interface {
 	// 		Requires the admin role or list_indexer_cluster capability.
 	// endpoint: https://<host>:<mPort>/services/cluster/manager/health
 	GetClusterManagerHealth(ctx context.Context) (*[]managermodel.ClusterManagerHealthContent, error)
+
+	// Access information about cluster manager node.
+	// get List cluster manager node details.
+	// endpoint: https://<host>:<mPort>/services/cluster/manager/info
+	GetClusterManagerInfo(ctx context.Context) (*[]managermodel.ClusterManagerInfoContent, error)
+
+	// Access cluster manager peers.
+	// endpoint: https://<host>:<mPort>/services/cluster/manager/peers
+	GetClusterManagerPeers(ctx context.Context) (*[]managermodel.ClusterManagerPeerContent, error)
 }
