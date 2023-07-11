@@ -2285,12 +2285,12 @@ func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splco
 		return "", err
 	}
 
-	if statefulSet.Spec.Template.Spec.Containers == nil {
-		return "", nil
+	if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
+		return statefulSet.Spec.Template.Spec.Containers[0].Image, nil
 	}
-	image := statefulSet.Spec.Template.Spec.Containers[0].Image
+	err = fmt.Errorf("Unable to get image from statefulset of type %s.", instanceType.ToString())
 
-	return image, nil
+	return "", err
 
 }
 

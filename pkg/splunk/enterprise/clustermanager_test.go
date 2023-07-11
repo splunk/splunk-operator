@@ -1489,9 +1489,6 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "test-cm",
-				},
 			},
 		},
 	}
@@ -1507,6 +1504,9 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "test-lm",
+				},
 			},
 		},
 	}

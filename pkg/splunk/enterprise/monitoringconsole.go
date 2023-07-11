@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -363,17 +364,43 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      cr.Spec.MonitoringConsoleRef.Name,
-	}
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
-	err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return nil
+	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {
+		// if the ClusterManager holds the MonitoringConsoleRef
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      cr.Spec.MonitoringConsoleRef.Name,
+		}
+		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
+		if err != nil {
+			return err
+		}
+	} else {
+		// List out all the MonitoringConsole instances in the namespace
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		objectList := enterpriseApi.MonitoringConsoleList{}
+		err := client.List(ctx, &objectList, opts...)
+		if err != nil {
+			return err
+		}
+
+		// check with instance has the required ClusterManagerRef
+		for _, mc := range objectList.Items {
+			if mc.Spec.ClusterManagerRef.Name == cr.GetName() {
+				monitoringConsoleInstance = &mc
+				break
+			}
+		}
+
+		if len(monitoringConsoleInstance.GetName()) == 0 {
+			return nil
+		}
 	}
+
 	image, _ := getCurrentImage(ctx, client, cr, SplunkClusterManager)
-	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
+	err := changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))

@@ -23,6 +23,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -508,17 +509,43 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      cr.Spec.ClusterManagerRef.Name,
-	}
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-	err := c.Get(ctx, namespacedName, clusterManagerInstance)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return nil
+	if len(cr.Spec.ClusterManagerRef.Name) > 0 {
+		// if the LicenseManager holds the ClusterManagerRef
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      cr.Spec.ClusterManagerRef.Name,
+		}
+		err := c.Get(ctx, namespacedName, clusterManagerInstance)
+		if err != nil {
+			return err
+		}
+	} else {
+		// List out all the ClusterManager instances in the namespace
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		objectList := enterpriseApi.ClusterManagerList{}
+		err := c.List(ctx, &objectList, opts...)
+		if err != nil {
+			return err
+		}
+
+		// check with instance has the required LicenseManagerRef
+		for _, cm := range objectList.Items {
+			if cm.Spec.LicenseManagerRef.Name == cr.GetName() {
+				clusterManagerInstance = &cm
+				break
+			}
+		}
+
+		if len(clusterManagerInstance.GetName()) == 0 {
+			return nil
+		}
 	}
+
 	image, _ := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
-	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
+	err := changeAnnotations(ctx, c, image, clusterManagerInstance)
 
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
