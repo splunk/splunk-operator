@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-// ErrorType indicates the class of problem that has caused the Host resource
+// ErrorType indicates the class of problem that has caused the splunk resource
 // to enter an error state.
 type ErrorType string
 
@@ -293,7 +293,7 @@ const (
 
 // ProvisionStatus holds the state information for a single target.
 type ProvisionStatus struct {
-	// An indiciator for what the provisioner is doing with the host.
+	// An indiciator for what the provisioner is doing with the splunk instance
 	State ProvisioningState `json:"state"`
 
 	// Image holds the details of the last image successfully
@@ -320,7 +320,7 @@ func (om OperationMetric) Duration() time.Duration {
 }
 
 // OperationHistory holds information about operations performed on a
-// host.
+// splunk instance.
 type OperationHistory struct {
 	Prepare      OperationMetric `json:"prepare,omitempty"`
 	Backup       OperationMetric `json:"backup,omitempty"`
@@ -331,11 +331,11 @@ type OperationHistory struct {
 	Error        OperationMetric `json:"error,omitempty"`
 }
 
-// OperationalStatus represents the state of the host
+// OperationalStatus represents the state of the splunk
 type OperationalStatus string
 
 const (
-	// OperationalStatusOK is the status value for when the host is
+	// OperationalStatusOK is the status value for when the splunk is
 	// configured correctly and is manageable.
 	OperationalStatusOK OperationalStatus = "OK"
 

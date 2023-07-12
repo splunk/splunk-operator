@@ -72,7 +72,7 @@ type ClusterManagerStatus struct {
 	Provisioning ProvisionStatus `json:"provisioning"`
 
 	// OperationHistory holds information about operations performed
-	// on this host.
+	// on this splunk instance.
 	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
 
 	// OperationalStatus holds the status of the splunk operations in upgrade
