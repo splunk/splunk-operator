@@ -8396,7 +8396,7 @@ spec:
                 type: string
               operationHistory:
                 description: OperationHistory holds information about operations performed
-                  on this host.
+                  on this splunk instance.
                 properties:
                   backup:
                     description: OperationMetric contains metadata about an operation
@@ -8521,7 +8521,7 @@ spec:
                     type: string
                   state:
                     description: An indiciator for what the provisioner is doing with
-                      the host.
+                      the splunk instance
                     type: string
                 type: object
               readyReplicas:

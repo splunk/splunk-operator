@@ -124,11 +124,11 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// error state of the cm).
 			if actResult.Dirty() {
 
-				// Save Host
+				// Save CR
 				info.log.Info("saving cluster manager status",
 					"operational status", cm.OperationalStatus(),
 					"provisioning state", cm.Status.Provisioning.State)
-				err = r.saveHostStatus(cm)
+				err = r.saveCRStatus(cm)
 				if err != nil {
 					return ctrl.Result{}, errors.Wrap(err,
 						fmt.Sprintf("failed to save cm status after %q", initialState))
