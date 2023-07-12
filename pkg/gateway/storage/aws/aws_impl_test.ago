@@ -1,0 +1,219 @@
+// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package impl
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/klauspost/compress/s2"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v3"
+	storagemodel "github.com/splunk/splunk-operator/pkg/gateway/storage/model"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
+)
+
+var slog = logz.New().WithName("gateway").WithName("test")
+
+func setCreds(t *testing.T) *awsGateway {
+	//ctx := context.TODO()
+	sad := &storagemodel.Credentials{
+		BucketName:      "sample_bucket",
+		AccessKeyID:     "abcd",
+		SecretAccessKey: "xyz",
+		Prefix:          "admin/",
+		StartAfter:      "",
+		Region:          "us-west-2",
+		Endpoint:        "https://s3-us-west-2.amazonws.com",
+		InitFunc:        InitAWSClientWrapper,
+	}
+	publisher := func(ctx context.Context, eventType, reason, message string) {}
+	// TODO fixme how to test the gateway call directly
+	//sm := NewGatewayFactory(ctx, &sad, publisher)
+	sm := &awsGateway{
+		credentials: sad,
+		publisher:   publisher,
+		log:         slog,
+		debugLog:    slog,
+	}
+	return sm
+}
+
+// NewMockGateway returns an AWS S3 mock client for testing
+// Ideally this function should live in test package but due to
+// dependency of some variables in client package and to avoid
+// cyclic dependency this has to live here.
+func NewMockGateway(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn storagemodel.GetInitFunc) (S3Client, error) {
+	var s3SplunkClient SplunkAWSS3Client
+	var err error
+
+	cl := fn(ctx, region, accessKeyID, secretAccessKey)
+	if cl == nil {
+		err = fmt.Errorf("failed to create an AWS S3 client")
+		return nil, err
+	}
+	credentials := &storagemodel.Credentials{
+		BucketName:      endpoint,
+		AccessKeyID:     accessKeyID,
+		SecretAccessKey: "",
+		Prefix:          prefix,
+		StartAfter:      "",
+		Region:          region,
+		Endpoint:        endpoint,
+		InitFunc:        cl,
+	}
+
+	s3SplunkClient = cl.(s3SplunkClient)
+	downloader := spltest.MockAWSDownloadClient{}
+
+	publisher := func(ctx context.Context, eventType, reason, message string) {}
+	// TODO fixme how to test the gateway call directly
+	//sm := NewGatewayFactory(ctx, &sad, publisher)
+	sm := &awsGateway{
+		credentials: credentials,
+		publisher:   publisher,
+		log:         slog,
+		debugLog:    slog,
+		client:      s3SplunkClient,
+		downloader:  downloader,
+	}
+	return sm, nil
+}
+
+func TestGetClusterConfig(t *testing.T) {
+	ctx := context.TODO()
+	sm := setCreds(t)
+
+	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
+		Defaults: enterpriseApi.AppSourceDefaultSpec{
+			VolName: "msos_s2s3_vol2",
+			Scope:   enterpriseApi.ScopeLocal,
+		},
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+			{
+				Name:      "msos_s2s3_vol2",
+				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+				Path:      "testbucket-rs-london2",
+				SecretRef: "s3-secret",
+				Type:      "s3",
+				Provider:  "aws",
+			},
+		},
+		AppSources: []enterpriseApi.AppSourceSpec{
+			{Name: "adminApps",
+				Location: "adminAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "securityApps",
+				Location: "securityAppsRepo",
+				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+					VolName: "msos_s2s3_vol",
+					Scope:   enterpriseApi.ScopeLocal},
+			},
+			{Name: "authenticationApps",
+				Location: "authenticationAppsRepo",
+			},
+		},
+	}
+	mockAwsHandler := spltest.MockAWSS3Handler{}
+
+	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
+	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
+	Sizes := []int64{10, 20, 30}
+	StorageClass := "STANDARD"
+	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
+	mockAwsObjects := []spltest.MockAWSS3Client{
+		{
+			Objects: []*spltest.MockS3Object{
+				{
+					Etag:         &Etags[0],
+					Key:          &Keys[0],
+					LastModified: &randomTime,
+					Size:         &Sizes[0],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+		{
+			Objects: []*spltest.MockS3Object{
+				{
+					Etag:         &Etags[1],
+					Key:          &Keys[1],
+					LastModified: &randomTime,
+					Size:         &Sizes[1],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+		{
+			Objects: []*spltest.MockS3Object{
+				{
+					Etag:         &Etags[2],
+					Key:          &Keys[2],
+					LastModified: &randomTime,
+					Size:         &Sizes[2],
+					StorageClass: &StorageClass,
+				},
+			},
+		},
+	}
+
+	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
+	var vol enterpriseApi.VolumeSpec
+	var err error
+	var allSuccess bool = true
+	for index, appSource := range appFrameworkRef.AppSources {
+
+		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
+		if err != nil {
+			allSuccess = false
+			continue
+		}
+		NewMockGateway(ctx)
+
+		// Update the GetS3Client with our mock call which initializes mock AWS client
+		getClientWrapper := S3Clients[vol.Provider]
+		getClientWrapper.SetS3ClientFuncPtr(ctx, vol.Provider, NewMockGateway)
+
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			cl := spltest.MockAWSS3Client{}
+			cl.Objects = mockAwsObjects[index].Objects
+			return cl
+		}
+
+		getClientWrapper.SetS3ClientInitFuncPtr(ctx, vol.Name, initFn)
+
+		getS3ClientFn := getClientWrapper.GetS3ClientInitFuncPtr(ctx)
+		sm.client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+
+		_, err := sm.GetAppsList(ctx)
+		if err != nil {
+			t.Errorf("failed to get app list")
+		}
+	}
+}

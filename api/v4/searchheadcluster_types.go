@@ -119,6 +119,15 @@ type SearchHeadClusterStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Information tracked by the provisioner.
+	Provisioning ProvisionStatus `json:"provisioning"`
+	// OperationHistory holds information about operations performed
+	// on this host.
+	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
+	// OperationalStatus holds the status of the splunk operations in upgrade
+	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
+	OperationalStatus OperationalStatus `json:"operationalStatus"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster
@@ -152,6 +161,46 @@ type SearchHeadClusterList struct {
 
 func init() {
 	SchemeBuilder.Register(&SearchHeadCluster{}, &SearchHeadClusterList{})
+}
+
+// SetOperationalStatus updates the OperationalStatus field and returns
+// true when a change is made or false when no change is made.
+func (shcstr *SearchHeadCluster) SetOperationalStatus(status OperationalStatus) bool {
+	if shcstr.Status.OperationalStatus != status {
+		shcstr.Status.OperationalStatus = status
+		return true
+	}
+	return false
+}
+
+// OperationMetricForState returns a pointer to the metric for the given
+// provisioning state.
+func (shcstr *SearchHeadCluster) OperationMetricForState(operation ProvisioningState) (metric *OperationMetric) {
+	history := &shcstr.Status.OperationHistory
+	switch operation {
+
+	case StateSearchHeadClusterPrepare:
+		metric = &history.Prepare
+
+	case StateSearchHeadClusterRestore:
+		metric = &history.Restore
+
+	case StateSearchHeadClusterBackup:
+		metric = &history.Backup
+
+	case StateSearchHeadClusterUpgrade:
+		metric = &history.Upgrade
+
+	case StateSearchHeadClusterVerification:
+		metric = &history.Verification
+
+	case StateSearchHeadClusterReady:
+		metric = &history.Ready
+
+	case StateSearchHeadClusterError:
+		metric = &history.Error
+	}
+	return
 }
 
 // NewEvent creates a new event associated with the object and ready

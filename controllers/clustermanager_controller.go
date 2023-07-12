@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	common "github.com/splunk/splunk-operator/controllers/common"
+	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -102,6 +103,50 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
+	/*
+		// get credentials
+			prov, err := provisioner.Factory.NewProvisioner(ctx, sad, info.publishEvent)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to create provisioner")
+			}
+			stateMachine := newUpgradeClusterManagerStateMachine(ctx, instance, r, prov, true)
+			actResult := stateMachine.ReconcileState(info)
+			result, err = actResult.Result()
+
+			if err != nil {
+				err = errors.Wrap(err, fmt.Sprintf("action %q failed", initialState))
+				return
+			}
+
+			// Only save status when we're told to, otherwise we
+			// introduce an infinite loop reconciling the same object over and
+			// over when there is an unrecoverable error (tracked through the
+			// error state of the cm).
+			if actResult.Dirty() {
+
+				// Save Host
+				info.log.Info("saving cluster manager status",
+					"operational status", cm.OperationalStatus(),
+					"provisioning state", cm.Status.Provisioning.State)
+				err = r.saveHostStatus(cm)
+				if err != nil {
+					return ctrl.Result{}, errors.Wrap(err,
+						fmt.Sprintf("failed to save cm status after %q", initialState))
+				}
+
+				for _, cb := range info.postSaveCallbacks {
+					cb()
+				}
+			}
+
+			for _, e := range info.events {
+				r.publishEvent(request, e)
+			}
+
+			logResult(info, result)
+
+	*/
+
 	result, err := ApplyClusterManager(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
@@ -162,4 +207,34 @@ func recordInstrumentionData(start time.Time, req ctrl.Request, module string, n
 	metricLabels[labelMethodName] = name
 	value := float64(time.Since(start) / time.Millisecond)
 	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
+}
+
+func (r *ClusterManagerReconciler) actionClusterManagerPrepare(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *ClusterManagerReconciler) actionClusterManagerBackup(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *ClusterManagerReconciler) actionClusterManagerRestore(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *ClusterManagerReconciler) actionClusterManagerUpgrade(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *ClusterManagerReconciler) actionClusterManagerVerification(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *ClusterManagerReconciler) actionClusterManagerReady(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
+
+	return actionComplete{}
 }

@@ -52,6 +52,15 @@ type LicenseManagerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Information tracked by the provisioner.
+	Provisioning ProvisionStatus `json:"provisioning"`
+	// OperationHistory holds information about operations performed
+	// on this host.
+	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
+	// OperationalStatus holds the status of the splunk operations in upgrade
+	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
+	OperationalStatus OperationalStatus `json:"operationalStatus"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -82,6 +91,46 @@ type LicenseManagerList struct {
 
 func init() {
 	SchemeBuilder.Register(&LicenseManager{}, &LicenseManagerList{})
+}
+
+// SetOperationalStatus updates the OperationalStatus field and returns
+// true when a change is made or false when no change is made.
+func (lmstr *LicenseManager) SetOperationalStatus(status OperationalStatus) bool {
+	if lmstr.Status.OperationalStatus != status {
+		lmstr.Status.OperationalStatus = status
+		return true
+	}
+	return false
+}
+
+// OperationMetricForState returns a pointer to the metric for the given
+// provisioning state.
+func (lmstr *LicenseManager) OperationMetricForState(operation ProvisioningState) (metric *OperationMetric) {
+	history := &lmstr.Status.OperationHistory
+	switch operation {
+
+	case StateLicenseManagerPrepare:
+		metric = &history.Prepare
+
+	case StateLicenseManagerRestore:
+		metric = &history.Restore
+
+	case StateLicenseManagerBackup:
+		metric = &history.Backup
+
+	case StateLicenseManagerUpgrade:
+		metric = &history.Upgrade
+
+	case StateLicenseManagerVerification:
+		metric = &history.Verification
+
+	case StateLicenseManagerReady:
+		metric = &history.Ready
+
+	case StateLicenseManagerError:
+		metric = &history.Error
+	}
+	return
 }
 
 // NewEvent creates a new event associated with the object and ready

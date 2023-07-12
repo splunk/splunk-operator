@@ -1,0 +1,200 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/cluster/manager/indexes",
+    "updated": "2022-07-18T23:54:27+00:00",
+    "generator": {
+        "build": "6818ac46f2ec",
+        "version": "9.0.0"
+    },
+    "entry": [
+        {
+            "name": "_audit",
+            "id": "https://localhost:8089/services/cluster/manager/indexes/_audit",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/manager/indexes/_audit",
+                "list": "/services/cluster/manager/indexes/_audit"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "buckets_with_excess_copies": 0,
+                "buckets_with_excess_searchable_copies": 0,
+                "eai:acl": null,
+                "index_size": 0,
+                "is_searchable": "1",
+                "non_site_aware_buckets_in_site_aware_cluster": 0,
+                "num_buckets": 12,
+                "replicated_copies_tracker": {
+                    "0": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    },
+                    "1": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    }
+                },
+                "searchable_copies_tracker": {
+                    "0": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    },
+                    "1": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    }
+                },
+                "sort_order": 0,
+                "total_excess_bucket_copies": 0,
+                "total_excess_searchable_copies": 0
+            }
+        },
+        {
+            "name": "_internal",
+            "id": "https://localhost:8089/services/cluster/manager/indexes/_internal",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/manager/indexes/_internal",
+                "list": "/services/cluster/manager/indexes/_internal"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "buckets_with_excess_copies": 0,
+                "buckets_with_excess_searchable_copies": 0,
+                "eai:acl": null,
+                "index_size": 0,
+                "is_searchable": "1",
+                "non_site_aware_buckets_in_site_aware_cluster": 0,
+                "num_buckets": 24,
+                "replicated_copies_tracker": {
+                    "0": {
+                        "actual_copies_per_slot": "24",
+                        "expected_total_per_slot": "24"
+                    },
+                    "1": {
+                        "actual_copies_per_slot": "24",
+                        "expected_total_per_slot": "24"
+                    }
+                },
+                "searchable_copies_tracker": {
+                    "0": {
+                        "actual_copies_per_slot": "24",
+                        "expected_total_per_slot": "24"
+                    },
+                    "1": {
+                        "actual_copies_per_slot": "24",
+                        "expected_total_per_slot": "24"
+                    }
+                },
+                "sort_order": 0,
+                "total_excess_bucket_copies": 0,
+                "total_excess_searchable_copies": 0
+            }
+        },
+        {
+            "name": "_telemetry",
+            "id": "https://localhost:8089/services/cluster/manager/indexes/_telemetry",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/manager/indexes/_telemetry",
+                "list": "/services/cluster/manager/indexes/_telemetry"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "buckets_with_excess_copies": 0,
+                "buckets_with_excess_searchable_copies": 0,
+                "eai:acl": null,
+                "index_size": 0,
+                "is_searchable": "1",
+                "non_site_aware_buckets_in_site_aware_cluster": 0,
+                "num_buckets": 12,
+                "replicated_copies_tracker": {
+                    "0": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    },
+                    "1": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    }
+                },
+                "searchable_copies_tracker": {
+                    "0": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    },
+                    "1": {
+                        "actual_copies_per_slot": "12",
+                        "expected_total_per_slot": "12"
+                    }
+                },
+                "sort_order": 0,
+                "total_excess_bucket_copies": 0,
+                "total_excess_searchable_copies": 0
+            }
+        }
+    ],
+    "paging": {
+        "total": 3,
+        "perPage": 30,
+        "offset": 0
+    },
+    "messages": []
+}

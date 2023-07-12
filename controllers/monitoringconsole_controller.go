@@ -18,12 +18,13 @@ package controllers
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	common "github.com/splunk/splunk-operator/controllers/common"
+	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -166,4 +167,34 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
+}
+
+func (r *MonitoringConsoleReconciler) actionMonitoringConsolePrepare(ctx context.Context, prov provisioner.Provisioner, info *reconcileMCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *MonitoringConsoleReconciler) actionMonitoringConsoleBackup(ctx context.Context, prov provisioner.Provisioner, info *reconcileMCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *MonitoringConsoleReconciler) actionMonitoringConsoleRestore(ctx context.Context, prov provisioner.Provisioner, info *reconcileMCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *MonitoringConsoleReconciler) actionMonitoringConsoleUpgrade(ctx context.Context, prov provisioner.Provisioner, info *reconcileMCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *MonitoringConsoleReconciler) actionMonitoringConsoleVerification(ctx context.Context, prov provisioner.Provisioner, info *reconcileMCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *MonitoringConsoleReconciler) actionMonitoringConsoleReady(ctx context.Context, prov provisioner.Provisioner, info *reconcileMCInfo) actionResult {
+
+	return actionComplete{}
 }

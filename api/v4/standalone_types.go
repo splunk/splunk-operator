@@ -73,6 +73,15 @@ type StandaloneStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Information tracked by the provisioner.
+	Provisioning ProvisionStatus `json:"provisioning"`
+	// OperationHistory holds information about operations performed
+	// on this host.
+	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
+	// OperationalStatus holds the status of the splunk operations in upgrade
+	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
+	OperationalStatus OperationalStatus `json:"operationalStatus"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -106,6 +115,46 @@ type StandaloneList struct {
 
 func init() {
 	SchemeBuilder.Register(&Standalone{}, &StandaloneList{})
+}
+
+// SetOperationalStatus updates the OperationalStatus field and returns
+// true when a change is made or false when no change is made.
+func (standln *Standalone) SetOperationalStatus(status OperationalStatus) bool {
+	if standln.Status.OperationalStatus != status {
+		standln.Status.OperationalStatus = status
+		return true
+	}
+	return false
+}
+
+// OperationMetricForState returns a pointer to the metric for the given
+// provisioning state.
+func (standln *Standalone) OperationMetricForState(operation ProvisioningState) (metric *OperationMetric) {
+	history := &standln.Status.OperationHistory
+	switch operation {
+
+	case StateStandalonePrepare:
+		metric = &history.Prepare
+
+	case StateStandaloneRestore:
+		metric = &history.Restore
+
+	case StateStandaloneBackup:
+		metric = &history.Backup
+
+	case StateStandaloneUpgrade:
+		metric = &history.Upgrade
+
+	case StateStandaloneVerification:
+		metric = &history.Verification
+
+	case StateStandaloneReady:
+		metric = &history.Ready
+
+	case StateStandaloneError:
+		metric = &history.Error
+	}
+	return
 }
 
 // NewEvent creates a new event associated with the object and ready

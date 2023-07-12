@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	common "github.com/splunk/splunk-operator/controllers/common"
+	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -152,4 +153,34 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
+}
+
+func (r *SearchHeadClusterReconciler) actionSearchHeadClusterPrepare(ctx context.Context, prov provisioner.Provisioner, info *reconcileSCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *SearchHeadClusterReconciler) actionSearchHeadClusterBackup(ctx context.Context, prov provisioner.Provisioner, info *reconcileSCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *SearchHeadClusterReconciler) actionSearchHeadClusterRestore(ctx context.Context, prov provisioner.Provisioner, info *reconcileSCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *SearchHeadClusterReconciler) actionSearchHeadClusterUpgrade(ctx context.Context, prov provisioner.Provisioner, info *reconcileSCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *SearchHeadClusterReconciler) actionSearchHeadClusterVerification(ctx context.Context, prov provisioner.Provisioner, info *reconcileSCInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *SearchHeadClusterReconciler) actionSearchHeadClusterReady(ctx context.Context, prov provisioner.Provisioner, info *reconcileSCInfo) actionResult {
+
+	return actionComplete{}
 }

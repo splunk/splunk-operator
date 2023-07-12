@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	common "github.com/splunk/splunk-operator/controllers/common"
+	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -152,4 +153,34 @@ func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
 		Complete(r)
+}
+
+func (r *LicenseManagerReconciler) actionLicenseManagerPrepare(ctx context.Context, prov provisioner.Provisioner, info *reconcileLMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *LicenseManagerReconciler) actionLicenseManagerBackup(ctx context.Context, prov provisioner.Provisioner, info *reconcileLMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *LicenseManagerReconciler) actionLicenseManagerRestore(ctx context.Context, prov provisioner.Provisioner, info *reconcileLMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *LicenseManagerReconciler) actionLicenseManagerUpgrade(ctx context.Context, prov provisioner.Provisioner, info *reconcileLMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *LicenseManagerReconciler) actionLicenseManagerVerification(ctx context.Context, prov provisioner.Provisioner, info *reconcileLMInfo) actionResult {
+
+	return actionComplete{}
+}
+
+func (r *LicenseManagerReconciler) actionLicenseManagerReady(ctx context.Context, prov provisioner.Provisioner, info *reconcileLMInfo) actionResult {
+
+	return actionComplete{}
 }

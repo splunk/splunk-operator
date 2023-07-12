@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.3
+    controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
   name: monitoringconsoles.enterprise.splunk.com
 spec:
@@ -8236,6 +8236,113 @@ spec:
                   needToPushMasterApps:
                     type: boolean
                 type: object
+              operationHistory:
+                description: OperationHistory holds information about operations performed
+                  on this host.
+                properties:
+                  backup:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                  error:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                  prepare:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                  ready:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                  restore:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                  upgrade:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                  verification:
+                    description: OperationMetric contains metadata about an operation
+                      (inspection, provisioning, etc.) used for tracking metrics.
+                    properties:
+                      end:
+                        format: date-time
+                        nullable: true
+                        type: string
+                      start:
+                        format: date-time
+                        nullable: true
+                        type: string
+                    type: object
+                type: object
+              operationalStatus:
+                description: OperationalStatus holds the status of the splunk operations
+                  in upgrade
+                enum:
+                - ""
+                - OK
+                - discovered
+                - error
+                - delayed
+                - detached
+                type: string
               phase:
                 description: current phase of the monitoring console
                 enum:
@@ -8247,6 +8354,18 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              provisioning:
+                description: Information tracked by the provisioner.
+                properties:
+                  image:
+                    description: Image holds the details of the last image successfully
+                      provisioned.
+                    type: string
+                  state:
+                    description: An indiciator for what the provisioner is doing with
+                      the host.
+                    type: string
+                type: object
               resourceRevMap:
                 additionalProperties:
                   type: string

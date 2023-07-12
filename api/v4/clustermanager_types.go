@@ -67,6 +67,17 @@ type ClusterManagerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Information tracked by the provisioner.
+	Provisioning ProvisionStatus `json:"provisioning"`
+
+	// OperationHistory holds information about operations performed
+	// on this host.
+	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
+
+	// OperationalStatus holds the status of the splunk operations in upgrade
+	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
+	OperationalStatus OperationalStatus `json:"operationalStatus"`
 }
 
 // BundlePushInfo Indicates if bundle push required
@@ -107,6 +118,46 @@ type ClusterManagerList struct {
 
 func init() {
 	SchemeBuilder.Register(&ClusterManager{}, &ClusterManagerList{})
+}
+
+// SetOperationalStatus updates the OperationalStatus field and returns
+// true when a change is made or false when no change is made.
+func (cmstr *ClusterManager) SetOperationalStatus(status OperationalStatus) bool {
+	if cmstr.Status.OperationalStatus != status {
+		cmstr.Status.OperationalStatus = status
+		return true
+	}
+	return false
+}
+
+// OperationMetricForState returns a pointer to the metric for the given
+// provisioning state.
+func (cmstr *ClusterManager) OperationMetricForState(operation ProvisioningState) (metric *OperationMetric) {
+	history := &cmstr.Status.OperationHistory
+	switch operation {
+
+	case StateClusterManagerPrepare:
+		metric = &history.Prepare
+
+	case StateClusterManagerRestore:
+		metric = &history.Restore
+
+	case StateClusterManagerBackup:
+		metric = &history.Backup
+
+	case StateClusterManagerUpgrade:
+		metric = &history.Upgrade
+
+	case StateClusterManagerVerification:
+		metric = &history.Verification
+
+	case StateClusterManagerReady:
+		metric = &history.Ready
+
+	case StateClusterManagerError:
+		metric = &history.Error
+	}
+	return
 }
 
 // NewEvent creates a new event associated with the object and ready

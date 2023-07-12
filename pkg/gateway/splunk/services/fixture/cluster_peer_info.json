@@ -1,0 +1,72 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/cluster/peer/info",
+    "updated": "2022-07-19T00:01:43+00:00",
+    "generator": {
+        "build": "6818ac46f2ec",
+        "version": "9.0.0"
+    },
+    "entry": [
+        {
+            "name": "slave",
+            "id": "https://localhost:8089/services/cluster/peer/info/slave",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/info/slave",
+                "list": "/services/cluster/peer/info/slave"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "active_bundle": {
+                    "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/790b3e9064a818577a839cc457828c91-1657659492.bundle",
+                    "checksum": "7351975980A20311463444E66492BDD5",
+                    "timestamp": 1657659492
+                },
+                "base_generation_id": 4,
+                "eai:acl": null,
+                "is_registered": true,
+                "last_dry_run_bundle": {
+                    "bundle_path": "",
+                    "checksum": "",
+                    "timestamp": 0
+                },
+                "last_heartbeat_attempt": 0,
+                "latest_bundle": {
+                    "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/790b3e9064a818577a839cc457828c91-1657659492.bundle",
+                    "checksum": "7351975980A20311463444E66492BDD5",
+                    "timestamp": 1657659492
+                },
+                "maintenance_mode": false,
+                "registered_summary_state": 3,
+                "restart_state": "NoRestart",
+                "site": "site1",
+                "status": "Up"
+            }
+        }
+    ],
+    "paging": {
+        "total": 1,
+        "perPage": 30,
+        "offset": 0
+    },
+    "messages": []
+}

@@ -1,0 +1,815 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/cluster/peer/buckets",
+    "updated": "2022-07-18T23:58:19+00:00",
+    "generator": {
+        "build": "6818ac46f2ec",
+        "version": "9.0.0"
+    },
+    "entry": [
+        {
+            "name": "_audit~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_audit~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_audit~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_audit~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_audit~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 1657659433,
+                "generations": {
+                    "0": "0xffffffffffffffff"
+                },
+                "index": "_audit",
+                "latest_time": 1657659471,
+                "search_state": "Searchable",
+                "status": "Complete"
+            }
+        },
+        {
+            "name": "_audit~1~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_audit~1~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_audit~1~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+                "list": "/services/cluster/peer/buckets/_audit~1~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+                "remove": "/services/cluster/peer/buckets/_audit~1~1FBC4C96-0AD0-4C00-8468-4DDA988FB808"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_audit",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_audit~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_audit~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_audit~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_audit~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_audit~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_audit",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_audit~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_audit~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_audit~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_audit~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_audit~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_audit",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_internal~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_internal~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_internal~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 1657659421,
+                "generations": {
+                    "0": "0xffffffffffffffff"
+                },
+                "index": "_internal",
+                "latest_time": 1657659476,
+                "search_state": "Searchable",
+                "status": "Complete"
+            }
+        },
+        {
+            "name": "_internal~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_internal~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_internal~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 1657659433,
+                "generations": {
+                    "0": "0xffffffffffffffff"
+                },
+                "index": "_internal",
+                "latest_time": 1657659476,
+                "search_state": "Searchable",
+                "status": "Complete"
+            }
+        },
+        {
+            "name": "_internal~2~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~2~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~2~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+                "list": "/services/cluster/peer/buckets/_internal~2~1FBC4C96-0AD0-4C00-8468-4DDA988FB808",
+                "remove": "/services/cluster/peer/buckets/_internal~2~1FBC4C96-0AD0-4C00-8468-4DDA988FB808"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_internal~2~3A617349-B077-4E0F-B76A-41C300B00326",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~2~3A617349-B077-4E0F-B76A-41C300B00326",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~2~3A617349-B077-4E0F-B76A-41C300B00326",
+                "list": "/services/cluster/peer/buckets/_internal~2~3A617349-B077-4E0F-B76A-41C300B00326",
+                "remove": "/services/cluster/peer/buckets/_internal~2~3A617349-B077-4E0F-B76A-41C300B00326"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_internal~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_internal~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_internal~2~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_internal~3~188C23DD-D641-4BA2-B651-C042F809A0B3",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~3~188C23DD-D641-4BA2-B651-C042F809A0B3",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~3~188C23DD-D641-4BA2-B651-C042F809A0B3",
+                "list": "/services/cluster/peer/buckets/_internal~3~188C23DD-D641-4BA2-B651-C042F809A0B3",
+                "remove": "/services/cluster/peer/buckets/_internal~3~188C23DD-D641-4BA2-B651-C042F809A0B3"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_internal~3~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~3~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~3~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_internal~3~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_internal~3~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_internal~4~3A617349-B077-4E0F-B76A-41C300B00326",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~4~3A617349-B077-4E0F-B76A-41C300B00326",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~4~3A617349-B077-4E0F-B76A-41C300B00326",
+                "list": "/services/cluster/peer/buckets/_internal~4~3A617349-B077-4E0F-B76A-41C300B00326",
+                "remove": "/services/cluster/peer/buckets/_internal~4~3A617349-B077-4E0F-B76A-41C300B00326"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_internal~4~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~4~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~4~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_internal~4~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_internal~4~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_internal~5~188C23DD-D641-4BA2-B651-C042F809A0B3",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~5~188C23DD-D641-4BA2-B651-C042F809A0B3",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~5~188C23DD-D641-4BA2-B651-C042F809A0B3",
+                "list": "/services/cluster/peer/buckets/_internal~5~188C23DD-D641-4BA2-B651-C042F809A0B3",
+                "remove": "/services/cluster/peer/buckets/_internal~5~188C23DD-D641-4BA2-B651-C042F809A0B3"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_internal~5~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_internal~5~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_internal~5~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_internal~5~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_internal~5~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_internal",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_telemetry~0~3A617349-B077-4E0F-B76A-41C300B00326",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_telemetry~0~3A617349-B077-4E0F-B76A-41C300B00326",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_telemetry~0~3A617349-B077-4E0F-B76A-41C300B00326",
+                "list": "/services/cluster/peer/buckets/_telemetry~0~3A617349-B077-4E0F-B76A-41C300B00326",
+                "remove": "/services/cluster/peer/buckets/_telemetry~0~3A617349-B077-4E0F-B76A-41C300B00326"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_telemetry",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_telemetry~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_telemetry~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_telemetry~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_telemetry~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_telemetry~0~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_telemetry",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        },
+        {
+            "name": "_telemetry~1~3A617349-B077-4E0F-B76A-41C300B00326",
+            "id": "https://localhost:8089/services/cluster/peer/buckets/_telemetry~1~3A617349-B077-4E0F-B76A-41C300B00326",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_telemetry~1~3A617349-B077-4E0F-B76A-41C300B00326",
+                "list": "/services/cluster/peer/buckets/_telemetry~1~3A617349-B077-4E0F-B76A-41C300B00326",
+                "remove": "/services/cluster/peer/buckets/_telemetry~1~3A617349-B077-4E0F-B76A-41C300B00326"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x2"
+                },
+                "index": "_telemetry",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingTarget"
+            }
+        },
+        {
+            "name": "_telemetry~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "id": "https:* Connection #0 to host localhost left intact //localhost:8089/services/cluster/peer/buckets/_telemetry~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/peer/buckets/_telemetry~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "list": "/services/cluster/peer/buckets/_telemetry~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25",
+                "remove": "/services/cluster/peer/buckets/_telemetry~1~7D3E85AB-B17A-47A6-B5E9-405FB889AD25"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "checksum": "",
+                "eai:acl": null,
+                "earliest_time": 0,
+                "generations": {
+                    "0": "0x3"
+                },
+                "index": "_telemetry",
+                "latest_time": 0,
+                "search_state": "Searchable",
+                "status": "StreamingSource"
+            }
+        }
+    ],
+    "paging": {
+        "total": 19,
+        "perPage": 30,
+        "offset": 0
+    },
+    "messages": []
+}

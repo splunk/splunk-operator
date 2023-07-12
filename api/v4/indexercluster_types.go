@@ -108,6 +108,15 @@ type IndexerClusterStatus struct {
 
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
+
+	// Information tracked by the provisioner.
+	Provisioning ProvisionStatus `json:"provisioning"`
+	// OperationHistory holds information about operations performed
+	// on this host.
+	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
+	// OperationalStatus holds the status of the splunk operations in upgrade
+	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
+	OperationalStatus OperationalStatus `json:"operationalStatus"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -143,6 +152,46 @@ type IndexerClusterList struct {
 
 func init() {
 	SchemeBuilder.Register(&IndexerCluster{}, &IndexerClusterList{})
+}
+
+// SetOperationalStatus updates the OperationalStatus field and returns
+// true when a change is made or false when no change is made.
+func (icstr *IndexerCluster) SetOperationalStatus(status OperationalStatus) bool {
+	if icstr.Status.OperationalStatus != status {
+		icstr.Status.OperationalStatus = status
+		return true
+	}
+	return false
+}
+
+// OperationMetricForState returns a pointer to the metric for the given
+// provisioning state.
+func (icstr *IndexerCluster) OperationMetricForState(operation ProvisioningState) (metric *OperationMetric) {
+	history := &icstr.Status.OperationHistory
+	switch operation {
+
+	case StateIndexerClusterPrepare:
+		metric = &history.Prepare
+
+	case StateIndexerClusterRestore:
+		metric = &history.Restore
+
+	case StateIndexerClusterBackup:
+		metric = &history.Backup
+
+	case StateIndexerClusterUpgrade:
+		metric = &history.Upgrade
+
+	case StateIndexerClusterVerification:
+		metric = &history.Verification
+
+	case StateIndexerClusterReady:
+		metric = &history.Ready
+
+	case StateIndexerClusterError:
+		metric = &history.Error
+	}
+	return
 }
 
 // NewEvent creates a new event associated with the object and ready

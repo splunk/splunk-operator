@@ -1,0 +1,8 @@
+{
+    "messages": [
+        {
+            "type": "ERROR",
+            "text": "Cluster manager redundancy is not enabled."
+        }
+    ]
+}

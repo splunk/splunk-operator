@@ -58,6 +58,15 @@ type MonitoringConsoleStatus struct {
 
 	// App Framework status
 	AppContext AppDeploymentContext `json:"appContext,omitempty"`
+
+	// Information tracked by the provisioner.
+	Provisioning ProvisionStatus `json:"provisioning"`
+	// OperationHistory holds information about operations performed
+	// on this host.
+	OperationHistory OperationHistory `json:"operationHistory,omitempty"`
+	// OperationalStatus holds the status of the splunk operations in upgrade
+	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
+	OperationalStatus OperationalStatus `json:"operationalStatus"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -90,6 +99,46 @@ type MonitoringConsoleList struct {
 
 func init() {
 	SchemeBuilder.Register(&MonitoringConsole{}, &MonitoringConsoleList{})
+}
+
+// SetOperationalStatus updates the OperationalStatus field and returns
+// true when a change is made or false when no change is made.
+func (mcnsl *MonitoringConsole) SetOperationalStatus(status OperationalStatus) bool {
+	if mcnsl.Status.OperationalStatus != status {
+		mcnsl.Status.OperationalStatus = status
+		return true
+	}
+	return false
+}
+
+// OperationMetricForState returns a pointer to the metric for the given
+// provisioning state.
+func (mcnsl *MonitoringConsole) OperationMetricForState(operation ProvisioningState) (metric *OperationMetric) {
+	history := &mcnsl.Status.OperationHistory
+	switch operation {
+
+	case StateMonitoringConsolePrepare:
+		metric = &history.Prepare
+
+	case StateMonitoringConsoleRestore:
+		metric = &history.Restore
+
+	case StateMonitoringConsoleBackup:
+		metric = &history.Backup
+
+	case StateMonitoringConsoleUpgrade:
+		metric = &history.Upgrade
+
+	case StateMonitoringConsoleVerification:
+		metric = &history.Verification
+
+	case StateMonitoringConsoleReady:
+		metric = &history.Ready
+
+	case StateMonitoringConsoleError:
+		metric = &history.Error
+	}
+	return
 }
 
 // NewEvent creates a new event associated with the object and ready
