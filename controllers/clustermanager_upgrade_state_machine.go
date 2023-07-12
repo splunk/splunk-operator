@@ -161,7 +161,7 @@ func (hsm *clusterManagerStateMachine) handleClusterManagerBackup(ctx context.Co
 func (hsm *clusterManagerStateMachine) handleClusterManagerRestore(ctx context.Context, info *reconcileCMInfo) actionResult {
 	actResult := hsm.Reconciler.actionClusterManagerRestore(ctx, hsm.Provisioner, info)
 	if _, complete := actResult.(actionComplete); complete {
-		hsm.NextState = enterpriseApi.StateClusterManagerReady
+		hsm.NextState = enterpriseApi.StateClusterManagerVerification
 	} else {
 		hsm.NextState = enterpriseApi.StateClusterManagerError
 	}

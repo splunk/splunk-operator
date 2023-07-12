@@ -161,7 +161,7 @@ func (hsm *indexerClusterStateMachine) handleIndexerClusterBackup(ctx context.Co
 func (hsm *indexerClusterStateMachine) handleIndexerClusterRestore(ctx context.Context, info *reconcileICInfo) actionResult {
 	actResult := hsm.Reconciler.actionIndexerClusterRestore(ctx, hsm.Provisioner, info)
 	if _, complete := actResult.(actionComplete); complete {
-		hsm.NextState = enterpriseApi.StateIndexerClusterReady
+		hsm.NextState = enterpriseApi.StateIndexerClusterVerification
 	} else {
 		hsm.NextState = enterpriseApi.StateIndexerClusterError
 	}

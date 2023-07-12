@@ -162,7 +162,7 @@ func (hsm *searchHeadClusterStateMachine) handleSearchHeadClusterBackup(ctx cont
 func (hsm *searchHeadClusterStateMachine) handleSearchHeadClusterRestore(ctx context.Context, info *reconcileSCInfo) actionResult {
 	actResult := hsm.Reconciler.actionSearchHeadClusterRestore(ctx, hsm.Provisioner, info)
 	if _, complete := actResult.(actionComplete); complete {
-		hsm.NextState = enterpriseApi.StateSearchHeadClusterReady
+		hsm.NextState = enterpriseApi.StateSearchHeadClusterVerification
 	} else {
 		hsm.NextState = enterpriseApi.StateSearchHeadClusterError
 	}

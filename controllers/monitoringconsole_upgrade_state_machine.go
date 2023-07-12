@@ -163,7 +163,7 @@ func (hsm *monitoringConsoleStateMachine) handleMonitoringConsoleBackup(ctx cont
 func (hsm *monitoringConsoleStateMachine) handleMonitoringConsoleRestore(ctx context.Context, info *reconcileMCInfo) actionResult {
 	actResult := hsm.Reconciler.actionMonitoringConsoleRestore(ctx, hsm.Provisioner, info)
 	if _, complete := actResult.(actionComplete); complete {
-		hsm.NextState = enterpriseApi.StateMonitoringConsoleReady
+		hsm.NextState = enterpriseApi.StateMonitoringConsoleVerification
 	} else {
 		hsm.NextState = enterpriseApi.StateMonitoringConsoleError
 	}
