@@ -4235,6 +4235,18 @@ spec:
                   needToPushMasterApps:
                     type: boolean
                 type: object
+              errorCount:
+                default: 0
+                description: ErrorCount records how many times the splunk has encoutered
+                  an error since the last successful operation
+                type: integer
+              errorMessage:
+                description: the last error message reported by the provisioning subsystem
+                type: string
+              errorType:
+                description: ErrorType indicates the type of failure encountered when
+                  the OperationalStatus is OperationalStatusError
+                type: string
               operationHistory:
                 description: OperationHistory holds information about operations performed
                   on this splunk instance.

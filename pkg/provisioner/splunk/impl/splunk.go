@@ -9,6 +9,7 @@ import (
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
+	provmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -79,11 +80,11 @@ var callGetClusterManagerSitesStatus = func(ctx context.Context, p *splunkProvis
 }
 
 // SetClusterManagerStatus Access cluster node configuration details.
-func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) error {
+func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error) {
 
 	peerlistptr, err := callGetClusterManagerPeersStatus(ctx, p)
 	if err != nil {
-		return err
+		return result, err
 	} else {
 		peerlist := *peerlistptr
 		for _, peer := range peerlist {
@@ -105,7 +106,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 
 	cminfolistptr, err := callGetClusterManagerInfo(ctx, p)
 	if err != nil {
-		return err
+		return result, err
 	}
 	cminfolist := *cminfolistptr
 	if cminfolist[0].Multisite {
@@ -134,7 +135,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 	//healthList, err := callGetClusterManagerHealth(ctx, p)
 	healthList, err := callGetClusterManagerHealth(ctx, p)
 	if err != nil {
-		return err
+		return result, err
 	} else {
 		hllist := *healthList
 		// prepare fields for conditions
@@ -156,7 +157,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 
 	sclistptr, err := callGetClusterManagerSearchHeadStatus(ctx, p)
 	if err != nil {
-		return err
+		return result, err
 	} else {
 		sclist := *sclistptr
 		for _, sc := range sclist {
@@ -176,5 +177,10 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 		}
 	}
 
-	return nil
+	return result, nil
+}
+
+// CheckClusterManagerHealth
+func (p *splunkProvisioner) CheckClusterManagerHealth(ctx context.Context) (result provmodel.Result, err error) {
+	return result, nil
 }

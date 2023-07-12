@@ -50,7 +50,7 @@ func TestSetClusterManagerStatus(t *testing.T) {
 	provisioner := setCreds(t)
 	ctx := context.TODO()
 	conditions := &[]metav1.Condition{}
-	err := provisioner.SetClusterManagerStatus(ctx, conditions)
+	_, err := provisioner.SetClusterManagerStatus(ctx, conditions)
 	if err != nil {
 		t.Errorf("fixture: error in set cluster manager %v", err)
 	}

@@ -209,8 +209,40 @@ func recordInstrumentionData(start time.Time, req ctrl.Request, module string, n
 	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
 }
 
+// clearError removes any existing error message.
+func clearError(resource *enterpriseApi.ClusterManager) (dirty bool) {
+	dirty = resource.SetOperationalStatus(enterpriseApi.OperationalStatusOK)
+	var emptyErrType enterpriseApi.ErrorType
+	if resource.Status.ErrorType != emptyErrType {
+		resource.Status.ErrorType = emptyErrType
+		dirty = true
+	}
+	if resource.Status.ErrorMessage != "" {
+		resource.Status.ErrorMessage = ""
+		dirty = true
+	}
+	return dirty
+}
+
 func (r *ClusterManagerReconciler) actionClusterManagerPrepare(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
 
+	provResult, err := prov.CheckClusterManagerHealth(ctx)
+
+	if err != nil {
+		return actionError{errors.Wrap(err, "cluster manager is not in healthy state")}
+	}
+
+	if provResult.ErrorMessage != "" {
+		return recordActionFailure(info, enterpriseApi.ClusterManagerPrepareUpgradeError, provResult.ErrorMessage)
+	}
+
+	if provResult.Dirty {
+		result := actionContinue{provResult.RequeueAfter}
+		if clearError(info.resource) {
+			return actionUpdate{result}
+		}
+		return result
+	}
 	return actionComplete{}
 }
 
@@ -237,4 +269,59 @@ func (r *ClusterManagerReconciler) actionClusterManagerVerification(ctx context.
 func (r *ClusterManagerReconciler) actionClusterManagerReady(ctx context.Context, prov provisioner.Provisioner, info *reconcileCMInfo) actionResult {
 
 	return actionComplete{}
+}
+
+// setErrorMessage updates the ErrorMessage in the host Status struct
+// and increases the ErrorCount
+func setErrorMessage(resource *enterpriseApi.ClusterManager, errType enterpriseApi.ErrorType, message string) {
+	resource.Status.OperationalStatus = enterpriseApi.OperationalStatusError
+	resource.Status.ErrorType = errType
+	resource.Status.ErrorMessage = message
+	resource.Status.ErrorCount++
+}
+
+func recordActionFailure(info *reconcileCMInfo, errorType enterpriseApi.ErrorType, errorMessage string) actionFailed {
+
+	setErrorMessage(info.resource, errorType, errorMessage)
+
+	eventType := map[enterpriseApi.ErrorType]string{
+		enterpriseApi.LicenseManagerPrepareUpgradeError:    "PrepareForUpgradeError",
+		enterpriseApi.LicenseManagerBackupError:            "BackupError",
+		enterpriseApi.LicenseManagerRestoreError:           "RestoreError",
+		enterpriseApi.LicenseManagerUpgradeError:           "UpgradeError",
+		enterpriseApi.LicenseManagerVerificationError:      "VerificationError",
+		enterpriseApi.ClusterManagerPrepareUpgradeError:    "PrepareForUpgradeError",
+		enterpriseApi.ClusterManageBackupError:             "BackupError",
+		enterpriseApi.ClusterManageRestoreError:            "RestoreError",
+		enterpriseApi.ClusterManageUpgradeError:            "UpgradeError",
+		enterpriseApi.ClusterManageVerificationError:       "VerificationError",
+		enterpriseApi.MonitoringConsolePrepareUpgradeError: "PrepareForUpgradeError",
+		enterpriseApi.MonitoringConsoleBackupError:         "BackupError",
+		enterpriseApi.MonitoringConsoleRestoreError:        "RestoreError",
+		enterpriseApi.MonitoringConsoleUpgradeError:        "UpgradeError",
+		enterpriseApi.MonitoringConsoleVerificationError:   "VerificationError",
+
+		enterpriseApi.SearchHeadClusterPrepareUpgradeError: "PrepareForUpgradeError",
+		enterpriseApi.SearchHeadClusterBackupError:         "BackupError",
+		enterpriseApi.SearchHeadClusterRestoreError:        "RestoreError",
+		enterpriseApi.SearchHeadClusterUpgradeError:        "UpgradeError",
+		enterpriseApi.SearchHeadClusterVerificationError:   "VerificationError",
+		enterpriseApi.IndexerClusterPrepareUpgradeError:    "PrepareForUpgradeError",
+		enterpriseApi.IndexerClusterBackupError:            "BackupError",
+		enterpriseApi.IndexerClusterRestoreError:           "RestoreError",
+		enterpriseApi.IndexerClusterUpgradeError:           "UpgradeError",
+		enterpriseApi.IndexerClusterVerificationError:      "VerificationError",
+		enterpriseApi.StandalonePrepareUpgradeError:        "UpgradeError",
+		enterpriseApi.StandaloneBackupError:                "BackupError",
+		enterpriseApi.StandaloneRestoreError:               "RestoreError",
+		enterpriseApi.StandaloneUpgradeError:               "UpgradeError",
+		enterpriseApi.StandaloneVerificationError:          "VerificationError",
+	}[errorType]
+
+	counter := actionFailureCounters.WithLabelValues(eventType)
+	info.postSaveCallbacks = append(info.postSaveCallbacks, counter.Inc)
+
+	info.publishEvent("Error", eventType, errorMessage)
+
+	return actionFailed{dirty: true, ErrorType: errorType, errorCount: info.resource.Status.ErrorCount}
 }

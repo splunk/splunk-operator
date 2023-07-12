@@ -78,6 +78,17 @@ type ClusterManagerStatus struct {
 	// OperationalStatus holds the status of the splunk operations in upgrade
 	// +kubebuilder:validation:Enum="";OK;discovered;error;delayed;detached
 	OperationalStatus OperationalStatus `json:"operationalStatus"`
+
+	// ErrorCount records how many times the splunk has encoutered an error since the last successful operation
+	// +kubebuilder:default:=0
+	ErrorCount int `json:"errorCount"`
+
+	// the last error message reported by the provisioning subsystem
+	ErrorMessage string `json:"errorMessage"`
+
+	// ErrorType indicates the type of failure encountered when the
+	// OperationalStatus is OperationalStatusError
+	ErrorType ErrorType `json:"errorType,omitempty"`
 }
 
 // BundlePushInfo Indicates if bundle push required
