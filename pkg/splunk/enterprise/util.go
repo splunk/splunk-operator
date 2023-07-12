@@ -2288,10 +2288,7 @@ func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splco
 	if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
 		return statefulSet.Spec.Template.Spec.Containers[0].Image, nil
 	}
-	err = fmt.Errorf("Unable to get image from statefulset of type %s.", instanceType.ToString())
-
-	return "", err
-
+	return "", fmt.Errorf("Unable to get image from statefulset of type %s.", instanceType.ToString())
 }
 
 // changeAnnotations updates the splunk/image-tag field to trigger the reconcile loop, and returns error if something is wrong
@@ -2316,5 +2313,4 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	}
 
 	return nil
-
 }

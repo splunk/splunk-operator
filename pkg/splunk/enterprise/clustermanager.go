@@ -522,8 +522,11 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 			Name:      cr.Spec.ClusterManagerRef.Name,
 		}
 		err := c.Get(ctx, namespacedName, clusterManagerInstance)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return nil
+		if err != nil {
+			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
 		}
 	} else {
 		// List out all the ClusterManager instances in the namespace
@@ -532,11 +535,14 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 		}
 		objectList := enterpriseApi.ClusterManagerList{}
 		err := c.List(ctx, &objectList, opts...)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return nil
+		if err != nil {
+			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
 		}
 
-		// check with instance has the required LicenseManagerRef
+		// check if instance has the required LicenseManagerRef
 		for _, cm := range objectList.Items {
 			if cm.Spec.LicenseManagerRef.Name == cr.GetName() {
 				clusterManagerInstance = &cm
@@ -549,9 +555,13 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 		}
 	}
 
-	image, _ := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
-	err := changeAnnotations(ctx, c, image, clusterManagerInstance)
-
+	image, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
+		scopedLog.Error(err, "Get LicenseManager Image failed with", "error", err)
+		return err
+	}
+	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
 		scopedLog.Error(err, "ClusterManager types update after changing annotations failed with", "error", err)

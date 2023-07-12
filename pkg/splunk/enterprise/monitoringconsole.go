@@ -436,8 +436,11 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 			Name:      cr.Spec.MonitoringConsoleRef.Name,
 		}
 		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return nil
+		if err != nil {
+			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
 		}
 	} else {
 		// List out all the MonitoringConsole instances in the namespace
@@ -446,11 +449,14 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		}
 		objectList := enterpriseApi.MonitoringConsoleList{}
 		err := client.List(ctx, &objectList, opts...)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return nil
+		if err != nil {
+			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
 		}
 
-		// check with instance has the required ClusterManagerRef
+		// check if instance has the required ClusterManagerRef
 		for _, mc := range objectList.Items {
 			if mc.Spec.ClusterManagerRef.Name == cr.GetName() {
 				monitoringConsoleInstance = &mc
@@ -463,9 +469,13 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		}
 	}
 
-	image, _ := getCurrentImage(ctx, client, cr, SplunkClusterManager)
-	err := changeAnnotations(ctx, client, image, monitoringConsoleInstance)
-
+	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
+		scopedLog.Error(err, "Get ClusterManager Image failed with", "error", err)
+		return err
+	}
+	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
 		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
@@ -473,5 +483,4 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 	}
 
 	return nil
-
 }
