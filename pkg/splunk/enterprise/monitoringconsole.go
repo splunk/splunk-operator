@@ -373,7 +373,7 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		}
 		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
 		if err != nil {
-			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				return nil
 			}
 			return err
@@ -386,7 +386,7 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 		objectList := enterpriseApi.MonitoringConsoleList{}
 		err := client.List(ctx, &objectList, opts...)
 		if err != nil {
-			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+			if err.Error() == "NotFound" {
 				return nil
 			}
 			return err

@@ -475,9 +475,12 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 	// get the license manager referred in cluster manager
 	err = c.Get(ctx, namespacedName, licenseManager)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
 		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not find the License Manager. Reason %v", err))
 		scopedLog.Error(err, "Unable to get licenseManager")
-		return true, err
+		return false, err
 	}
 
 	lmImage, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
@@ -518,7 +521,7 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 		}
 		err := c.Get(ctx, namespacedName, clusterManagerInstance)
 		if err != nil {
-			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+			if k8serrors.IsNotFound(err) {
 				return nil
 			}
 			return err
@@ -531,7 +534,7 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 		objectList := enterpriseApi.ClusterManagerList{}
 		err := c.List(ctx, &objectList, opts...)
 		if err != nil {
-			if err.Error() == "NotFound" || k8serrors.IsNotFound(err) {
+			if err.Error() == "NotFound" {
 				return nil
 			}
 			return err
