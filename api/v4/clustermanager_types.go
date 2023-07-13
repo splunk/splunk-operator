@@ -67,6 +67,9 @@ type ClusterManagerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 // BundlePushInfo Indicates if bundle push required

@@ -294,7 +294,7 @@ func SetClusterManagerStatus(ctx context.Context, client splcommon.ControllerCli
 	if err != nil {
 		return errors.Wrap(err, "failed to create gateway")
 	}
-	err = prov.SetClusterManagerStatus(ctx, cr)
+	err = prov.SetClusterManagerStatus(ctx, &cr.Status.Conditions)
 	if err != nil {
 		return errors.Wrap(err, "failed to update cluster manager health status")
 	}

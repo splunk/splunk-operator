@@ -6,11 +6,10 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -49,16 +48,6 @@ var callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner
 	return healthList, err
 }
 
-// var callGetClusterManagerSearchHeadStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.SearchHeadContent, error) {
-// 	sclist, err := p.gateway.GetClusterManagerSearchHeadStatus(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	} else if sclist == nil {
-// 		return nil, fmt.Errorf("search head list is empty")
-// 	}
-// 	return sclist, err
-// }
-
 var callGetClusterManagerPeersStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
 	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
 	if err != nil {
@@ -80,7 +69,7 @@ var callGetClusterManagerSitesStatus = func(ctx context.Context, p *splunkProvis
 }
 
 // SetClusterManagerStatus Access cluster node configuration details.
-func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splcommon.MetaObject) error {
+func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) error {
 
 	peerlistptr, err := callGetClusterManagerPeersStatus(ctx, p)
 	if err != nil {
@@ -100,7 +89,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splc
 
 			}
 			// set condition to existing conditions list
-			// meta.SetStatusCondition(conditions, condition)
+			meta.SetStatusCondition(conditions, condition)
 		}
 	}
 
@@ -128,7 +117,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splc
 			Reason:  site,
 			Status:  multiSiteStatus,
 		}
-		// meta.SetStatusCondition(conditions, condition)
+		meta.SetStatusCondition(conditions, condition)
 	}
 
 	// business logic starts here
@@ -140,14 +129,18 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, cr splc
 		hllist := *healthList
 		// prepare fields for conditions
 		for _, health := range hllist {
-			if health.AllPeersAreUp == "1" {
-				continue
-			} else {
-				cr.Status.Phase = enterpriseApi.PhaseWarning
+			condition := metav1.Condition{
+				Type:    "Health",
+				Message: "all the peers of indexer cluster status",
+				Reason:  "PeersStatus",
 			}
-
+			if health.AllPeersAreUp == "1" {
+				condition.Status = metav1.ConditionTrue
+			} else {
+				condition.Status = metav1.ConditionFalse
+			}
 			// set condition to existing conditions list
-
+			meta.SetStatusCondition(conditions, condition)
 		}
 	}
 

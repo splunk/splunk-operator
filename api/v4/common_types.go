@@ -139,9 +139,6 @@ const (
 
 	// PhaseError means an error occured with custom resource management
 	PhaseError Phase = "Error"
-
-	// PhaseWarning means an error occured with in the process of version upgrade
-	PhaseWarning Phase = "Warning"
 )
 
 // Probe defines set of configurable values for Startup, Readiness, and Liveness probes
