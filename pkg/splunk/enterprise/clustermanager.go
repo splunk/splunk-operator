@@ -540,6 +540,10 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 			return err
 		}
 
+		if len(objectList.Items) == 0 {
+			return nil
+		}
+
 		// check if instance has the required LicenseManagerRef
 		for _, cm := range objectList.Items {
 			if cm.Spec.LicenseManagerRef.Name == cr.GetName() {
