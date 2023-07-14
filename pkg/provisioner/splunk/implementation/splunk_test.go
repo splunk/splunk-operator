@@ -6,7 +6,7 @@ import (
 
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
-	splunkgatewayimpl "github.com/splunk/splunk-operator/pkg/gateway/splunk/services/implementation"
+	fixturegatewayimpl "github.com/splunk/splunk-operator/pkg/gateway/splunk/services/fixture"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,11 +28,12 @@ func setCreds(t *testing.T) *splunkProvisioner {
 		DisableCertificateVerification: true,
 	}
 	publisher := func(ctx context.Context, eventType, reason, message string) {}
-	gatewayFactory := splunkgatewayimpl.NewGatewayFactory()
-	gateway, err := gatewayFactory.NewGateway(ctx, sad, publisher)
+	fixtureFactory := fixturegatewayimpl.Fixture{}
+	gateway, err := fixtureFactory.NewGateway(ctx, sad, publisher)
 	if err != nil {
 		return nil
 	}
+
 	// TODO fixme how to test the provisioner call directly
 	//sm := NewProvisionerFactory(ctx, &sad, publisher)
 	sm := &splunkProvisioner{
@@ -49,8 +50,10 @@ func TestSetClusterManagerStatus(t *testing.T) {
 		return &healthData, nil
 	}
 	provisioner := setCreds(t)
-	ctx := context.TODO()
 	conditions := &[]metav1.Condition{}
+
+	ctx := context.TODO()
+
 	err := provisioner.SetClusterManagerStatus(ctx, conditions)
 	if err != nil {
 		t.Errorf("fixture: error in set cluster manager %v", err)

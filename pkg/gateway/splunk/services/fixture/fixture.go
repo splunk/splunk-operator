@@ -2,6 +2,7 @@ package fixture
 
 import (
 	"context"
+
 	//"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -59,7 +60,7 @@ func (f *Fixture) NewGateway(ctx context.Context, sad *splunkmodel.SplunkCredent
 func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managermodel.ClusterManagerInfoContent, error) {
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("cluster_config.json")
+	content, err := ioutil.ReadFile("../../../gateway/splunk/services/fixture/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -103,7 +104,7 @@ func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managerm
 func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]managermodel.ClusterManagerPeerContent, error) {
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("cluster_config.json")
+	content, err := ioutil.ReadFile("../../../gateway/splunk/services/fixture/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -151,7 +152,7 @@ func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]manager
 func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]managermodel.ClusterManagerHealthContent, error) {
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("cluster_config.json")
+	content, err := ioutil.ReadFile("../../../gateway/splunk/services/fixture/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err

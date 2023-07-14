@@ -51,6 +51,7 @@ var callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner
 var callGetClusterManagerPeersStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
 	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
 	if err != nil {
+		fmt.Println("Hi3")
 		return nil, err
 	} else if peerlist == nil {
 		return nil, fmt.Errorf("peer list is empty")
