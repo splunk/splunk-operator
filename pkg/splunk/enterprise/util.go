@@ -2308,9 +2308,5 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
