@@ -57,7 +57,6 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
-		{MetaName: "*v4.ClusterManager-test-"},
 		{MetaName: "*v4.LicenseManager-test-stack1"},
 		{MetaName: "*v4.LicenseManager-test-stack1"},
 	}
@@ -71,10 +70,10 @@ func TestApplyLicenseManager(t *testing.T) {
 		client.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts}}
-
+		{ListOpts: listOpts},
+	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[10]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[9], funcCalls[11], funcCalls[12], funcCalls[13]}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[9], funcCalls[11], funcCalls[12]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
@@ -717,98 +716,6 @@ func TestLicenseManagerList(t *testing.T) {
 	numOfObjects = len(objList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of LicenseManager objects. Expected=%d, Got=%d", 1, numOfObjects)
-	}
-}
-
-func TestGetLicenseManagerCurrentImage(t *testing.T) {
-
-	ctx := context.TODO()
-	current := enterpriseApi.LicenseManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.LicenseManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
-				},
-				Volumes: []corev1.Volume{},
-			},
-		},
-	}
-	builder := fake.NewClientBuilder()
-	client := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
-
-	err := client.Create(ctx, &current)
-	_, err = ApplyLicenseManager(ctx, client, &current)
-	if err != nil {
-		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
-	}
-
-	namespacedName := types.NamespacedName{
-		Namespace: current.GetNamespace(),
-		Name:      GetSplunkStatefulsetName(SplunkLicenseManager, current.GetName()),
-	}
-	statefulSet := &appsv1.StatefulSet{}
-	err = client.Get(ctx, namespacedName, statefulSet)
-	if err != nil {
-		t.Errorf("Unexpected get statefulset  %v", err)
-	}
-	labels := statefulSet.Spec.Template.ObjectMeta.Labels
-
-	stpod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "splunk-test-license-manager-0",
-			Namespace: "test",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "splunk",
-					Image: "splunk/splunk:latest",
-					Env: []corev1.EnvVar{
-						{
-							Name:  "test",
-							Value: "test",
-						},
-					},
-				},
-			},
-		},
-	}
-	stpod.ObjectMeta.Labels = labels
-	// simulate create pod
-	err = client.Create(ctx, stpod)
-	if err != nil {
-		t.Errorf("Unexpected create pod failed %v", err)
-		debug.PrintStack()
-	}
-
-	// update statefulset
-	stpod.Status.Phase = corev1.PodRunning
-	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
-		{
-			Image: "splunk/splunk:latest",
-			Name:  "splunk",
-			Ready: true,
-		},
-	}
-	err = client.Status().Update(ctx, stpod)
-	if err != nil {
-		t.Errorf("Unexpected update pod  %v", err)
-		debug.PrintStack()
-	}
-
-	image, err := getLicenseManagerCurrentImage(ctx, client, &current)
-
-	if err != nil {
-		t.Errorf("Unexpected getLicenseManagerCurrentImage error %v", err)
-	}
-	if image != stpod.Status.ContainerStatuses[0].Image {
-		t.Errorf("getLicenseManagerCurrentImage does not return the current pod image")
 	}
 }
 

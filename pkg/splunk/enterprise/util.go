@@ -2272,3 +2272,41 @@ func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) 
 	}
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }
+
+// getCurrentImage gets the image of the statefulset, returns the image, and error if something goes wrong
+func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (string, error) {
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+	}
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil {
+		return "", err
+	}
+
+	if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
+		return statefulSet.Spec.Template.Spec.Containers[0].Image, nil
+	}
+	return "", fmt.Errorf("Unable to get image from statefulset of type %s.", instanceType.ToString())
+}
+
+// changeAnnotations updates the splunk/image-tag field to trigger the reconcile loop, and returns error if something is wrong
+func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image string, cr splcommon.MetaObject) error {
+	annotations := cr.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	if _, ok := annotations["splunk/image-tag"]; ok {
+		if annotations["splunk/image-tag"] == image {
+			return nil
+		}
+	}
+
+	// create/update the checkUpdateImage annotation field
+	annotations["splunk/image-tag"] = image
+
+	cr.SetAnnotations(annotations)
+	err := c.Update(ctx, cr)
+	return err
+}

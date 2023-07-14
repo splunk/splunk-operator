@@ -19,12 +19,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
@@ -37,9 +37,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -185,15 +183,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	checkUpgradeReady, err := upgradeScenarioClusterManager(ctx, client, cr)
-	if err != nil {
-		return result, err
-	}
-
-	// TODO: Right now if the CM is not ready for upgrade the reconcile loop goes into
-	// an infite loop and ives Time Out. We still want the other functions to run if
-	// a proper upgrade does not happen
-	if !checkUpgradeReady {
+	// check if the ClusterManager is ready for version upgrade, if required
+	continueReconcile, err := isClusterManagerReadyForUpgrade(ctx, client, cr)
+	if err != nil || !continueReconcile {
 		return result, err
 	}
 
@@ -504,12 +496,18 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, 
 	return extraEnv, err
 }
 
-// upgradeScenario checks if it is suitable to update the clusterManager based on the Status of the licenseManager, returns bool, err accordingly
-func upgradeScenarioClusterManager(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
-
+// isClusterManagerReadyForUpgrade checks if ClusterManager can be upgraded if a version upgrade is in-progress
+// No-operation otherwise; returns bool, err accordingly
+func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (bool, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("upgradeScenario").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// check if a LicenseManager is attached to the instance
+	licenseManagerRef := cr.Spec.LicenseManagerRef
+	if licenseManagerRef.Name == "" {
+		return true, nil
+	}
 
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
@@ -523,139 +521,101 @@ func upgradeScenarioClusterManager(ctx context.Context, c splcommon.ControllerCl
 		return true, nil
 	}
 
-	licenseManagerRef := cr.Spec.LicenseManagerRef
 	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: licenseManagerRef.Name}
-
-	// create new object
 	licenseManager := &enterpriseApi.LicenseManager{}
 
 	// get the license manager referred in cluster manager
 	err = c.Get(ctx, namespacedName, licenseManager)
 	if err != nil {
-		return true, nil
-	}
-
-	lmImage, err := getLicenseManagerCurrentImage(ctx, c, licenseManager)
-	if err != nil {
-		eventPublisher.Warning(ctx, "upgradeScenario", fmt.Sprintf("Could not get the License Manager Image. Reason %v", err))
-		scopedLog.Error(err, "Unable to licenseManager current image")
-		return false, err
-	}
-	cmImage, err := getClusterManagerCurrentImage(ctx, c, cr)
-	if err != nil {
-		eventPublisher.Warning(ctx, "upgradeScenario", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
-		scopedLog.Error(err, "Unable to clusterManager current image")
-		return false, err
-	}
-
-	// check conditions for upgrade
-	if cr.Spec.Image != cmImage && lmImage == cr.Spec.Image && licenseManager.Status.Phase == enterpriseApi.PhaseReady {
-		return true, nil
-	}
-
-	// Temporary workaround to keep the clusterManager method working only when the LM is ready
-	if licenseManager.Status.Phase == enterpriseApi.PhaseReady {
-		return true, nil
-	}
-
-	// want ordered upgrade only for version/image upgrade
-	if cr.Spec.Image == cmImage {
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// getClusterManagerCurrentImage gets the image of the pods of the clusterManager before any upgrade takes place,
-// returns the image, and error if something goes wring
-func getClusterManagerCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (string, error) {
-
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getClusterManagerCurrentImage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
-
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
-	}
-	statefulSet := &appsv1.StatefulSet{}
-	err := c.Get(ctx, namespacedName, statefulSet)
-	if err != nil {
-		eventPublisher.Warning(ctx, "getClusterManagerCurrentImage", fmt.Sprintf("Could not get Stateful Set. Reason %v", err))
-		scopedLog.Error(err, "StatefulSet types not found in namespace", "namsespace", cr.GetNamespace())
-		return "", err
-	}
-	labelSelector, err := metav1.LabelSelectorAsSelector(statefulSet.Spec.Selector)
-	if err != nil {
-		eventPublisher.Warning(ctx, "getClusterManagerCurrentImage", fmt.Sprintf("Could not get labels. Reason %v", err))
-		scopedLog.Error(err, "Unable to get labels")
-		return "", err
-	}
-
-	// get a list of all pods in the namespace with matching labels as the statefulset
-	statefulsetPods := &corev1.PodList{}
-	opts := []rclient.ListOption{
-		rclient.InNamespace(cr.GetNamespace()),
-		rclient.MatchingLabelsSelector{Selector: labelSelector},
-	}
-
-	err = c.List(ctx, statefulsetPods, opts...)
-	if err != nil {
-		eventPublisher.Warning(ctx, "getClusterManagerCurrentImage", fmt.Sprintf("Could not get Pod list. Reason %v", err))
-		scopedLog.Error(err, "Pods types not found in namespace", "namsespace", cr.GetNamespace())
-		return "", err
-	}
-
-	// find the container with the phrase 'splunk' in it
-	for _, v := range statefulsetPods.Items {
-		for _, container := range v.Status.ContainerStatuses {
-			if strings.Contains(container.Name, "splunk") {
-				image := container.Image
-				return image, nil
-			}
-
+		if k8serrors.IsNotFound(err) {
+			return true, nil
 		}
+		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not find the License Manager. Reason %v", err))
+		scopedLog.Error(err, "Unable to get licenseManager")
+		return false, err
 	}
 
-	return "", nil
+	lmImage, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not get the License Manager Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get licenseManager current image")
+		return false, err
+	}
+
+	cmImage, err := getCurrentImage(ctx, c, cr, SplunkClusterManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get clusterManager current image")
+		return false, err
+	}
+
+	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
+	if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != cr.Spec.Image) {
+		return false, nil
+	}
+
+	return true, nil
 }
 
-// changeClusterManagerAnnotations updates the checkUpdateImage field of the CLuster Manager Annotations to trigger the reconcile loop
+// changeClusterManagerAnnotations updates the splunk/image-tag field of the ClusterManager annotations to trigger the reconcile loop
 // on update, and returns error if something is wrong
 func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
-
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
 
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      cr.Spec.ClusterManagerRef.Name,
-	}
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
-	err := c.Get(ctx, namespacedName, clusterManagerInstance)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return nil
-	}
+	if len(cr.Spec.ClusterManagerRef.Name) > 0 {
+		// if the LicenseManager holds the ClusterManagerRef
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      cr.Spec.ClusterManagerRef.Name,
+		}
+		err := c.Get(ctx, namespacedName, clusterManagerInstance)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	} else {
+		// List out all the ClusterManager instances in the namespace
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		objectList := enterpriseApi.ClusterManagerList{}
+		err := c.List(ctx, &objectList, opts...)
+		if err != nil {
+			if err.Error() == "NotFound" {
+				return nil
+			}
+			return err
+		}
 
-	image, _ := getLicenseManagerCurrentImage(ctx, c, cr)
+		if len(objectList.Items) == 0 {
+			return nil
+		}
 
-	// fetch and check the annotation fields of the ClusterManager
-	annotations := clusterManagerInstance.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	if _, ok := annotations["checkUpdateImage"]; ok {
-		if annotations["checkUpdateImage"] == image {
+		// check if instance has the required LicenseManagerRef
+		for _, cm := range objectList.Items {
+			if cm.Spec.LicenseManagerRef.Name == cr.GetName() {
+				clusterManagerInstance = &cm
+				break
+			}
+		}
+
+		if len(clusterManagerInstance.GetName()) == 0 {
 			return nil
 		}
 	}
 
-	// create/update the checkUpdateImage annotation field
-	annotations["checkUpdateImage"] = image
-
-	clusterManagerInstance.SetAnnotations(annotations)
-	err = c.Update(ctx, clusterManagerInstance)
+	image, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
+		scopedLog.Error(err, "Get LicenseManager Image failed with", "error", err)
+		return err
+	}
+	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
 	if err != nil {
 		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
 		scopedLog.Error(err, "ClusterManager types update after changing annotations failed with", "error", err)
@@ -663,5 +623,4 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	}
 
 	return nil
-
 }
