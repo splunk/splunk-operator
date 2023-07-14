@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	splunkimpl "github.com/splunk/splunk-operator/pkg/provisioner/splunk/implementation"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -914,7 +915,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, splunkimpl.NewProvisionerFactory(false))
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -988,7 +989,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager)
+	_, err = ApplyClusterManager(ctx, c, clustermanager, splunkimpl.NewProvisionerFactory(false))
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()

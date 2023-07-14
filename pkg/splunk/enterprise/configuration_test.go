@@ -26,6 +26,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	splunkimpl "github.com/splunk/splunk-operator/pkg/provisioner/splunk/implementation"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -232,7 +233,7 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 
 	var client splcommon.ControllerClient
 
-	_, err := ApplyClusterManager(context.Background(), client, &cr)
+	_, err := ApplyClusterManager(context.Background(), client, &cr, splunkimpl.NewProvisionerFactory(false))
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
