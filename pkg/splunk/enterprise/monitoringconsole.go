@@ -455,6 +455,9 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 			}
 			return err
 		}
+		if len(objectList.Items) == 0 {
+			return nil
+		}
 
 		// check if instance has the required ClusterManagerRef
 		for _, mc := range objectList.Items {

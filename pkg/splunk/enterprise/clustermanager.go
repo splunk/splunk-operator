@@ -233,6 +233,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
+		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
 		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
 		if err != nil {
 			return result, err
@@ -544,7 +545,6 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 			}
 			return err
 		}
-
 		if len(objectList.Items) == 0 {
 			return nil
 		}
