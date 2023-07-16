@@ -1,0 +1,40 @@
+---
+# assert for SearchHeadCluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+status:
+  phase: Ready
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-shc-deployer-secret-v1
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-shc-search-head-secret-v1
+
+---
+# check for stateful set and replicas as configured
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-shc-search-head
+status:
+  replicas: 3
+
+---
+# check for statefull set
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-shc-deployer
+status:
+  replicas: 1

@@ -3149,3 +3149,43 @@ func TestGetLicenseMasterURL(t *testing.T) {
 		t.Errorf("Expected a valid return value")
 	}
 }
+func TestGetCurrentImage(t *testing.T) {
+
+	ctx := context.TODO()
+	current := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	err := client.Create(ctx, &current)
+	_, err = ApplyClusterManager(ctx, client, &current)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+
+	instanceType := SplunkClusterManager
+
+	image, err := getCurrentImage(ctx, client, &current, instanceType)
+
+	if err != nil {
+		t.Errorf("Unexpected getCurrentImage error %v", err)
+	}
+	if image != current.Spec.Image {
+		t.Errorf("getCurrentImage does not return the current statefulset image")
+	}
+
+}

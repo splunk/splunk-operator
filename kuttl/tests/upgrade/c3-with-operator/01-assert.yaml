@@ -1,0 +1,9 @@
+---
+# assert for splunk operator pod to be ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: splunk-operator-controller-manager
+status:
+  readyReplicas: 1
+  availableReplicas: 1
