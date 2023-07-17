@@ -32,9 +32,11 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -176,6 +178,11 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getSearchHeadEnv(cr))
 	if err != nil {
+		return result, err
+	}
+
+	continueReconcile, err := isSearchHeadReadyForUpgrade(ctx, client, cr)
+	if err != nil || !continueReconcile {
 		return result, err
 	}
 
@@ -666,4 +673,107 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 	}
 
 	return objectList, nil
+}
+
+// isSearchHeadReadyForUpgrade checks if SearchHeadCluster can be upgraded if a version upgrade is in-progress
+// No-operation otherwise; returns bool, err accordingly
+func isSearchHeadReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isSearchHeadReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// check if a LicenseManager is attached to the instance
+	monitoringConsoleRef := cr.Spec.MonitoringConsoleRef
+	if monitoringConsoleRef.Name == "" {
+		return true, nil
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+	}
+
+	// check if the stateful set is created at this instance
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: monitoringConsoleRef.Name}
+	monitoringConsole := &enterpriseApi.MonitoringConsole{}
+
+	// get the license manager referred in cluster manager
+	err = c.Get(ctx, namespacedName, monitoringConsole)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not find the Monitoring Console. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Monitoring Console")
+		return false, err
+	}
+
+	mcImage, err := getCurrentImage(ctx, c, cr, SplunkMonitoringConsole)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Monitoring Console current image")
+		return false, err
+	}
+
+	shcImage, err := getCurrentImage(ctx, c, cr, SplunkSearchHead)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Search Head Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Search Head current image")
+		return false, err
+	}
+
+	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
+	if (cr.Spec.Image != shcImage) && (monitoringConsole.Status.Phase != enterpriseApi.PhaseReady || mcImage != cr.Spec.Image) {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// changeSearchHeadAnnotations updates the splunk/image-tag field of the SearchHeadCluster annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong.
+func changeSearchHeadAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeSearchHeadAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	image, err := getCurrentImage(ctx, client, cr, SplunkMonitoringConsole)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeSearchHeadAnnotations", fmt.Sprintf("Could not get the MonitoringConsole Image. Reason %v", err))
+		scopedLog.Error(err, "Get MonitoringConsole Image failed with", "error", err)
+		return err
+	}
+
+	// List out all the SearchHeadCluster instances in the namespace
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+	}
+	objectList := enterpriseApi.SearchHeadClusterList{}
+	err = client.List(ctx, &objectList, opts...)
+	if err != nil {
+		if err.Error() == "NotFound" {
+			return nil
+		}
+		return err
+	}
+
+	// check if instance has the required MonitoringConsoleRef
+	for _, shc := range objectList.Items {
+		if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
+			err = changeAnnotations(ctx, client, image, &shc)
+			if err != nil {
+				eventPublisher.Warning(ctx, "changeSearchHeadAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+				scopedLog.Error(err, "SearchHeadCluster types update after changing annotations failed with", "error", err)
+				return err
+			}
+		}
+	}
+
+	return nil
 }

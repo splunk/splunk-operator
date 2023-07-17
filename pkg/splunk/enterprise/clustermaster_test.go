@@ -578,7 +578,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	}
 }
 
-func TestApplyCLusterMasterDeletion(t *testing.T) {
+func TestApplyClusterMasterDeletion(t *testing.T) {
 	ctx := context.TODO()
 	cm := enterpriseApiV3.ClusterMaster{
 		ObjectMeta: metav1.ObjectMeta{

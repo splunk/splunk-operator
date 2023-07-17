@@ -1873,3 +1873,170 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 }
+
+func TestIsSearchHeadReadyForUpgrade(t *testing.T) {
+	ctx := context.TODO()
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// Create License Manager
+	mc := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+
+	err := client.Create(ctx, &mc)
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+	mc.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, &mc)
+	if err != nil {
+		t.Errorf("Unexpected status update  %v", err)
+		debug.PrintStack()
+	}
+
+	// Create Cluster Manager
+	shc := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+
+	err = client.Create(ctx, &shc)
+	_, err = ApplySearchHeadCluster(ctx, client, &shc)
+	if err != nil {
+		t.Errorf("applySearchHeadCluster should not have returned error; err=%v", err)
+	}
+
+	mc.Spec.Image = "splunk2"
+	shc.Spec.Image = "splunk2"
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+
+	searchHeadCluster := &enterpriseApi.SearchHeadCluster{}
+	namespacedName := types.NamespacedName{
+		Name:      shc.Name,
+		Namespace: shc.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, searchHeadCluster)
+	if err != nil {
+		t.Errorf("Get Search Head Cluster should not have returned error=%v", err)
+	}
+
+	check, err := isSearchHeadReadyForUpgrade(ctx, client, searchHeadCluster)
+
+	if err != nil {
+		t.Errorf("Unexpected upgradeScenario error %v", err)
+	}
+
+	if !check {
+		t.Errorf("isSearchHeadReadyForUpgrade: SHC should be ready for upgrade")
+	}
+}
+
+func TestChangeSearchHeadAnnotations(t *testing.T) {
+	ctx := context.TODO()
+
+	// define MC and SHC
+	mc := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+
+	shc := &enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+	mc.Spec.Image = "splunk/splunk:latest"
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// Create the instances
+	client.Create(ctx, mc)
+	_, err := ApplyMonitoringConsole(ctx, client, mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+	mc.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, mc)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+	client.Create(ctx, shc)
+	_, err = ApplySearchHeadCluster(ctx, client, shc)
+	if err != nil {
+		t.Errorf("applySearchHeadCluster should not have returned error; err=%v", err)
+	}
+
+	err = changeSearchHeadAnnotations(ctx, client, mc)
+	if err != nil {
+		t.Errorf("changeSearchHeadAnnotations should not have returned error=%v", err)
+	}
+	searchHeadCluster := &enterpriseApi.SearchHeadCluster{}
+	namespacedName := types.NamespacedName{
+		Name:      shc.Name,
+		Namespace: shc.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, searchHeadCluster)
+	if err != nil {
+		t.Errorf("changeSearchHeadAnnotations should not have returned error=%v", err)
+	}
+
+	annotations := searchHeadCluster.GetAnnotations()
+	if annotations["splunk/image-tag"] != mc.Spec.Image {
+		t.Errorf("changeSearchHeadAnnotations should have set the splunk/image-tag annotation field to the current image")
+	}
+}
