@@ -532,9 +532,14 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		runtime.InNamespace("test"),
 		runtime.MatchingLabels(labels),
 	}
+	listOpts1 := []runtime.ListOption{
+		runtime.InNamespace("test"),
+	}
 	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[10], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[13]}}
+		{ListOpts: listOpts},
+		{ListOpts: listOpts1},
+	}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[10], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[13]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{

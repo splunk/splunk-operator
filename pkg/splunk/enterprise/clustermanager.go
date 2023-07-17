@@ -239,6 +239,12 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		if err != nil {
 			scopedLog.Error(err, "error while setting cluster health")
 		}
+
+		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
+		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
+		if err != nil {
+			return result, err
+		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -591,7 +597,6 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 			}
 			return err
 		}
-
 		if len(objectList.Items) == 0 {
 			return nil
 		}
