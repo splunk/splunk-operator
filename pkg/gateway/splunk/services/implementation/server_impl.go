@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
-	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	servermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/server"
 	healthmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/server/health"
 )
@@ -41,7 +40,7 @@ func (p *splunkGateway) GetServerDeploymentHealthDetails(context context.Context
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.DeploymentContent{}
+	contentList := []healthmodel.DeploymentContent{}
 	for _, entry := range envelop.Entry {
 		contentList = append(contentList, entry.Content)
 	}
@@ -77,7 +76,7 @@ func (p *splunkGateway) GetSplunkdHealthDetails(context context.Context) (*[]hea
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.DeploymentContent{}
+	contentList := []healthmodel.DeploymentContent{}
 	for _, entry := range envelop.Entry {
 		contentList = append(contentList, entry.Content)
 	}
@@ -92,7 +91,7 @@ func (p *splunkGateway) GetSplunkdHealthDetails(context context.Context) (*[]hea
 // to be accessible from this endpoint. Use server/sysinfo to access server status instead.
 //  endpoint: https://<host>:<mPort>/services/server/info
 
-func (p *splunkGateway) GetServerInfo(context context.Context) (*[]servermodel.DeploymentContent, error) {
+func (p *splunkGateway) GetServerInfo(context context.Context) (*[]healthmodel.DeploymentContent, error) {
 	url := servermodel.InfoUrl
 
 	// fetch the configheader into struct
@@ -116,7 +115,7 @@ func (p *splunkGateway) GetServerInfo(context context.Context) (*[]servermodel.D
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.DeploymentContent{}
+	contentList := []healthmodel.DeploymentContent{}
 	for _, entry := range envelop.Entry {
 		contentList = append(contentList, entry.Content)
 	}
@@ -126,7 +125,7 @@ func (p *splunkGateway) GetServerInfo(context context.Context) (*[]servermodel.D
 // List server/status child resources.
 // endpoint: https://<host>:<mPort>/services/server/status
 
-func (p *splunkGateway) GetServerStatus(context context.Context) (*[]servermodel.DeploymentContent, error) {
+func (p *splunkGateway) GetServerStatus(context context.Context) (*[]healthmodel.DeploymentContent, error) {
 	url := servermodel.StatusUrl
 
 	// fetch the configheader into struct
@@ -150,7 +149,7 @@ func (p *splunkGateway) GetServerStatus(context context.Context) (*[]servermodel
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.DeploymentContent{}
+	contentList := []healthmodel.DeploymentContent{}
 	for _, entry := range envelop.Entry {
 		contentList = append(contentList, entry.Content)
 	}

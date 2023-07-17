@@ -3,7 +3,12 @@ package health
 import "time"
 
 // Description: Endpoint to get the status of a rolling restart.
-// Rest End Point: services/cluster/manager/status
+// Rest End Point: services/server/health/deployment/details
+
+type DeploymentContent struct {
+	Health string `json:"health,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
 
 type DeploymentHeader struct {
 	Links struct {
@@ -42,11 +47,7 @@ type DeploymentHeader struct {
 			Optional []interface{} `json:"optional"`
 			Wildcard []interface{} `json:"wildcard"`
 		} `json:"fields"`
-		Content struct {
-			Disabled bool        `json:"disabled"`
-			EaiACL   interface{} `json:"eai:acl"`
-			Health   string      `json:"health"`
-		} `json:"content"`
+		Content DeploymentContent `json:"content,omitempty"`
 	} `json:"entry"`
 	Paging struct {
 		Total   int `json:"total"`
