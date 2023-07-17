@@ -743,19 +743,14 @@ func changeSearchHeadAnnotations(ctx context.Context, client splcommon.Controlle
 	scopedLog := reqLogger.WithName("changeSearchHeadAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
-	image, err := getCurrentImage(ctx, client, cr, SplunkMonitoringConsole)
-	if err != nil {
-		eventPublisher.Warning(ctx, "changeSearchHeadAnnotations", fmt.Sprintf("Could not get the MonitoringConsole Image. Reason %v", err))
-		scopedLog.Error(err, "Get MonitoringConsole Image failed with", "error", err)
-		return err
-	}
+	searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
 
 	// List out all the SearchHeadCluster instances in the namespace
 	opts := []rclient.ListOption{
 		rclient.InNamespace(cr.GetNamespace()),
 	}
 	objectList := enterpriseApi.SearchHeadClusterList{}
-	err = client.List(ctx, &objectList, opts...)
+	err := client.List(ctx, &objectList, opts...)
 	if err != nil {
 		if err.Error() == "NotFound" {
 			return nil
@@ -766,13 +761,25 @@ func changeSearchHeadAnnotations(ctx context.Context, client splcommon.Controlle
 	// check if instance has the required MonitoringConsoleRef
 	for _, shc := range objectList.Items {
 		if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
-			err = changeAnnotations(ctx, client, image, &shc)
-			if err != nil {
-				eventPublisher.Warning(ctx, "changeSearchHeadAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
-				scopedLog.Error(err, "SearchHeadCluster types update after changing annotations failed with", "error", err)
-				return err
-			}
+			searchHeadClusterInstance = shc
 		}
+	}
+	if len(searchHeadClusterInstance.GetName()) == 0 {
+		return nil
+	}
+
+	image, err := getCurrentImage(ctx, client, cr, SplunkMonitoringConsole)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeSearchHeadAnnotations", fmt.Sprintf("Could not get the MonitoringConsole Image. Reason %v", err))
+		scopedLog.Error(err, "Get MonitoringConsole Image failed with", "error", err)
+		return err
+	}
+
+	err = changeAnnotations(ctx, client, image, &searchHeadClusterInstance)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeSearchHeadAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		scopedLog.Error(err, "SearchHeadCluster types update after changing annotations failed with", "error", err)
+		return err
 	}
 
 	return nil
