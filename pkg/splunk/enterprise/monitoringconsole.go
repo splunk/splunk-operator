@@ -391,7 +391,7 @@ func isMonitoringConsoleReadyForUpgrade(ctx context.Context, c splcommon.Control
 	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
 	clusterManager := &enterpriseApi.ClusterManager{}
 
-	// get the cluster manager referred in cluster manager
+	// get the cluster manager referred in monitoring console
 	err = c.Get(ctx, namespacedName, clusterManager)
 	if err != nil {
 		eventPublisher.Warning(ctx, "isMonitoringConsoleReadyForUpgrade", fmt.Sprintf("Could not find the Cluster Manager. Reason %v", err))
