@@ -191,3 +191,92 @@ func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]manage
 	}
 	return &contentList, nil
 }
+
+// GetClusterManagerSites Access cluster site information.
+// list List available cluster sites.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/sites
+func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]managermodel.ClusterManagerSiteContent, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
+	content, err := ioutil.ReadFile("cluster_config.json")
+	if err != nil {
+		log.Error(err, "fixture: error in get cluster config")
+		return nil, err
+	}
+	httpmock.ActivateNonDefault(p.client.GetClient())
+	fixtureData := string(content)
+	responder := httpmock.NewStringResponder(200, fixtureData)
+	fakeUrl := clustermodel.GetClusterManagerSitesUrl
+	httpmock.RegisterResponder("GET", fakeUrl, responder)
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &managermodel.ClusterManagerSiteHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(fakeUrl)
+	if err != nil {
+		p.log.Error(err, "get cluster manager buckets failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []managermodel.ClusterManagerSiteContent{}
+	for _, entry := range envelop.Entry {
+		contentList = append(contentList, entry.Content)
+	}
+	return &contentList, nil
+}
+
+// GetClusterManagerSearchHeadStatus Endpoint to get searchheads connected to cluster manager.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/status
+func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]managermodel.ClusterManagerStatusContent, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
+	content, err := ioutil.ReadFile("cluster_manager_status.json")
+	if err != nil {
+		log.Error(err, "fixture: error in get cluster manager search heads")
+		return nil, err
+	}
+	httpmock.ActivateNonDefault(p.client.GetClient())
+	fixtureData := string(content)
+	responder := httpmock.NewStringResponder(200, fixtureData)
+	fakeUrl := clustermodel.GetClusterManagerStatusUrl
+	httpmock.RegisterResponder("GET", fakeUrl, responder)
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &managermodel.ClusterManagerStatusHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(fakeUrl)
+	if err != nil {
+		p.log.Error(err, "get cluster manager status failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []managermodel.ClusterManagerStatusContent{}
+	for _, entry := range envelop.Entry {
+		contentList = append(contentList, entry.Content)
+	}
+	return &contentList, nil
+}

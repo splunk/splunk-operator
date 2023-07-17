@@ -34,4 +34,14 @@ type Gateway interface {
 	// Access cluster manager peers.
 	// endpoint: https://<host>:<mPort>/services/cluster/manager/peers
 	GetClusterManagerPeers(ctx context.Context) (*[]managermodel.ClusterManagerPeerContent, error)
+
+	// Access cluster site information.
+	// list List available cluster sites.
+	// endpoint: https://<host>:<mPort>/services/cluster/manager/sites
+	GetClusterManagerSites(ctx context.Context) (*[]managermodel.ClusterManagerSiteContent, error)
+
+	// GetClusterManagerSearchHeadStatus Endpoint to get the status of a rolling restart.
+	// GET the status of a rolling restart.
+	// endpoint: https://<host>:<mPort>/services/cluster/manager/status
+	GetClusterManagerStatus(ctx context.Context) (*[]managermodel.ClusterManagerStatusContent, error)
 }

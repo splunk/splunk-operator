@@ -1,0 +1,109 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/cluster/manager/sites",
+    "updated": "2022-07-18T23:56:42+00:00",
+    "generator": {
+        "build": "6818ac46f2ec",
+        "version": "9.0.0"
+    },
+    "entry": [
+        {
+            "name": "site1",
+            "id": "https://localhost:8089/services/cluster/manager/sites/site1",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/manager/sites/site1",
+                "list": "/services/cluster/manager/sites/site1"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "peers": {
+                    "7D3E85AB-B17A-47A6-B5E9-405FB889AD25": {
+                        "host_port_pair": "192.168.47.247:8089",
+                        "server_name": "splunk-example-site1-indexer-0"
+                    },
+                    "CB87DA8D-38FF-42D8-B7EC-076C97D77E18": {
+                        "host_port_pair": "192.168.82.138:8089",
+                        "server_name": "splunk-example-site1-indexer-2"
+                    },
+                    "F881BA5F-E181-4C09-BB33-96131460678E": {
+                        "host_port_pair": "192.168.11.34:8089",
+                        "server_name": "splunk-example-site1-indexer-1"
+                    }
+                }
+            }
+        },
+        {
+            "name": "site2",
+            "id": "https://localhost:8089/services/cluster/manager/sites/site2",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/cluster/manager/sites/site2",
+                "list": "/services/cluster/manager/sites/site2"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "peers": {
+                    "188C23DD-D641-4BA2-B651-C042F809A0B3": {
+                        "host_port_pair": "192.168.61.169:8089",
+                        "server_name": "splunk-example-site2-indexer-0"
+                    },
+                    "1FBC4C96-0AD0-4C00-8468-4DDA988FB808": {
+                        "host_port_pair": "192.168.79.147:8089",
+                        "server_name": "splunk-example-site2-indexer-2"
+                    },
+                    "3A617349-B077-4E0F-B76A-41C300B00326": {
+                        "host_port_pair": "192.168.10.218:8089",
+                        "server_name": "splunk-example-site2-indexer-1"
+                    }
+                }
+            }
+        }
+    ],
+    "paging": {
+        "total": 2,
+        "perPage": 30,
+        "offset": 0
+    },
+    "messages": []
+}

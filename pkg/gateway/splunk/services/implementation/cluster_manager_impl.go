@@ -133,3 +133,73 @@ func (p *splunkGateway) GetClusterManagerHealth(context context.Context) (*[]man
 	}
 	return &contentList, err
 }
+
+// Access cluster site information.
+// list List available cluster sites.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/sites
+func (p *splunkGateway) GetClusterManagerSites(context context.Context) (*[]managermodel.ClusterManagerSiteContent, error) {
+	url := clustermodel.GetClusterManagerSitesUrl
+
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &managermodel.ClusterManagerSiteHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(url)
+	if err != nil {
+		p.log.Error(err, "get cluster manager sites failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []managermodel.ClusterManagerSiteContent{}
+	for _, entry := range envelop.Entry {
+		contentList = append(contentList, entry.Content)
+	}
+	return &contentList, err
+}
+
+// GetClusterManagerSearchHeadStatus Endpoint to get the status of a rolling restart.
+// GET the status of a rolling restart.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/status
+func (p *splunkGateway) GetClusterManagerStatus(context context.Context) (*[]managermodel.ClusterManagerStatusContent, error) {
+	url := clustermodel.GetClusterManagerStatusUrl
+
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &managermodel.ClusterManagerStatusHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(url)
+	if err != nil {
+		p.log.Error(err, "get cluster manager status failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []managermodel.ClusterManagerStatusContent{}
+	for _, entry := range envelop.Entry {
+		contentList = append(contentList, entry.Content)
+	}
+	return &contentList, err
+}

@@ -48,6 +48,16 @@ var callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner
 	return healthList, err
 }
 
+var callGetClusterManagerStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerStatusContent, error) {
+	statuslist, err := p.gateway.GetClusterManagerStatus(ctx)
+	if err != nil {
+		return nil, err
+	} else if statuslist == nil {
+		return nil, fmt.Errorf("status list is empty")
+	}
+	return statuslist, err
+}
+
 var callGetClusterManagerPeersStatus = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerPeerContent, error) {
 	peerlist, err := p.gateway.GetClusterManagerPeers(ctx)
 	if err != nil {
