@@ -500,6 +500,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
+		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 	}
