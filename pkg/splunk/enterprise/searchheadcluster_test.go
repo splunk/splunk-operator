@@ -1436,7 +1436,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	// mock new search pod manager
-	newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+	newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 		return searchHeadClusterPodManager{
 			log:     log,
 			cr:      cr,
@@ -1910,7 +1910,7 @@ func TestIsSearchHeadReadyForUpgrade(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	// Create Cluster Manager
+	// Create Search Head Cluster
 	shc := enterpriseApi.SearchHeadCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -1927,6 +1927,7 @@ func TestIsSearchHeadReadyForUpgrade(t *testing.T) {
 					Name: "test",
 				},
 			},
+			Replicas: int32(3),
 		},
 	}
 
