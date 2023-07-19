@@ -714,7 +714,7 @@ func isSearchHeadReadyForUpgrade(ctx context.Context, c splcommon.ControllerClie
 		return false, err
 	}
 
-	mcImage, err := getCurrentImage(ctx, c, cr, SplunkMonitoringConsole)
+	mcImage, err := getCurrentImage(ctx, c, monitoringConsole, SplunkMonitoringConsole)
 	if err != nil {
 		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
 		scopedLog.Error(err, "Unable to get Monitoring Console current image")
@@ -756,6 +756,9 @@ func changeSearchHeadAnnotations(ctx context.Context, client splcommon.Controlle
 			return nil
 		}
 		return err
+	}
+	if len(objectList.Items) == 0 {
+		return nil
 	}
 
 	// check if instance has the required MonitoringConsoleRef
