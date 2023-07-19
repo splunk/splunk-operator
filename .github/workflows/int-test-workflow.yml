@@ -2,6 +2,7 @@ name: Integration Test WorkFlow
 on:
   push:
     branches:
+      - cspl-2344-shc
       - develop
       - main
       - feature**

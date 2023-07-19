@@ -867,7 +867,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	}
 }
 
-func TestApplyCLusterManagerDeletion(t *testing.T) {
+func TestApplyClusterManagerDeletion(t *testing.T) {
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
