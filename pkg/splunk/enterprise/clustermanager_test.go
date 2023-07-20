@@ -640,8 +640,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		//manager := setCreds(t, c, &current)
-		_, err := manager.ApplyClusterManager(ctx, c, &current)
+		//manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
 
