@@ -39,7 +39,6 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splunkimpl "github.com/splunk/splunk-operator/pkg/provisioner/splunk/implementation"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -3173,7 +3172,8 @@ func TestGetCurrentImage(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	err := client.Create(ctx, &current)
-	_, err = ApplyClusterManager(ctx, client, &current, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, client, &current)
+	_, err = manager.ApplyClusterManager(ctx, client, &current)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}

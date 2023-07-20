@@ -137,12 +137,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	// check if the Monitoring Console is ready for version upgrade, if required
-	continueReconcile, err := isMonitoringConsoleReadyForUpgrade(ctx, client, cr)
-	if err != nil || !continueReconcile {
-		return result, err
-	}
-
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -361,64 +355,6 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
-}
-
-// isMonitoringConsoleReadyForUpgrade checks if MonitoringConsole can be upgraded if a version upgrade is in-progress
-// No-operation otherwise; returns bool, err accordingly
-func isMonitoringConsoleReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isMonitoringConsoleReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
-
-	// check if a LicenseManager is attached to the instance
-	clusterManagerRef := cr.Spec.ClusterManagerRef
-	if clusterManagerRef.Name == "" {
-		return true, nil
-	}
-
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetName()),
-	}
-
-	// check if the stateful set is created at this instance
-	statefulSet := &appsv1.StatefulSet{}
-	err := c.Get(ctx, namespacedName, statefulSet)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return true, nil
-	}
-
-	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
-	clusterManager := &enterpriseApi.ClusterManager{}
-
-	// get the cluster manager referred in monitoring console
-	err = c.Get(ctx, namespacedName, clusterManager)
-	if err != nil {
-		eventPublisher.Warning(ctx, "isMonitoringConsoleReadyForUpgrade", fmt.Sprintf("Could not find the Cluster Manager. Reason %v", err))
-		scopedLog.Error(err, "Unable to get clusterManager")
-		return true, err
-	}
-
-	cmImage, err := getCurrentImage(ctx, c, cr, SplunkClusterManager)
-	if err != nil {
-		eventPublisher.Warning(ctx, "isMonitoringConsoleReadyForUpgrade", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
-		scopedLog.Error(err, "Unable to get clusterManager current image")
-		return false, err
-	}
-
-	mcImage, err := getCurrentImage(ctx, c, cr, SplunkMonitoringConsole)
-	if err != nil {
-		eventPublisher.Warning(ctx, "isMonitoringConsolerReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
-		scopedLog.Error(err, "Unable to get monitoring console current image")
-		return false, err
-	}
-
-	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
-	if (cr.Spec.Image != mcImage) && (clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != cr.Spec.Image) {
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // changeMonitoringConsoleAnnotations updates the splunk/image-tag field of the MonitoringConsole annotations to trigger the reconcile loop

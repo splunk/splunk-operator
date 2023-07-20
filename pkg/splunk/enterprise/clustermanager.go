@@ -21,13 +21,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
-	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
+	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -36,14 +35,27 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+type splunkManager struct {
+	// a logger configured for this host
+	log logr.Logger
+	// a debug logger configured for this host
+	debugLog logr.Logger
+	// an event publisher for recording significant events
+	publisher gateway.EventPublisher
+	// credentials
+	// gateway factory
+	provisioner provisioner.Provisioner
+	// client
+	client splcommon.ControllerClient
+}
+
 // ApplyClusterManager reconciles the state of a Splunk Enterprise cluster manager.
-func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, provisionerFactory provisioner.Factory) (reconcile.Result, error) {
+func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -108,7 +120,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := initAndCheckAppInfoStatus(ctx, p.client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -117,7 +129,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := ApplySplunkConfig(ctx, p.client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
@@ -128,7 +140,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			extraEnv, _ := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, p.client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
 			}
@@ -235,16 +247,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
-		err = SetClusterManagerStatus(ctx, client, cr, provisionerFactory)
-		if err != nil {
-			scopedLog.Error(err, "error while setting cluster health")
-		}
-
-		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
-		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
-		if err != nil {
-			return result, err
-		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -253,51 +255,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	return result, nil
-}
-
-// SetClusterManagerStatus
-func SetClusterManagerStatus(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, provisionerFactory provisioner.Factory) error {
-	eventPublisher, _ := newK8EventPublisher(client, cr)
-
-	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
-	if err != nil {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not access default secret object to fetch admin password. Reason %v", err))
-		return fmt.Errorf("Could not access default secret object to fetch admin password. Reason %v", err)
-	}
-
-	//Get the admin password from the secret object
-	adminPwd, foundSecret := defaultSecret.Data["password"]
-	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", fmt.Sprintf("Could not find admin password "))
-		return fmt.Errorf("Could not find admin password ")
-	}
-
-	service := getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, false)
-
-	sad := &splunkmodel.SplunkCredentials{
-		Address:                        service.Name,
-		Port:                           8089,
-		ServicesNamespace:              "-",
-		User:                           "admin",
-		App:                            "-",
-		CredentialsName:                string(adminPwd[:]),
-		TrustedCAFile:                  "",
-		ClientCertificateFile:          "",
-		ClientPrivateKeyFile:           "",
-		DisableCertificateVerification: true,
-		Namespace:                      cr.Namespace,
-	}
-	prov, err := provisionerFactory.NewProvisioner(ctx, sad, eventPublisher.publishEvent)
-	if err != nil {
-		return errors.Wrap(err, "failed to create gateway")
-	}
-	err = prov.SetClusterManagerStatus(ctx, &cr.Status.Conditions)
-	if err != nil {
-		return errors.Wrap(err, "failed to update cluster manager health status")
-	}
-
-	return nil
 }
 
 // clusterManagerPodManager is used to manage the cluster manager pod

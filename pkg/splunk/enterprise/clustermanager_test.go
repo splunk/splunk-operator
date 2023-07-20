@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jinzhu/copier"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,14 +38,39 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	splunkimpl "github.com/splunk/splunk-operator/pkg/provisioner/splunk/implementation"
+	manager "github.com/splunk/splunk-operator/pkg/splunk"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	managermodel "github.com/splunk/splunk-operator/pkg/splunk/model"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	//splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 )
+
+func setCreds(t *testing.T, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) manager.SplunkManager {
+	ctx := context.TODO()
+	clusterManager := enterpriseApi.ClusterManager{}
+	clusterManager.Name = "test"
+	info := &managermodel.ReconcileInfo{
+		TypeMeta:   clusterManager.TypeMeta,
+		CommonSpec: cr.Spec.CommonSplunkSpec,
+		Client:     c,
+		Log:        log.Log,
+		Namespace:  "default",
+		Name:       "clusterManager",
+	}
+	copier.Copy(info.MetaObject, cr.ObjectMeta)
+	publisher := func(ctx context.Context, eventType, reason, message string) {}
+	mg := NewManagerFactory(true)
+	manager, err := mg.NewManager(ctx, info, publisher)
+	if err != nil {
+		return nil
+	}
+	return manager
+}
 
 func TestApplyClusterManager(t *testing.T) {
 
@@ -118,7 +144,8 @@ func TestApplyClusterManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), splunkimpl.NewProvisionerFactory(false))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -128,7 +155,8 @@ func TestApplyClusterManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), splunkimpl.NewProvisionerFactory(false))
+		manager := setCreds(t, c, &current)
+		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -139,7 +167,9 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	c := spltest.NewMockClient()
 	_ = errors.New(splcommon.Rerr)
-	_, err := ApplyClusterManager(ctx, c, &current, splunkimpl.NewProvisionerFactory(false))
+
+	manager := setCreds(t, c, &current)
+	_, err := manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -205,7 +235,7 @@ func TestApplyClusterManager(t *testing.T) {
 		},
 	}
 
-	_, err = ApplyClusterManager(ctx, c, &current, splunkimpl.NewProvisionerFactory(false))
+	_, err = manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -221,7 +251,7 @@ func TestApplyClusterManager(t *testing.T) {
 	current.Spec.SmartStore.VolList[0].SecretRef = "s3-secret"
 	current.Status.SmartStore.VolList[0].SecretRef = "s3-secret"
 	current.Status.ResourceRevMap["s3-secret"] = "v2"
-	_, err = ApplyClusterManager(ctx, c, &current, splunkimpl.NewProvisionerFactory(false))
+	_, err = manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -235,7 +265,8 @@ func TestApplyClusterManager(t *testing.T) {
 	c.Create(ctx, &cmap)
 	current.Spec.SmartStore.VolList[0].SecretRef = ""
 	current.Spec.SmartStore.Defaults.IndexAndGlobalCommonSpec.VolName = "msos_s2s3_vol"
-	_, err = ApplyClusterManager(ctx, c, &current, splunkimpl.NewProvisionerFactory(false))
+	manager = setCreds(t, c, &current)
+	_, err = manager.ApplyClusterManager(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Don't expected error here")
 	}
@@ -291,7 +322,7 @@ func TestApplyClusterManager(t *testing.T) {
 			},
 		},
 	}
-	_, err = ApplyClusterManager(ctx, c, &current, splunkimpl.NewProvisionerFactory(false))
+	_, err = manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -308,7 +339,7 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
-	_, err = ApplyClusterManager(ctx, c, &current, splunkimpl.NewProvisionerFactory(false))
+	_, err = manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -585,7 +616,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 
 	// Without S3 keys, ApplyClusterManager should fail
-	_, err := ApplyClusterManager(ctx, client, &current, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, client, &current)
+	_, err := manager.ApplyClusterManager(ctx, client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
 	}
@@ -614,7 +646,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterManager), splunkimpl.NewProvisionerFactory(false))
+		//manager := setCreds(t, c, &current)
+		_, err := manager.ApplyClusterManager(ctx, client, &current)
 		return err
 	}
 
@@ -641,12 +674,12 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
-	if _, err = ApplyClusterManager(context.Background(), client, &current, splunkimpl.NewProvisionerFactory(false)); err != nil {
+	if _, err = manager.ApplyClusterManager(ctx, client, &current); err != nil {
 		t.Errorf("ApplyClusterManager() should not have returned error")
 	}
 
 	current.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyClusterManager(context.Background(), client, &current, splunkimpl.NewProvisionerFactory(false)); err == nil {
+	if _, err = manager.ApplyClusterManager(ctx, client, &current); err == nil {
 		t.Errorf("ApplyClusterManager() should have returned error")
 	}
 
@@ -656,7 +689,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	ss.Spec.Replicas = &replicas
 	ss.Spec.Template.Spec.Containers[0].Image = "splunk/splunk"
 	client.AddObject(ss)
-	if result, err := ApplyClusterManager(context.Background(), client, &current, splunkimpl.NewProvisionerFactory(false)); err == nil && !result.Requeue {
+	if result, err := manager.ApplyClusterManager(ctx, client, &current); err == nil && !result.Requeue {
 		t.Errorf("ApplyClusterManager() should have returned error or result.requeue should have been false")
 	}
 
@@ -666,7 +699,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	client.AddObjects(objects)
 	current.Spec.CommonSplunkSpec.Mock = false
 
-	if _, err := ApplyClusterManager(context.Background(), client, &current, splunkimpl.NewProvisionerFactory(false)); err == nil {
+	if _, err = manager.ApplyClusterManager(ctx, client, &current); err == nil {
 		t.Errorf("ApplyClusterManager() should have returned error")
 	}
 }
@@ -868,7 +901,8 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	_, err = ApplyClusterManager(context.Background(), client, &cm, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, client, &cm)
+	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
 	}
@@ -963,7 +997,8 @@ func TestApplyCLusterManagerDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyClusterManager(ctx, c, &cm, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, c, &cm)
+	_, err = manager.ApplyClusterManager(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
 	}
@@ -1451,7 +1486,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	}
 
 	err = client.Create(ctx, &cm)
-	_, err = ApplyClusterManager(ctx, client, &cm, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, client, &cm)
+	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
@@ -1536,7 +1572,8 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		debug.PrintStack()
 	}
 	client.Create(ctx, cm)
-	_, err = ApplyClusterManager(ctx, client, cm, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, client, cm)
+	_, err = manager.ApplyClusterManager(ctx, client, cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
@@ -1677,7 +1714,8 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, clustermanager)
 
-	_, err := ApplyClusterManager(ctx, c, clustermanager, splunkimpl.NewProvisionerFactory(false))
+	manager := setCreds(t, c, clustermanager)
+	_, err := manager.ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermanager with app framework  %v", err)
 		debug.PrintStack()
@@ -1713,7 +1751,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager, splunkimpl.NewProvisionerFactory(false))
+	_, err = manager.ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1831,7 +1869,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyClusterManager(ctx, c, clustermanager, splunkimpl.NewProvisionerFactory(false))
+	_, err = manager.ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
