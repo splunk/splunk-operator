@@ -503,7 +503,8 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return false, err
 	}
 
-	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
+	// check if an image upgrade is happening and whether LM has finished updating yet, return false to stop
+	// further reconcile operations on CM until LM is ready
 	if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != cr.Spec.Image) {
 		return false, nil
 	}

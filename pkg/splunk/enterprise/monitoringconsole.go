@@ -413,7 +413,8 @@ func isMonitoringConsoleReadyForUpgrade(ctx context.Context, c splcommon.Control
 		return false, err
 	}
 
-	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
+	// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
+	// further reconcile operations on MC until CM is ready
 	if (cr.Spec.Image != mcImage) && (clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != cr.Spec.Image) {
 		return false, nil
 	}
