@@ -1875,3 +1875,135 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 }
+func TestIsIndexerClusterReadyForUpgrade(t *testing.T) {
+	ctx := context.TODO()
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// Create Search Head Cluster
+	shc := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+
+	err := client.Create(ctx, &shc)
+	_, err = ApplySearchHeadCluster(ctx, client, &shc)
+	if err != nil {
+		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
+	}
+	shc.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, &shc)
+	if err != nil {
+		t.Errorf("Unexpected status update  %v", err)
+		debug.PrintStack()
+	}
+
+	// Create Indexer Cluster
+	idx := enterpriseApi.IndexerCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+
+	replicas := int32(1)
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "splunk-test-indexer-headless",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:latest",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "test",
+									Value: "test",
+								},
+							},
+						},
+					},
+				},
+			},
+			Replicas: &replicas,
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer-headless",
+			Namespace: "test",
+		},
+	}
+
+	// simulate service
+	client.Create(ctx, service)
+
+	// simulate create stateful set
+	client.Create(ctx, statefulset)
+
+	err = client.Create(ctx, &idx)
+
+	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
+		debug.PrintStack()
+	}
+
+	idx.Spec.Image = "splunk2"
+	shc.Spec.Image = "splunk2"
+	_, err = ApplySearchHeadCluster(ctx, client, &shc)
+
+	indexerCluster := &enterpriseApi.IndexerCluster{}
+	namespacedName := types.NamespacedName{
+		Name:      idx.Name,
+		Namespace: idx.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, indexerCluster)
+	if err != nil {
+		t.Errorf(" Get Indexer Cluster should not have returned error=%v", err)
+	}
+
+	check, err := isIndexerClusterReadyForUpgrade(ctx, client, indexerCluster)
+
+	if err != nil {
+		t.Errorf("Unexpected isIndexerClusterReadyForUpgrade error %v", err)
+	}
+
+	if !check {
+		t.Errorf("isIndexerClusterReadyForUpgrade: CM should be ready for upgrade")
+	}
+}
