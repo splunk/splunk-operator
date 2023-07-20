@@ -531,7 +531,6 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-cluster-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-test-monitoring-console"},
-		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 		{MetaName: "*v4.ClusterManager-test-stack1"},
 	}
@@ -564,14 +563,9 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		runtime.InNamespace("test"),
 		runtime.MatchingLabels(labels),
 	}
-	listOpts1 := []runtime.ListOption{
-		runtime.InNamespace("test"),
-	}
 	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts},
-		{ListOpts: listOpts1},
-	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[10], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[13]}}
+		{ListOpts: listOpts}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[10], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[13]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{
@@ -647,7 +641,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		//manager := setCreds(t, c, &current)
-		_, err := manager.ApplyClusterManager(ctx, client, &current)
+		_, err := manager.ApplyClusterManager(ctx, c, &current)
 		return err
 	}
 
