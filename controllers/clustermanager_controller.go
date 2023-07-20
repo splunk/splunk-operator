@@ -106,7 +106,7 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyClusterManager(ctx, r.Client, instance, r.ProvisionerFactory)
+	result, err := ApplyClusterManager(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -115,7 +115,7 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // ApplyClusterManager adding to handle unit test case
-var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, provisionerFactory provisioner.Factory) (reconcile.Result, error) {
+var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
 	// match the provisioner.EventPublisher interface
 	publishEvent := func(ctx context.Context, eventType, reason, message string) {
 		instance.NewEvent(eventType, reason, message)
