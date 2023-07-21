@@ -2,7 +2,6 @@ name: Helm Test WorkFlow
 on:
   push:
     branches:
-      - cspl-2343
       - develop
       - main
 jobs:
