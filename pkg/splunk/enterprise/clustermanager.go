@@ -56,7 +56,6 @@ type splunkManager struct {
 
 // ApplyClusterManager reconciles the state of a Splunk Enterprise cluster manager.
 func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (reconcile.Result, error) {
-
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
 		Requeue:      true,
@@ -120,7 +119,7 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
-		err := initAndCheckAppInfoStatus(ctx, p.client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
 			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
@@ -129,7 +128,7 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 	}
 
 	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, p.client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
+	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
@@ -140,7 +139,7 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
 			extraEnv, _ := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, p.client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
 			}

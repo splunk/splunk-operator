@@ -146,6 +146,7 @@ func TestApplyClusterManager(t *testing.T) {
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
+		//_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -157,6 +158,7 @@ func TestApplyClusterManager(t *testing.T) {
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
 		manager := setCreds(t, c, &current)
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
+		//_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
