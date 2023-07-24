@@ -28,6 +28,7 @@ import (
 	"github.com/go-logr/logr"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
+	provmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -247,6 +248,15 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 	}
+
+	// Verification of splunk instance update CR status
+	// We are using Conditions to update status information
+	provResult := provmodel.Result{}
+	provResult, err = p.provisioner.SetClusterManagerStatus(ctx, &cr.Status.Conditions)
+	if err != nil {
+		cr.Status.ErrorMessage = provResult.ErrorMessage
+	}
+
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
 	if !result.Requeue {

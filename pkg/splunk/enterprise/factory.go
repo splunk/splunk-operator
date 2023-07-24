@@ -65,7 +65,7 @@ func (f splunkManagerFactory) splunkManager(ctx context.Context, info *types.Rec
 			return nil, fmt.Errorf("could not find admin password ")
 		}
 
-		service := getSplunkService(ctx, info.MetaObject, &info.CommonSpec, GetInstantTypeFromKind(info.TypeMeta.Kind), false)
+		service := getSplunkService(ctx, info.MetaObject, &info.CommonSpec, GetInstantTypeFromKind(info.Kind), false)
 
 		sad = &splunkmodel.SplunkCredentials{
 			Address:                        service.Name,

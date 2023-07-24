@@ -70,6 +70,9 @@ type ClusterManagerStatus struct {
 
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // BundlePushInfo Indicates if bundle push required

@@ -121,7 +121,7 @@ var ApplyClusterManager = func(ctx context.Context, client client.Client, instan
 		instance.NewEvent(eventType, reason, message)
 	}
 	info := &managermodel.ReconcileInfo{
-		TypeMeta:   instance.TypeMeta,
+		Kind:       instance.Kind,
 		CommonSpec: instance.Spec.CommonSplunkSpec,
 		Client:     client,
 		Log:        log.FromContext(ctx),

@@ -58,6 +58,12 @@ type MonitoringConsoleStatus struct {
 
 	// App Framework status
 	AppContext AppDeploymentContext `json:"appContext,omitempty"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -55,12 +55,12 @@ func setCreds(t *testing.T, c splcommon.ControllerClient, cr *enterpriseApi.Clus
 	clusterManager := enterpriseApi.ClusterManager{}
 	clusterManager.Name = "test"
 	info := &managermodel.ReconcileInfo{
-		TypeMeta:   clusterManager.TypeMeta,
+		Kind:       cr.Kind,
 		CommonSpec: cr.Spec.CommonSplunkSpec,
 		Client:     c,
 		Log:        log.Log,
-		Namespace:  "default",
-		Name:       "clusterManager",
+		Namespace:  cr.Namespace,
+		Name:       cr.Name,
 	}
 	copier.Copy(info.MetaObject, cr.ObjectMeta)
 	publisher := func(ctx context.Context, eventType, reason, message string) {}
@@ -642,7 +642,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		//manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
