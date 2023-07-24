@@ -1,10 +1,12 @@
 from __future__ import print_function
 import os
+import shlex
 import sys, getopt
 import subprocess
 
 def executeShellCommand(command):
-   stream = subprocess.popen(command).wait()
+   cmdlist = shlex.split(command)
+   stream = subprocess.Popen(cmdlist).wait()
    output = stream.read()
    return output
 
@@ -21,7 +23,7 @@ def runAndCollectDiag(collectDir, podDiagsDir, pod):
             if len(dirs) >= 2 and len(dirs[3]) > 0:
                 diagFile = dirs[3]
 
-            #Copy the diag over            
+            #Copy the diag over
             executeShellCommand("kubectl cp %s:%s %s/%s/%s" % (pod, diagFileFullPath, collectDir, podDiagsDir, diagFile))
 
             #Delete the diag
