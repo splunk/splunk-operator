@@ -150,7 +150,9 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
 
-		// trigger SearchHeadCluster reconcile by changing the splunk/image-tag annotation
+		// TODO: Fix the Change Annotation logic/ find an alternative (eg. state machine); right now the search head deployer
+		// starts terminating with this and few replicas do not come up properly after that
+
 		// err = changeSearchHeadAnnotations(ctx, client, cr)
 		// if err != nil {
 		// 	return result, err
