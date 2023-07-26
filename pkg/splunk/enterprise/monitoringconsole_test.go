@@ -1100,3 +1100,173 @@ func TestGetMonitoringConsoleList(t *testing.T) {
 		t.Errorf("Got wrong number of IndexerCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }
+
+func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
+	ctx := context.TODO()
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// Create Cluster Manager
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+
+	err := client.Create(ctx, &cm)
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+	cm.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, &cm)
+	if err != nil {
+		t.Errorf("Unexpected status update  %v", err)
+		debug.PrintStack()
+	}
+
+	// Create Monitoring Console
+	mc := enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:latest",
+				},
+				Volumes: []corev1.Volume{},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+
+	err = client.Create(ctx, &mc)
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+
+	mc.Spec.Image = "splunk2"
+	cm.Spec.Image = "splunk2"
+	_, err = ApplyClusterManager(ctx, client, &cm)
+
+	monitoringConsole := &enterpriseApi.MonitoringConsole{}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, monitoringConsole)
+	if err != nil {
+		t.Errorf("isMonitoringConsoleReadyForUpgrade should not have returned error=%v", err)
+	}
+
+	check, err := isMonitoringConsoleReadyForUpgrade(ctx, client, monitoringConsole)
+
+	if err != nil {
+		t.Errorf("Unexpected upgradeScenario error %v", err)
+	}
+
+	if !check {
+		t.Errorf("isMonitoringConsoleReadyForUpgrade: MC should be ready for upgrade")
+	}
+}
+
+func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
+	ctx := context.TODO()
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	// define CM and MC
+	cm := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+	}
+
+	mc := &enterpriseApi.MonitoringConsole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.MonitoringConsoleSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+			},
+		},
+	}
+	cm.Spec.Image = "splunk/splunk:latest"
+
+	// Create the instances
+	client.Create(ctx, cm)
+	_, err := ApplyClusterManager(ctx, client, cm)
+	if err != nil {
+		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+	}
+	cm.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, cm)
+	if err != nil {
+		t.Errorf("Unexpected update pod  %v", err)
+		debug.PrintStack()
+	}
+	client.Create(ctx, mc)
+	_, err = ApplyMonitoringConsole(ctx, client, mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+
+	err = changeMonitoringConsoleAnnotations(ctx, client, cm)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
+	monitoringConsole := &enterpriseApi.MonitoringConsole{}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, monitoringConsole)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
+
+	annotations := monitoringConsole.GetAnnotations()
+	if annotations["splunk/image-tag"] != cm.Spec.Image {
+		t.Errorf("changeMonitoringConsoleAnnotations should have set the checkUpdateImage annotation field to the current image")
+	}
+}
