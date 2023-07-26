@@ -127,7 +127,7 @@ var ApplyClusterManager = func(ctx context.Context, client client.Client, instan
 		Log:        log.FromContext(ctx),
 		Namespace:  instance.GetNamespace(),
 		Name:       instance.GetName(),
-	  MetaObject: instance,
+		MetaObject: instance,
 	}
 	//copier.Copy(info.MetaObject, instance.ObjectMeta)
 	mg := enterprise.NewManagerFactory(false)
