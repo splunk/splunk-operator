@@ -2,6 +2,10 @@ package fixture
 
 import (
 	"context"
+	"fmt"
+	"os"
+
+	"path/filepath"
 
 	//"encoding/json"
 	"io/ioutil"
@@ -39,6 +43,37 @@ type fixtureGateway struct {
 	state *Fixture
 }
 
+func findFixturePath() (string, error) {
+	ext := ".env"
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		dir, err := os.Open(wd)
+		if err != nil {
+			fmt.Println("Error opening directory:", err)
+			return "", err
+		}
+		defer dir.Close()
+
+		files, err := dir.Readdir(-1)
+		if err != nil {
+			fmt.Println("Error reading directory:", err)
+			return "", err
+		}
+
+		for _, file := range files {
+			if file.Name() == ext {
+				wd, err = filepath.Abs(wd)
+				wd += "/pkg/gateway/splunk/services/fixture/"
+				return wd, err
+			}
+		}
+		wd += "/.."
+	}
+}
+
 // Fixture contains persistent state for a particular splunk instance
 type Fixture struct {
 }
@@ -60,7 +95,12 @@ func (f *Fixture) NewGateway(ctx context.Context, sad *splunkmodel.SplunkCredent
 func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managermodel.ClusterManagerInfoContent, error) {
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("../../../gateway/splunk/services/fixture/cluster_config.json")
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
+	}
+	content, err := ioutil.ReadFile(relativePath + "/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -102,9 +142,14 @@ func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managerm
 // GetClusterManagerPeersAccess cluster manager peers.
 // endpoint: https://<host>:<mPort>/services/cluster/manager/peers
 func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]managermodel.ClusterManagerPeerContent, error) {
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
+	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("../../../gateway/splunk/services/fixture/cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -150,9 +195,15 @@ func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]manager
 //
 // endpoint: https://<host>:<mPort>/services/cluster/manager/health
 func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]managermodel.ClusterManagerHealthContent, error) {
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
+	}
+
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("../../../gateway/splunk/services/fixture/cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -196,9 +247,14 @@ func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]manage
 // list List available cluster sites.
 // endpoint: https://<host>:<mPort>/services/cluster/manager/sites
 func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]managermodel.ClusterManagerSiteContent, error) {
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
+	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -240,9 +296,14 @@ func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]manager
 // GetClusterManagerSearchHeadStatus Endpoint to get searchheads connected to cluster manager.
 // endpoint: https://<host>:<mPort>/services/cluster/manager/status
 func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]managermodel.ClusterManagerStatusContent, error) {
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
+	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile("cluster_manager_status.json")
+	content, err := ioutil.ReadFile(relativePath + "/cluster_manager_status.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster manager search heads")
 		return nil, err
