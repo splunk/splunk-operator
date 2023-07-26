@@ -425,7 +425,7 @@ var _ = Describe("c3appfw test", func() {
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
-			// Wait for License Manager to be in READY status
+			// Wait for License Manager to be in READY phase
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -478,6 +478,17 @@ var _ = Describe("c3appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE IMAGE ################
+
+			// Update LM Image
+
+			lm := &enterpriseApi.LicenseManager{}
+			err = deployment.GetInstance(ctx, deployment.GetName(), lm)
+			Expect(err).To(Succeed(), "Failed to get instance of License Manager")
+
+			testcaseEnvInst.Log.Info("Upgrading the License Manager Image", "Current Image", oldImage, "New Image", newImage)
+			lm.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, lm)
+			Expect(err).To(Succeed(), "Failed upgrade License Manager image")
 
 			// Update CM image
 

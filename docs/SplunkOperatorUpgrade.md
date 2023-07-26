@@ -45,8 +45,11 @@ splunk-operator-controller-manager-75f5d4d85b-8pshn   1/1     Running   0       
 ```
 ​
 If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.  
-​
-If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image.
+
+### Upgrading Splunk Enterprise Docker Image with the Operator Upgrade
+
+If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image. To follow the best practices described under the [General Process to Upgrade the Splunk Enterprise], a recommeded upgrade path is followed while initiating pod restarts of different Splunk Instances. At each step, if a particular CR instance exists, a certain flow is imposed to ensure that each instance is updated in the correct order. After an instance is upgraded, the Operator verifies if the upgrade was successful and all the components are working as expected. If any unexpected behaviour is detected, the process is terminated.
+
 
 ## Steps to Upgrade from 1.0.5 or older version to latest
 
@@ -144,7 +147,9 @@ This is an example of the process followed by the Splunk Operator if the operato
 ​
 1. A new Splunk Operator pod will be created, and the existing operator pod will be terminated.
 2. Any existing License Manager, Search Head, Deployer, ClusterManager, Standalone pods will be terminated to be redeployed with the upgraded spec.
-3. After a ClusterManager pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
-4. After all pods in the Indexer cluster and Search head cluster are redeployed, the Monitoring Console pod is terminated and redeployed.
+3. The termination and redeployment of the pods happen in a particular order based on a recommended upgrade path.
+4. After a ClusterManager pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
+5. After all pods in the Indexer cluster and Search head cluster are redeployed, the Monitoring Console pod is terminated and redeployed.
+6. Each pod upgrade is verified to ensure the process was successful and everything is working as expected.
 
 * Note: If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first
