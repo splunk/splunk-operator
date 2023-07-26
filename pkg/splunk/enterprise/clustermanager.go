@@ -483,7 +483,7 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return false, err
 	}
 
-	lmImage, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	lmImage, err := getCurrentImage(ctx, c, licenseManager, SplunkLicenseManager)
 	if err != nil {
 		eventPublisher.Warning(ctx, "isClusterManagerReadyForUpgrade", fmt.Sprintf("Could not get the License Manager Image. Reason %v", err))
 		scopedLog.Error(err, "Unable to get licenseManager current image")

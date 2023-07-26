@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -202,6 +203,11 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 	} else {
+		// check if the IndexerCluster is ready for version upgrade
+		continueReconcile, err := mgr.isIndexerClusterReadyForUpgrade(ctx, client, cr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
@@ -1068,4 +1074,135 @@ func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *
 	}
 
 	return "", nil
+}
+
+func getIndexerClusterSortedSiteList(ctx context.Context, c splcommon.ControllerClient, ref corev1.ObjectReference, indexerList enterpriseApi.IndexerClusterList) (enterpriseApi.IndexerClusterList, error) {
+
+	namespaceList := enterpriseApi.IndexerClusterList{}
+
+	for _, v := range indexerList.Items {
+		if v.Spec.ClusterManagerRef == ref {
+			namespaceList.Items = append(namespaceList.Items, v)
+		}
+	}
+
+	sort.SliceStable(namespaceList.Items, func(i, j int) bool {
+		return getSiteName(ctx, c, &namespaceList.Items[i]) < getSiteName(ctx, c, &namespaceList.Items[j])
+	})
+
+	return namespaceList, nil
+}
+
+func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) string {
+	defaults := cr.Spec.Defaults
+	pattern := `site:\s+(\w+)`
+
+	// Compile the regular expression pattern
+	re := regexp.MustCompile(pattern)
+
+	// Find the first match in the input string
+	match := re.FindStringSubmatch(defaults)
+
+	var extractedValue string
+	if len(match) > 1 {
+		// Extracted value is stored in the second element of the match array
+		extractedValue := match[1]
+		return extractedValue
+	}
+
+	return extractedValue
+}
+
+// isIndexerClusterReadyForUpgrade checks if IndexerCluster can be upgraded if a version upgrade is in-progress
+// No-operation otherwise; returns bool, err accordingly
+func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isIndexerClusterReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// get the clusterManagerRef attached to the instance
+	clusterManagerRef := cr.Spec.ClusterManagerRef
+
+	cm := mgr.getClusterManagerClient(ctx)
+	clusterInfo, err := cm.GetClusterInfo(false)
+	if err != nil {
+		return false, fmt.Errorf("could not get cluster info from cluster manager")
+	}
+	if clusterInfo.MultiSite == "true" {
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		indexerList, err := getIndexerClusterList(ctx, c, cr, opts)
+		if err != nil {
+			return false, err
+		}
+		sortedList, err := getIndexerClusterSortedSiteList(ctx, c, cr.Spec.ClusterManagerRef, indexerList)
+
+		preIdx := enterpriseApi.IndexerCluster{}
+
+		for i, v := range sortedList.Items {
+			if &v == cr {
+				if i > 0 {
+					preIdx = sortedList.Items[i-1]
+				}
+				break
+
+			}
+		}
+		if len(preIdx.Name) != 0 {
+			image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
+			if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != cr.Spec.Image {
+				return false, nil
+			}
+		}
+
+	}
+
+	// check if a search head cluster exists with the same ClusterManager instance attached
+	searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+	}
+	searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
+	if err != nil {
+		if err.Error() == "NotFound" {
+			return true, nil
+		}
+		return false, err
+	}
+	if len(searchHeadList.Items) == 0 {
+		return true, nil
+	}
+
+	// check if instance has the required ClusterManagerRef
+	for _, shc := range searchHeadList.Items {
+		if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
+			searchHeadClusterInstance = shc
+			break
+		}
+	}
+	if len(searchHeadClusterInstance.GetName()) == 0 {
+		return true, nil
+	}
+
+	shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get SearchHeadCluster current image")
+		return false, err
+	}
+
+	idxImage, err := getCurrentImage(ctx, c, cr, SplunkIndexer)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Indexer Cluster Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get IndexerCluster current image")
+		return false, err
+	}
+
+	// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
+	// further reconcile operations on IDX until SHC is ready
+	if (cr.Spec.Image != idxImage) && (searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != cr.Spec.Image) {
+		return false, nil
+	}
+	return true, nil
 }

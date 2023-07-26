@@ -1875,3 +1875,69 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 }
+
+func TestGetIndexerClusterSortedSiteList(t *testing.T) {
+
+	ctx := context.TODO()
+
+	builder := fake.NewClientBuilder()
+	client := builder.Build()
+	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
+
+	namespaceList := enterpriseApi.IndexerClusterList{}
+
+	siteCount := 3
+	name := "test"
+	clusterManagerRef := "test"
+	siteName := []string{"sitea", "siteb", "sitec"}
+
+	for site := 1; site <= siteCount; site++ {
+		siteName := fmt.Sprintf("site%c", rune('a'+3-site))
+		siteDefaults := fmt.Sprintf(`splunk:
+			multisite_master: splunk-%s-%s-service
+			site: %s
+			`, name, "cluster-manager", siteName)
+
+		idx := enterpriseApi.IndexerCluster{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "IndexerCluster",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       name,
+				Namespace:  "test",
+				Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+			},
+
+			Spec: enterpriseApi.IndexerClusterSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Volumes: []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					ClusterManagerRef: corev1.ObjectReference{
+						Name: clusterManagerRef,
+					},
+					Defaults: siteDefaults,
+				},
+				Replicas: int32(1),
+			},
+		}
+
+		namespaceList.Items = append(namespaceList.Items, idx)
+
+	}
+
+	l, err := getIndexerClusterSortedSiteList(ctx, client, namespaceList.Items[0].Spec.ClusterManagerRef, namespaceList)
+	if err != nil {
+		t.Errorf("getIndexerClusterSortedSiteList should not have returned error; err=%v", err)
+	}
+
+	for i, v := range l.Items {
+		if getSiteName(ctx, client, &v) != siteName[i] {
+			t.Errorf("Unexpected error while sorting indexer clusters using siteName  %v", err)
+			debug.PrintStack()
+
+		}
+	}
+
+}
