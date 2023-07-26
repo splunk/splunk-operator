@@ -18,7 +18,7 @@ package controllers
 
 import (
 	"context"
-	"github.com/jinzhu/copier"
+	//"github.com/jinzhu/copier"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
@@ -127,8 +127,9 @@ var ApplyClusterManager = func(ctx context.Context, client client.Client, instan
 		Log:        log.FromContext(ctx),
 		Namespace:  instance.GetNamespace(),
 		Name:       instance.GetName(),
+	  MetaObject: instance,
 	}
-	copier.Copy(info.MetaObject, instance.ObjectMeta)
+	//copier.Copy(info.MetaObject, instance.ObjectMeta)
 	mg := enterprise.NewManagerFactory(false)
 	manager, err := mg.NewManager(ctx, info, publishEvent)
 	if err != nil {
