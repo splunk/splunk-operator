@@ -328,8 +328,8 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Upload V1 apps to S3 for Monitoring Console
-			oldImage := "splunk/splunk:latest"
-			newImage := "splunk/splunk:latest:1.1"
+			oldImage := "splunk/splunk:9.0.3"
+			newImage := "splunk/splunk:9.0.3-a2"
 
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
@@ -535,6 +535,9 @@ var _ = Describe("c3appfw test", func() {
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+
+			// Wait for License Manager to be in READY phase
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that the Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
