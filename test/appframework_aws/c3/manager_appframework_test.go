@@ -350,6 +350,9 @@ var _ = Describe("c3appfw test", func() {
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
+					ClusterManagerRef: corev1.ObjectReference{
+						Name: deployment.GetName(),
+					},
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
@@ -489,11 +492,11 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
-			// Wait for License Manager to be in READY phase
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
-
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Wait for License Manager to be in READY phase
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
