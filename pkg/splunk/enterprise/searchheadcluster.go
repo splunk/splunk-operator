@@ -32,6 +32,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -160,6 +161,11 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	continueReconcile, err := isSearchHeadReadyForUpgrade(ctx, client, cr)
+	if err != nil || !continueReconcile {
+		return result, err
+	}
+
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -179,7 +185,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	mgr := newSerachHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newSearchHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -247,7 +253,7 @@ type searchHeadClusterPodManager struct {
 }
 
 // newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
-var newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 	return searchHeadClusterPodManager{
 		log:             log,
 		cr:              cr,
@@ -666,4 +672,65 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 	}
 
 	return objectList, nil
+}
+
+// isSearchHeadReadyForUpgrade checks if SearchHeadCluster can be upgraded if a version upgrade is in-progress
+// No-operation otherwise; returns bool, err accordingly
+func isSearchHeadReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isSearchHeadReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// check if a MonitoringConsole is attached to the instance
+	monitoringConsoleRef := cr.Spec.MonitoringConsoleRef
+	if monitoringConsoleRef.Name == "" {
+		return true, nil
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+	}
+
+	// check if the stateful set is created at this instance
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil && k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: monitoringConsoleRef.Name}
+	monitoringConsole := &enterpriseApi.MonitoringConsole{}
+
+	// get the monitoring console referred in search head cluster
+	err = c.Get(ctx, namespacedName, monitoringConsole)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not find the Monitoring Console. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Monitoring Console")
+		return false, err
+	}
+
+	mcImage, err := getCurrentImage(ctx, c, monitoringConsole, SplunkMonitoringConsole)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Monitoring Console current image")
+		return false, err
+	}
+
+	shcImage, err := getCurrentImage(ctx, c, cr, SplunkSearchHead)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Search Head Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Search Head current image")
+		return false, err
+	}
+
+	// check if an image upgrade is happening and whether the SearchHeadCluster is ready for the upgrade
+	if (cr.Spec.Image != shcImage) && (monitoringConsole.Status.Phase != enterpriseApi.PhaseReady || mcImage != cr.Spec.Image) {
+		return false, nil
+	}
+
+	return true, nil
 }
