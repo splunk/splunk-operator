@@ -204,7 +204,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	} else {
 		// check if the IndexerCluster is ready for version upgrade
-		continueReconcile, err := isIndexerClusterReadyForUpgrade(ctx, client, cr)
+		continueReconcile, err := mgr.isIndexerClusterReadyForUpgrade(ctx, client, cr)
 		if err != nil || !continueReconcile {
 			return result, err
 		}
