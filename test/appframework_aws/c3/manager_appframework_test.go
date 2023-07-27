@@ -305,36 +305,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
-		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
-
-			/* Test Steps
-			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
-			   * Create app sources for Cluster Manager and Deployer
-			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
-			   ######### INITIAL VERIFICATIONS #############
-			   * Verify Apps are Downloaded in App Deployment Info
-			   * Verify Apps Copied in App Deployment Info
-			   * Verify App Package is deleted from Operator Pod
-			   * Verify Apps Installed in App Deployment Info
-			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is successful
-			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
-			   ############### UPGRADE APPS ################
-			   * Upload V2 apps on S3
-			   * Wait for Monitoring Console and C3 pods to be ready
-			   ############ FINAL VERIFICATIONS ############
-			   * Verify Apps are Downloaded in App Deployment Info
-			   * Verify Apps Copied in App Deployment Info
-			   * Verify App Package is deleted from Operator Pod
-			   * Verify Apps Installed in App Deployment Info
-			   * Verify App Package is deleted from Splunk Pod
-			   * Verify bundle push is successful
-			   * Verify V2 apps are copied and upgraded on Monitoring Console and on Search Heads and Indexers pods
-			*/
+		It("smoke, c3, managerappframeworkc3t, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
 
 			//################## SETUP ####################
 
@@ -517,6 +488,9 @@ var _ = Describe("c3appfw test", func() {
 			idxc.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
+
+			// Wait for License Manager to be in READY phase
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
