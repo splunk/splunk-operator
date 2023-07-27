@@ -304,6 +304,303 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
+		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
+
+			/* Test Steps
+			   ################## SETUP ####################
+			   * Upload V1 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
+			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Create app sources for Cluster Manager and Deployer
+			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
+			   ######### INITIAL VERIFICATIONS #############
+			   * Verify Apps are Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify bundle push is successful
+			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
+			   ############### UPGRADE APPS ################
+			   * Upload V2 apps on S3
+			   * Wait for Monitoring Console and C3 pods to be ready
+			   ############ FINAL VERIFICATIONS ############
+			   * Verify Apps are Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify bundle push is successful
+			   * Verify V2 apps are copied and upgraded on Monitoring Console and on Search Heads and Indexers pods
+			*/
+
+			//################## SETUP ####################
+
+			// Download License File
+			downloadDir := "licenseFolder"
+			switch testenv.ClusterProvider {
+			case "eks":
+				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "azure":
+				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
+				Expect(err).To(Succeed(), "Unable to download license file from Azure")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			default:
+				fmt.Printf("Unable to download license file")
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+			}
+
+			// Upload V1 apps to S3 for Monitoring Console
+			oldImage := "splunk/splunk:latest"
+			newImage := "splunk/splunk:latest:1.1"
+
+			appVersion := "V1"
+			appFileList := testenv.GetAppFileList(appListV1)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Prepare Monitoring Console spec with its own app source
+			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+				AppFrameworkConfig: appFrameworkSpecMC,
+			}
+
+			// Deploy Monitoring Console
+			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Upload V1 apps to S3 for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			s3TestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V1 apps to S3 for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			s3TestDirShc = "c3appfw-shc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Create App framework Spec for C3
+			appSourceNameIdxc = "appframework-idxc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceNameShc = "appframework-shc-" + enterpriseApi.ScopeCluster + testenv.RandomDNSName(3)
+			appSourceVolumeNameIdxc := "appframework-test-volume-idxc-" + testenv.RandomDNSName(3)
+			appSourceVolumeNameShc := "appframework-test-volume-shc-" + testenv.RandomDNSName(3)
+			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, s3TestDirIdxc, 60)
+			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
+
+			// get revision number of the resource
+			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+
+			// Deploy C3 CRD
+			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
+			indexerReplicas := 3
+			shReplicas := 3
+			cm, idxc, shc, err := deployment.DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, deployment.GetName())
+
+			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
+
+			// Wait for License Manager to be in READY phase
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			// wait for custom resource resource version to change
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Verify no SH in disconnected status is present on CM
+			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+
+			//######### INITIAL VERIFICATIONS #############
+			var idxcPodNames, shcPodNames []string
+			idxcPodNames = testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 1)
+			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
+			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
+			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
+			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
+			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
+			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+
+			//############### UPGRADE IMAGE ################
+
+			// Update LM Image
+
+			lm := &enterpriseApi.LicenseManager{}
+			err = deployment.GetInstance(ctx, deployment.GetName(), lm)
+			Expect(err).To(Succeed(), "Failed to get instance of License Manager")
+
+			testcaseEnvInst.Log.Info("Upgrading the License Manager Image", "Current Image", oldImage, "New Image", newImage)
+			lm.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, lm)
+			Expect(err).To(Succeed(), "Failed upgrade License Manager image")
+
+			// Update CM image
+
+			testcaseEnvInst.Log.Info("Upgrading the Cluster Manager Image", "Current Image", oldImage, "New Image", newImage)
+			cm.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, cm)
+			Expect(err).To(Succeed(), "Failed upgrade Cluster Manager image")
+
+			// Update MC image
+
+			testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
+			mc.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, mc)
+			Expect(err).To(Succeed(), "Failed upgrade Monitoring Console image")
+
+			// Update SHC image
+
+			testcaseEnvInst.Log.Info("Upgrading the Search Head Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			shc.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, shc)
+			Expect(err).To(Succeed(), "Failed upgrade Search Head Cluster image")
+
+			// Update IDXC image
+
+			testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			idxc.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, idxc)
+			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
+
+			// Ensure Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			//############### UPGRADE APPS ################
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
+
+			// get revision number of the resource
+			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+
+			// Upload V2 apps to S3 for Indexer Cluster
+			appVersion = "V2"
+			appFileList = testenv.GetAppFileList(appListV2)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V2 apps to S3 for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Upload V2 apps to S3 for Monitoring Console
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
+			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Check for changes in App phase to determine if next poll has been triggered
+			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList)
+
+			// Ensure that the Cluster Manager goes to Ready phase
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify RF SF is met
+			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
+
+			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+
+			// Verify Monitoring Console is ready and stays in ready state
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Get Pod age to check for pod resets later
+			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
+			//############ FINAL VERIFICATIONS ############
+			cmAppSourceInfo.CrAppVersion = appVersion
+			cmAppSourceInfo.CrAppList = appListV2
+			cmAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			shcAppSourceInfo.CrAppVersion = appVersion
+			shcAppSourceInfo.CrAppList = appListV2
+			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			mcAppSourceInfo.CrAppVersion = appVersion
+			mcAppSourceInfo.CrAppList = appListV2
+			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
+
+			// Verify no pods reset by checking the pod age
+			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
+
+		})
+	})
+
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
