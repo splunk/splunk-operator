@@ -27,4 +27,6 @@ type Provisioner interface {
 
 	// CheckClusterManagerHealth
 	CheckClusterManagerHealth(ctx context.Context) (result provmodel.Result, err error)
+
+	SetClusterInMaintenanceMode(ctx context.Context, mode bool) error
 }

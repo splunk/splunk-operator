@@ -44,4 +44,9 @@ type Gateway interface {
 	// GET the status of a rolling restart.
 	// endpoint: https://<host>:<mPort>/services/cluster/manager/status
 	GetClusterManagerStatus(ctx context.Context) (*[]managermodel.ClusterManagerStatusContent, error)
+
+	// SetClusterInMaintainanceMode Endpoint to set cluster in maintenance mode.
+	// Post the status of a rolling restart.
+	// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
+	SetClusterInMaintenanceMode(context context.Context, mode bool) error
 }

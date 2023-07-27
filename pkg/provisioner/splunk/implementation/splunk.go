@@ -162,3 +162,7 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 func (p *splunkProvisioner) CheckClusterManagerHealth(ctx context.Context) (result provmodel.Result, err error) {
 	return result, nil
 }
+
+func (p *splunkProvisioner) SetClusterInMaintenanceMode(ctx context.Context, mode bool) error {
+	return p.gateway.SetClusterInMaintenanceMode(ctx, mode)
+}

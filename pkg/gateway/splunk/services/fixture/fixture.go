@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"path/filepath"
 
@@ -340,4 +341,50 @@ func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]manage
 		contentList = append(contentList, entry.Content)
 	}
 	return &contentList, nil
+}
+
+// SetClusterInMaintainanceMode Endpoint to set cluster in maintenance mode.
+// Post the status of a rolling restart.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
+func (p *fixtureGateway) SetClusterInMaintenanceMode(context context.Context, mode bool) error {
+
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return err
+	}
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
+	content, err := ioutil.ReadFile(relativePath + "/cluster_maintenance.json")
+	if err != nil {
+		log.Error(err, "fixture: error in post cluster maintenance")
+		return err
+	}
+	httpmock.ActivateNonDefault(p.client.GetClient())
+	fixtureData := string(content)
+	responder := httpmock.NewStringResponder(200, fixtureData)
+	fakeUrl := clustermodel.SetClusterInMaintenanceMode
+	httpmock.RegisterResponder("POST", fakeUrl, responder)
+
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	resp, err := p.client.R().
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "mode": strconv.FormatBool(mode)}).
+		Post(fakeUrl)
+	if err != nil {
+		p.log.Error(err, "get cluster manager status failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return splunkError
+	}
+
+	return err
 }

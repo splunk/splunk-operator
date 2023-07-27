@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	"github.com/go-resty/resty/v2"
@@ -202,4 +203,33 @@ func (p *splunkGateway) GetClusterManagerStatus(context context.Context) (*[]man
 		contentList = append(contentList, entry.Content)
 	}
 	return &contentList, err
+}
+
+// SetClusterInMaintainanceMode Endpoint to set cluster in maintenance mode.
+// Post the status of a rolling restart.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
+func (p *splunkGateway) SetClusterInMaintenanceMode(context context.Context, mode bool) error {
+	url := clustermodel.SetClusterInMaintenanceMode
+
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	resp, err := p.client.R().
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "mode": strconv.FormatBool(mode)}).
+		Post(url)
+	if err != nil {
+		p.log.Error(err, "get cluster manager status failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return splunkError
+	}
+
+	return err
 }

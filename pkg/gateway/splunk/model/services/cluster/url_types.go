@@ -30,4 +30,6 @@ const (
 	GetSearchHeadCaptainInfoUrl = "/services/shcluster/captain/info"
 
 	GetClusterManagerStatusUrl = "/services/cluster/manager/status"
+
+	SetClusterInMaintenanceMode = "/services/cluster/manager/control/default/maintenance"
 )

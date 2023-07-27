@@ -45,7 +45,7 @@ import (
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
 // ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
-func ApplyIndexerClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
+func (p *splunkManager) ApplyIndexerClusterManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -202,6 +202,11 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 	} else {
+		err = p.provisioner.SetClusterInMaintenanceMode(ctx, true)
+		if err != nil {
+			eventPublisher.Warning(ctx, "SetClusterInMaintenanceMode", fmt.Sprintf("Unable to enable cluster manager maintenance mode %s", err.Error()))
+			return result, err
+		}
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
@@ -277,6 +282,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetStatefulSetOwnerRef", fmt.Sprintf("set stateful set owner reference failed %s", err.Error()))
 			result.Requeue = true
+			return result, err
+		}
+
+		err = p.provisioner.SetClusterInMaintenanceMode(ctx, false)
+		if err != nil {
+			eventPublisher.Warning(ctx, "SetClusterInMaintenanceMode", fmt.Sprintf("Unable to disable cluster manager maintenance mode %s", err.Error()))
 			return result, err
 		}
 	}

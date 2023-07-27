@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -40,10 +41,13 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/go-logr/logr"
+	manager "github.com/splunk/splunk-operator/pkg/splunk"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	managermodel "github.com/splunk/splunk-operator/pkg/splunk/model"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -65,6 +69,28 @@ func init() {
 		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
 		return fileLocation
 	}
+}
+
+func setCredsIdx(t *testing.T, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) manager.SplunkManager {
+	ctx := context.TODO()
+	clusterManager := enterpriseApi.ClusterManager{}
+	clusterManager.Name = "test"
+	info := &managermodel.ReconcileInfo{
+		Kind:       cr.Kind,
+		CommonSpec: cr.Spec.CommonSplunkSpec,
+		Client:     c,
+		Log:        log.Log,
+		Namespace:  cr.Namespace,
+		Name:       cr.Name,
+	}
+	copier.Copy(info.MetaObject, cr.ObjectMeta)
+	publisher := func(ctx context.Context, eventType, reason, message string) {}
+	mg := NewManagerFactory(true)
+	manager, err := mg.NewManager(ctx, info, publisher)
+	if err != nil {
+		return nil
+	}
+	return manager
 }
 
 func TestApplyIndexerClusterOld(t *testing.T) {
@@ -220,7 +246,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
+		manager := setCredsIdx(t, c, cr.(*enterpriseApi.IndexerCluster))
+		_, err := manager.ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -230,7 +257,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
+		manager := setCredsIdx(t, c, cr.(*enterpriseApi.IndexerCluster))
+		_, err := manager.ApplyIndexerClusterManager(context.Background(), c, cr.(*enterpriseApi.IndexerCluster))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -240,7 +268,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	c := spltest.NewMockClient()
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
-	_, err := ApplyIndexerClusterManager(ctx, c, &current)
+	manager := setCredsIdx(t, c, &current)
+	_, err := manager.ApplyIndexerClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -260,7 +289,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 		Name:      "manager1",
 		Namespace: "test",
 	}
-	_, err = ApplyIndexerClusterManager(ctx, c, &current)
+	manager = setCredsIdx(t, c, &current)
+	_, err = manager.ApplyIndexerClusterManager(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Expected error")
 	}
@@ -273,7 +303,8 @@ func TestApplyIndexerCluster(t *testing.T) {
 	newc.Create(ctx, nsSec)
 	newc.Create(ctx, &cManager)
 	newc.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = rerr
-	_, err = ApplyIndexerClusterManager(ctx, newc, &current)
+	manager = setCredsIdx(t, c, &current)
+	_, err = manager.ApplyIndexerClusterManager(ctx, newc, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -1283,19 +1314,22 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	// Empty ClusterManagerRef should return an error
 	cr.Spec.ClusterManagerRef.Name = ""
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	manager := setCredsIdx(t, c, &cr)
+	if _, err := manager.ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
 	cr.Spec.ClusterManagerRef.Name = "manager1"
 	// verifyRFPeers should return err here
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	manager = setCredsIdx(t, c, &cr)
+	if _, err := manager.ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 
 	cm.Status.Phase = enterpriseApi.PhaseError
 	cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.StorageCapacity = "-abcd"
-	if _, err := ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
+	manager = setCredsIdx(t, c, &cr)
+	if _, err := manager.ApplyIndexerClusterManager(context.Background(), c, &cr); err == nil {
 		t.Errorf("ApplyIndxerCluster() should have returned error")
 	}
 }
@@ -1756,7 +1790,8 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, indexercluster)
 
-	_, err = ApplyIndexerClusterManager(ctx, c, indexercluster)
+	manager = setCredsIdx(t, c, indexercluster)
+	_, err = manager.ApplyIndexerClusterManager(ctx, c, indexercluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()
@@ -1793,7 +1828,8 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyIndexerClusterManager(ctx, c, indexercluster)
+	manager = setCredsIdx(t, c, indexercluster)
+	_, err = manager.ApplyIndexerClusterManager(ctx, c, indexercluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1870,7 +1906,8 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	indexercluster.Status.IndexingReady = true
 	indexercluster.Status.ServiceReady = true
 	// call reconciliation
-	_, err = ApplyIndexerClusterManager(ctx, c, indexercluster)
+	manager = setCredsIdx(t, c, indexercluster)
+	_, err = manager.ApplyIndexerClusterManager(ctx, c, indexercluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster with app framework  %v", err)
 		debug.PrintStack()

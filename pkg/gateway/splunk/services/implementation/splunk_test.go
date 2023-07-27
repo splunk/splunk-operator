@@ -122,3 +122,25 @@ func TestGetClusterManagerPeers(t *testing.T) {
 		t.Errorf("fixture: error in get cluster manager searchheads  peers list is empty")
 	}
 }
+
+func TestSetClusterInMaintenanceeMode(t *testing.T) {
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	ctx := context.TODO()
+	sm := setCreds(t)
+	httpmock.ActivateNonDefault(sm.client.GetClient())
+	content, err := ioutil.ReadFile("../fixture/cluster_maintenance.json")
+	if err != nil {
+		t.Errorf("fixture: error in get cluster manager peers %v", err)
+	}
+	fixtureData := string(content)
+	responder := httpmock.NewStringResponder(200, fixtureData)
+	url := clustermodel.SetClusterInMaintenanceMode
+	httpmock.RegisterResponder("POST", url, responder)
+
+	err = sm.SetClusterInMaintenanceMode(ctx, true)
+	if err != nil {
+		t.Errorf("fixture: error in get cluster manager searchheads %v", err)
+	}
+}
