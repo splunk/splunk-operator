@@ -350,9 +350,6 @@ var _ = Describe("c3appfw test", func() {
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
-					ClusterManagerRef: corev1.ObjectReference{
-						Name: deployment.GetName(),
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
