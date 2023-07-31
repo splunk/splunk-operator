@@ -191,7 +191,6 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 			return enterpriseApi.PhaseError
 		}
 		testenvInstance.Log.Info("Waiting for cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
-		testenvInstance.Log.Info("Waiting for cluster-manager phase to be ready", "Spec Image", cm.Spec.Image)
 		DumpGetPods(testenvInstance.GetName())
 		DumpGetTopPods(testenvInstance.GetName())
 		DumpGetTopNodes()

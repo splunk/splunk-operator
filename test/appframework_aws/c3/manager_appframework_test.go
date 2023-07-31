@@ -344,23 +344,23 @@ var _ = Describe("c3appfw test", func() {
 			// appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
-			// mcSpec := enterpriseApi.MonitoringConsoleSpec{
-			// 	CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			// 		Spec: enterpriseApi.Spec{
-			// 			ImagePullPolicy: "IfNotPresent",
-			// 		},
-			// 		Volumes: []corev1.Volume{},
-			// 	},
-			// }
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+			}
 
 			// Deploy Monitoring Console
-			// testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			// mcName := deployment.GetName()
-			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			// testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -466,10 +466,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update MC image
 
-			// testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
-			// mc.Spec.Image = newImage
-			// err = deployment.UpdateCR(ctx, mc)
-			// Expect(err).To(Succeed(), "Failed upgrade Monitoring Console image")
+			testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
+			mc.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, mc)
+			Expect(err).To(Succeed(), "Failed upgrade Monitoring Console image")
 
 			// // Update SHC image
 
@@ -492,7 +492,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// // Ensure Search Head Cluster go to Ready phase
 			// testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
