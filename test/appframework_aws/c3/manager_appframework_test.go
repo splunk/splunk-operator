@@ -394,7 +394,10 @@ var _ = Describe("c3appfw test", func() {
 
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
 			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
-			shc, err := deployment.DeploySearchHeadCluster(ctx, deployment.GetName(), deployment.GetName(), lm.GetName(), "", mcName)
+			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
+			// idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
+			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, deployment.GetName(), lm.GetName(), "", mcName)
+			// idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Wait for License Manager to be in READY phase
@@ -403,11 +406,11 @@ var _ = Describe("c3appfw test", func() {
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure Indexers go to Ready phase
-			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
 			// // Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// // Verify RF SF is met
 			// testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
