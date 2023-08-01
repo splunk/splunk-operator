@@ -395,9 +395,9 @@ var _ = Describe("c3appfw test", func() {
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
 			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
-			// idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
+			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
 			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, deployment.GetName(), lm.GetName(), "", mcName)
-			// idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
+			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Wait for License Manager to be in READY phase
@@ -410,7 +410,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
-			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// // Verify RF SF is met
 			// testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -484,10 +484,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// // Update IDXC image
 
-			// testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", oldImage, "New Image", newImage)
-			// idxc.Spec.Image = newImage
-			// err = deployment.UpdateCR(ctx, idxc)
-			// Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
+			testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			idxc.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, idxc)
+			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
@@ -502,7 +502,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// // Ensure Indexers go to Ready phase
-			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
