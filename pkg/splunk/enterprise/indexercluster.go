@@ -1101,7 +1101,7 @@ func isIndexerClusterReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return true, nil
 	}
 
-	// check if instance has the required ClusterManagerRef
+	// check if Search Head instance has the required ClusterManagerRef
 	for _, shc := range searchHeadList.Items {
 		if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
 			searchHeadClusterInstance = shc
