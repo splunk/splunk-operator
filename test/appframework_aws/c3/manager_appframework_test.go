@@ -419,10 +419,10 @@ var _ = Describe("c3appfw test", func() {
 			// testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// // Verify no SH in disconnected status is present on CM
-			// testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
+			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
