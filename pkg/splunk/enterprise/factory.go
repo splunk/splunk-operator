@@ -8,7 +8,6 @@ import (
 
 	//model "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
-	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	splunkprovisionerimpl "github.com/splunk/splunk-operator/pkg/provisioner/splunk/implementation"
 	manager "github.com/splunk/splunk-operator/pkg/splunk"
@@ -16,7 +15,7 @@ import (
 	types "github.com/splunk/splunk-operator/pkg/splunk/model"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	//cmmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/cluster-manager/model"
-
+	model "github.com/splunk/splunk-operator/pkg/splunk/model"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -44,7 +43,7 @@ func (f *splunkManagerFactory) init(runInTestMode bool) error {
 	return nil
 }
 
-func (f splunkManagerFactory) splunkManager(ctx context.Context, info *types.ReconcileInfo, publisher gateway.EventPublisher) (*splunkManager, error) {
+func (f splunkManagerFactory) splunkManager(ctx context.Context, info *types.ReconcileInfo, publisher model.EventPublisher) (*splunkManager, error) {
 	provisionerLogger := log.FromContext(ctx)
 	reqLogger := log.FromContext(ctx)
 	f.log = reqLogger.WithName("splunkProvisioner")
@@ -100,6 +99,6 @@ func (f splunkManagerFactory) splunkManager(ctx context.Context, info *types.Rec
 
 // NewProvisioner returns a new Splunk Provisioner using global
 // configuration for finding the Splunk services.
-func (f splunkManagerFactory) NewManager(ctx context.Context, info *types.ReconcileInfo, publisher gateway.EventPublisher) (manager.SplunkManager, error) {
+func (f splunkManagerFactory) NewManager(ctx context.Context, info *types.ReconcileInfo, publisher model.EventPublisher) (manager.SplunkManager, error) {
 	return f.splunkManager(ctx, info, publisher)
 }

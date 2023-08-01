@@ -10,7 +10,7 @@ import (
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	clustermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
-	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
+	model "github.com/splunk/splunk-operator/pkg/splunk/model"
 )
 
 // splunkGateway implements the gateway.Gateway interface
@@ -21,7 +21,7 @@ type splunkGateway struct {
 	// a debug logger configured for this host
 	debugLog logr.Logger
 	// an event publisher for recording significant events
-	publisher gateway.EventPublisher
+	publisher model.EventPublisher
 	// client for talking to splunk
 	client *resty.Client
 	// credentials
@@ -41,6 +41,7 @@ func (p *splunkGateway) GetClusterManagerInfo(context context.Context) (*[]manag
 		SetResult(envelop).
 		SetError(&splunkError).
 		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
 		Get(url)
 	if err != nil {
 		p.log.Error(err, "get cluster manager info failed")
@@ -208,8 +209,8 @@ func (p *splunkGateway) GetClusterManagerStatus(context context.Context) (*[]man
 // SetClusterInMaintainanceMode Endpoint to set cluster in maintenance mode.
 // Post the status of a rolling restart.
 // endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
-func (p *splunkGateway) SetClusterInMaintenanceMode(context context.Context, mode bool) error {
-	url := clustermodel.SetClusterInMaintenanceMode
+func (p *splunkGateway) SetClusterInMaintenanceMode(ctx context.Context, mode bool) error {
+	url := clustermodel.SetClusterInMaintenanceModeUrl
 
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
@@ -232,4 +233,18 @@ func (p *splunkGateway) SetClusterInMaintenanceMode(context context.Context, mod
 	}
 
 	return err
+}
+
+// IsClusterInMaintenanceMode Endpoint check if cluster in maintenance mode.
+// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
+func (p *splunkGateway) IsClusterInMaintenanceMode(ctx context.Context) (result bool, err error) {
+	clusterInfoList, err := p.GetClusterManagerInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+	if clusterInfoList != nil && len(*clusterInfoList) > 0 {
+		content := *clusterInfoList
+		return content[0].MaintenanceMode, nil
+	}
+	return false, nil
 }

@@ -4235,6 +4235,9 @@ spec:
                   needToPushMasterApps:
                     type: boolean
                 type: object
+              maintenance_mode:
+                description: Indicates if the cluster is in maintenance mode.
+                type: boolean
               phase:
                 description: current phase of the cluster manager
                 enum:

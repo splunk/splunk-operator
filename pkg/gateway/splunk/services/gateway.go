@@ -5,15 +5,12 @@ import (
 
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
+	model "github.com/splunk/splunk-operator/pkg/splunk/model"
 )
-
-// EventPublisher is a function type for publishing events associated
-// with gateway functions.
-type EventPublisher func(ctx context.Context, eventType, reason, message string)
 
 // Factory is the interface for creating new Gateway objects.
 type Factory interface {
-	NewGateway(ctx context.Context, sad *splunkmodel.SplunkCredentials, publisher EventPublisher) (Gateway, error)
+	NewGateway(ctx context.Context, sad *splunkmodel.SplunkCredentials, publisher model.EventPublisher) (Gateway, error)
 }
 
 // Gateway holds the state information for talking to
@@ -49,4 +46,7 @@ type Gateway interface {
 	// Post the status of a rolling restart.
 	// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
 	SetClusterInMaintenanceMode(context context.Context, mode bool) error
+
+	// IsClusterInMaintenanceMode check if cluster is in maintenance mode
+	IsClusterInMaintenanceMode(ctx context.Context) (bool, error)
 }

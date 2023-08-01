@@ -1,0 +1,104 @@
+{
+  "links": {},
+  "origin": "https://localhost:8089/services/cluster/manager/info",
+  "updated": "2022-07-18T23:54:50+00:00",
+  "generator": {
+      "build": "6818ac46f2ec",
+      "version": "9.0.0"
+  },
+  "entry": [
+      {
+          "name": "master",
+          "id": "https://localhost:8089/services/cluster/manager/info/master",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+              "alternate": "/services/cluster/manager/info/master",
+              "list": "/services/cluster/manager/info/master"
+          },
+          "author": "system",
+          "acl": {
+              "app": "",
+              "can_list": true,
+              "can_write": true,
+              "modifiable": false,
+              "owner": "system",
+              "perms": {
+                  "read": [
+                      "admin",
+                      "splunk-system-role"
+                  ],
+                  "write": [
+                      "admin",
+                      "splunk-system-role"
+                  ]
+              },
+              "removable": false,
+              "sharing": "system"
+          },
+          "content": {
+              "active_bundle": {
+                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
+                  "checksum": "7351975980A20311463444E66492BDD5",
+                  "timestamp": 1657658326
+              },
+              "apply_bundle_status": {
+                  "invalid_bundle": {
+                      "bundle_path": "",
+                      "bundle_validation_errors_on_master": [],
+                      "checksum": "",
+                      "timestamp": 0
+                  },
+                  "reload_bundle_issued": false,
+                  "status": "None"
+              },
+              "available_sites": "[site1, site2]",
+              "backup_and_restore_primaries": false,
+              "controlled_rolling_restart_flag": false,
+              "eai:acl": null,
+              "forwarder_site_failover": "",
+              "indexing_ready_flag": true,
+              "initialized_flag": true,
+              "label": "splunk-cm-cluster-master-0",
+              "last_check_restart_bundle_result": false,
+              "last_dry_run_bundle": {
+                  "bundle_path": "",
+                  "checksum": "",
+                  "timestamp": 0
+              },
+              "last_validated_bundle": {
+                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
+                  "checksum": "7351975980A20311463444E66492BDD5",
+                  "is_valid_bundle": true,
+                  "timestamp": 1657658326
+              },
+              "latest_bundle": {
+                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
+                  "checksum": "7351975980A20311463444E66492BDD5",
+                  "timestamp": 1657658326
+              },
+              "maintenance_mode": false,
+              "multisite": true,
+              "previous_active_bundle": {
+                  "bundle_path": "",
+                  "checksum": "",
+                  "timestamp": 0
+              },
+              "primaries_backup_status": "No on-going (or) completed primaries backup yet. Check back again in few minutes if you expect a backup.",
+              "quiet_period_flag": false,
+              "rolling_restart_flag": false,
+              "rolling_restart_or_upgrade": false,
+              "service_ready_flag": true,
+              "site_replication_factor": "{ origin:1, total:2 }",
+              "site_search_factor": "{ origin:1, total:2 }",
+              "start_time": 1657658831,
+              "summary_replication": "false"
+          }
+      }
+  ],
+  "paging": {
+      "total": 1,
+      "perPage": 30,
+      "offset": 0
+  },
+  "messages": []
+}

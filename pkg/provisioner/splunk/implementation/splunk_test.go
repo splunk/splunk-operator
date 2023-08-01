@@ -36,7 +36,7 @@ func setCreds(t *testing.T) provisioner.Provisioner {
 	return provisioner
 }
 
-func TestSetClusterManagerStatus(t *testing.T) {
+func TestGetClusterManagerStatus(t *testing.T) {
 	callGetClusterManagerHealth = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerHealthContent, error) {
 		healthData := []managermodel.ClusterManagerHealthContent{}
 		return &healthData, nil
@@ -46,7 +46,7 @@ func TestSetClusterManagerStatus(t *testing.T) {
 
 	ctx := context.TODO()
 
-	_, err := provisioner.SetClusterManagerStatus(ctx, conditions)
+	_, err := provisioner.GetClusterManagerStatus(ctx, conditions)
 	if err != nil {
 		t.Errorf("fixture: error in set cluster manager %v", err)
 	}
@@ -94,7 +94,7 @@ func TestSetClusterManagerMultiSiteStatus(t *testing.T) {
 
 	ctx := context.TODO()
 
-	_, err := provisioner.SetClusterManagerStatus(ctx, conditions)
+	_, err := provisioner.GetClusterManagerStatus(ctx, conditions)
 	if err != nil {
 		t.Errorf("fixture: error in set cluster manager %v", err)
 	}

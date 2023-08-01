@@ -105,13 +105,13 @@ func (mcnsl *MonitoringConsole) NewEvent(eventType, reason, message string) core
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    mcnsl.ObjectMeta.Namespace,
+			Namespace:    mcnsl.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "MonitoringConsole",
-			Namespace:  mcnsl.Namespace,
-			Name:       mcnsl.Name,
-			UID:        mcnsl.UID,
+			Kind:       "SearchHeadCluster",
+			Namespace:  mcnsl.GetNamespace(),
+			Name:       mcnsl.GetName(),
+			UID:        mcnsl.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

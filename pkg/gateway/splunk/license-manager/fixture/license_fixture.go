@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 
 	"path/filepath"
 
@@ -16,14 +15,10 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
-	clustermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster"
-	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
+	licensemodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/license"
+
+	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/license-manager"
 	model "github.com/splunk/splunk-operator/pkg/splunk/model"
-	// peermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/peer"
-	// searchheadmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/searchhead"
-	// commonmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/common"
-	// lmmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/license-manager"
-	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -67,7 +62,7 @@ func findFixturePath() (string, error) {
 		for _, file := range files {
 			if file.Name() == ext {
 				wd, err = filepath.Abs(wd)
-				wd += "/pkg/gateway/splunk/services/fixture/"
+				wd += "/pkg/gateway/splunk/license-manager/fixture/"
 				return wd, err
 			}
 		}
@@ -90,10 +85,7 @@ func (f *Fixture) NewGateway(ctx context.Context, sad *splunkmodel.SplunkCredent
 	return p, nil
 }
 
-// GetClusterManagerInfo Access information about cluster manager node.
-// get List cluster manager node details.
-// endpoint: https://<host>:<mPort>/services/cluster/manager/info
-func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managermodel.ClusterManagerInfoContent, error) {
+func (p *fixtureGateway) GetLicenseGroup(ctx context.Context) (*[]licensemodel.LicenseGroup, error) {
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
 	relativePath, err := findFixturePath()
@@ -101,7 +93,7 @@ func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managerm
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "/license_group.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -109,11 +101,11 @@ func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managerm
 	httpmock.ActivateNonDefault(p.client.GetClient())
 	fixtureData := string(content)
 	responder := httpmock.NewStringResponder(200, fixtureData)
-	fakeUrl := clustermodel.GetClusterManagerInfoUrl
+	fakeUrl := licensemodel.GetLicenseGroupUrl
 	httpmock.RegisterResponder("GET", fakeUrl, responder)
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
-	envelop := &managermodel.ClusterManagerInfoHeader{}
+	envelop := &licensemodel.LicenseHeader{}
 	resp, err := p.client.R().
 		SetResult(envelop).
 		SetError(&splunkError).
@@ -133,24 +125,23 @@ func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managerm
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.ClusterManagerInfoContent{}
+	contentList := []licensemodel.LicenseGroup{}
 	for _, entry := range envelop.Entry {
-		contentList = append(contentList, entry.Content)
+		content := entry.Content.(licensemodel.LicenseGroup)
+		contentList = append(contentList, content)
 	}
 	return &contentList, nil
 }
 
-// GetClusterManagerPeersAccess cluster manager peers.
-// endpoint: https://<host>:<mPort>/services/cluster/manager/peers
-func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]managermodel.ClusterManagerPeerContent, error) {
+func (p *fixtureGateway) GetLicense(ctx context.Context) (*[]licensemodel.License, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
 	relativePath, err := findFixturePath()
 	if err != nil {
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	// Read entire file content, giving us little control but
-	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "/license.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -158,11 +149,11 @@ func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]manager
 	httpmock.ActivateNonDefault(p.client.GetClient())
 	fixtureData := string(content)
 	responder := httpmock.NewStringResponder(200, fixtureData)
-	fakeUrl := clustermodel.GetClusterManagerPeersUrl
+	fakeUrl := licensemodel.GetLicenseUrl
 	httpmock.RegisterResponder("GET", fakeUrl, responder)
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
-	envelop := &managermodel.ClusterManagerPeerHeader{}
+	envelop := &licensemodel.LicenseHeader{}
 	resp, err := p.client.R().
 		SetResult(envelop).
 		SetError(&splunkError).
@@ -182,29 +173,23 @@ func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]manager
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.ClusterManagerPeerContent{}
+	contentList := []licensemodel.License{}
 	for _, entry := range envelop.Entry {
-		contentList = append(contentList, entry.Content)
+		content := entry.Content.(licensemodel.License)
+		contentList = append(contentList, content)
 	}
 	return &contentList, nil
 }
 
-// GetClusterManagerHealth Performs health checks to determine the cluster health and search impact, prior to a rolling upgrade of the indexer cluster.
-// Authentication and Authorization:
-//
-//	Requires the admin role or list_indexer_cluster capability.
-//
-// endpoint: https://<host>:<mPort>/services/cluster/manager/health
-func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]managermodel.ClusterManagerHealthContent, error) {
+func (p *fixtureGateway) GetLicenseLocalPeer(ctx context.Context) (*[]licensemodel.LicenseLocalPeer, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
 	relativePath, err := findFixturePath()
 	if err != nil {
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-
-	// Read entire file content, giving us little control but
-	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "/license_local_peer.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -212,12 +197,11 @@ func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]manage
 	httpmock.ActivateNonDefault(p.client.GetClient())
 	fixtureData := string(content)
 	responder := httpmock.NewStringResponder(200, fixtureData)
-	fakeUrl := clustermodel.GetClusterManagerHealthUrl
+	fakeUrl := licensemodel.GetLicenseLocalPeersUrl
 	httpmock.RegisterResponder("GET", fakeUrl, responder)
-
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
-	envelop := &managermodel.ClusterManagerHealthHeader{}
+	envelop := &licensemodel.LicenseHeader{}
 	resp, err := p.client.R().
 		SetResult(envelop).
 		SetError(&splunkError).
@@ -237,25 +221,23 @@ func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]manage
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.ClusterManagerHealthContent{}
+	contentList := []licensemodel.LicenseLocalPeer{}
 	for _, entry := range envelop.Entry {
-		contentList = append(contentList, entry.Content)
+		content := entry.Content.(licensemodel.LicenseLocalPeer)
+		contentList = append(contentList, content)
 	}
 	return &contentList, nil
 }
 
-// GetClusterManagerSites Access cluster site information.
-// list List available cluster sites.
-// endpoint: https://<host>:<mPort>/services/cluster/manager/sites
-func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]managermodel.ClusterManagerSiteContent, error) {
+func (p *fixtureGateway) GetLicenseMessage(ctx context.Context) (*[]licensemodel.LicenseMessage, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
 	relativePath, err := findFixturePath()
 	if err != nil {
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	// Read entire file content, giving us little control but
-	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "/cluster_config.json")
+	content, err := ioutil.ReadFile(relativePath + "/license_message.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -263,11 +245,11 @@ func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]manager
 	httpmock.ActivateNonDefault(p.client.GetClient())
 	fixtureData := string(content)
 	responder := httpmock.NewStringResponder(200, fixtureData)
-	fakeUrl := clustermodel.GetClusterManagerSitesUrl
+	fakeUrl := licensemodel.GetLicenseMessagesUrl
 	httpmock.RegisterResponder("GET", fakeUrl, responder)
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
-	envelop := &managermodel.ClusterManagerSiteHeader{}
+	envelop := &licensemodel.LicenseHeader{}
 	resp, err := p.client.R().
 		SetResult(envelop).
 		SetError(&splunkError).
@@ -287,36 +269,35 @@ func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]manager
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.ClusterManagerSiteContent{}
+	contentList := []licensemodel.LicenseMessage{}
 	for _, entry := range envelop.Entry {
-		contentList = append(contentList, entry.Content)
+		content := entry.Content.(licensemodel.LicenseMessage)
+		contentList = append(contentList, content)
 	}
 	return &contentList, nil
 }
 
-// GetClusterManagerSearchHeadStatus Endpoint to get searchheads connected to cluster manager.
-// endpoint: https://<host>:<mPort>/services/cluster/manager/status
-func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]managermodel.ClusterManagerStatusContent, error) {
+func (p *fixtureGateway) GetLicensePools(ctx context.Context) (*[]licensemodel.LicensePool, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
 	relativePath, err := findFixturePath()
 	if err != nil {
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	// Read entire file content, giving us little control but
-	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "/cluster_manager_status.json")
+	content, err := ioutil.ReadFile(relativePath + "/license_pools.json")
 	if err != nil {
-		log.Error(err, "fixture: error in get cluster manager search heads")
+		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
 	}
 	httpmock.ActivateNonDefault(p.client.GetClient())
 	fixtureData := string(content)
 	responder := httpmock.NewStringResponder(200, fixtureData)
-	fakeUrl := clustermodel.GetClusterManagerStatusUrl
+	fakeUrl := licensemodel.GetLicensePoolsUrl
 	httpmock.RegisterResponder("GET", fakeUrl, responder)
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
-	envelop := &managermodel.ClusterManagerStatusHeader{}
+	envelop := &licensemodel.LicenseHeader{}
 	resp, err := p.client.R().
 		SetResult(envelop).
 		SetError(&splunkError).
@@ -324,7 +305,7 @@ func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]manage
 		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
 		Get(fakeUrl)
 	if err != nil {
-		p.log.Error(err, "get cluster manager status failed")
+		p.log.Error(err, "get cluster manager buckets failed")
 	}
 	if resp.StatusCode() != http.StatusOK {
 		p.log.Info("response failure set to", "result", err)
@@ -336,45 +317,43 @@ func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]manage
 		return nil, splunkError
 	}
 
-	contentList := []managermodel.ClusterManagerStatusContent{}
+	contentList := []licensemodel.LicensePool{}
 	for _, entry := range envelop.Entry {
-		contentList = append(contentList, entry.Content)
+		content := entry.Content.(licensemodel.LicensePool)
+		contentList = append(contentList, content)
 	}
 	return &contentList, nil
 }
 
-// SetClusterInMaintainanceMode Endpoint to set cluster in maintenance mode.
-// Post the status of a rolling restart.
-// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
-func (p *fixtureGateway) SetClusterInMaintenanceMode(context context.Context, mode bool) error {
-
+func (p *fixtureGateway) GetLicensePeers(context context.Context) (*[]licensemodel.LicensePeer, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
 	relativePath, err := findFixturePath()
 	if err != nil {
 		log.Error(err, "fixture: unable to find path")
-		return err
+		return nil, err
 	}
-	// Read entire file content, giving us little control but
-	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "/cluster_maintenance.json")
+	content, err := ioutil.ReadFile(relativePath + "/license_peers.json")
 	if err != nil {
-		log.Error(err, "fixture: error in post cluster maintenance")
-		return err
+		log.Error(err, "fixture: error in get cluster config")
+		return nil, err
 	}
 	httpmock.ActivateNonDefault(p.client.GetClient())
 	fixtureData := string(content)
 	responder := httpmock.NewStringResponder(200, fixtureData)
-	fakeUrl := clustermodel.SetClusterInMaintenanceModeUrl
-	httpmock.RegisterResponder("POST", fakeUrl, responder)
-
+	fakeUrl := licensemodel.GetLicensePeersUrl
+	httpmock.RegisterResponder("GET", fakeUrl, responder)
 	// featch the configheader into struct
 	splunkError := &splunkmodel.SplunkError{}
+	envelop := &licensemodel.LicenseHeader{}
 	resp, err := p.client.R().
+		SetResult(envelop).
 		SetError(&splunkError).
 		ForceContentType("application/json").
-		SetQueryParams(map[string]string{"output_mode": "json", "mode": strconv.FormatBool(mode)}).
-		Post(fakeUrl)
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(fakeUrl)
 	if err != nil {
-		p.log.Error(err, "set cluster manager in maintenance mode failed")
+		p.log.Error(err, "get cluster manager buckets failed")
 	}
 	if resp.StatusCode() != http.StatusOK {
 		p.log.Info("response failure set to", "result", err)
@@ -383,22 +362,109 @@ func (p *fixtureGateway) SetClusterInMaintenanceMode(context context.Context, mo
 		if len(splunkError.Messages) > 0 {
 			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
 		}
-		return splunkError
+		return nil, splunkError
 	}
 
-	return err
+	contentList := []licensemodel.LicensePeer{}
+	for _, entry := range envelop.Entry {
+		content := entry.Content.(licensemodel.LicensePeer)
+		contentList = append(contentList, content)
+	}
+	return &contentList, nil
 }
 
-// IsClusterInMaintenanceMode Endpoint check if cluster in maintenance mode.
-// endpoint: https://<host>:<mPort>/services/cluster/manager/control/default/maintenance
-func (p *fixtureGateway) IsClusterInMaintenanceMode(ctx context.Context) (result bool, err error) {
-	clusterInfoList, err := p.GetClusterManagerInfo(ctx)
+func (p *fixtureGateway) GetLicenseUsage(ctx context.Context) (*[]licensemodel.LicenseUsage, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
+	relativePath, err := findFixturePath()
 	if err != nil {
-		return false, err
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
 	}
-	if clusterInfoList != nil && len(*clusterInfoList) > 0 {
-		content := *clusterInfoList
-		return content[0].MaintenanceMode, nil
+	content, err := ioutil.ReadFile(relativePath + "/license_usage.json")
+	if err != nil {
+		log.Error(err, "fixture: error in get cluster config")
+		return nil, err
 	}
-	return false, nil
+	httpmock.ActivateNonDefault(p.client.GetClient())
+	fixtureData := string(content)
+	responder := httpmock.NewStringResponder(200, fixtureData)
+	fakeUrl := licensemodel.GetLicenseUsageUrl
+	httpmock.RegisterResponder("GET", fakeUrl, responder)
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &licensemodel.LicenseHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(fakeUrl)
+	if err != nil {
+		p.log.Error(err, "get cluster manager buckets failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []licensemodel.LicenseUsage{}
+	for _, entry := range envelop.Entry {
+		content := entry.Content.(licensemodel.LicenseUsage)
+		contentList = append(contentList, content)
+	}
+	return &contentList, nil
+}
+
+func (p *fixtureGateway) GetLicenseStacks(ctx context.Context) (*[]licensemodel.LicenseStack, error) {
+	// Read entire file content, giving us little control but
+	// making it very simple. No need to close the file.
+	relativePath, err := findFixturePath()
+	if err != nil {
+		log.Error(err, "fixture: unable to find path")
+		return nil, err
+	}
+	content, err := ioutil.ReadFile(relativePath + "/license_stack.json")
+	if err != nil {
+		log.Error(err, "fixture: error in get cluster config")
+		return nil, err
+	}
+	httpmock.ActivateNonDefault(p.client.GetClient())
+	fixtureData := string(content)
+	responder := httpmock.NewStringResponder(200, fixtureData)
+	fakeUrl := licensemodel.GetLicenseStacksUrl
+	httpmock.RegisterResponder("GET", fakeUrl, responder)
+	// featch the configheader into struct
+	splunkError := &splunkmodel.SplunkError{}
+	envelop := &licensemodel.LicenseHeader{}
+	resp, err := p.client.R().
+		SetResult(envelop).
+		SetError(&splunkError).
+		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
+		Get(fakeUrl)
+	if err != nil {
+		p.log.Error(err, "get cluster manager buckets failed")
+	}
+	if resp.StatusCode() != http.StatusOK {
+		p.log.Info("response failure set to", "result", err)
+	}
+	if resp.StatusCode() > 400 {
+		if len(splunkError.Messages) > 0 {
+			p.log.Info("response failure set to", "result", splunkError.Messages[0].Text)
+		}
+		return nil, splunkError
+	}
+
+	contentList := []licensemodel.LicenseStack{}
+	for _, entry := range envelop.Entry {
+		content := entry.Content.(licensemodel.LicenseStack)
+		contentList = append(contentList, content)
+	}
+	return &contentList, nil
 }

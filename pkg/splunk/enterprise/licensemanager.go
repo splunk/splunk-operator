@@ -22,6 +22,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	provmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -36,7 +37,7 @@ import (
 )
 
 // ApplyLicenseManager reconciles the state for the Splunk Enterprise license manager.
-func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (reconcile.Result, error) {
+func (p *splunkManager) ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) (reconcile.Result, error) {
 
 	// unless modified, reconcile for this object will be requeued after 5 seconds
 	result := reconcile.Result{
@@ -177,6 +178,14 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 		err = changeClusterManagerAnnotations(ctx, client, cr)
 		if err != nil {
 			return result, err
+		}
+
+		// Verification of splunk instance update CR status
+		// We are using Conditions to update status information
+		provResult := provmodel.Result{}
+		provResult, err = p.provisioner.GetClusterManagerStatus(ctx, &cr.Status.Conditions)
+		if err != nil {
+			cr.Status.ErrorMessage = provResult.ErrorMessage
 		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.

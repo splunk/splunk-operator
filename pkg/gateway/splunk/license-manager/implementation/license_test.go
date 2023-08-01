@@ -54,14 +54,14 @@ func setCreds(t *testing.T) *splunkGateway {
 	return sm
 }
 
-func TestGetClusterManagerHealth(t *testing.T) {
+func GetLicenseGroup(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
 	ctx := context.TODO()
 	sm := setCreds(t)
 	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_manager_health.json")
+	content, err := ioutil.ReadFile("../fixture/license_group.json")
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager health %v", err)
 	}
@@ -70,77 +70,8 @@ func TestGetClusterManagerHealth(t *testing.T) {
 	url := clustermodel.GetClusterManagerHealthUrl
 	httpmock.RegisterResponder("GET", url, responder)
 
-	_, err = sm.GetClusterManagerHealth(ctx)
+	_, err = sm.GetLicenseGroup(ctx)
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager health %v", err)
-	}
-}
-
-func TestGetClusterManagerInfo(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
-	ctx := context.TODO()
-	sm := setCreds(t)
-	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_manager_info.json")
-	if err != nil {
-		t.Errorf("fixture: error in get cluster manager info %v", err)
-	}
-	fixtureData := string(content)
-	responder := httpmock.NewStringResponder(200, fixtureData)
-	url := clustermodel.GetClusterManagerInfoUrl
-	httpmock.RegisterResponder("GET", url, responder)
-
-	_, err = sm.GetClusterManagerInfo(ctx)
-	if err != nil {
-		t.Errorf("fixture: error in get cluster manager info %v", err)
-	}
-}
-
-func TestGetClusterManagerPeers(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
-	ctx := context.TODO()
-	sm := setCreds(t)
-	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_manager_peers.json")
-	if err != nil {
-		t.Errorf("fixture: error in get cluster manager peers %v", err)
-	}
-	fixtureData := string(content)
-	responder := httpmock.NewStringResponder(200, fixtureData)
-	url := clustermodel.GetClusterManagerPeersUrl
-	httpmock.RegisterResponder("GET", url, responder)
-
-	peersptr, err := sm.GetClusterManagerPeers(ctx)
-	if err != nil {
-		t.Errorf("fixture: error in get cluster manager searchheads %v", err)
-	}
-	if peersptr == nil {
-		t.Errorf("fixture: error in get cluster manager searchheads  peers list is empty")
-	}
-}
-
-func TestSetClusterInMaintenanceeMode(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
-	ctx := context.TODO()
-	sm := setCreds(t)
-	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_maintenance.json")
-	if err != nil {
-		t.Errorf("fixture: error in get cluster manager peers %v", err)
-	}
-	fixtureData := string(content)
-	responder := httpmock.NewStringResponder(200, fixtureData)
-	url := clustermodel.SetClusterInMaintenanceModeUrl
-	httpmock.RegisterResponder("POST", url, responder)
-
-	err = sm.SetClusterInMaintenanceMode(ctx, true)
-	if err != nil {
-		t.Errorf("fixture: error in get cluster manager searchheads %v", err)
 	}
 }

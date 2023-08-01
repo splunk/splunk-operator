@@ -167,13 +167,13 @@ func (shcstr *SearchHeadCluster) NewEvent(eventType, reason, message string) cor
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    shcstr.ObjectMeta.Namespace,
+			Namespace:    shcstr.GetNamespace(),
 		},
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "SearchHeadCluster",
-			Namespace:  shcstr.Namespace,
-			Name:       shcstr.Name,
-			UID:        shcstr.UID,
+			Namespace:  shcstr.GetNamespace(),
+			Name:       shcstr.GetName(),
+			UID:        shcstr.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

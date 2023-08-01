@@ -187,6 +187,8 @@ func (p *splunkManager) ApplyIndexerClusterManager(ctx context.Context, client s
 				// get the pod image name
 				if v.Spec.Containers[0].Image != cr.Spec.Image {
 					// image do not match that means its image upgrade
+					eventPublisher.Normal(ctx, "version_upgrade", fmt.Sprintf("image change v.spec.Containers[0].Image=%s cr.Spec.Image=%s", v.Spec.Containers[0].Image, cr.Spec.Image))
+					scopedLog.Info("image change enabled", "v.spec.Containers[0].Image", v.Spec.Containers[0].Image, "cr.Spec.Image", cr.Spec.Image)
 					versionUpgrade = true
 					break
 				}
@@ -202,7 +204,8 @@ func (p *splunkManager) ApplyIndexerClusterManager(ctx context.Context, client s
 			return result, err
 		}
 	} else {
-		err = p.provisioner.SetClusterInMaintenanceMode(ctx, true)
+
+		err = p.SetClusterInMaintenanceMode(ctx, client, cr, true)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetClusterInMaintenanceMode", fmt.Sprintf("Unable to enable cluster manager maintenance mode %s", err.Error()))
 			return result, err
@@ -285,7 +288,7 @@ func (p *splunkManager) ApplyIndexerClusterManager(ctx context.Context, client s
 			return result, err
 		}
 
-		err = p.provisioner.SetClusterInMaintenanceMode(ctx, false)
+		err = p.SetClusterInMaintenanceMode(ctx, client, cr, false)
 		if err != nil {
 			eventPublisher.Warning(ctx, "SetClusterInMaintenanceMode", fmt.Sprintf("Unable to disable cluster manager maintenance mode %s", err.Error()))
 			return result, err
@@ -297,6 +300,44 @@ func (p *splunkManager) ApplyIndexerClusterManager(ctx context.Context, client s
 		result.RequeueAfter = 0
 	}
 	return result, nil
+}
+
+func (p *splunkManager) SetClusterInMaintenanceMode(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, value bool) error {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	clusterManagerInstance := &enterpriseApi.ClusterManager{}
+	if len(cr.Spec.ClusterManagerRef.Name) == 0 {
+		return fmt.Errorf("cluster manager not found")
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      cr.Spec.ClusterManagerRef.Name,
+	}
+	err := client.Get(ctx, namespacedName, clusterManagerInstance)
+	if err != nil {
+		return err
+	}
+
+	annotations := cr.GetAnnotations()
+	if value {
+		annotations[enterpriseApi.ClusterManagerMaintenanceAnnotation] = ""
+		scopedLog.Info("set cluster manager in maintenance mode")
+		eventPublisher.Normal(ctx, "ClusterManager", "set cluster manager in maintenance mode")
+	} else {
+		delete(annotations, enterpriseApi.ClusterManagerMaintenanceAnnotation)
+		scopedLog.Info("unset cluster manager in maintenance mode")
+		eventPublisher.Normal(ctx, "ClusterManager", "unset cluster manager in maintenance mode")
+	}
+	clusterManagerInstance.Annotations = annotations
+	err = client.Update(ctx, cr)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ApplyIndexerCluster reconciles the state of a Splunk Enterprise indexer cluster for Older CM CRDs.

@@ -97,7 +97,7 @@ func (lmstr *LicenseManager) NewEvent(eventType, reason, message string) corev1.
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    lmstr.ObjectMeta.Namespace,
+			Namespace:    lmstr.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "LicenseManager",

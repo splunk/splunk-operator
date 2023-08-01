@@ -50,19 +50,19 @@ import (
 	//splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 )
 
-func setCreds(t *testing.T, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) manager.SplunkManager {
+func setCreds(t *testing.T, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec) manager.SplunkManager {
 	ctx := context.TODO()
 	clusterManager := enterpriseApi.ClusterManager{}
 	clusterManager.Name = "test"
 	info := &managermodel.ReconcileInfo{
-		Kind:       cr.Kind,
-		CommonSpec: cr.Spec.CommonSplunkSpec,
+		Kind:       cr.GroupVersionKind().Kind,
+		CommonSpec: spec,
 		Client:     c,
 		Log:        log.Log,
-		Namespace:  cr.Namespace,
-		Name:       cr.Name,
+		Namespace:  cr.GetNamespace(),
+		Name:       cr.GetName(),
 	}
-	copier.Copy(info.MetaObject, cr.ObjectMeta)
+	copier.Copy(info.MetaObject, cr)
 	publisher := func(ctx context.Context, eventType, reason, message string) {}
 	mg := NewManagerFactory(true)
 	manager, err := mg.NewManager(ctx, info, publisher)
@@ -156,7 +156,7 @@ func TestApplyClusterManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		manager := setCreds(t, c, &current)
+		manager := setCreds(t, c, &current, current.Spec.CommonSplunkSpec)
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		//_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return true, err
@@ -170,7 +170,7 @@ func TestApplyClusterManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	_ = errors.New(splcommon.Rerr)
 
-	manager := setCreds(t, c, &current)
+	manager := setCreds(t, c, &current,  current.Spec.CommonSplunkSpec)
 	_, err := manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -612,7 +612,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 
 	// Without S3 keys, ApplyClusterManager should fail
-	manager := setCreds(t, client, &current)
+	manager := setCreds(t, client, &current, current.Spec.CommonSplunkSpec)
 	_, err := manager.ApplyClusterManager(ctx, client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
@@ -642,7 +642,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager), )
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
@@ -897,7 +897,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	manager := setCreds(t, client, &cm)
+	manager := setCreds(t, client, &cm,  cm.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
@@ -993,7 +993,7 @@ func TestApplyCLusterManagerDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	manager := setCreds(t, c, &cm)
+	manager := setCreds(t, c, &cm,  cm.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")

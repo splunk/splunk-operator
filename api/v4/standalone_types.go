@@ -121,13 +121,13 @@ func (standln *Standalone) NewEvent(eventType, reason, message string) corev1.Ev
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    standln.ObjectMeta.Namespace,
+			Namespace:    standln.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Standalone",
-			Namespace:  standln.Namespace,
-			Name:       standln.Name,
-			UID:        standln.UID,
+			Kind:       "SearchHeadCluster",
+			Namespace:  standln.GetNamespace(),
+			Name:       standln.GetName(),
+			UID:        standln.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

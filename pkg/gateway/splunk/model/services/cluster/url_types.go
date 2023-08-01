@@ -31,5 +31,5 @@ const (
 
 	GetClusterManagerStatusUrl = "/services/cluster/manager/status"
 
-	SetClusterInMaintenanceMode = "/services/cluster/manager/control/default/maintenance"
+	SetClusterInMaintenanceModeUrl = "/services/cluster/manager/control/default/maintenance"
 )

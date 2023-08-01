@@ -88,7 +88,8 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		_, err := manager.ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -98,7 +99,8 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		_, err := manager.ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return true, err
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
@@ -107,7 +109,8 @@ func TestApplyLicenseManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	current.Spec.LivenessInitialDelaySeconds = -1
-	_, err := ApplyLicenseManager(ctx, c, &current)
+	manager := setCreds(t, c, current.(*enterpriseApi.ClusterManager))
+	_, err := manager.ApplyLicenseManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}

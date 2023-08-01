@@ -26,6 +26,7 @@ func (p *splunkGateway) GetServerDeploymentHealthDetails(context context.Context
 		SetResult(envelop).
 		SetError(&splunkError).
 		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
 		Get(url)
 	if err != nil {
 		p.log.Error(err, "get deployment details failed")
@@ -62,6 +63,7 @@ func (p *splunkGateway) GetSplunkdHealthDetails(context context.Context) (*[]hea
 		SetResult(envelop).
 		SetError(&splunkError).
 		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
 		Get(url)
 	if err != nil {
 		p.log.Error(err, "get splunkd health details failed")
@@ -101,6 +103,7 @@ func (p *splunkGateway) GetServerInfo(context context.Context) (*[]healthmodel.D
 		SetResult(envelop).
 		SetError(&splunkError).
 		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
 		Get(url)
 	if err != nil {
 		p.log.Error(err, "get splunkd health details failed")
@@ -135,6 +138,7 @@ func (p *splunkGateway) GetServerStatus(context context.Context) (*[]healthmodel
 		SetResult(envelop).
 		SetError(&splunkError).
 		ForceContentType("application/json").
+		SetQueryParams(map[string]string{"output_mode": "json", "count": "0"}).
 		Get(url)
 	if err != nil {
 		p.log.Error(err, "get splunkd health details failed")

@@ -68,6 +68,9 @@ type ClusterMasterStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Indicates if the cluster is in maintenance mode.
+	MaintenanceMode bool `json:"maintenance_mode"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

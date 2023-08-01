@@ -26,12 +26,12 @@ import (
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
-	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	provmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	model "github.com/splunk/splunk-operator/pkg/splunk/model"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,7 +47,7 @@ type splunkManager struct {
 	// a debug logger configured for this host
 	debugLog logr.Logger
 	// an event publisher for recording significant events
-	publisher gateway.EventPublisher
+	publisher model.EventPublisher
 	// credentials
 	// gateway factory
 	provisioner provisioner.Provisioner
@@ -247,14 +247,16 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
-	}
 
-	// Verification of splunk instance update CR status
-	// We are using Conditions to update status information
-	provResult := provmodel.Result{}
-	provResult, err = p.provisioner.SetClusterManagerStatus(ctx, &cr.Status.Conditions)
-	if err != nil {
-		cr.Status.ErrorMessage = provResult.ErrorMessage
+		p.ReconcileClusterManagerMaintenanceMode(ctx, client, cr)
+
+		// Verification of splunk instance update CR status
+		// We are using Conditions to update status information
+		provResult := provmodel.Result{}
+		provResult, err = p.provisioner.GetClusterManagerStatus(ctx, &cr.Status.Conditions)
+		if err != nil {
+			cr.Status.ErrorMessage = provResult.ErrorMessage
+		}
 	}
 
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
@@ -264,6 +266,46 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 	}
 
 	return result, nil
+}
+
+func (p *splunkManager) ReconcileClusterManagerMaintenanceMode(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+	var result reconcile.Result
+	var err error
+	var response bool
+	response, err = p.provisioner.IsClusterInMaintenanceMode(ctx)
+	if err != nil {
+		cr.Status.ErrorMessage = err.Error()
+		return result, err
+	}
+
+	// Check if user asking to move Cluster to maintenance mode
+	cr.Status.MaintenanceMode = response
+	annotations := cr.GetAnnotations()
+	if annotations != nil {
+		if _, ok := annotations[enterpriseApi.ClusterManagerMaintenanceAnnotation]; ok {
+			if response {
+				// if cluster is already in maintenance mode return
+				return result, nil
+			}
+			// place cluster manager in maintenance mode
+			err = p.provisioner.SetClusterInMaintenanceMode(ctx, true)
+			if err != nil {
+				cr.Status.ErrorMessage = err.Error()
+				return result, err
+			}
+			cr.Status.MaintenanceMode = true
+		} else if response {
+			// if cluster manager is in maintenance mode and annotations is not set then
+			// unset maintenance mode
+			err = p.provisioner.SetClusterInMaintenanceMode(ctx, false)
+			if err != nil {
+				cr.Status.ErrorMessage = err.Error()
+				return result, err
+			}
+			cr.Status.MaintenanceMode = false
+		}
+	}
+	return result, err
 }
 
 // clusterManagerPodManager is used to manage the cluster manager pod

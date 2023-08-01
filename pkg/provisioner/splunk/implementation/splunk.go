@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	licensegateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/license-manager"
 	splunkmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	gateway "github.com/splunk/splunk-operator/pkg/gateway/splunk/services"
 	provmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
+	model "github.com/splunk/splunk-operator/pkg/splunk/model"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -22,11 +24,13 @@ type splunkProvisioner struct {
 	// a debug logger configured for this host
 	debugLog logr.Logger
 	// an event publisher for recording significant events
-	publisher gateway.EventPublisher
+	publisher model.EventPublisher
 	// credentials
 	credentials *splunkmodel.SplunkCredentials
 	// gateway factory
 	gateway gateway.Gateway
+	// splunk license factory
+	licensegateway licensegateway.Gateway
 }
 
 var callGetClusterManagerInfo = func(ctx context.Context, p *splunkProvisioner) (*[]managermodel.ClusterManagerInfoContent, error) {
@@ -79,8 +83,8 @@ var callGetClusterManagerSitesStatus = func(ctx context.Context, p *splunkProvis
 	return peerlist, err
 }
 
-// SetClusterManagerStatus Access cluster node configuration details.
-func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error) {
+// GetClusterManagerStatus Access cluster node configuration details.
+func (p *splunkProvisioner) GetClusterManagerStatus(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error) {
 
 	peerlistptr, err := callGetClusterManagerPeersStatus(ctx, p)
 	if err != nil {
@@ -89,8 +93,8 @@ func (p *splunkProvisioner) SetClusterManagerStatus(ctx context.Context, conditi
 		peerlist := *peerlistptr
 		for _, peer := range peerlist {
 			condition := metav1.Condition{
-				Type:    "Peers",
-				Message: fmt.Sprintf("%s with %s is %s ", peer.Site, peer.Label, peer.Status),
+				Type:    peer.Label,
+				Message: fmt.Sprintf("%s in site %s is %s ", peer.Label, peer.Site, peer.Status),
 				Reason:  peer.Site,
 			}
 			if peer.Status == "Up" {
@@ -165,4 +169,8 @@ func (p *splunkProvisioner) CheckClusterManagerHealth(ctx context.Context) (resu
 
 func (p *splunkProvisioner) SetClusterInMaintenanceMode(ctx context.Context, mode bool) error {
 	return p.gateway.SetClusterInMaintenanceMode(ctx, mode)
+}
+
+func (p *splunkProvisioner) IsClusterInMaintenanceMode(ctx context.Context) (bool, error) {
+	return p.gateway.IsClusterInMaintenanceMode(ctx)
 }

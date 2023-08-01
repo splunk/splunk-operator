@@ -158,7 +158,7 @@ func (icstr *IndexerCluster) NewEvent(eventType, reason, message string) corev1.
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    icstr.ObjectMeta.Namespace,
+			Namespace:    icstr.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "IndexerCluster",
