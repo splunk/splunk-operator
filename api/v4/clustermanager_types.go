@@ -131,7 +131,7 @@ func (cmstr *ClusterManager) NewEvent(eventType, reason, message string) corev1.
 			Namespace:    cmstr.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "SearchHeadCluster",
+			Kind:       "ClusterManager",
 			Namespace:  cmstr.GetNamespace(),
 			Name:       cmstr.GetName(),
 			UID:        cmstr.GetUID(),

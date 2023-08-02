@@ -99,7 +99,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager), cr.(*enterpriseApi.ClusterManager).Spec.CommonSplunkSpec)
+		manager := setCreds(t, c, cr.(*enterpriseApi.LicenseManager), cr.(*enterpriseApi.LicenseManager).Spec.CommonSplunkSpec)
 		_, err := manager.ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return true, err
 	}
