@@ -1987,17 +1987,14 @@ func TestIsIndexerClusterReadyForUpgrade(t *testing.T) {
 	shc.Spec.Image = "splunk2"
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 
-	indexerCluster := &enterpriseApi.IndexerCluster{}
-	namespacedName := types.NamespacedName{
-		Name:      idx.Name,
-		Namespace: idx.Namespace,
-	}
-	err = client.Get(ctx, namespacedName, indexerCluster)
+	shc.Status.Phase = enterpriseApi.PhaseReady
+	err = client.Status().Update(ctx, &shc)
 	if err != nil {
-		t.Errorf(" Get Indexer Cluster should not have returned error=%v", err)
+		t.Errorf("Unexpected status update  %v", err)
+		debug.PrintStack()
 	}
 
-	check, err := isIndexerClusterReadyForUpgrade(ctx, client, indexerCluster)
+	check, err := isIndexerClusterReadyForUpgrade(ctx, client, &idx)
 
 	if err != nil {
 		t.Errorf("Unexpected isIndexerClusterReadyForUpgrade error %v", err)
