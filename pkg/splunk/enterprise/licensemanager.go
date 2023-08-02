@@ -175,15 +175,15 @@ func (p *splunkManager) ApplyLicenseManager(ctx context.Context, client splcommo
 		result = *finalResult
 
 		// trigger ClusterManager reconcile by changing the splunk/image-tag annotation
-		err = changeClusterManagerAnnotations(ctx, client, cr)
-		if err != nil {
-			return result, err
-		}
+		//err = changeClusterManagerAnnotations(ctx, client, cr)
+		//if err != nil {
+		//	return result, err
+		//}
 
 		// Verification of splunk instance update CR status
 		// We are using Conditions to update status information
 		provResult := provmodel.Result{}
-		provResult, err = p.provisioner.GetClusterManagerStatus(ctx, &cr.Status.Conditions)
+		provResult, err = p.provisioner.GetLicense(ctx, &cr.Status.Conditions)
 		if err != nil {
 			cr.Status.ErrorMessage = provResult.ErrorMessage
 		}

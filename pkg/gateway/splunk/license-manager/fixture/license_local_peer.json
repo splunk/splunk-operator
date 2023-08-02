@@ -1,104 +1,115 @@
 {
-  "links": {},
-  "origin": "https://localhost:8089/services/cluster/manager/info",
-  "updated": "2022-07-18T23:54:50+00:00",
-  "generator": {
-      "build": "6818ac46f2ec",
-      "version": "9.0.0"
-  },
-  "entry": [
-      {
-          "name": "master",
-          "id": "https://localhost:8089/services/cluster/manager/info/master",
+    "links": {},
+    "origin": "https://splunk-lm-license-manager-service.test:8089/services/licenser/localpeer",
+    "updated": "2023-08-01T21:36:59+00:00",
+    "generator": {
+       "build": "e9494146ae5c",
+       "version": "9.0.5"
+    },
+    "entry": [
+       {
+          "name": "license",
+          "id": "https://splunk-lm-license-manager-service.test:8089/services/licenser/localpeer/license",
           "updated": "1970-01-01T00:00:00+00:00",
           "links": {
-              "alternate": "/services/cluster/manager/info/master",
-              "list": "/services/cluster/manager/info/master"
+             "alternate": "/services/licenser/localpeer/license",
+             "list": "/services/licenser/localpeer/license",
+             "edit": "/services/licenser/localpeer/license"
           },
           "author": "system",
           "acl": {
-              "app": "",
-              "can_list": true,
-              "can_write": true,
-              "modifiable": false,
-              "owner": "system",
-              "perms": {
-                  "read": [
-                      "admin",
-                      "splunk-system-role"
-                  ],
-                  "write": [
-                      "admin",
-                      "splunk-system-role"
-                  ]
-              },
-              "removable": false,
-              "sharing": "system"
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
           },
           "content": {
-              "active_bundle": {
-                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
-                  "checksum": "7351975980A20311463444E66492BDD5",
-                  "timestamp": 1657658326
-              },
-              "apply_bundle_status": {
-                  "invalid_bundle": {
-                      "bundle_path": "",
-                      "bundle_validation_errors_on_master": [],
-                      "checksum": "",
-                      "timestamp": 0
-                  },
-                  "reload_bundle_issued": false,
-                  "status": "None"
-              },
-              "available_sites": "[site1, site2]",
-              "backup_and_restore_primaries": false,
-              "controlled_rolling_restart_flag": false,
-              "eai:acl": null,
-              "forwarder_site_failover": "",
-              "indexing_ready_flag": true,
-              "initialized_flag": true,
-              "label": "splunk-cm-cluster-master-0",
-              "last_check_restart_bundle_result": false,
-              "last_dry_run_bundle": {
-                  "bundle_path": "",
-                  "checksum": "",
-                  "timestamp": 0
-              },
-              "last_validated_bundle": {
-                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
-                  "checksum": "7351975980A20311463444E66492BDD5",
-                  "is_valid_bundle": true,
-                  "timestamp": 1657658326
-              },
-              "latest_bundle": {
-                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
-                  "checksum": "7351975980A20311463444E66492BDD5",
-                  "timestamp": 1657658326
-              },
-              "maintenance_mode": false,
-              "multisite": true,
-              "previous_active_bundle": {
-                  "bundle_path": "",
-                  "checksum": "",
-                  "timestamp": 0
-              },
-              "primaries_backup_status": "No on-going (or) completed primaries backup yet. Check back again in few minutes if you expect a backup.",
-              "quiet_period_flag": false,
-              "rolling_restart_flag": false,
-              "rolling_restart_or_upgrade": false,
-              "service_ready_flag": true,
-              "site_replication_factor": "{ origin:1, total:2 }",
-              "site_search_factor": "{ origin:1, total:2 }",
-              "start_time": 1657658831,
-              "summary_replication": "false"
+             "add_ons": null,
+             "connection_timeout": 30,
+             "eai:acl": null,
+             "features": {
+                "AWSMarketplace": "DISABLED_DUE_TO_LICENSE",
+                "Acceleration": "ENABLED",
+                "AdvancedSearchCommands": "ENABLED",
+                "AdvancedXML": "ENABLED",
+                "Alerting": "ENABLED",
+                "AllowDuplicateKeys": "ENABLED",
+                "ArchiveToHdfs": "ENABLED",
+                "Auth": "ENABLED",
+                "CanBeRemoteMaster": "ENABLED",
+                "ConditionalLicensingEnforcement": "ENABLED",
+                "CustomRoles": "ENABLED",
+                "DeployClient": "ENABLED",
+                "DeployServer": "ENABLED",
+                "DisableQuotaEnforcement": "DISABLED_DUE_TO_LICENSE",
+                "DistSearch": "ENABLED",
+                "FwdData": "ENABLED",
+                "GuestPass": "ENABLED",
+                "HideQuotaWarnings": "DISABLED_DUE_TO_LICENSE",
+                "KVStore": "ENABLED",
+                "LDAPAuth": "ENABLED",
+                "LocalSearch": "ENABLED",
+                "MultifactorAuth": "ENABLED",
+                "MultisiteClustering": "ENABLED",
+                "NontableLookups": "ENABLED",
+                "RcvData": "ENABLED",
+                "RcvSearch": "ENABLED",
+                "ResetWarnings": "DISABLED_DUE_TO_LICENSE",
+                "RollingWindowAlerts": "ENABLED",
+                "SAMLAuth": "ENABLED",
+                "ScheduledAlerts": "ENABLED",
+                "ScheduledReports": "ENABLED",
+                "ScheduledSearch": "ENABLED",
+                "ScriptedAuth": "ENABLED",
+                "SearchheadPooling": "ENABLED",
+                "SigningProcessor": "ENABLED",
+                "SplunkWeb": "ENABLED",
+                "SubgroupId": "DISABLED_DUE_TO_LICENSE",
+                "SyslogOutputProcessor": "ENABLED",
+                "UnisiteClustering": "ENABLED"
+             },
+             "guid": [
+                "2A327594-08E4-48BA-A001-3EB4C1475910"
+             ],
+             "last_manager_contact_attempt_time": 1690925795,
+             "last_manager_contact_success_time": 1690925795,
+             "last_master_contact_attempt_time": 1690925795,
+             "last_master_contact_success_time": 1690925795,
+             "last_trackerdb_service_time": 0,
+             "license_keys": [
+                "455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987"
+             ],
+             "manager_guid": "A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+             "manager_uri": "self",
+             "master_guid": "A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+             "master_uri": "self",
+             "peer_id": "A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+             "peer_label": "splunk-lm-license-manager-0",
+             "receive_timeout": 30,
+             "send_timeout": 30,
+             "slave_id": "A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+             "slave_label": "splunk-lm-license-manager-0",
+             "squash_threshold": 2000
           }
-      }
-  ],
-  "paging": {
-      "total": 1,
-      "perPage": 30,
-      "offset": 0
-  },
-  "messages": []
-}
+       }
+    ],
+    "paging": {
+       "total": 1,
+       "perPage": 10000000,
+       "offset": 0
+    },
+    "messages": []
+ }

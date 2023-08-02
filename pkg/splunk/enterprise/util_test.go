@@ -3172,7 +3172,7 @@ func TestGetCurrentImage(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	err := client.Create(ctx, &current)
-	manager := setCreds(t, client, &current)
+	manager := setCreds(t, client, &current, current.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, client, &current)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)

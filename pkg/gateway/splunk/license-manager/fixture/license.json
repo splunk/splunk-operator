@@ -1,104 +1,286 @@
 {
-  "links": {},
-  "origin": "https://localhost:8089/services/cluster/manager/info",
-  "updated": "2022-07-18T23:54:50+00:00",
-  "generator": {
-      "build": "6818ac46f2ec",
-      "version": "9.0.0"
-  },
-  "entry": [
-      {
-          "name": "master",
-          "id": "https://localhost:8089/services/cluster/manager/info/master",
+    "links": {
+       "create": "/services/licenser/licenses/_new"
+    },
+    "origin": "https://splunk-lm-license-manager-service.test:8089/services/licenser/licenses",
+    "updated": "2023-08-01T23:14:56+00:00",
+    "generator": {
+       "build": "e9494146ae5c",
+       "version": "9.0.5"
+    },
+    "entry": [
+       {
+          "name": "455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987",
+          "id": "https://splunk-lm-license-manager-service.test:8089/services/licenser/licenses/455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987",
           "updated": "1970-01-01T00:00:00+00:00",
           "links": {
-              "alternate": "/services/cluster/manager/info/master",
-              "list": "/services/cluster/manager/info/master"
+             "alternate": "/services/licenser/licenses/455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987",
+             "list": "/services/licenser/licenses/455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987",
+             "edit": "/services/licenser/licenses/455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987"
           },
           "author": "system",
           "acl": {
-              "app": "",
-              "can_list": true,
-              "can_write": true,
-              "modifiable": false,
-              "owner": "system",
-              "perms": {
-                  "read": [
-                      "admin",
-                      "splunk-system-role"
-                  ],
-                  "write": [
-                      "admin",
-                      "splunk-system-role"
-                  ]
-              },
-              "removable": false,
-              "sharing": "system"
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
           },
           "content": {
-              "active_bundle": {
-                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
-                  "checksum": "7351975980A20311463444E66492BDD5",
-                  "timestamp": 1657658326
-              },
-              "apply_bundle_status": {
-                  "invalid_bundle": {
-                      "bundle_path": "",
-                      "bundle_validation_errors_on_master": [],
-                      "checksum": "",
-                      "timestamp": 0
-                  },
-                  "reload_bundle_issued": false,
-                  "status": "None"
-              },
-              "available_sites": "[site1, site2]",
-              "backup_and_restore_primaries": false,
-              "controlled_rolling_restart_flag": false,
-              "eai:acl": null,
-              "forwarder_site_failover": "",
-              "indexing_ready_flag": true,
-              "initialized_flag": true,
-              "label": "splunk-cm-cluster-master-0",
-              "last_check_restart_bundle_result": false,
-              "last_dry_run_bundle": {
-                  "bundle_path": "",
-                  "checksum": "",
-                  "timestamp": 0
-              },
-              "last_validated_bundle": {
-                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
-                  "checksum": "7351975980A20311463444E66492BDD5",
-                  "is_valid_bundle": true,
-                  "timestamp": 1657658326
-              },
-              "latest_bundle": {
-                  "bundle_path": "/opt/splunk/var/run/splunk/cluster/remote-bundle/aabbb9c25a79c081cbd0b1aaf1c2425a-1657658326.bundle",
-                  "checksum": "7351975980A20311463444E66492BDD5",
-                  "timestamp": 1657658326
-              },
-              "maintenance_mode": false,
-              "multisite": true,
-              "previous_active_bundle": {
-                  "bundle_path": "",
-                  "checksum": "",
-                  "timestamp": 0
-              },
-              "primaries_backup_status": "No on-going (or) completed primaries backup yet. Check back again in few minutes if you expect a backup.",
-              "quiet_period_flag": false,
-              "rolling_restart_flag": false,
-              "rolling_restart_or_upgrade": false,
-              "service_ready_flag": true,
-              "site_replication_factor": "{ origin:1, total:2 }",
-              "site_search_factor": "{ origin:1, total:2 }",
-              "start_time": 1657658831,
-              "summary_replication": "false"
+             "add_ons": null,
+             "allowedRoles": [],
+             "assignableRoles": [],
+             "creation_time": 1688108400,
+             "disabled_features": [],
+             "eai:acl": null,
+             "expiration_time": 1704095999,
+             "features": [
+                "Acceleration",
+                "AdvancedSearchCommands",
+                "AdvancedXML",
+                "Alerting",
+                "AllowDuplicateKeys",
+                "ArchiveToHdfs",
+                "Auth",
+                "CanBeRemoteMaster",
+                "ConditionalLicensingEnforcement",
+                "CustomRoles",
+                "DeployClient",
+                "DeployServer",
+                "DistSearch",
+                "FwdData",
+                "GuestPass",
+                "KVStore",
+                "LDAPAuth",
+                "LocalSearch",
+                "MultifactorAuth",
+                "MultisiteClustering",
+                "NontableLookups",
+                "RcvData",
+                "RcvSearch",
+                "RollingWindowAlerts",
+                "SAMLAuth",
+                "ScheduledAlerts",
+                "ScheduledReports",
+                "ScheduledSearch",
+                "ScriptedAuth",
+                "SearchheadPooling",
+                "SigningProcessor",
+                "SplunkWeb",
+                "SyslogOutputProcessor",
+                "UnisiteClustering"
+             ],
+             "group_id": "Enterprise",
+             "guid": "2A327594-08E4-48BA-A001-3EB4C1475910",
+             "is_unlimited": false,
+             "label": "Splunk Internal License DO NOT DISTRIBUTE",
+             "license_hash": "455A1EC0719F74DB8B13CD2FDA81D930A55EF21366AC9A3D096E2545B6D5D987",
+             "max_retention_size": 0,
+             "max_stack_quota": 18446744073709552000,
+             "max_users": 0,
+             "max_violations": 5,
+             "notes": "",
+             "quota": 53687091200,
+             "relative_expiration_interval": 0,
+             "relative_expiration_start": 0,
+             "sourcetypes": [],
+             "stack_id": "enterprise",
+             "status": "VALID",
+             "subgroup_id": "Production",
+             "type": "enterprise",
+             "window_period": 30
           }
-      }
-  ],
-  "paging": {
-      "total": 1,
-      "perPage": 30,
-      "offset": 0
-  },
-  "messages": []
-}
+       },
+       {
+          "name": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD",
+          "id": "https://splunk-lm-license-manager-service.test:8089/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD",
+             "list": "/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD",
+             "edit": "/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "add_ons": null,
+             "allowedRoles": [],
+             "assignableRoles": [],
+             "creation_time": 1277017200,
+             "disabled_features": [
+                "Acceleration",
+                "AdvancedSearchCommands",
+                "AdvancedXML",
+                "ArchiveToHdfs",
+                "ConditionalLicensingEnforcement",
+                "CustomRoles",
+                "GuestPass",
+                "KVStore",
+                "LDAPAuth",
+                "MultifactorAuth",
+                "MultisiteClustering",
+                "NontableLookups",
+                "RollingWindowAlerts",
+                "SAMLAuth",
+                "ScheduledAlerts",
+                "ScheduledReports",
+                "ScriptedAuth",
+                "SearchheadPooling",
+                "UnisiteClustering"
+             ],
+             "eai:acl": null,
+             "expiration_time": 2147483647,
+             "features": [
+                "Auth",
+                "DeployClient",
+                "FwdData",
+                "RcvData",
+                "SigningProcessor",
+                "SplunkWeb",
+                "SyslogOutputProcessor"
+             ],
+             "group_id": "Forwarder",
+             "guid": "11111111-1111-1111-1111-111111111111",
+             "is_unlimited": false,
+             "label": "Splunk Forwarder",
+             "license_hash": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD",
+             "max_retention_size": 0,
+             "max_stack_quota": 18446744073709552000,
+             "max_users": 4294967295,
+             "max_violations": 5,
+             "notes": "",
+             "quota": 1048576,
+             "relative_expiration_interval": 0,
+             "relative_expiration_start": 0,
+             "sourcetypes": [],
+             "stack_id": "forwarder",
+             "status": "VALID",
+             "subgroup_id": "Production",
+             "type": "forwarder",
+             "window_period": 30
+          }
+       },
+       {
+          "name": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+          "id": "https://splunk-lm-license-manager-service.test:8089/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+             "list": "/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+             "edit": "/services/licenser/licenses/FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "add_ons": null,
+             "allowedRoles": [],
+             "assignableRoles": [],
+             "creation_time": 1277017200,
+             "disabled_features": [
+                "Acceleration",
+                "AdvancedSearchCommands",
+                "AdvancedXML",
+                "ArchiveToHdfs",
+                "ConditionalLicensingEnforcement",
+                "CustomRoles",
+                "GuestPass",
+                "LDAPAuth",
+                "MultifactorAuth",
+                "MultisiteClustering",
+                "NontableLookups",
+                "RollingWindowAlerts",
+                "SAMLAuth",
+                "ScheduledAlerts",
+                "ScheduledReports",
+                "ScriptedAuth",
+                "SearchheadPooling",
+                "UnisiteClustering"
+             ],
+             "eai:acl": null,
+             "expiration_time": 2147483647,
+             "features": [
+                "FwdData",
+                "KVStore",
+                "LocalSearch",
+                "RcvData",
+                "ScheduledSearch",
+                "SigningProcessor",
+                "SplunkWeb"
+             ],
+             "group_id": "Free",
+             "guid": "00000000-0000-0000-0000-000000000000",
+             "is_unlimited": false,
+             "label": "Splunk Free",
+             "license_hash": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+             "max_retention_size": 0,
+             "max_stack_quota": 18446744073709552000,
+             "max_users": 4294967295,
+             "max_violations": 3,
+             "notes": "",
+             "quota": 524288000,
+             "relative_expiration_interval": 0,
+             "relative_expiration_start": 0,
+             "sourcetypes": [],
+             "stack_id": "free",
+             "status": "VALID",
+             "subgroup_id": "Production",
+             "type": "free",
+             "window_period": 30
+          }
+       }
+    ],
+    "paging": {
+       "total": 3,
+       "perPage": 10000000,
+       "offset": 0
+    },
+    "messages": []
+ }

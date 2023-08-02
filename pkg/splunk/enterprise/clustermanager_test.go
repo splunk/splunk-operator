@@ -144,9 +144,8 @@ func TestApplyClusterManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager), cr.(*enterpriseApi.ClusterManager).Spec.CommonSplunkSpec)
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
-		//_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcile, true)
@@ -170,7 +169,7 @@ func TestApplyClusterManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	_ = errors.New(splcommon.Rerr)
 
-	manager := setCreds(t, c, &current,  current.Spec.CommonSplunkSpec)
+	manager := setCreds(t, c, &current, current.Spec.CommonSplunkSpec)
 	_, err := manager.ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -267,7 +266,7 @@ func TestApplyClusterManager(t *testing.T) {
 	c.Create(ctx, &cmap)
 	current.Spec.SmartStore.VolList[0].SecretRef = ""
 	current.Spec.SmartStore.Defaults.IndexAndGlobalCommonSpec.VolName = "msos_s2s3_vol"
-	manager = setCreds(t, c, &current)
+	manager = setCreds(t, c, &current, current.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Don't expected error here")
@@ -642,7 +641,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager), )
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager), current.Spec.CommonSplunkSpec)
 		_, err := manager.ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
@@ -897,7 +896,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	manager := setCreds(t, client, &cm,  cm.Spec.CommonSplunkSpec)
+	manager := setCreds(t, client, &cm, cm.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
@@ -993,7 +992,7 @@ func TestApplyCLusterManagerDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	manager := setCreds(t, c, &cm,  cm.Spec.CommonSplunkSpec)
+	manager := setCreds(t, c, &cm, cm.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
@@ -1450,7 +1449,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	}
 
 	err := client.Create(ctx, &lm)
-	_, err = ApplyLicenseManager(ctx, client, &lm)
+	manager := setCreds(t, client, &lm, lm.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
 	}
@@ -1482,7 +1482,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	}
 
 	err = client.Create(ctx, &cm)
-	manager := setCreds(t, client, &cm)
+	manager = setCreds(t, client, &lm, lm.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -1490,7 +1490,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 
 	cm.Spec.Image = "splunk2"
 	lm.Spec.Image = "splunk2"
-	_, err = ApplyLicenseManager(ctx, client, &lm)
+	manager = setCreds(t, client, &lm, lm.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, client, &lm)
 
 	clusterManager := &enterpriseApi.ClusterManager{}
 	namespacedName := types.NamespacedName{
@@ -1557,7 +1558,8 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 
 	// Create the instances
 	client.Create(ctx, lm)
-	_, err := ApplyLicenseManager(ctx, client, lm)
+	manager := setCreds(t, client, lm, lm.Spec.CommonSplunkSpec)
+	_, err := manager.ApplyLicenseManager(ctx, client, lm)
 	if err != nil {
 		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
 	}
@@ -1568,7 +1570,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		debug.PrintStack()
 	}
 	client.Create(ctx, cm)
-	manager := setCreds(t, client, cm)
+	manager = setCreds(t, client, cm, cm.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, client, cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
@@ -1710,7 +1712,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, clustermanager)
 
-	manager := setCreds(t, c, clustermanager)
+	manager := setCreds(t, c, clustermanager, clustermanager.Spec.CommonSplunkSpec)
 	_, err := manager.ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for clustermanager with app framework  %v", err)

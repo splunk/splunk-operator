@@ -29,4 +29,9 @@ type Provisioner interface {
 
 	// IsClusterInMaintenanceMode
 	IsClusterInMaintenanceMode(ctx context.Context) (bool, error)
+
+	// GetLicenseLocalPeer
+	GetLicenseLocalPeer(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error)
+
+	GetLicense(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error)
 }

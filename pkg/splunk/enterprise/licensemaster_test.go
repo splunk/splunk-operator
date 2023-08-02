@@ -924,7 +924,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	manager := setCreds(t, c, clustermanager)
+	manager := setCreds(t, c, clustermanager, clustermanager.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)

@@ -88,7 +88,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.LicenseManager), cr.(*enterpriseApi.LicenseManager).Spec.CommonSplunkSpec)
 		_, err := manager.ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return err
 	}
@@ -99,7 +99,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
 	revised.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
 	deleteFunc := func(cr splcommon.MetaObject, c splcommon.ControllerClient) (bool, error) {
-		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager))
+		manager := setCreds(t, c, cr.(*enterpriseApi.ClusterManager), cr.(*enterpriseApi.ClusterManager).Spec.CommonSplunkSpec)
 		_, err := manager.ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return true, err
 	}
@@ -109,7 +109,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	current.Spec.LivenessInitialDelaySeconds = -1
-	manager := setCreds(t, c, current.(*enterpriseApi.ClusterManager))
+	manager := setCreds(t, c, &current, current.Spec.CommonSplunkSpec)
 	_, err := manager.ApplyLicenseManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -118,7 +118,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	rerr := errors.New(splcommon.Rerr)
 	current.Spec.LivenessInitialDelaySeconds = 5
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
-	_, err = ApplyLicenseManager(ctx, c, &current)
+	_, err = manager.ApplyLicenseManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -130,7 +130,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	}
 	c.Create(ctx, nsSec)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = rerr
-	_, err = ApplyLicenseManager(ctx, c, &current)
+	_, err = manager.ApplyLicenseManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -253,7 +253,8 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyLicenseManager(ctx, client, &cr)
+	manager := setCreds(t, client, &cr, cr.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, client, &cr)
 
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should be successful")
@@ -683,7 +684,8 @@ func TestApplyLicenseManagerDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
-	_, err = ApplyLicenseManager(ctx, c, &lm)
+	manager := setCreds(t, c, &lm, lm.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, c, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should not have returned error here.")
 	}
@@ -917,7 +919,7 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	manager := setCreds(t, c, clustermanager)
+	manager := setCreds(t, c, clustermanager, clustermanager.Spec.CommonSplunkSpec)
 	_, err = manager.ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
@@ -1069,7 +1071,8 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, licensemanager)
 
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	manager = setCreds(t, c, licensemanager, licensemanager.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()
@@ -1106,7 +1109,8 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	manager = setCreds(t, c, licensemanager, licensemanager.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1221,7 +1225,8 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
-	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	manager = setCreds(t, c, licensemanager, licensemanager.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyLicenseManager(ctx, c, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for license manager with app framework  %v", err)
 		debug.PrintStack()

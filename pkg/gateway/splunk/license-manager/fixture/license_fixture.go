@@ -2,6 +2,7 @@ package fixture
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -175,7 +176,16 @@ func (p *fixtureGateway) GetLicense(ctx context.Context) (*[]licensemodel.Licens
 
 	contentList := []licensemodel.License{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.License)
+		var content licensemodel.License
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		//content = entry.Content.(licensemodel.License)
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -223,7 +233,15 @@ func (p *fixtureGateway) GetLicenseLocalPeer(ctx context.Context) (*[]licensemod
 
 	contentList := []licensemodel.LicenseLocalPeer{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseLocalPeer)
+		var content licensemodel.LicenseLocalPeer
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -271,7 +289,15 @@ func (p *fixtureGateway) GetLicenseMessage(ctx context.Context) (*[]licensemodel
 
 	contentList := []licensemodel.LicenseMessage{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseMessage)
+		var content licensemodel.LicenseMessage
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -319,7 +345,15 @@ func (p *fixtureGateway) GetLicensePools(ctx context.Context) (*[]licensemodel.L
 
 	contentList := []licensemodel.LicensePool{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicensePool)
+		var content licensemodel.LicensePool
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -367,7 +401,15 @@ func (p *fixtureGateway) GetLicensePeers(context context.Context) (*[]licensemod
 
 	contentList := []licensemodel.LicensePeer{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicensePeer)
+		var content licensemodel.LicensePeer
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -415,7 +457,15 @@ func (p *fixtureGateway) GetLicenseUsage(ctx context.Context) (*[]licensemodel.L
 
 	contentList := []licensemodel.LicenseUsage{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseUsage)
+		var content licensemodel.LicenseUsage
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -463,7 +513,15 @@ func (p *fixtureGateway) GetLicenseStacks(ctx context.Context) (*[]licensemodel.
 
 	contentList := []licensemodel.LicenseStack{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseStack)
+		var content licensemodel.LicenseStack
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil

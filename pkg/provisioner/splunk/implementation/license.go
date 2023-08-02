@@ -6,7 +6,8 @@ import (
 
 	licensemodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/license"
 	provmodel "github.com/splunk/splunk-operator/pkg/provisioner/splunk/model"
-	//"k8s.io/apimachinery/pkg/api/meta"
+
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -16,6 +17,16 @@ var callLicenseLocalPeer = func(ctx context.Context, p *splunkProvisioner) (*[]l
 		return nil, err
 	} else if lminfo == nil {
 		return nil, fmt.Errorf("cluster manager info data is empty")
+	}
+	return lminfo, err
+}
+
+var callLicense = func(ctx context.Context, p *splunkProvisioner) (*[]licensemodel.License, error) {
+	lminfo, err := p.licensegateway.GetLicense(ctx)
+	if err != nil {
+		return nil, err
+	} else if lminfo == nil {
+		return nil, fmt.Errorf("license data is empty")
 	}
 	return lminfo, err
 }
@@ -45,5 +56,32 @@ func (p *splunkProvisioner) GetLicenseLocalPeer(ctx context.Context, conditions 
 			meta.SetStatusCondition(conditions, condition)
 		}
 	}*/
+	return result, err
+}
+
+// GetClusterManagerStatus Access cluster node configuration details.
+func (p *splunkProvisioner) GetLicense(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error) {
+	_, err = callLicense(ctx, p)
+	lslistptr, err := callLicense(ctx, p)
+	if err != nil {
+		return result, err
+	} else {
+		lslist := *lslistptr
+		for _, peer := range lslist {
+			condition := metav1.Condition{
+				Type:    peer.GroupId,
+				Message: fmt.Sprintf("%s license %s is %s ", peer.Type, peer.Guid, peer.Status),
+				Reason:  peer.SubGroupId,
+			}
+			if peer.Status == "VALID" {
+				condition.Status = metav1.ConditionTrue
+			} else {
+				condition.Status = metav1.ConditionFalse
+
+			}
+			// set condition to existing conditions list
+			meta.SetStatusCondition(conditions, condition)
+		}
+	}
 	return result, err
 }

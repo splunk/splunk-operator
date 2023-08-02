@@ -2,6 +2,7 @@ package impl
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -53,7 +54,15 @@ func (p *splunkGateway) GetLicenseGroup(ctx context.Context) (*[]licensemodel.Li
 
 	contentList := []licensemodel.LicenseGroup{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseGroup)
+		var content licensemodel.LicenseGroup
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -86,7 +95,15 @@ func (p *splunkGateway) GetLicense(ctx context.Context) (*[]licensemodel.License
 
 	contentList := []licensemodel.License{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.License)
+		var content licensemodel.License
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -152,7 +169,15 @@ func (p *splunkGateway) GetLicenseMessage(ctx context.Context) (*[]licensemodel.
 
 	contentList := []licensemodel.LicenseMessage{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseMessage)
+		var content licensemodel.LicenseMessage
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -185,7 +210,15 @@ func (p *splunkGateway) GetLicensePools(ctx context.Context) (*[]licensemodel.Li
 
 	contentList := []licensemodel.LicensePool{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicensePool)
+		var content licensemodel.LicensePool
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -218,7 +251,15 @@ func (p *splunkGateway) GetLicensePeers(context context.Context) (*[]licensemode
 
 	contentList := []licensemodel.LicensePeer{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicensePeer)
+		var content licensemodel.LicensePeer
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -251,7 +292,15 @@ func (p *splunkGateway) GetLicenseUsage(ctx context.Context) (*[]licensemodel.Li
 
 	contentList := []licensemodel.LicenseUsage{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseUsage)
+		var content licensemodel.LicenseUsage
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
@@ -284,7 +333,15 @@ func (p *splunkGateway) GetLicenseStacks(ctx context.Context) (*[]licensemodel.L
 
 	contentList := []licensemodel.LicenseStack{}
 	for _, entry := range envelop.Entry {
-		content := entry.Content.(licensemodel.LicenseStack)
+		var content licensemodel.LicenseStack
+		s, err := json.Marshal(entry.Content)
+		if err != nil {
+			return &contentList, nil
+		}
+		err = json.Unmarshal([]byte(s), &content)
+		if err != nil {
+			return &contentList, nil
+		}
 		contentList = append(contentList, content)
 	}
 	return &contentList, nil
