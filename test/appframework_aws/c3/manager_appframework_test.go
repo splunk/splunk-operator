@@ -310,22 +310,22 @@ var _ = Describe("c3appfw test", func() {
 			//################## SETUP ####################
 
 			// Download License File
-			downloadDir := "licenseFolder"
-			switch testenv.ClusterProvider {
-			case "eks":
-				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			case "azure":
-				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
-				Expect(err).To(Succeed(), "Unable to download license file from Azure")
-				// Create License Config Map
-				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
-			default:
-				fmt.Printf("Unable to download license file")
-				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
-			}
+			// downloadDir := "licenseFolder"
+			// switch testenv.ClusterProvider {
+			// case "eks":
+			// 	licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+			// 	Expect(err).To(Succeed(), "Unable to download license file from S3")
+			// 	// Create License Config Map
+			// 	testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			// case "azure":
+			// 	licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
+			// 	Expect(err).To(Succeed(), "Unable to download license file from Azure")
+			// 	// Create License Config Map
+			// 	testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			// default:
+			// 	fmt.Printf("Unable to download license file")
+			// 	testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
+			// }
 
 			// Upload V1 apps to S3 for Monitoring Console
 			oldImage := "splunk/splunk:9.0.3"
@@ -344,23 +344,23 @@ var _ = Describe("c3appfw test", func() {
 			// appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
 			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
-			// mcSpec := enterpriseApi.MonitoringConsoleSpec{
-			// 	CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			// 		Spec: enterpriseApi.Spec{
-			// 			ImagePullPolicy: "IfNotPresent",
-			// 		},
-			// 		Volumes: []corev1.Volume{},
-			// 	},
-			// }
+			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "IfNotPresent",
+					},
+					Volumes: []corev1.Volume{},
+				},
+			}
 
 			// Deploy Monitoring Console
-			// testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			// mcName := deployment.GetName()
-			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
+			mcName := deployment.GetName()
+			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			//  testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload V1 apps to S3 for Indexer Cluster
 			// testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
@@ -392,17 +392,17 @@ var _ = Describe("c3appfw test", func() {
 			// indexerReplicas := 3
 			// err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), indexerReplicas, true, mcName, deployment.GetName())
 
-			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
-			mcName := ""
-			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
+			// lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
+			// mcName := ""
+			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), "", "", "")
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
-			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, cm.GetName(), lm.GetName(), "", mcName)
-			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
+			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, cm.GetName(), "", "", mcName)
+			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, "", 3, cm.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Wait for License Manager to be in READY phase
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
@@ -420,7 +420,7 @@ var _ = Describe("c3appfw test", func() {
 			// testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// // Verify no SH in disconnected status is present on CM
 			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
@@ -457,10 +457,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update LM Image
 
-			testcaseEnvInst.Log.Info("Upgrading the License Manager Image", "Current Image", oldImage, "New Image", newImage)
-			lm.Spec.Image = newImage
-			err = deployment.UpdateCR(ctx, lm)
-			Expect(err).To(Succeed(), "Failed upgrade License Manager image")
+			// testcaseEnvInst.Log.Info("Upgrading the License Manager Image", "Current Image", oldImage, "New Image", newImage)
+			// lm.Spec.Image = newImage
+			// err = deployment.UpdateCR(ctx, lm)
+			// Expect(err).To(Succeed(), "Failed upgrade License Manager image")
 
 			// Update CM image
 
@@ -471,10 +471,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// Update MC image
 
-			// testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
-			// mc.Spec.Image = newImage
-			// err = deployment.UpdateCR(ctx, mc)
-			// Expect(err).To(Succeed(), "Failed upgrade Monitoring Console image")
+			testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
+			mc.Spec.Image = newImage
+			err = deployment.UpdateCR(ctx, mc)
+			Expect(err).To(Succeed(), "Failed upgrade Monitoring Console image")
 
 			// // Update SHC image
 
@@ -494,10 +494,10 @@ var _ = Describe("c3appfw test", func() {
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Wait for License Manager to be in READY phase
-			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
+			// testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// // Verify Monitoring Console is ready and stays in ready state
-			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// // Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
