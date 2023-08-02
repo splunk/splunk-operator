@@ -695,8 +695,13 @@ func isSearchHeadReadyForUpgrade(ctx context.Context, c splcommon.ControllerClie
 	// check if the stateful set is created at this instance
 	statefulSet := &appsv1.StatefulSet{}
 	err := c.Get(ctx, namespacedName, statefulSet)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return true, nil
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not find the Search Head stateful set. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Stateful Set")
+		return false, err
 	}
 
 	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: monitoringConsoleRef.Name}
