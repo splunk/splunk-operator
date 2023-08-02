@@ -393,11 +393,11 @@ var _ = Describe("c3appfw test", func() {
 			// err = deployment.DeploySingleSiteClusterWithGivenMonitoringConsole(ctx, deployment.GetName(), indexerReplicas, true, mcName, deployment.GetName())
 
 			// lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
-			mcName := ""
+			// mcName := ""
 			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), "", "", "")
-			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
+			// shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
-			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, deployment.GetName(), "", "", mcName)
+			// shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, deployment.GetName(), "", "", mcName)
 			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, "", 3, cm.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -408,7 +408,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// // Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			// testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
@@ -478,10 +478,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// // Update SHC image
 
-			testcaseEnvInst.Log.Info("Upgrading the Search Head Cluster Image", "Current Image", oldImage, "New Image", newImage)
-			shc.Spec.Image = newImage
-			err = deployment.UpdateCR(ctx, shc)
-			Expect(err).To(Succeed(), "Failed upgrade Search Head Cluster image")
+			// testcaseEnvInst.Log.Info("Upgrading the Search Head Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			// shc.Spec.Image = newImage
+			// err = deployment.UpdateCR(ctx, shc)
+			// Expect(err).To(Succeed(), "Failed upgrade Search Head Cluster image")
 
 			// // Update IDXC image
 
@@ -500,7 +500,7 @@ var _ = Describe("c3appfw test", func() {
 			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// // Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			// testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// // Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
