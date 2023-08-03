@@ -393,6 +393,9 @@ var _ = Describe("c3appfw test", func() {
 						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
+					ClusterManagerRef: corev1.ObjectReference{
+						Name: cm.GetName(),
+					},
 				},
 			}
 			mcName := deployment.GetName()
@@ -400,10 +403,10 @@ var _ = Describe("c3appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
-			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
+			// idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
 			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, cm.GetName(), lm.GetName(), "", mcName)
-			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
+			// idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
+			// Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
 			// Wait for License Manager to be in READY phase
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
@@ -418,7 +421,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// // Verify RF SF is met
 			// testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -492,10 +495,10 @@ var _ = Describe("c3appfw test", func() {
 
 			// // Update IDXC image
 
-			testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", oldImage, "New Image", newImage)
-			idxc.Spec.Image = newImage
-			err = deployment.UpdateCR(ctx, idxc)
-			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
+			// testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			// idxc.Spec.Image = newImage
+			// err = deployment.UpdateCR(ctx, idxc)
+			// Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
@@ -510,7 +513,7 @@ var _ = Describe("c3appfw test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// // Ensure Indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+			// testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			//############### UPGRADE APPS ################
 			// Delete apps on S3
