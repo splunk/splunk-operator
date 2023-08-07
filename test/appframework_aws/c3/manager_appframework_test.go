@@ -521,7 +521,6 @@ var _ = Describe("c3appfw test", func() {
 			// testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			// uploadedApps = nil
 
-			// get revision number of the resource
 			// resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Upload V2 apps to S3 for Indexer Cluster
