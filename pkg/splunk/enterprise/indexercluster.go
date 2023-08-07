@@ -1117,13 +1117,12 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 // No-operation otherwise; returns bool, err accordingly
 func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (bool, error) {
 
-	return true, nil
-	// reqLogger := log.FromContext(ctx)
-	// scopedLog := reqLogger.WithName("isIndexerClusterReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	// eventPublisher, _ := newK8EventPublisher(c, cr)
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isIndexerClusterReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	// get the clusterManagerRef attached to the instance
-	// clusterManagerRef := cr.Spec.ClusterManagerRef
+	clusterManagerRef := cr.Spec.ClusterManagerRef
 
 	// cm := mgr.getClusterManagerClient(ctx)
 	// clusterInfo, err := cm.GetClusterInfo(false)
@@ -1160,51 +1159,51 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 
 	// }
 
-	// // check if a search head cluster exists with the same ClusterManager instance attached
-	// searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
-	// opts := []rclient.ListOption{
-	// 	rclient.InNamespace(cr.GetNamespace()),
-	// }
-	// searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
-	// if err != nil {
-	// 	if err.Error() == "NotFound" {
-	// 		return true, nil
-	// 	}
-	// 	return false, err
-	// }
-	// if len(searchHeadList.Items) == 0 {
-	// 	return true, nil
-	// }
+	// check if a search head cluster exists with the same ClusterManager instance attached
+	searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
+	opts := []rclient.ListOption{
+		rclient.InNamespace(cr.GetNamespace()),
+	}
+	searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
+	if err != nil {
+		if err.Error() == "NotFound" {
+			return true, nil
+		}
+		return false, err
+	}
+	if len(searchHeadList.Items) == 0 {
+		return true, nil
+	}
 
-	// // check if instance has the required ClusterManagerRef
-	// for _, shc := range searchHeadList.Items {
-	// 	if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
-	// 		searchHeadClusterInstance = shc
-	// 		break
-	// 	}
-	// }
-	// if len(searchHeadClusterInstance.GetName()) == 0 {
-	// 	return true, nil
-	// }
+	// check if instance has the required ClusterManagerRef
+	for _, shc := range searchHeadList.Items {
+		if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
+			searchHeadClusterInstance = shc
+			break
+		}
+	}
+	if len(searchHeadClusterInstance.GetName()) == 0 {
+		return true, nil
+	}
 
-	// shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
-	// if err != nil {
-	// 	eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
-	// 	scopedLog.Error(err, "Unable to get SearchHeadCluster current image")
-	// 	return false, err
-	// }
+	shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get SearchHeadCluster current image")
+		return false, err
+	}
 
-	// idxImage, err := getCurrentImage(ctx, c, cr, SplunkIndexer)
-	// if err != nil {
-	// 	eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Indexer Cluster Image. Reason %v", err))
-	// 	scopedLog.Error(err, "Unable to get IndexerCluster current image")
-	// 	return false, err
-	// }
+	idxImage, err := getCurrentImage(ctx, c, cr, SplunkIndexer)
+	if err != nil {
+		eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Indexer Cluster Image. Reason %v", err))
+		scopedLog.Error(err, "Unable to get IndexerCluster current image")
+		return false, err
+	}
 
-	// // check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
-	// // further reconcile operations on IDX until SHC is ready
-	// if (cr.Spec.Image != idxImage) && (searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != cr.Spec.Image) {
-	// 	return false, nil
-	// }
-	// return true, nil
+	// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
+	// further reconcile operations on IDX until SHC is ready
+	if (cr.Spec.Image != idxImage) && (searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != cr.Spec.Image) {
+		return false, nil
+	}
+	return true, nil
 }
