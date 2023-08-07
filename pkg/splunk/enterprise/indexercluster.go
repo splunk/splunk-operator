@@ -1124,6 +1124,10 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 	// get the clusterManagerRef attached to the instance
 	clusterManagerRef := cr.Spec.ClusterManagerRef
 
+	if mgr.c == nil {
+		mgr.c = c
+	}
+
 	cm := mgr.getClusterManagerClient(ctx)
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
