@@ -48,7 +48,7 @@ If a Splunk Operator release changes the custom resource (CRD) API version, the 
 
 ### Upgrading Splunk Enterprise Docker Image with the Operator Upgrade
 
-If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image. To follow the best practices described under the [General Process to Upgrade the Splunk Enterprise], a recommeded upgrade path is followed while initiating pod restarts of different Splunk Instances. At each step, if a particular CR instance exists, a certain flow is imposed to ensure that each instance is updated in the correct order. After an instance is upgraded, the Operator verifies if the upgrade was successful and all the components are working as expected. If any unexpected behaviour is detected, the process is terminated.
+If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image. To follow the best practices described under the [General Process to Upgrade the Splunk Enterprise](https://docs.splunk.com/Documentation/Splunk/9.0.4/Installation/HowtoupgradeSplunk), a recommeded upgrade path is followed while initiating pod restarts of different Splunk Instances. At each step, if a particular CR instance exists, a certain flow is imposed to ensure that each instance is updated in the correct order. After an instance is upgraded, the Operator verifies if the upgrade was successful and all the components are working as expected. If any unexpected behaviour is detected, the process is terminated.
 
 
 ## Steps to Upgrade from 1.0.5 or older version to latest
