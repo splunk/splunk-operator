@@ -322,7 +322,10 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
-			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
+			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods]
+			    ############### UPGRADE IMAGE ################
+			   * Upgrade the imageof all the instances
+			   * Wait for them to become ready
 			   ############### UPGRADE APPS ################
 			   * Upload V2 apps on S3
 			   * Wait for Monitoring Console and C3 pods to be ready
@@ -357,8 +360,7 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Upload V1 apps to S3 for Monitoring Console
-			oldImage := "splunk/splunk:latest"
-			newImage := "splunk/splunk:latest:1.1"
+			newImage := "splunk/splunk:9.0.5"
 
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
@@ -485,38 +487,41 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.GetInstance(ctx, deployment.GetName(), lm)
 			Expect(err).To(Succeed(), "Failed to get instance of License Manager")
 
-			testcaseEnvInst.Log.Info("Upgrading the License Manager Image", "Current Image", oldImage, "New Image", newImage)
+			testcaseEnvInst.Log.Info("Upgrading the License Manager Image", "New Image", newImage)
 			lm.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, lm)
 			Expect(err).To(Succeed(), "Failed upgrade License Manager image")
 
 			// Update CM image
 
-			testcaseEnvInst.Log.Info("Upgrading the Cluster Manager Image", "Current Image", oldImage, "New Image", newImage)
+			testcaseEnvInst.Log.Info("Upgrading the Cluster Manager Image", "New Image", newImage)
 			cm.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, cm)
 			Expect(err).To(Succeed(), "Failed upgrade Cluster Manager image")
 
 			// Update MC image
 
-			testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "Current Image", oldImage, "New Image", newImage)
+			testcaseEnvInst.Log.Info("Upgrading the Monitoring Console Image", "New Image", newImage)
 			mc.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, mc)
 			Expect(err).To(Succeed(), "Failed upgrade Monitoring Console image")
 
 			// Update SHC image
 
-			testcaseEnvInst.Log.Info("Upgrading the Search Head Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			testcaseEnvInst.Log.Info("Upgrading the Search Head Cluster Image", "Current Image", "New Image", newImage)
 			shc.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Failed upgrade Search Head Cluster image")
 
 			// Update IDXC image
 
-			testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", oldImage, "New Image", newImage)
+			testcaseEnvInst.Log.Info("Upgrading the Indexer Cluster Image", "Current Image", "New Image", newImage)
 			idxc.Spec.Image = newImage
 			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
+
+			// Wait for License Manager to be in READY phase
+			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
