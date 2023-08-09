@@ -248,7 +248,7 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml 
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Setup Kustomize
         run: |
           sudo snap install kustomize
@@ -274,10 +274,10 @@ jobs:
         run: |
           make cleanup
           make clean
-      - name: Cleanup up EKS cluster
-        if: ${{ always() }}
-        run: |
-          make cluster-down
+      #- name: Cleanup up EKS cluster
+      #  if: ${{ always() }}
+      #  run: |
+      #    make cluster-down
       #- name: Test Report
       #  uses: dorny/test-reporter@v1
       #  if: success() || failure()    # run this step even if previous step failed
