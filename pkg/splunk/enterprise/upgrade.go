@@ -17,7 +17,7 @@ func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(c, cr)
-	kind :=  cr.GroupVersionKind().Kind
+	kind := cr.GroupVersionKind().Kind
 	scopedLog.Info("kind is set to ", "kind", kind)
 	goto Standalone
 
@@ -73,8 +73,11 @@ ClusterManager:
 		// check if the stateful set is created at this instance
 		statefulSet := &appsv1.StatefulSet{}
 		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return true, nil
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, nil
 		}
 		return true, nil
 	} else {
@@ -120,23 +123,12 @@ MonitoringConsole:
 		// check if the stateful set is created at this instance
 		statefulSet := &appsv1.StatefulSet{}
 		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return true, nil
-		}
-
-		mcImage, err := getCurrentImage(ctx, c, cr, SplunkMonitoringConsole)
 		if err != nil {
-			eventPublisher.Warning(ctx, "isMonitoringConsolerReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
-			scopedLog.Error(err, "Unable to get monitoring console current image")
-			return false, err
-		}
-
-		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
-		// further reconcile operations on MC until CM is ready
-		if spec.Image != mcImage {
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
 			return false, nil
 		}
-
 		return true, nil
 	} else {
 
@@ -185,19 +177,10 @@ SearchHeadCluster:
 		// check if the stateful set is created at this instance
 		statefulSet := &appsv1.StatefulSet{}
 		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil && k8serrors.IsNotFound(err) {
-			return true, nil
-		}
-
-		shcImage, err := getCurrentImage(ctx, c, cr, SplunkSearchHead)
 		if err != nil {
-			eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Search Head Image. Reason %v", err))
-			scopedLog.Error(err, "Unable to get Search Head current image")
-			return false, err
-		}
-
-		// check if an image upgrade is happening and whether the SearchHeadCluster is ready for the upgrade
-		if spec.Image != shcImage {
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
 			return false, nil
 		}
 		return true, nil
@@ -240,16 +223,9 @@ SearchHeadCluster:
 			return false, err
 		}
 
-		idxImage, err := getCurrentImage(ctx, c, cr, SplunkIndexer)
-		if err != nil {
-			eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Indexer Cluster Image. Reason %v", err))
-			scopedLog.Error(err, "Unable to get IndexerCluster current image")
-			return false, err
-		}
-
 		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
 		// further reconcile operations on IDX until SHC is ready
-		if (spec.Image != idxImage) && (searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image) {
+		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
 			return false, nil
 		}
 		goto IndexerCluster
@@ -294,17 +270,6 @@ IndexerCluster:
 				}
 			}
 
-		}
-
-		idxImage, err := getCurrentImage(ctx, c, cr, SplunkIndexer)
-		if err != nil {
-			eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not get the Indexer Cluster Image. Reason %v", err))
-			scopedLog.Error(err, "Unable to get IndexerCluster current image")
-			return false, err
-		}
-
-		if spec.Image != idxImage {
-			return false, nil
 		}
 		return true, nil
 	} else {
