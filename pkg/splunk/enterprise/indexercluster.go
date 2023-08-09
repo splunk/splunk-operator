@@ -185,14 +185,24 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	for _, v := range statefulsetPods.Items {
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
+				previousImage := v.Spec.Containers[0].Image
+				currentImage := cr.Spec.Image
 				// get the pod image name
-				if v.Spec.Containers[0].Image != cr.Spec.Image {
+				if strings.HasPrefix(previousImage, "8") &&
+					strings.HasPrefix(currentImage, "9") {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
 				}
 			}
 		}
+	}
+
+	// check if the IndexerCluster is ready for version upgrade
+	cr.Kind = "IndexerCluster"
+	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+	if err != nil || !continueReconcile {
+		return result, err
 	}
 
 	// check if version upgrade is set
@@ -203,16 +213,10 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 	} else {
-		// check if the IndexerCluster is ready for version upgrade
-		cr.Kind = "IndexerCluster"
-		continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-		if err != nil || !continueReconcile {
-			return result, err
-		}
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mitmatch for indexer clustre and indexer container, delete statefulset failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mismatch for indexer cluster and indexer container, delete statefulset failed %s", err.Error()))
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
 			return result, err
 		}
@@ -446,6 +450,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 			}
 		}
+	}
+
+	// check if the IndexerCluster is ready for version upgrade
+	cr.Kind = "IndexerCluster"
+	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+	if err != nil || !continueReconcile {
+		return result, err
 	}
 
 	// check if version upgrade is set
