@@ -76,7 +76,7 @@ ClusterManager:
 		if err != nil && k8serrors.IsNotFound(err) {
 			return true, nil
 		}
-		return false, nil
+		return true, nil
 	} else {
 		// check if a LicenseManager is attached to the instance
 		clusterManagerRef := spec.ClusterManagerRef
@@ -95,7 +95,7 @@ ClusterManager:
 			goto MonitoringConsole
 		}
 
-		cmImage, err := getCurrentImage(ctx, c, cr, SplunkClusterManager)
+		cmImage, err := getCurrentImage(ctx, c, clusterManager, SplunkClusterManager)
 		if err != nil {
 			eventPublisher.Warning(ctx, "isMonitoringConsoleReadyForUpgrade", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
 			scopedLog.Error(err, "Unable to get clusterManager current image")

@@ -161,7 +161,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	continueReconcile, err := isSearchHeadReadyForUpgrade(ctx, client, cr)
+	cr.Kind = "SearchHeadCluster"
+	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 	if err != nil || !continueReconcile {
 		return result, err
 	}

@@ -138,7 +138,8 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// check if the Monitoring Console is ready for version upgrade, if required
-	continueReconcile, err := isMonitoringConsoleReadyForUpgrade(ctx, client, cr)
+	cr.Kind = "MonitoringConsole"
+	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 	if err != nil || !continueReconcile {
 		return result, err
 	}

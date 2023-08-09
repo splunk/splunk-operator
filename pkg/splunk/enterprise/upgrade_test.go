@@ -122,6 +122,9 @@ func TestUpgradePathValidation(t *testing.T) {
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
+				MonitoringConsoleRef: corev1.ObjectReference{
+					Name: "test",
+				},
 			},
 		},
 	}
@@ -142,6 +145,9 @@ func TestUpgradePathValidation(t *testing.T) {
 					Name: "test",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
+					Name: "test",
+				},
+				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "test",
 				},
 			},
@@ -169,6 +175,24 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("create should not have returned error; err=%v", err)
 	}
 
+	_, err = ApplySearchHeadCluster(ctx, client, &shc)
+	// license manager statefulset is not created so if its NotFound error we are good
+	if err != nil && !k8serrors.IsNotFound(err) {
+		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
+	}
+
+	_, err = ApplyIndexerCluster(ctx, client, &idx)
+	// license manager statefulset is not created so if its NotFound error we are good
+	if err != nil && !k8serrors.IsNotFound(err) {
+		t.Errorf("applyIndexerCluster should not have returned error; err=%v", err)
+	}
+
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+	// license manager statefulset is not created so if its NotFound error we are good
+	if err != nil && !k8serrors.IsNotFound(err) {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+
 	_, err = ApplyClusterManager(ctx, client, &cm)
 	// license manager statefulset is not created
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -187,18 +211,9 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
 
-	_, err = ApplyMonitoringConsole(ctx, client, &mc)
-	if err != nil {
-		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
-	}
-	_, err = ApplyIndexerCluster(ctx, client, &idx)
-	if err != nil {
-		t.Errorf("applyIndexerCluster should not have returned error; err=%v", err)
-	}
-	_, err = ApplySearchHeadCluster(ctx, client, &shc)
-	if err != nil {
-		t.Errorf("applySearchHeadCluster should not have returned error; err=%v", err)
-	}
+
+
+
 
 	// Update
 	// standalone
