@@ -35,6 +35,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -185,14 +186,23 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	for _, v := range statefulsetPods.Items {
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
+				previousImage := v.Spec.Containers[0].Image
+				currentImage := cr.Spec.Image
 				// get the pod image name
-				if v.Spec.Containers[0].Image != cr.Spec.Image {
+				if strings.HasPrefix(previousImage, "8") &&
+					strings.HasPrefix(currentImage, "9") {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
 				}
 			}
 		}
+	}
+
+	// check if the IndexerCluster is ready for version upgrade
+	continueReconcile, err := mgr.isIndexerClusterReadyForUpgrade(ctx, client, cr)
+	if err != nil || !continueReconcile {
+		return result, err
 	}
 
 	// check if version upgrade is set
@@ -203,11 +213,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			return result, err
 		}
 	} else {
-		// check if the IndexerCluster is ready for version upgrade
-		continueReconcile, err := mgr.isIndexerClusterReadyForUpgrade(ctx, client, cr)
-		if err != nil || !continueReconcile {
-			return result, err
-		}
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
@@ -1123,43 +1128,25 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 	// get the clusterManagerRef attached to the instance
 	clusterManagerRef := cr.Spec.ClusterManagerRef
 
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(SplunkIndexer, cr.GetName()),
+	}
+
+	// check if the stateful set is created at this instance
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		eventPublisher.Warning(ctx, "isIndexerClusterReadyForUpgrade", fmt.Sprintf("Could not find the Indexer stateful set. Reason %v", err))
+		scopedLog.Error(err, "Unable to get Stateful Set")
+		return false, err
+	}
+
 	if mgr.c == nil {
 		mgr.c = c
-	}
-
-	cm := mgr.getClusterManagerClient(ctx)
-	clusterInfo, err := cm.GetClusterInfo(false)
-	if err != nil {
-		return false, fmt.Errorf("could not get cluster info from cluster manager")
-	}
-	if clusterInfo.MultiSite == "true" {
-		opts := []rclient.ListOption{
-			rclient.InNamespace(cr.GetNamespace()),
-		}
-		indexerList, err := getIndexerClusterList(ctx, c, cr, opts)
-		if err != nil {
-			return false, err
-		}
-		sortedList, err := getIndexerClusterSortedSiteList(ctx, c, cr.Spec.ClusterManagerRef, indexerList)
-
-		preIdx := enterpriseApi.IndexerCluster{}
-
-		for i, v := range sortedList.Items {
-			if &v == cr {
-				if i > 0 {
-					preIdx = sortedList.Items[i-1]
-				}
-				break
-
-			}
-		}
-		if len(preIdx.Name) != 0 {
-			image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
-			if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != cr.Spec.Image {
-				return false, nil
-			}
-		}
-
 	}
 
 	// check if a search head cluster exists with the same ClusterManager instance attached
@@ -1208,5 +1195,41 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 	if (cr.Spec.Image != idxImage) && (searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != cr.Spec.Image) {
 		return false, nil
 	}
+
+	cm := mgr.getClusterManagerClient(ctx)
+	clusterInfo, err := cm.GetClusterInfo(false)
+	if err != nil {
+		return false, fmt.Errorf("could not get cluster info from cluster manager")
+	}
+	if clusterInfo.MultiSite == "true" {
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		indexerList, err := getIndexerClusterList(ctx, c, cr, opts)
+		if err != nil {
+			return false, err
+		}
+		sortedList, err := getIndexerClusterSortedSiteList(ctx, c, cr.Spec.ClusterManagerRef, indexerList)
+
+		preIdx := enterpriseApi.IndexerCluster{}
+
+		for i, v := range sortedList.Items {
+			if &v == cr {
+				if i > 0 {
+					preIdx = sortedList.Items[i-1]
+				}
+				break
+
+			}
+		}
+		if len(preIdx.Name) != 0 {
+			preIdxImage, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
+			if (cr.Spec.Image != idxImage) && (preIdx.Status.Phase != enterpriseApi.PhaseReady || preIdxImage != cr.Spec.Image) {
+				return false, nil
+			}
+		}
+
+	}
+
 	return true, nil
 }
