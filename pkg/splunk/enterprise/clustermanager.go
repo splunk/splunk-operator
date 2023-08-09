@@ -180,9 +180,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
+	cr.Kind = "ClusterManager"
 	// check if the ClusterManager is ready for version upgrade, if required
-	continueReconcile, err := isClusterManagerReadyForUpgrade(ctx, client, cr)
-	if err != nil || !continueReconcile {
+	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	 if err != nil || !continueReconcile {
 		return result, err
 	}
 
