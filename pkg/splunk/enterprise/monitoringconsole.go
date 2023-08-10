@@ -50,6 +50,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "MonitoringConsole"
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -138,8 +139,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// check if the Monitoring Console is ready for version upgrade, if required
-	cr.Kind = "MonitoringConsole"
-	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 	if err != nil || !continueReconcile {
 		return result, err
 	}

@@ -50,6 +50,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "SearchHeadCluster"
 
 	// validate and updates defaults for CR
 	err := validateSearchHeadClusterSpec(ctx, client, cr)
@@ -161,8 +162,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	cr.Kind = "SearchHeadCluster"
-	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 	if err != nil || !continueReconcile {
 		return result, err
 	}
@@ -457,6 +457,24 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 	// manage scaling and updates
 	return splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+}
+
+// used in mocking this function
+var GetSearchHeadClusterMemberInfo := func GetSearchHeadClusterMemberInfo(c *SplunkClient) (*SearchHeadClusterMemberInfo, error) {
+	apiResponse := struct {
+		Entry []struct {
+			Content SearchHeadClusterMemberInfo `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/shcluster/member/info"
+	err := c.Get(path, &apiResponse)
+	if err != nil {
+		return nil, err
+	}
+	if len(apiResponse.Entry) < 1 {
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
+	}
+	return &apiResponse.Entry[0].Content, nil
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready

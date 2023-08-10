@@ -56,6 +56,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
@@ -94,7 +95,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		Name:      cr.Spec.ClusterManagerRef.Name,
 	}
 	managerIdxCluster := &enterpriseApi.ClusterManager{}
-	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
+	err = client.Get(ctx, namespacedName, managerIdxCluster)
 	if err == nil {
 		// when user creates both cluster manager and index cluster yaml file at the same time
 		// cluser manager status is not yet set so it will be blank
@@ -200,7 +201,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
 	if err != nil || !continueReconcile {
 		return result, err
 	}
@@ -310,6 +311,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
@@ -348,7 +350,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		Name:      cr.Spec.ClusterMasterRef.Name,
 	}
 	managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
-	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
+	err = client.Get(ctx, namespacedName, managerIdxCluster)
 	if err == nil {
 		// when user creates both cluster manager and index cluster yaml file at the same time
 		// cluser master status is not yet set so it will be blank
@@ -454,7 +456,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
 	if err != nil || !continueReconcile {
 		return result, err
 	}

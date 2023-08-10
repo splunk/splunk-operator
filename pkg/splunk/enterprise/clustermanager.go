@@ -50,6 +50,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "ClusterManager"
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -180,10 +181,10 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	cr.Kind = "ClusterManager"
+
 	// check if the ClusterManager is ready for version upgrade, if required
-	continueReconcile, err :=  UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	 if err != nil || !continueReconcile {
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	if err != nil || !continueReconcile {
 		return result, err
 	}
 
