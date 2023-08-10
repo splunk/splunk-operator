@@ -16,8 +16,8 @@ if [[ -z "${ECR_REPOSITORY}" ]]; then
 fi
 
 if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
-  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.22"
-  export EKS_CLUSTER_K8_VERSION="1.22"
+  echo "EKS_CLUSTER_K8_VERSION not set. Changing to 1.26"
+  export EKS_CLUSTER_K8_VERSION="1.26"
 fi
 
 function deleteCluster() {
