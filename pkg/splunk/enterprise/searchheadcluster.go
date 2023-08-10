@@ -459,23 +459,6 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	return splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
 }
 
-// used in mocking this function
-var GetSearchHeadClusterMemberInfo := func GetSearchHeadClusterMemberInfo(c *SplunkClient) (*SearchHeadClusterMemberInfo, error) {
-	apiResponse := struct {
-		Entry []struct {
-			Content SearchHeadClusterMemberInfo `json:"content"`
-		} `json:"entry"`
-	}{}
-	path := "/services/shcluster/member/info"
-	err := c.Get(path, &apiResponse)
-	if err != nil {
-		return nil, err
-	}
-	if len(apiResponse.Entry) < 1 {
-		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
-	}
-	return &apiResponse.Entry[0].Content, nil
-}
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
@@ -578,6 +561,18 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
+// used in mocking this function
+var GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
+	c := mgr.getClient(ctx, n)
+	return c.GetSearchHeadClusterMemberInfo()
+}
+
+// used in mocking this function
+var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
+	c := mgr.getClient(ctx, n)
+	return c.GetSearchHeadCaptainInfo()
+}
+
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	// populate members status using REST API to get search head cluster member info
@@ -589,10 +584,10 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		c := mgr.getClient(ctx, n)
+		//c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
-		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
+		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
 		if err == nil {
 			memberStatus.Status = memberInfo.Status
 			memberStatus.Adhoc = memberInfo.Adhoc
@@ -605,7 +600,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 		if err == nil && !gotCaptainInfo {
 			// try querying captain api; note that this should work on any node
-			captainInfo, err := c.GetSearchHeadCaptainInfo()
+			captainInfo, err := GetSearchHeadCaptainInfo(ctx, mgr, n)
 			if err == nil {
 				mgr.cr.Status.Captain = captainInfo.Label
 				mgr.cr.Status.CaptainReady = captainInfo.ServiceReady

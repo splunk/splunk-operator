@@ -6,6 +6,8 @@ import (
 	"runtime/debug"
 	"testing"
 
+
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -332,6 +334,22 @@ func TestUpgradePathValidation(t *testing.T) {
 	createPods(t, ctx, client, "deployer", fmt.Sprintf("splunk-%s-deployer-0", shc.Name), shc.Namespace, shc.Spec.Image)
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-deployer", shc.Name), shc.Namespace)
 
+	// used in mocking this function
+	GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
+		shcm := &splclient.SearchHeadClusterMemberInfo{
+			Status: "Up",
+		}
+		return shcm, nil
+	}
+
+	// used in mocking this function
+	GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
+		shci := &splclient.SearchHeadCaptainInfo{
+			ServiceReady: true,
+			Initialized: true,
+		}
+		return shci, nil
+	}
 	// Now SearchheadCluster should move to READY state
 	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
@@ -352,6 +370,8 @@ func TestUpgradePathValidation(t *testing.T) {
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
+
+
 	// search head cluster is ready, this should create statefulset but they are not ready
 	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
 	if err != nil && !k8serrors.IsNotFound(err) {

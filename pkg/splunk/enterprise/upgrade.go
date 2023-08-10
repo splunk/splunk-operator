@@ -147,14 +147,14 @@ MonitoringConsole:
 			if k8serrors.IsNotFound(err) {
 				goto SearchHeadCluster
 			}
-			eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not find the Monitoring Console. Reason %v", err))
+			eventPublisher.Warning(ctx, "GetMonitoringConsole", fmt.Sprintf("Could not find the Monitoring Console. Reason %v", err))
 			scopedLog.Error(err, "Unable to get Monitoring Console")
 			return false, err
 		}
 
 		mcImage, err := getCurrentImage(ctx, c, monitoringConsole, SplunkMonitoringConsole)
 		if err != nil {
-			eventPublisher.Warning(ctx, "isSearchHeadReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
+			eventPublisher.Warning(ctx, "getCurrentImage", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
 			scopedLog.Error(err, "Unable to get Monitoring Console current image")
 			return false, err
 		}
