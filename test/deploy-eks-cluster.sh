@@ -49,7 +49,9 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${TEST_CLUSTER_NAME}" -v 0)
   if [ -z "${found}" ]; then
+    eksctl utils update-cluster-logging --enable-types=all --region=us-west-2 --cluster=${TEST_CLUSTER_NAME}
     eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge --version=${EKS_CLUSTER_K8_VERSION}
+    eksctl utils update-cluster-logging --enable-types=all --region=us-west-2 --cluster=${TEST_CLUSTER_NAME}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
