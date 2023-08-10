@@ -213,12 +213,14 @@ func TestUpgradePathValidation(t *testing.T) {
 	// create pods for license manager
 	createPods(t , ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0",lm.Name), lm.Namespace, lm.Spec.Image)
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager",lm.Name), lm.Namespace)
+	lm.Status.TelAppInstalled = true
 	// create license manager statefulset
 	_, err = ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager should not have returned error; err=%v", err)
 	}
 
+	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 	// cluster manager statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -248,6 +250,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
 
+	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 	// monitoring console statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
@@ -283,6 +286,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	createPods(t , ctx, client, "deployer", fmt.Sprintf("splunk-%s-deployer-0",shc.Name), shc.Namespace, shc.Spec.Image)
 	updateStatefulSetsInTest(t, ctx, client, 3, fmt.Sprintf("splunk-%s-deployer",shc.Name), shc.Namespace)
 
+	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 	// monitoring console statefulset is not created so if its NotFound error we are good
 	if err != nil {
@@ -372,10 +376,12 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("update should not have returned error; err=%v", err)
 	}
 
+	cm.Status.TelAppInstalled = true
 	_, err = ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
 	}
+	lm.Status.TelAppInstalled = true
 	_, err = ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
@@ -388,6 +394,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyIndexerCluster after update should not have returned error; err=%v", err)
 	}
+	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 	if err != nil {
 		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
