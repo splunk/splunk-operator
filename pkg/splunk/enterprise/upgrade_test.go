@@ -459,10 +459,6 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("update should not have returned error; err=%v", err)
 	}
-	_, err = ApplyClusterManager(ctx, client, &cm)
-	if err != nil {
-		t.Errorf("ApplyStandalone should not have returned error; err=%v", err)
-	}
 
 	// license manager
 	err = client.Get(ctx, namespacedName, &lm)
@@ -508,30 +504,30 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("update should not have returned error; err=%v", err)
 	}
 
-	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
-	if err != nil {
-		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
-	}
 	lm.Status.TelAppInstalled = true
 	_, err = ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
 	}
+	cm.Status.TelAppInstalled = true
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
+	}
 	_, err = ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
 		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
 	}
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
-	if err != nil {
-		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
-	}
+
 	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 	if err != nil {
 		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
 	}
-
+  _, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	if err != nil {
+		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
+	}
 	newImage := "splunk/splunk:latest"
 	// create pods for license manager
 	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, newImage)
@@ -560,85 +556,126 @@ func TestUpgradePathValidation(t *testing.T) {
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-deployer", shc.Name), shc.Namespace)
 	shc.Status.TelAppInstalled = true
 
-	cm.Status.TelAppInstalled = true
-	_, err = ApplyClusterManager(ctx, client, &cm)
-	if err != nil {
-		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
-	}
 	lm.Status.TelAppInstalled = true
 	_, err = ApplyLicenseManager(ctx, client, &lm)
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
 	}
+
+	cm.Status.TelAppInstalled = true
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
+	}
+
+	cm.Status.TelAppInstalled = true
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
+	}
+
 	_, err = ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
 		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
 	}
-	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
-		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
+		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
 	}
+
 	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
 	if err != nil {
 		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
 	}
+
+	shc.Status.TelAppInstalled = true
+	_, err = ApplySearchHeadCluster(ctx, client, &shc)
+	if err != nil {
+		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
+	}
+
+	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	if err != nil {
+		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
+	}
+
 }
 
 func createPods(t *testing.T, ctx context.Context, client common.ControllerClient, crtype, name, namespace, image string) {
-	// create pod
-	stpod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "splunk-operator",
-				"app.kubernetes.io/component":  crtype,
-				"app.kubernetes.io/name":       crtype,
-				"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-test-%s", crtype),
-				"app.kubernetes.io/instance":   fmt.Sprintf("splunk-test-%s", crtype),
+	stpod := &corev1.Pod{}
+	namespacesName := types.NamespacedName{
+		Name: name,
+		Namespace: namespace,
+	}
+	err := client.Get(ctx, namespacesName, stpod)
+	if err != nil && k8serrors.IsNotFound(err) {
+		// create pod
+		stpod = &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "splunk-operator",
+					"app.kubernetes.io/component":  crtype,
+					"app.kubernetes.io/name":       crtype,
+					"app.kubernetes.io/part-of":    fmt.Sprintf("splunk-test-%s", crtype),
+					"app.kubernetes.io/instance":   fmt.Sprintf("splunk-test-%s", crtype),
+				},
+				Annotations: map[string]string{
+					"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
+					"traffic.sidecar.istio.io/includeInboundPorts":  "8000",
+				},
 			},
-			Annotations: map[string]string{
-				"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
-				"traffic.sidecar.istio.io/includeInboundPorts":  "8000",
-			},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "splunk",
-					Image: image,
-					Env: []corev1.EnvVar{
-						{
-							Name:  "test",
-							Value: "test",
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "splunk",
+						Image: image,
+						Env: []corev1.EnvVar{
+							{
+								Name:  "test",
+								Value: "test",
+							},
 						},
-					},
-					Ports: []corev1.ContainerPort{
-						{
-							Name:          "http-splunkweb",
-							HostPort:      0,
-							ContainerPort: 8000,
-							Protocol:      "TCP",
-							HostIP:        "",
-						},
-						{
-							Name:          "https-splunkd",
-							HostPort:      0,
-							ContainerPort: 8089,
-							Protocol:      "TCP",
-							HostIP:        "",
+						Ports: []corev1.ContainerPort{
+							{
+								Name:          "http-splunkweb",
+								HostPort:      0,
+								ContainerPort: 8000,
+								Protocol:      "TCP",
+								HostIP:        "",
+							},
+							{
+								Name:          "https-splunkd",
+								HostPort:      0,
+								ContainerPort: 8089,
+								Protocol:      "TCP",
+								HostIP:        "",
+							},
 						},
 					},
 				},
 			},
-		},
-	}
-	// simulate create stateful set
-	err := client.Create(ctx, stpod)
-	if err != nil {
-		t.Errorf("Unexpected create pod failed %v", err)
+		}
+		// simulate create stateful set
+		err := client.Create(ctx, stpod)
+		if err != nil {
+			t.Errorf("Unexpected create pod failed %v", err)
+			debug.PrintStack()
+		}
+	} else if err != nil {
+		t.Errorf("Unexpected erro while get pod  %v", err)
 		debug.PrintStack()
+	}
+	if stpod.Spec.Containers[0].Image != image {
+		stpod.Spec.Containers[0].Image = image
+		err := client.Update(ctx, stpod)
+		if err != nil {
+			t.Errorf("Unexpected create pod failed %v", err)
+			debug.PrintStack()
+		}
 	}
 
 	// update statefulset
@@ -652,7 +689,7 @@ func createPods(t *testing.T, ctx context.Context, client common.ControllerClien
 	}
 	err = client.Status().Update(ctx, stpod)
 	if err != nil {
-		t.Errorf("Unexpected update statefulset  %v", err)
+		t.Errorf("Unexpected update pod  %v", err)
 		debug.PrintStack()
 	}
 }
@@ -671,6 +708,8 @@ func updateStatefulSetsInTest(t *testing.T, ctx context.Context, client common.C
 	// update statefulset
 	statefulset.Status.ReadyReplicas = replicas
 	statefulset.Status.Replicas = replicas
+	statefulset.Status.CurrentReplicas = replicas
+	statefulset.Status.AvailableReplicas = replicas
 	err = client.Status().Update(ctx, statefulset)
 	if err != nil {
 		t.Errorf("Unexpected update statefulset  %v", err)
