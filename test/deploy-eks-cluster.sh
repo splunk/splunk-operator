@@ -49,13 +49,39 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${TEST_CLUSTER_NAME}" -v 0)
   if [ -z "${found}" ]; then
-    eksctl utils update-cluster-logging --enable-types=all --region=us-west-2 --cluster=${TEST_CLUSTER_NAME}
     eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge --version=${EKS_CLUSTER_K8_VERSION}
-    eksctl utils update-cluster-logging --enable-types=all --region=us-west-2 --cluster=${TEST_CLUSTER_NAME}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
     fi
+    eksctl utils associate-iam-oidc-provider --cluster=${TEST_CLUSTER_NAME}  --approve
+    oidc_id=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5)
+    account_id=$(aws sts get-caller-identity --query "Account" --output text)
+    oidc_provider=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME}  --region "us-west-2" --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
+    namespace=kube-system
+    service_account=ebs-csi-controller-sa
+    echo "{
+      \"Version\": \"2012-10-17\",
+      \"Statement\": [
+        {
+          \"Effect\": \"Allow\",
+          \"Principal\": {
+            \"Federated\": \"arn:aws:iam::$account_id:oidc-provider/$oidc_provider\"
+          },
+          \"Action\": \"sts:AssumeRoleWithWebIdentity\",
+          \"Condition\": {
+            \"StringEquals\": {
+              \"$oidc_provider:aud\": \"sts.amazonaws.com\",
+              \"$oidc_provider:sub\": \"system:serviceaccount:$namespace:$service_account\"
+            }
+          }
+        }
+      ]
+    }"  >aws-ebs-csi-driver-trust-policy.json
+    aws iam create-role --role-name EBS_${TEST_CLUSTER_NAME} --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
+    aws iam attach-role-policy  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy  --role-name EBS_${TEST_CLUSTER_NAME}
+    kubectl annotate serviceaccount -n $namespace $service_account eks.amazonaws.com/role-arn=arn:aws:iam::$account_id:role/EBS_${TEST_CLUSTER_NAME}
+    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::$account_id:role/EBS_${TEST_CLUSTER_NAME} --force
   else
     echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"
     # Cluster exists but kubeconfig may not
