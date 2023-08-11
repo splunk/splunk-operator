@@ -6,12 +6,19 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+//helps in mock function
+var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
+	cm := mgr.getClusterManagerClient(ctx)
+	return cm.GetClusterInfo(false)
+}
 
 func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, mgr *indexerClusterPodManager) (bool, error) {
 	reqLogger := log.FromContext(ctx)
@@ -237,8 +244,7 @@ IndexerCluster:
 			mgr.c = c
 		}
 
-		cm := mgr.getClusterManagerClient(ctx)
-		clusterInfo, err := cm.GetClusterInfo(false)
+		clusterInfo, err := GetClusterInfoCall(ctx, mgr, false)
 		if err != nil {
 			return false, fmt.Errorf("could not get cluster info from cluster manager")
 		}

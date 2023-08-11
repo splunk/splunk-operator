@@ -371,6 +371,33 @@ func TestUpgradePathValidation(t *testing.T) {
 		return nil
 	}
 
+	// mock the call
+	GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
+		cinfo := &splclient.ClusterInfo{
+			MultiSite: "false",
+		}
+		return cinfo, nil
+	}
+	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		response := map[string]splclient.ClusterManagerPeerInfo{
+			"splunk-test-indexer-0" : {
+				ID : "site-1",
+				Status: "Up",
+				ActiveBundleID : "1",
+				BucketCount: 10,
+				Searchable: true,
+			},
+		}
+		return response,err
+	}
+	GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+    response := &splclient.ClusterManagerInfo{
+			Initialized: true,
+			IndexingReady: true,
+			ServiceReady: true,
+		}
+		return response, err
+	}
 
 	// search head cluster is ready, this should create statefulset but they are not ready
 	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
@@ -381,6 +408,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	// create pods for indexer cluster
 	createPods(t , ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0",idx.Name), idx.Namespace, idx.Spec.Image)
 	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer",idx.Name), idx.Namespace)
+
 
 	// search head cluster is not ready, so wait for search head cluster
 	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
@@ -397,10 +425,15 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("shc is not in ready state")
 	}
 
+	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, err
+	}
+
 	// ------- Step2 starts here -----
 	// Update
 	// standalone
-	err = client.Get(ctx, namespacedName, &lm)
+	err = client.Get(ctx, namespacedName, &stdln)
 	if err != nil {
 		t.Errorf("get should not have returned error; err=%v", err)
 	}
@@ -425,6 +458,10 @@ func TestUpgradePathValidation(t *testing.T) {
 	err = client.Update(ctx, &cm)
 	if err != nil {
 		t.Errorf("update should not have returned error; err=%v", err)
+	}
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("ApplyStandalone should not have returned error; err=%v", err)
 	}
 
 	// license manager
@@ -470,6 +507,58 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("update should not have returned error; err=%v", err)
 	}
+
+	cm.Status.TelAppInstalled = true
+	_, err = ApplyClusterManager(ctx, client, &cm)
+	if err != nil {
+		t.Errorf("applyClusterManager after update should not have returned error; err=%v", err)
+	}
+	lm.Status.TelAppInstalled = true
+	_, err = ApplyLicenseManager(ctx, client, &lm)
+	if err != nil {
+		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
+	}
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole after update should not have returned error; err=%v", err)
+	}
+	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	if err != nil {
+		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
+	}
+	shc.Status.TelAppInstalled = true
+	_, err = ApplySearchHeadCluster(ctx, client, &shc)
+	if err != nil {
+		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
+	}
+
+	newImage := "splunk/splunk:latest"
+	// create pods for license manager
+	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, newImage)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
+	lm.Status.TelAppInstalled = true
+
+	// create pods for cluster manager
+	createPods(t, ctx, client, "cluster-manager", fmt.Sprintf("splunk-%s-cluster-manager-0", cm.Name), cm.Namespace, cm.Spec.Image)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-cluster-manager", cm.Name), cm.Namespace)
+	cm.Status.TelAppInstalled = true
+
+	// create pods for indexer cluster
+	createPods(t , ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0",idx.Name), idx.Namespace, newImage)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer",idx.Name), idx.Namespace)
+
+	// create pods for cluster manager
+	createPods(t, ctx, client, "monitoring-console", fmt.Sprintf("splunk-%s-monitoring-console-0", lm.Name), lm.Namespace, newImage)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-monitoring-console", lm.Name), lm.Namespace)
+
+	// create pods for cluster manager
+	createPods(t, ctx, client, "search-head", fmt.Sprintf("splunk-%s-search-head-0", shc.Name), shc.Namespace, newImage)
+	createPods(t, ctx, client, "search-head", fmt.Sprintf("splunk-%s-search-head-1", shc.Name), shc.Namespace, newImage)
+	createPods(t, ctx, client, "search-head", fmt.Sprintf("splunk-%s-search-head-2", shc.Name), shc.Namespace, newImage)
+	updateStatefulSetsInTest(t, ctx, client, 3, fmt.Sprintf("splunk-%s-search-head", shc.Name), shc.Namespace)
+	createPods(t, ctx, client, "deployer", fmt.Sprintf("splunk-%s-deployer-0", shc.Name), shc.Namespace, newImage)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-deployer", shc.Name), shc.Namespace)
+	shc.Status.TelAppInstalled = true
 
 	cm.Status.TelAppInstalled = true
 	_, err = ApplyClusterManager(ctx, client, &cm)

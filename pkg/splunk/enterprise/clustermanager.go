@@ -125,7 +125,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, _ := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
+			extraEnv, _ := VerifyCMisMultisiteCall(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
@@ -175,7 +175,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	extraEnv, err := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
+	extraEnv, err := VerifyCMisMultisiteCall(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		return result, err
@@ -433,8 +433,8 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return numOfObjects, nil
 }
 
-// VerifyCMisMultisite checks if its a multisite
-func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+// VerifyCMisMultisite checks if its a multisite used also in mock
+var VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())

@@ -962,6 +962,16 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 	return nil
 }
 
+var GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+	c := mgr.getClusterManagerClient(ctx)
+	return c.GetClusterManagerInfo()
+}
+
+var GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+	c := mgr.getClusterManagerClient(ctx)
+	return c.GetClusterManagerPeers()
+}
+
 // updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource
 func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
@@ -975,8 +985,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	}
 
 	// get indexer cluster info from cluster manager if it's ready
-	c := mgr.getClusterManagerClient(ctx)
-	clusterInfo, err := c.GetClusterManagerInfo()
+	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
 	if err != nil {
 		return err
 	}
@@ -986,7 +995,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	mgr.cr.Status.MaintenanceMode = clusterInfo.MaintenanceMode
 
 	// get peer information from cluster manager
-	peers, err := c.GetClusterManagerPeers()
+	peers, err := GetClusterManagerPeersCall(ctx, mgr)
 	if err != nil {
 		return err
 	}
