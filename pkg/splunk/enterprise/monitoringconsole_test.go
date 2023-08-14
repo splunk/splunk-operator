@@ -72,6 +72,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
@@ -81,15 +82,19 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
+
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
+
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
@@ -875,7 +880,11 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		Name:      monitoringconsole.Name,
 		Namespace: monitoringconsole.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected get monitoring console %v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	monitoringconsole.Status.Phase = enterpriseApi.PhaseReady
 	monitoringconsole.Spec.ServiceTemplate.Annotations = map[string]string{
@@ -1133,6 +1142,14 @@ func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, &cm)
+	if err != nil {
+		t.Errorf("isMonitoringConsoleReadyForUpgrade should not have returned error=%v", err)
+	}
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, &cm)
 	if err != nil {
@@ -1171,9 +1188,9 @@ func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
 	_, err = ApplyClusterManager(ctx, client, &cm)
 
 	monitoringConsole := &enterpriseApi.MonitoringConsole{}
-	namespacedName := types.NamespacedName{
-		Name:      cm.Name,
-		Namespace: cm.Namespace,
+	namespacedName = types.NamespacedName{
+		Name:      mc.Name,
+		Namespace: mc.Namespace,
 	}
 	err = client.Get(ctx, namespacedName, monitoringConsole)
 	if err != nil {
@@ -1239,6 +1256,14 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, cm)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, cm)
 	if err != nil {
@@ -1256,7 +1281,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
 	}
 	monitoringConsole := &enterpriseApi.MonitoringConsole{}
-	namespacedName := types.NamespacedName{
+	namespacedName = types.NamespacedName{
 		Name:      cm.Name,
 		Namespace: cm.Namespace,
 	}

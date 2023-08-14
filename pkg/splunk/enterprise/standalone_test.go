@@ -1281,7 +1281,11 @@ func TestStandaloneWithReadyState(t *testing.T) {
 		Name:      standalone.Name,
 		Namespace: standalone.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, &standalone)
+	if err != nil {
+		t.Errorf("Unexpected get standalone %v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	standalone.Status.Phase = enterpriseApi.PhaseReady
 	standalone.Spec.ServiceTemplate.Annotations = map[string]string{

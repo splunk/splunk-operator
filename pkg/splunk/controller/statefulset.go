@@ -353,8 +353,8 @@ func DeleteReferencesToAutomatedMCIfExists(ctx context.Context, client splcommon
 func isCurrentCROwner(cr splcommon.MetaObject, currentOwners []metav1.OwnerReference) bool {
 	// adding extra verification as unit test cases fails since fakeclient do not set UID
 	return reflect.DeepEqual(currentOwners[0].UID, cr.GetUID()) &&
-	(currentOwners[0].Kind == cr.GetObjectKind().GroupVersionKind().Kind) &&
-	(currentOwners[0].Name == cr.GetName())
+		(currentOwners[0].Kind == cr.GetObjectKind().GroupVersionKind().Kind) &&
+		(currentOwners[0].Name == cr.GetName())
 }
 
 // IsStatefulSetScalingUpOrDown checks if we are currently scaling up or down

@@ -1421,6 +1421,14 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
 	}
+	namespacedName := types.NamespacedName{
+		Name:      "test",
+		Namespace: "test",
+	}
+	err = client.Get(ctx, namespacedName, &lm)
+	if err != nil {
+		t.Errorf("get should not have returned error; err=%v", err)
+	}
 	lm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, &lm)
 	if err != nil {
@@ -1454,12 +1462,19 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
 
-	cm.Spec.Image = "splunk2"
+	// create pods for license manager
+	lm.Status.TelAppInstalled = true
 	lm.Spec.Image = "splunk2"
+	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
+	// now the statefulset image in spec is updated to splunk2
+	_, err = ApplyLicenseManager(ctx, client, &lm)
+
+	// now the statefulset and license manager both should be in ready state
 	_, err = ApplyLicenseManager(ctx, client, &lm)
 
 	clusterManager := &enterpriseApi.ClusterManager{}
-	namespacedName := types.NamespacedName{
+	namespacedName = types.NamespacedName{
 		Name:      cm.Name,
 		Namespace: cm.Namespace,
 	}
@@ -1467,8 +1482,13 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	if err != nil {
 		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
 	}
+	clusterManager.Spec.Image = "splunk2"
+	err = client.Update(ctx, clusterManager)
+	if err != nil {
+		t.Errorf("update should not have returned error; err=%v", err)
+	}
 
-	check, err := isClusterManagerReadyForUpgrade(ctx, client, clusterManager)
+	check, err := UpgradePathValidation(ctx, client, clusterManager, clusterManager.Spec.CommonSplunkSpec, nil)
 
 	if err != nil {
 		t.Errorf("Unexpected upgradeScenario error %v", err)
@@ -1527,6 +1547,15 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyLicenseManager should not have returned error; err=%v", err)
 	}
+
+	namespacedName := types.NamespacedName{
+		Name:      lm.Name,
+		Namespace: lm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, lm)
+	if err != nil {
+		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
+	}
 	lm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, lm)
 	if err != nil {
@@ -1544,7 +1573,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		t.Errorf("changeClusterManagerAnnotations should not have returned error=%v", err)
 	}
 	clusterManager := &enterpriseApi.ClusterManager{}
-	namespacedName := types.NamespacedName{
+	namespacedName = types.NamespacedName{
 		Name:      cm.Name,
 		Namespace: cm.Namespace,
 	}
@@ -1683,6 +1712,12 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	namespacedName := types.NamespacedName{
 		Name:      clustermanager.Name,
 		Namespace: clustermanager.Namespace,
+	}
+
+	// cluster manager
+	err = c.Get(ctx, namespacedName, clustermanager)
+	if err != nil {
+		t.Errorf("get should not have returned error; err=%v", err)
 	}
 
 	// simulate Ready state

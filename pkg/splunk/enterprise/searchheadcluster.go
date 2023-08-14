@@ -459,7 +459,6 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	return splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
 }
 
-
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
 	// start by quarantining the pod

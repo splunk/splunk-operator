@@ -735,7 +735,8 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
+		//{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
+		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
@@ -750,7 +751,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[4], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 
 	// test 1 ready pod
 	mockHandlers := []spltest.MockHTTPHandler{
@@ -802,6 +803,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
+		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
@@ -814,6 +816,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
@@ -841,7 +844,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	statefulSet.Status.Replicas = 2
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Status.UpdatedReplicas = 2
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[4]}, "Create": {funcCalls[1]}}
 	method = "indexerClusterPodManager.Update(Pod Not Found)"
 	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
 
@@ -862,6 +865,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
@@ -1576,7 +1580,11 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		Name:      clustermanager.Name,
 		Namespace: clustermanager.Namespace,
 	}
-
+	err := c.Get(ctx, namespacedName, clustermanager)
+	if err != nil {
+		t.Errorf("Unexpected get cluster manager %v", err)
+		debug.PrintStack()
+	}
 	clustermanager.Status.Phase = enterpriseApi.PhaseReady
 	clustermanager.Spec.ServiceTemplate.Annotations = map[string]string{
 		"traffic.sidecar.istio.io/excludeOutboundPorts": "8089,8191,9997",
@@ -1589,7 +1597,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		"app.kubernetes.io/name":       "cluster-manager",
 		"app.kubernetes.io/part-of":    "splunk-test-cluster-manager",
 	}
-	err := c.Status().Update(ctx, clustermanager)
+	err = c.Status().Update(ctx, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
@@ -1755,6 +1763,24 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, indexercluster)
 
+	GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
+		cinfo := &splclient.ClusterInfo{
+			MultiSite: "false",
+		}
+		return cinfo, nil
+	}
+	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+		response := map[string]splclient.ClusterManagerPeerInfo{
+			"splunk-test-indexer-0": {
+				ID:             "site-1",
+				Status:         "Up",
+				ActiveBundleID: "1",
+				BucketCount:    10,
+				Searchable:     true,
+			},
+		}
+		return response, err
+	}
 	_, err = ApplyIndexerClusterManager(ctx, c, indexercluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
@@ -1765,7 +1791,11 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		Name:      indexercluster.Name,
 		Namespace: indexercluster.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, indexercluster)
+	if err != nil {
+		t.Errorf("Unexpected get indexer cluster %v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	indexercluster.Status.Phase = enterpriseApi.PhaseReady
 	indexercluster.Spec.ServiceTemplate.Annotations = map[string]string{

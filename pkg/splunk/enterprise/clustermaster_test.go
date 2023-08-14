@@ -1220,7 +1220,11 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		Name:      clustermaster.Name,
 		Namespace: clustermaster.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, clustermaster)
+	if err != nil {
+		t.Errorf("Unexpected get cluster master %v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	clustermaster.Status.Phase = enterpriseApi.PhaseReady
 	clustermaster.Spec.ServiceTemplate.Annotations = map[string]string{

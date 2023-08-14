@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//helps in mock function
+// helps in mock function
 var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager, mockCall bool) (*splclient.ClusterInfo, error) {
 	cm := mgr.getClusterManagerClient(ctx)
 	return cm.GetClusterInfo(false)

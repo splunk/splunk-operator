@@ -6,9 +6,8 @@ import (
 	"runtime/debug"
 	"testing"
 
-
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,8 +19,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-
 
 func TestUpgradePathValidation(t *testing.T) {
 
@@ -346,7 +343,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
 		shci := &splclient.SearchHeadCaptainInfo{
 			ServiceReady: true,
-			Initialized: true,
+			Initialized:  true,
 		}
 		return shci, nil
 	}
@@ -380,21 +377,21 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
 		response := map[string]splclient.ClusterManagerPeerInfo{
-			"splunk-test-indexer-0" : {
-				ID : "site-1",
-				Status: "Up",
-				ActiveBundleID : "1",
-				BucketCount: 10,
-				Searchable: true,
+			"splunk-test-indexer-0": {
+				ID:             "site-1",
+				Status:         "Up",
+				ActiveBundleID: "1",
+				BucketCount:    10,
+				Searchable:     true,
 			},
 		}
-		return response,err
+		return response, err
 	}
 	GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
-    response := &splclient.ClusterManagerInfo{
-			Initialized: true,
+		response := &splclient.ClusterManagerInfo{
+			Initialized:   true,
 			IndexingReady: true,
-			ServiceReady: true,
+			ServiceReady:  true,
 		}
 		return response, err
 	}
@@ -406,9 +403,8 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 
 	// create pods for indexer cluster
-	createPods(t , ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0",idx.Name), idx.Namespace, idx.Spec.Image)
-	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer",idx.Name), idx.Namespace)
-
+	createPods(t, ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0", idx.Name), idx.Namespace, idx.Spec.Image)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer", idx.Name), idx.Namespace)
 
 	// search head cluster is not ready, so wait for search head cluster
 	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
@@ -524,7 +520,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("applySearchHeadCluster after update should not have returned error; err=%v", err)
 	}
-  _, err = ApplyIndexerClusterManager(ctx, client, &idx)
+	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
 	if err != nil {
 		t.Errorf("ApplyIndexerClusterManager after update should not have returned error; err=%v", err)
 	}
@@ -540,8 +536,8 @@ func TestUpgradePathValidation(t *testing.T) {
 	cm.Status.TelAppInstalled = true
 
 	// create pods for indexer cluster
-	createPods(t , ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0",idx.Name), idx.Namespace, newImage)
-	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer",idx.Name), idx.Namespace)
+	createPods(t, ctx, client, "indexer", fmt.Sprintf("splunk-%s-indexer-0", idx.Name), idx.Namespace, newImage)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-indexer", idx.Name), idx.Namespace)
 
 	// create pods for cluster manager
 	createPods(t, ctx, client, "monitoring-console", fmt.Sprintf("splunk-%s-monitoring-console-0", lm.Name), lm.Namespace, newImage)
@@ -606,7 +602,7 @@ func TestUpgradePathValidation(t *testing.T) {
 func createPods(t *testing.T, ctx context.Context, client common.ControllerClient, crtype, name, namespace, image string) {
 	stpod := &corev1.Pod{}
 	namespacesName := types.NamespacedName{
-		Name: name,
+		Name:      name,
 		Namespace: namespace,
 	}
 	err := client.Get(ctx, namespacesName, stpod)
