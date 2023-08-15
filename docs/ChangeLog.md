@@ -92,7 +92,7 @@
 * CSPL-1768: Adding an annotation to define a default container
 
 * CSPL-1769: Change the naming of volumeMounts to adopt setup of init container
-  
+
 * CSPL-1727: Manifest files to differentiate namespace scoped and cluster scoped
 
 ## 1.1.0 (2022-04-12)
@@ -166,7 +166,7 @@
 * This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:8.2.1-a2 image with it
 
 * CSPL-725 - Operator App Management Framework Phase 2 (Beta Release)
-  
+
 * CSPL-1139: Make the Liveness and Readiness Probe initial delay time configurable
 
 * Documentation updates to include
@@ -199,9 +199,9 @@
 
 * CSPL-555 - Use pre-defined system resource values for Montioring Console pod (CPU & Memory) to avoid continuous reset of the MC pod when those values aren't consistent on different CRs
 
-* CSPL-780 - When deleting Search Head Cluster's custom resources, add fix to delete PVCs for both the "search-head" and "deployer" components 
+* CSPL-780 - When deleting Search Head Cluster's custom resources, add fix to delete PVCs for both the "search-head" and "deployer" components
 
-* Documentation updates to include 
+* Documentation updates to include
   * System resources & Storage requirements
   * How to Upgrade Splunk Operator
   * Ingress documentation updates with ngingx examples
@@ -224,7 +224,7 @@
 
 * CSPL-624 - Added Splunk Operator upgrade documentation
 
-* Security enhancements 
+* Security enhancements
 
 * Test automation enhancements
 
@@ -275,7 +275,7 @@
 
 * Password management has been enhanced to make use of a centralized approach to create & maintain Splunk secrets within a Kubernetes Cluster. Refer [PasswordManagement.md](PasswordManagement.md) for more details in Setup & Usage
 
-* Introduction of SmartStore Index management feature. With this update, SmartStore-enabled Indexes can be configured through Custom resources. For more details, refer to [SmartStore.md](SmartStore.md) 
+* Introduction of SmartStore Index management feature. With this update, SmartStore-enabled Indexes can be configured through Custom resources. For more details, refer to [SmartStore.md](SmartStore.md)
 
 * Added support for deployment of Multi-site Indexer Cluster. This release introduces a new ClusterMaster Custom Resource, thus allowing the Cluster Manager to have it's own resource specifications. Further, the ClusterMaster & IndexerCluster Custom Resources can together be used to configure both Single & Multi-site Indexer clusters. For more details see [Examples.md](Examples.md) & [MultisiteExamples.md](MultisiteExamples.md)
 
