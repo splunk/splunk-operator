@@ -274,7 +274,7 @@ jobs:
         run: |
           make cleanup
           make clean
-      #- name: Cleanup up EKS cluster FIXME TODO
+      #- name: Cleanup up EKS cluster FIXME
       #  if: ${{ always() }}
       #  run: |
       #    make cluster-down
