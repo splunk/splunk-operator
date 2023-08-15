@@ -274,10 +274,10 @@ jobs:
         run: |
           make cleanup
           make clean
-      #- name: Cleanup up EKS cluster FIXME
-      #  if: ${{ always() }}
-      #  run: |
-      #    make cluster-down
+      - name: Cleanup up EKS cluster FIXME
+        if: ${{ always() }}
+        run: |
+          make cluster-down
       #- name: Test Report
       #  uses: dorny/test-reporter@v1
       #  if: success() || failure()    # run this step even if previous step failed
