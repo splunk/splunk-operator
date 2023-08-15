@@ -35,6 +35,7 @@ function deleteCluster() {
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
     return 1
   fi
+  aws iam delete-role --role-name EBS_${TEST_CLUSTER_NAME##*-}
 
   return 0
 }
