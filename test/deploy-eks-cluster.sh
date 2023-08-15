@@ -60,6 +60,7 @@ function createCluster() {
     oidc_provider=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME}  --region "us-west-2" --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
     namespace=kube-system
     service_account=ebs-csi-controller-sa
+    kubectl create serviceaccount ${service_account} --namespace ${namespace}
     echo "{
       \"Version\": \"2012-10-17\",
       \"Statement\": [
@@ -78,7 +79,7 @@ function createCluster() {
         }
       ]
     }"  >aws-ebs-csi-driver-trust-policy.json
-    aws iam create-role --role-name EBS_${TEST_CLUSTER_NAME} --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
+    aws iam create-role --role-name EBS_${TEST_CLUSTER_NAME##*-} --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
     aws iam attach-role-policy  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy  --role-name EBS_${TEST_CLUSTER_NAME}
     kubectl annotate serviceaccount -n $namespace $service_account eks.amazonaws.com/role-arn=arn:aws:iam::$account_id:role/EBS_${TEST_CLUSTER_NAME}
     eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::$account_id:role/EBS_${TEST_CLUSTER_NAME} --force
