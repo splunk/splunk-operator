@@ -66,7 +66,7 @@ jobs:
       run: |
           make setup/ginkgo
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      uses: docker/setup-buildx-action@v2.5.0
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -105,7 +105,7 @@ jobs:
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      uses: docker/setup-buildx-action@v2.5.0
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -175,7 +175,7 @@ jobs:
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'refs/heads/main'
-        run:
+        run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
@@ -208,7 +208,7 @@ jobs:
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2.5.0
       - name: Install Operator SDK
         run: |
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
@@ -248,7 +248,7 @@ jobs:
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml 
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
       - name: Setup Kustomize
         run: |
           sudo snap install kustomize
@@ -278,13 +278,13 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
-        with:
-          name: Integration Tests          # Name of the check run which will be created
-          path: inttest-*.xml         # Path to test results
-          reporter: jest-junit        # Format of test results
+      #- name: Test Report
+      #  uses: dorny/test-reporter@v1
+      #  if: success() || failure()    # run this step even if previous step failed
+      #  with:
+      #    name: Integration Tests          # Name of the check run which will be created
+      #    path: inttest-*.xml         # Path to test results
+      #    reporter: jest-junit        # Format of test results
   push-latest:
     needs: smoke-tests
     if: github.ref == 'refs/heads/main'
@@ -299,7 +299,7 @@ jobs:
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      uses: docker/setup-buildx-action@v2.5.0
     - name: Configure Docker Hub credentials
       uses: docker/login-action@v1
       with:

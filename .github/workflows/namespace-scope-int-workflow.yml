@@ -55,7 +55,7 @@ jobs:
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
-            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
+            echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Checkout code
         uses: actions/checkout@v2
@@ -80,7 +80,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
           make setup/ginkgo
       - name: Install EKS CTL
@@ -89,7 +89,7 @@ jobs:
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2.5.0
       - name: Install Operator SDK
         run: |
           sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
@@ -156,4 +156,3 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-   

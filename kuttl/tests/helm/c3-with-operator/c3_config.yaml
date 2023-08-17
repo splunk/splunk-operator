@@ -2,6 +2,10 @@ splunk-operator:
   enabled: true
   splunkOperator:
     clusterWideAccess: false
+    annotations:
+      annotation: "true"
+    labels:
+      testing: "true"
 
 sva:
     c3:

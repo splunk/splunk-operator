@@ -11,6 +11,14 @@ helm repo update
 
 The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Splunk Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Enterprise custom resources.
 
+Upgrading to latest version of splunk operator using helm chart will not upgrade CRDs. User need to deploy the latest CRDs manually. this is [limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/) from helm
+
+```
+git clone https://github.com/splunk/splunk-operator.git .
+git checkout release/2.3.0
+make install
+```
+
 Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
 
 ## Splunk Operator deployments
@@ -86,7 +94,7 @@ release "splunk-operator-test" uninstalled
 
 ## Splunk Enterprise deployments
 
-The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command: 
+The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command:
 ```
 helm dependency build splunk/splunk-enterprise
 ```
@@ -94,7 +102,7 @@ If the operator is already installed then you will need to disable the dependenc
 ```
 helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
-Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise customer resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
+Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise custom resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
 
 ```
 clusterMaster:
@@ -126,7 +134,7 @@ STATUS: deployed
 REVISION: 1
 TEST SUITE: None
 ```
-``` 
+```
 splunk-cm-test-cluster-master-0                       1/1     Running   0               11m
 splunk-idxc-test-indexer-0                            1/1     Running   0               5m49s
 splunk-idxc-test-indexer-1                            1/1     Running   0               5m49s
@@ -146,6 +154,8 @@ release "splunk-enterprise-test" uninstalled
 ```
 ```helm uninstall``` terminates all resources deployed by Helm including Persistent Volume Claims created for Splunk Enterprise resources.
 
+Note: Helm by default does not cleanup Custom Resource Definitions and Persistent Volume Claims. Splunk Admin needs to manually clean them.
+
 ## Splunk Validated Architecture deployments
 
 The Splunk Enterprise chart has support for three Splunk Validated Architectures:
@@ -159,12 +169,3 @@ Install a Standalone deployment using the following command:
 helm install --set s1.enabled=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
 Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-operator/values.yaml) and [splunk/splunk-enterprise](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-enterprise/values.yaml).
-
-
-
-
-
-
-
-
-

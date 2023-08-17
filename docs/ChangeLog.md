@@ -1,5 +1,19 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.3.0 (2023-06-28)
+
+* This is the 2.3.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* This release depends upon changes made concurrently in the Splunk Enterprise container images. You should use the splunk/splunk:9.0.5 image with it
+
+* CSPL-2341: Enable private access links as endpoints for AWS client sessions
+
+* CSPL-2331: Documentation changes for AWS IRSA support
+
+* CSPL-2250: Improve code coverage
+
+* CSPL-2408: Support labels in Splunk Operator helm chart
+
 ## 2.2.1 (2023-03-13)
 
 * This is the 2.2.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)

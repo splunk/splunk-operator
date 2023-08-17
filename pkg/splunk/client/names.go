@@ -43,4 +43,9 @@ const (
 	headerUserAgent          = "User-Agent"
 	headerXmsDate            = "x-ms-date"
 	headerXmsVersion         = "x-ms-version"
+
+	awsRegionEndPointDelimiter = "|"
+
+	// Timeout for http clients used with appFramework
+	appFrameworkHttpclientTimeout = 2000
 )

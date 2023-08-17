@@ -23,7 +23,7 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      uses: docker/setup-buildx-action@v2.5.0
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -96,15 +96,15 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - name: Change splunk enterprise to release image on main branches
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Checkcout code
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Change splunk enterprise to release image on main branches
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
       - name: Install Kubectl
         uses: Azure/setup-kubectl@v3
         with:
@@ -121,7 +121,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install Ginkgo 
+      - name: Install Ginkgo
         run: |
           make setup/ginkgo
       - name: Install Helm
@@ -136,7 +136,7 @@ jobs:
           sudo mv /tmp/eksctl /usr/local/bin
           eksctl version
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2.5.0
       - name: Configure Docker Hub credentials
         uses: docker/login-action@v1
         with:
@@ -205,10 +205,10 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
-        with:
-          name: Integration Tests          # Name of the check run which will be created
-          path: inttest-*.xml         # Path to test results
-          reporter: jest-junit        # Format of test results
+      #- name: Test Report
+      #  uses: dorny/test-reporter@v1
+      #  if: success() || failure()    # run this step even if previous step failed
+      #  with:
+      #    name: Integration Tests          # Name of the check run which will be created
+      #    path: inttest-*.xml         # Path to test results
+      #    reporter: jest-junit        # Format of test results
