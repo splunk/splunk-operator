@@ -11,12 +11,12 @@ helm repo update
 
 The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Splunk Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Enterprise custom resources.
 
-Currently only latest version splunk operator is hosted on `https://splunk.github.io/splunk-operator`. For previous version of helm chart, checkout release branch code. For example, for 2.0.0 release, please follow the below steps:
+Upgrading to latest version of splunk operator using helm chart will not upgrade CRDs. User need to deploy the latest CRDs manually. this is [limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/) from helm
 
 ```
 git clone https://github.com/splunk/splunk-operator.git .
-git checkout release/2.0.0
-helm install splunk-s1 helm-chart/splunk-enterprise ...
+git checkout release/2.3.0
+make install
 ```
 
 Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
