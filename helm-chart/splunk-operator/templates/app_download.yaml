@@ -19,7 +19,9 @@ spec:
       storage: 10Gi
 {{- end }}
   volumeMode: Filesystem
+{{- if $.Values.splunkOperator.persistentVolumeClaim.storageClassName }}
   storageClassName: {{ $.Values.splunkOperator.persistentVolumeClaim.storageClassName }}
+{{- end }}
 
 ---
 {{- end }}
