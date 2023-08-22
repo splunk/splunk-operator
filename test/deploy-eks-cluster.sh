@@ -36,6 +36,12 @@ function deleteCluster() {
     return 1
   fi
   rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
+  role_attached_policies=$(aws iam list-attached-role-policies --role-name $rolename --query 'AttachedPolicies[*].PolicyArn' --output text)
+  for policy_arn in ${role_attached_policies};
+  do
+    aws iam detach-role-policy --role-name ${rolename} --policy-arn ${policy_arn}
+  done
+
   aws iam delete-role --role-name ${rolename}
 
   return 0
