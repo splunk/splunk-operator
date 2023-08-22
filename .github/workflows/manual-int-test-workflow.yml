@@ -60,7 +60,7 @@ jobs:
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
-            echo "CLUSTER_NODES=2" >> $GITHUB_ENV  
+            echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Checkout code
         uses: actions/checkout@v2
@@ -197,5 +197,5 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-    - name: Push Splunk Operator Image to Docker Hub 
+    - name: Push Splunk Operator Image to Docker Hub
       run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
