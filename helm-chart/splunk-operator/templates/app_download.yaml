@@ -20,7 +20,7 @@ spec:
 {{- end }}
   volumeMode: Filesystem
 {{- if $volume.storageClassName }}
-  storageClassName: {{ $volume.storageClassName }}
+  storageClassName: {{ .Values.splunkOperator.persistentVolumeClaim.storageClassName }}
 {{- end }}
 
 ---

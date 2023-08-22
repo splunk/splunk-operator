@@ -126,6 +126,10 @@ splunkOperator:
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#pod-v1-core
   terminationGracePeriodSeconds: 10
 
+  # Set storageClassName for the PersistentVolumeClaim
+  persistentVolumeClaim:
+    storageClassName: "default"
+
   # Specify volumes for Splunk Operator pod, append additional volumes to list
   # reference: https://kubernetes.io/docs/concepts/storage/volumes/
   volumes:
