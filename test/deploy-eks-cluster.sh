@@ -35,7 +35,7 @@ function deleteCluster() {
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
     return 1
   fi
-  rolename= echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}'
+  rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
   aws iam delete-role --role-name ${rolename}
 
   return 0
