@@ -427,7 +427,7 @@ func createAppDownloadDir(ctx context.Context, path string) error {
 	scopedLog := reqLogger.WithName("createAppDownloadDir").WithValues("path", path)
 	_, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		errDir := os.MkdirAll(path, 0755)
+		errDir := os.MkdirAll(path, 0700)
 		if errDir != nil {
 			scopedLog.Error(errDir, "Unable to create directory at path")
 			return errDir
@@ -447,7 +447,7 @@ func getAvailableDiskSpace(ctx context.Context) (uint64, error) {
 	if err != nil {
 		scopedLog.Error(err, "There is no default volume configured for the App framework, use the temporary location", "dir", TmpAppDownloadDir)
 		splcommon.AppDownloadVolume = TmpAppDownloadDir
-		err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+		err = os.MkdirAll(splcommon.AppDownloadVolume, 0700)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the directory", "dir", splcommon.AppDownloadVolume)
 			return 0, err

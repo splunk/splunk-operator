@@ -19,6 +19,7 @@ import (
 	"archive/tar"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 var cpMakeTar = func(src localPath, dest remotePath, writer io.Writer) error {
@@ -85,7 +86,7 @@ func recursiveTar(srcDir, srcFile localPath, destDir, destFile remotePath, tw *t
 			if err := tw.WriteHeader(hdr); err != nil {
 				return err
 			}
-
+			fpath = filepath.Clean(fpath)
 			f, err := os.Open(fpath)
 			if err != nil {
 				return err
