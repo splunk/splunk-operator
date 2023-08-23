@@ -23,15 +23,15 @@ var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager
 // UpgradePathValidation is used in validating if upgrade can be done to given custom resource
 //
 // the method follows the sequence
-// 1. Standalone or License Manager
-// 2. Cluster Manager - if LM ref is defined, wait for License manager to complete
-// 3. Monitoring Console - if CM ref is defined, wait for Cluster Manager to complete
-// 4. Search Head Cluster - if MC ref , CM ref , LM ref is defined, wait for them to complete in order,
-//														if any one of them not defined, ignore them and wait for the one added in ref
-// 5. Indexer Cluster - same as above also wait for search head cluster to complete before starting upgrade
-// 											if its multisite then do 1 site at a time
-//  function returns bool and error , true  - go ahead with upgrade
-// 																		false -  exit the reconciliation loop with error
+//  1. Standalone or License Manager
+//  2. Cluster Manager - if LM ref is defined, wait for License manager to complete
+//  3. Monitoring Console - if CM ref is defined, wait for Cluster Manager to complete
+//  4. Search Head Cluster - if MC ref , CM ref , LM ref is defined, wait for them to complete in order,
+//     if any one of them not defined, ignore them and wait for the one added in ref
+//  5. Indexer Cluster - same as above also wait for search head cluster to complete before starting upgrade
+//     if its multisite then do 1 site at a time
+//     function returns bool and error , true  - go ahead with upgrade
+//     false -  exit the reconciliation loop with error
 func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, mgr *indexerClusterPodManager) (bool, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -297,7 +297,7 @@ IndexerCluster:
 				}
 			}
 			if len(preIdx.Name) != 0 {
-			// check if previous indexer have completed before starting next one
+				// check if previous indexer have completed before starting next one
 				image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
 				if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != spec.Image {
 					return false, nil

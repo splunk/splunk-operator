@@ -287,10 +287,15 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplySearchHeadCluster should not have returned error; err=%v", err)
 	}
 
+	// mock the verify RF peer funciton
+	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
+		return nil
+	}
+
 	_, err = ApplyIndexerClusterManager(ctx, client, &idx)
 	// monitoring console statefulset is not created so if its NotFound error we are good
 	if err != nil && !k8serrors.IsNotFound(err) {
-		t.Errorf("ApplyIndexerClusterManagershould not have returned error; err=%v", err)
+		t.Errorf("ApplyIndexerClusterManager should not have returned error; err=%v", err)
 	}
 
 	// mointoring console statefulset is created here
@@ -505,6 +510,13 @@ func TestUpgradePathValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
 	}
+
+	lm.Status.TelAppInstalled = true
+	_, err = ApplyLicenseManager(ctx, client, &lm)
+	if err != nil {
+		t.Errorf("ApplyLicenseManager after update should not have returned error; err=%v", err)
+	}
+
 	cm.Status.TelAppInstalled = true
 	_, err = ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
