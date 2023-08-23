@@ -1511,7 +1511,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-				  Image : "splunk/splunk:latest",
+					Image:           "splunk/splunk:latest",
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1527,7 +1527,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-				  Image : "splunk/splunk:latest",
+					Image:           "splunk/splunk:latest",
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1580,7 +1580,6 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		t.Errorf("Unexpected update pod  %v", err)
 		debug.PrintStack()
 	}
-
 
 	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
