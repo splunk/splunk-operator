@@ -257,6 +257,12 @@ func (p *splunkManager) ApplyClusterManager(ctx context.Context, client splcommo
 		if err != nil {
 			cr.Status.ErrorMessage = provResult.ErrorMessage
 		}
+
+		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
+		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
@@ -563,7 +569,8 @@ func isClusterManagerReadyForUpgrade(ctx context.Context, c splcommon.Controller
 		return false, err
 	}
 
-	// check if an image upgrade is happening and whether the ClusterManager is ready for the upgrade
+	// check if an image upgrade is happening and whether LM has finished updating yet, return false to stop
+	// further reconcile operations on CM until LM is ready
 	if (cr.Spec.Image != cmImage) && (licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != cr.Spec.Image) {
 		return false, nil
 	}
