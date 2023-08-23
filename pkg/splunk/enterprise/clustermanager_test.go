@@ -1511,6 +1511,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
+				  Image : "splunk/splunk:latest",
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1526,6 +1527,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
+				  Image : "splunk/splunk:latest",
 					ImagePullPolicy: "Always",
 				},
 				Volumes: []corev1.Volume{},
@@ -1556,12 +1558,35 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	if err != nil {
 		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
 	}
+
+	// create pods for license manager
+	createPods(t, ctx, client, "license-manager", fmt.Sprintf("splunk-%s-license-manager-0", lm.Name), lm.Namespace, lm.Spec.Image)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-license-manager", lm.Name), lm.Namespace)
+	lm.Status.TelAppInstalled = true
+	// create license manager statefulset
+	_, err = ApplyLicenseManager(ctx, client, lm)
+	if err != nil {
+		t.Errorf("ApplyLicenseManager should not have returned error; err=%v", err)
+	}
+
+	err = client.Get(ctx, namespacedName, lm)
+	if err != nil {
+		t.Errorf("changeLicenseManagerAnnotations should not have returned error=%v", err)
+	}
+
 	lm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, lm)
 	if err != nil {
 		t.Errorf("Unexpected update pod  %v", err)
 		debug.PrintStack()
 	}
+
+
+	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, err
+	}
+
 	client.Create(ctx, cm)
 	_, err = ApplyClusterManager(ctx, client, cm)
 	if err != nil {
