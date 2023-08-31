@@ -1,3 +1,6 @@
+splunk-operator:
+  enabled: true
+
 # Splunk image
 image:
   repository: docker.io/splunk/splunk:9.0.5

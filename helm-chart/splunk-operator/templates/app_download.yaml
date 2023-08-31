@@ -1,3 +1,4 @@
+{{- if $.Values.splunk-operator.enabled }}
 {{- range $volume := .Values.splunkOperator.volumes }}
 {{- if $volume.persistentVolumeClaim }}
 {{- if $volume.persistentVolumeClaim.claimName }}
@@ -24,6 +25,7 @@ spec:
 {{- end }}
 
 ---
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
