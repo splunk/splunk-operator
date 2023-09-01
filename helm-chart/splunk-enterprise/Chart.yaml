@@ -29,8 +29,3 @@ maintainers:
     email: akondur@splunk.com
   - name: Gaurav Gupta
     email: gaurav@splunk.com
-dependencies:
-- name: splunk-operator
-  version: "2.3.0"
-  repository: "file://splunk-operator/helm-chart/splunk-operator"
-  condition: splunk-operator.enabled
