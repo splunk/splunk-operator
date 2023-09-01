@@ -1,6 +1,5 @@
-{{- if $.Values.splunk-operator.enabled }}
 {{- range .Values.extraManifests }}
 ---
 {{ tpl (toYaml .) $ }}
 {{- end }}
-{{- end }}
+
