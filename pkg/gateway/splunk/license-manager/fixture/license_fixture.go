@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	//"encoding/json"
-	"io/ioutil"
+
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -94,7 +94,7 @@ func (p *fixtureGateway) GetLicenseGroup(ctx context.Context) (*[]licensemodel.L
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_group.json")
+	content, err := os.ReadFile(relativePath + "/license_group.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -142,7 +142,7 @@ func (p *fixtureGateway) GetLicense(ctx context.Context) (*[]licensemodel.Licens
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license.json")
+	content, err := os.ReadFile(relativePath + "/license.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -199,7 +199,7 @@ func (p *fixtureGateway) GetLicenseLocalPeer(ctx context.Context) (*[]licensemod
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_local_peer.json")
+	content, err := os.ReadFile(relativePath + "/license_local_peer.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -255,7 +255,7 @@ func (p *fixtureGateway) GetLicenseMessage(ctx context.Context) (*[]licensemodel
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_message.json")
+	content, err := os.ReadFile(relativePath + "/license_message.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -311,7 +311,7 @@ func (p *fixtureGateway) GetLicensePools(ctx context.Context) (*[]licensemodel.L
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_pools.json")
+	content, err := os.ReadFile(relativePath + "/license_pools.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -367,7 +367,7 @@ func (p *fixtureGateway) GetLicensePeers(context context.Context) (*[]licensemod
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_peers.json")
+	content, err := os.ReadFile(relativePath + "/license_peers.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -423,7 +423,7 @@ func (p *fixtureGateway) GetLicenseUsage(ctx context.Context) (*[]licensemodel.L
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_usage.json")
+	content, err := os.ReadFile(relativePath + "/license_usage.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -479,7 +479,7 @@ func (p *fixtureGateway) GetLicenseStacks(ctx context.Context) (*[]licensemodel.
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/license_stack.json")
+	content, err := os.ReadFile(relativePath + "/license_stack.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err

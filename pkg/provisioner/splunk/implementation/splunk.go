@@ -135,8 +135,6 @@ func (p *splunkProvisioner) GetClusterManagerStatus(ctx context.Context, conditi
 		meta.SetStatusCondition(conditions, condition)
 	}
 
-	// business logic starts here
-	//healthList, err := callGetClusterManagerHealth(ctx, p)
 	healthList, err := callGetClusterManagerHealth(ctx, p)
 	if err != nil {
 		return result, err

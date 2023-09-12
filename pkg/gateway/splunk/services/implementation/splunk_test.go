@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -12,7 +13,7 @@ import (
 
 	//managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	//peermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/peer"
-	"io/ioutil"
+
 	"testing"
 
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -61,7 +62,7 @@ func TestGetClusterManagerHealth(t *testing.T) {
 	ctx := context.TODO()
 	sm := setCreds(t)
 	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_manager_health.json")
+	content, err := os.ReadFile("../fixture/cluster_manager_health.json")
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager health %v", err)
 	}
@@ -83,7 +84,7 @@ func TestGetClusterManagerInfo(t *testing.T) {
 	ctx := context.TODO()
 	sm := setCreds(t)
 	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_manager_info.json")
+	content, err := os.ReadFile("../fixture/cluster_manager_info.json")
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager info %v", err)
 	}
@@ -105,7 +106,7 @@ func TestGetClusterManagerPeers(t *testing.T) {
 	ctx := context.TODO()
 	sm := setCreds(t)
 	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_manager_peers.json")
+	content, err := os.ReadFile("../fixture/cluster_manager_peers.json")
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager peers %v", err)
 	}
@@ -130,7 +131,7 @@ func TestSetClusterInMaintenanceeMode(t *testing.T) {
 	ctx := context.TODO()
 	sm := setCreds(t)
 	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/cluster_maintenance.json")
+	content, err := os.ReadFile("../fixture/cluster_maintenance.json")
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager peers %v", err)
 	}

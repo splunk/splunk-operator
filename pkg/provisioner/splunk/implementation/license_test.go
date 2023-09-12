@@ -44,6 +44,6 @@ func TestGetLicenseLocalPeer(t *testing.T) {
 		t.Errorf("fixture: error in set cluster manager %v", err)
 	}
 	if conditions == nil || len(*conditions) == 0 {
-		t.Errorf("fixture: error in conditions for lm %v", err)
+		t.Errorf("fixture: error in conditions for license manager %v", err)
 	}
 }

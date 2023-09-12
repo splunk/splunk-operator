@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -12,7 +13,6 @@ import (
 
 	//managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	//peermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/peer"
-	"io/ioutil"
 	"testing"
 
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -61,7 +61,7 @@ func GetLicenseGroup(t *testing.T) {
 	ctx := context.TODO()
 	sm := setCreds(t)
 	httpmock.ActivateNonDefault(sm.client.GetClient())
-	content, err := ioutil.ReadFile("../fixture/license_group.json")
+	content, err := os.ReadFile("../fixture/license_group.json")
 	if err != nil {
 		t.Errorf("fixture: error in get cluster manager health %v", err)
 	}

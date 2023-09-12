@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	//"encoding/json"
-	"io/ioutil"
+
 	"net/http"
 
 	"github.com/go-logr/logr"
@@ -19,6 +19,7 @@ import (
 	clustermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster"
 	managermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/manager"
 	model "github.com/splunk/splunk-operator/pkg/splunk/model"
+
 	// peermodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/peer"
 	// searchheadmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/cluster/searchhead"
 	// commonmodel "github.com/splunk/splunk-operator/pkg/gateway/splunk/model/services/common"
@@ -101,7 +102,7 @@ func (p *fixtureGateway) GetClusterManagerInfo(ctx context.Context) (*[]managerm
 		log.Error(err, "fixture: unable to find path")
 		return nil, err
 	}
-	content, err := ioutil.ReadFile(relativePath + "/cluster_config.json")
+	content, err := os.ReadFile(relativePath + "/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -150,7 +151,7 @@ func (p *fixtureGateway) GetClusterManagerPeers(ctx context.Context) (*[]manager
 	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "cluster_config.json")
+	content, err := os.ReadFile(relativePath + "cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -204,7 +205,7 @@ func (p *fixtureGateway) GetClusterManagerHealth(ctx context.Context) (*[]manage
 
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "cluster_config.json")
+	content, err := os.ReadFile(relativePath + "cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -255,7 +256,7 @@ func (p *fixtureGateway) GetClusterManagerSites(ctx context.Context) (*[]manager
 	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "/cluster_config.json")
+	content, err := os.ReadFile(relativePath + "/cluster_config.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster config")
 		return nil, err
@@ -304,7 +305,7 @@ func (p *fixtureGateway) GetClusterManagerStatus(ctx context.Context) (*[]manage
 	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "/cluster_manager_status.json")
+	content, err := os.ReadFile(relativePath + "/cluster_manager_status.json")
 	if err != nil {
 		log.Error(err, "fixture: error in get cluster manager search heads")
 		return nil, err
@@ -355,7 +356,7 @@ func (p *fixtureGateway) SetClusterInMaintenanceMode(context context.Context, mo
 	}
 	// Read entire file content, giving us little control but
 	// making it very simple. No need to close the file.
-	content, err := ioutil.ReadFile(relativePath + "/cluster_maintenance.json")
+	content, err := os.ReadFile(relativePath + "/cluster_maintenance.json")
 	if err != nil {
 		log.Error(err, "fixture: error in post cluster maintenance")
 		return err
