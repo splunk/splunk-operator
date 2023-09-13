@@ -25,6 +25,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -60,13 +61,13 @@ type AWSS3Client struct {
 	Downloader         SplunkAWSDownloadClient
 }
 
-var regionRegex = ".*.s3[-,.](?P<region>.*).amazonaws.com"
+var regionRegex = ".*.s3[-,.]([a-z]+-[a-z]+-[0-9]+)\\..*amazonaws.com"
 
 // GetRegion extracts the region from the endpoint field
 func GetRegion(ctx context.Context, endpoint string, region *string) error {
 	var err error
 	pattern := regexp.MustCompile(regionRegex)
-	if len(pattern.FindStringSubmatch(endpoint)) > 0 {
+	if len(pattern.FindStringSubmatch(endpoint)) > 1 {
 		*region = pattern.FindStringSubmatch(endpoint)[1]
 	} else {
 		err = fmt.Errorf("unable to extract region from the endpoint")
@@ -91,7 +92,10 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 		},
 	}
 	tr.ForceAttemptHTTP2 = true
-	httpClient := http.Client{Transport: tr}
+	httpClient := http.Client{
+		Transport: tr,
+		Timeout:   appFrameworkHttpclientTimeout * time.Second,
+	}
 
 	var err error
 	var sess *session.Session
@@ -111,7 +115,6 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 		Region:     aws.String(region),
 		MaxRetries: aws.Int(3),
 		HTTPClient: &httpClient,
-		Endpoint:   aws.String(endpoint),
 	}
 
 	if accessKeyID != "" && secretAccessKey != "" {
@@ -129,7 +132,7 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 		return nil
 	}
 
-	s3Client := s3.New(sess)
+	s3Client := s3.New(sess, &aws.Config{Endpoint: aws.String(endpoint)})
 
 	// Validate transport
 	tlsVersion := "Unknown"

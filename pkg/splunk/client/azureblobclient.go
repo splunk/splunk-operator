@@ -231,7 +231,10 @@ func InitAzureBlobClientSession(ctx context.Context) SplunkHTTPClient {
 	}
 	tr.ForceAttemptHTTP2 = true
 
-	httpClient := http.Client{Transport: tr}
+	httpClient := http.Client{
+		Transport: tr,
+		Timeout:   appFrameworkHttpclientTimeout * time.Second,
+	}
 
 	// Validate transport
 	tlsVersion := "Unknown"

@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -994,10 +995,19 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
-	extraEnv = append(extraEnv, spec.ExtraEnv...)
+	extraEnv = append(spec.ExtraEnv, extraEnv...)
 
-	// append any extra variables
-	env = append(env, extraEnv...)
+	// append any extra variables adding environment variable from extraEnv in the first
+	// so when duplicates are removed the last ones are removed from the list
+	env = append(extraEnv, env...)
+	//env = append(env, extraEnv...)
+
+	// check if there are any duplicate entries
+	// we use orderedmap so the test case can pass as json marshal
+	// expects order
+	if len(env) > 0 {
+		env = removeDuplicateEnvVars(env)
+	}
 
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
@@ -1007,6 +1017,18 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
 	}
+}
+
+func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
+	allKeys := orderedmap.New[string, bool]()
+	list := []corev1.EnvVar{}
+	for _, item := range sliceList {
+		if _, ok := allKeys.Get(item.Name); !ok {
+			allKeys.Set(item.Name, true)
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 // getLivenessProbe the probe for checking the liveness of the Pod
