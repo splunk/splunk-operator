@@ -18,8 +18,11 @@ package client
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -108,8 +111,16 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 	var s3Client *minio.Client
 	var err error
 
+	// Create a custom http transport as minio doesn't support
+	transport := http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: appFrameworkHttpclientTimeout * time.Second,
+		}).Dial,
+	}
+
 	options := &minio.Options{
-		Secure: useSSL,
+		Secure:    useSSL,
+		Transport: &transport,
 	}
 	if accessKeyID != "" && secretAccessKey != "" {
 		options.Creds = credentials.NewStaticV4(accessKeyID, secretAccessKey, "")

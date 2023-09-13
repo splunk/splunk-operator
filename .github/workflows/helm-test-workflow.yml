@@ -69,6 +69,7 @@ jobs:
       DEPLOYMENT_TYPE: "helm"
       HELM_REPO_PATH: "../../../../helm-chart"
       INSTALL_OPERATOR: "true"
+      TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
     steps:
       - uses: chrisdickinson/setup-yq@3d931309f27270ebbafd53f2daee773a82ea1822
       - name: Checking YQ installation
@@ -83,16 +84,16 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
+      - name: Chekcout code
+        uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
           echo "HELM_REPO_PATH=splunk"  >> $GITHUB_ENV
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Dotenv Action
-        id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
       - name: Set GITHUB SHA value
         run: |
           echo "HELM_GITHUB_SHA=$GITHUB_SHA" >> $GITHUB_ENV
@@ -183,6 +184,7 @@ jobs:
           S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
+          TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results

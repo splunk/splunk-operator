@@ -9,12 +9,12 @@ sva:
         name: cm
         allSites: "site1,site2"
         site: site1
-        zone: us-west-2c
+        zone: us-west-2d
 
       indexerClusters:
         - name: idx1
           site: site1
-          zone: us-west-2c
+          zone: us-west-2d
         - name: idx2
           site: site2
           zone: us-west-2b
