@@ -33,5 +33,5 @@ type Provisioner interface {
 	// GetLicenseLocalPeer
 	GetLicenseLocalPeer(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error)
 
-	GetLicense(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error)
+	GetLicenseStatus(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error)
 }

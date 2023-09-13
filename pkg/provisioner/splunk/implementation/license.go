@@ -59,8 +59,8 @@ func (p *splunkProvisioner) GetLicenseLocalPeer(ctx context.Context, conditions 
 	return result, err
 }
 
-// GetClusterManagerStatus Access cluster node configuration details.
-func (p *splunkProvisioner) GetLicense(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error) {
+// GetLicenseStatus Access cluster node configuration details.
+func (p *splunkProvisioner) GetLicenseStatus(ctx context.Context, conditions *[]metav1.Condition) (result provmodel.Result, err error) {
 	_, err = callLicense(ctx, p)
 	lslistptr, err := callLicense(ctx, p)
 	if err != nil {

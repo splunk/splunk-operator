@@ -20,7 +20,7 @@ func TestGetGetLicense(t *testing.T) {
 
 	ctx := context.TODO()
 
-	_, err := provisioner.GetLicense(ctx, conditions)
+	_, err := provisioner.GetLicenseStatus(ctx, conditions)
 	if err != nil {
 		t.Errorf("fixture: error in set cluster manager %v", err)
 	}
