@@ -21,6 +21,9 @@ items:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
+  {{- if $.Values.indexerCluster.serviceAccount }}
+    serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
+  {{- end }}
   {{- if $.Values.indexerCluster.replicaCount }}
     replicas: {{ $.Values.indexerCluster.replicaCount }}
   {{- end }}
@@ -73,7 +76,7 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.volumes }}      
+  {{- with $.Values.indexerCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}
   {{- end }}
@@ -129,9 +132,6 @@ items:
   {{- with $.Values.indexerCluster.resources }}
     resources:
 {{ toYaml . | indent 6 }}
-  {{- end }}
-  {{- if $.Values.indexerCluster.serviceAccount }}
-    serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
   {{- end }}
   {{- with $.Values.indexerCluster.serviceTemplate }}
     serviceTemplate:
