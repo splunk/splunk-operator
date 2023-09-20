@@ -115,7 +115,6 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 		Region:     aws.String(region),
 		MaxRetries: aws.Int(3),
 		HTTPClient: &httpClient,
-		Endpoint:   aws.String(endpoint),
 	}
 
 	if accessKeyID != "" && secretAccessKey != "" {
@@ -133,7 +132,7 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 		return nil
 	}
 
-	s3Client := s3.New(sess)
+	s3Client := s3.New(sess, &aws.Config{Endpoint: aws.String(endpoint)})
 
 	// Validate transport
 	tlsVersion := "Unknown"
