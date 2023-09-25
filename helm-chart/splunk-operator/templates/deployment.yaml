@@ -27,6 +27,9 @@ spec:
 {{- end }}
       labels:
 {{- include "splunk-operator.selectorLabels" . | nindent 8 }}
+{{- if .Values.splunkOperator.podLabels }}
+{{ toYaml .Values.splunkOperator.podLabels | indent 8 }}
+{{- end }}
     spec:
 {{- with .Values.splunkOperator.imagePullSecrets }}
       imagePullSecrets:
