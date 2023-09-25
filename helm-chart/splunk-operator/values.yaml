@@ -51,6 +51,9 @@ splunkOperator:
   # Add pod annotations to Splunk Operator deployment pod
   podAnnotations: {}
 
+  # Add pod labels to Splunk Operator deployment pod
+  podLabels: {}
+
   # Set security context for manager container, default ensures that no child process of manager can gain more privileges than manager
   # reference: https://kubernetes.io/docs/concepts/security/pod-security-policy/#privilege-escalation
   containerSecurityContext:
