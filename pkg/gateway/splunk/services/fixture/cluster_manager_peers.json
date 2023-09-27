@@ -1,0 +1,649 @@
+{
+    "links": {
+       "create": "/services/cluster/manager/peers/_new"
+    },
+    "origin": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers",
+    "updated": "2022-07-21T07:55:59+00:00",
+    "generator": {
+       "build": "6818ac46f2ec",
+       "version": "9.0.0"
+    },
+    "entry": [
+       {
+          "name": "27165CF0-FFDA-403C-B2FD-F258EA1794DA",
+          "id": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers/27165CF0-FFDA-403C-B2FD-F258EA1794DA",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/cluster/manager/peers/27165CF0-FFDA-403C-B2FD-F258EA1794DA",
+             "list": "/services/cluster/manager/peers/27165CF0-FFDA-403C-B2FD-F258EA1794DA",
+             "edit": "/services/cluster/manager/peers/27165CF0-FFDA-403C-B2FD-F258EA1794DA"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "active_bundle_id": "7351975980A20311463444E66492BDD5",
+             "apply_bundle_status": {
+                "invalid_bundle": {
+                   "bundle_validation_errors": [],
+                   "invalid_bundle_id": ""
+                },
+                "reasons_for_restart": [],
+                "restart_required_for_apply_bundle": false,
+                "status": "None"
+             },
+             "base_generation_id": 13,
+             "batched_replication_count": 0,
+             "bucket_count": 49,
+             "bucket_count_by_index": {
+                "_audit": 15,
+                "_internal": 30,
+                "_telemetry": 4
+             },
+             "buckets_rf_by_origin_site": {
+                "default": 3,
+                "site1": 29,
+                "site2": 17
+             },
+             "buckets_sf_by_origin_site": {
+                "default": 3,
+                "site1": 28,
+                "site2": 17
+             },
+             "eai:acl": null,
+             "fixup_set": [],
+             "heartbeat_started": true,
+             "host_port_pair": "192.168.27.74:8089",
+             "indexing_disk_space": 15719145472,
+             "is_searchable": true,
+             "is_valid_bundle": true,
+             "label": "splunk-example-site2-indexer-2",
+             "last_dry_run_bundle": "",
+             "last_heartbeat": 1658390158,
+             "last_validated_bundle": "7351975980A20311463444E66492BDD5",
+             "latest_bundle_id": "7351975980A20311463444E66492BDD5",
+             "merging_mode": false,
+             "peer_registered_summaries": true,
+             "pending_job_count": 0,
+             "primary_count": 17,
+             "primary_count_remote": 194,
+             "register_search_address": "192.168.27.74:8089",
+             "replication_count": 0,
+             "replication_port": 9887,
+             "replication_use_ssl": false,
+             "restart_required_for_applying_dry_run_bundle": false,
+             "search_state_counter": {
+                "PendingSearchable": 0,
+                "PendingUnsearchable": 0,
+                "Searchable": 48,
+                "SearchablePendingMask": 0,
+                "Unknown": 0,
+                "Unsearchable": 1
+             },
+             "site": "site2",
+             "splunk_version": "9.0.0",
+             "status": "Up",
+             "status_counter": {
+                "Complete": 36,
+                "NonStreamingTarget": 0,
+                "PendingDiscard": 0,
+                "PendingTruncate": 0,
+                "StreamingError": 0,
+                "StreamingSource": 4,
+                "StreamingTarget": 9,
+                "Unset": 0
+             },
+             "summary_replication_count": 0,
+             "transient_job_count": 0
+          }
+       },
+       {
+          "name": "4E2D2D32-9317-4E00-A531-52622CF1F22D",
+          "id": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers/4E2D2D32-9317-4E00-A531-52622CF1F22D",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/cluster/manager/peers/4E2D2D32-9317-4E00-A531-52622CF1F22D",
+             "list": "/services/cluster/manager/peers/4E2D2D32-9317-4E00-A531-52622CF1F22D",
+             "edit": "/services/cluster/manager/peers/4E2D2D32-9317-4E00-A531-52622CF1F22D"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "active_bundle_id": "7351975980A20311463444E66492BDD5",
+             "apply_bundle_status": {
+                "invalid_bundle": {
+                   "bundle_validation_errors": [],
+                   "invalid_bundle_id": ""
+                },
+                "reasons_for_restart": [],
+                "restart_required_for_apply_bundle": false,
+                "status": "None"
+             },
+             "base_generation_id": 11,
+             "batched_replication_count": 0,
+             "bucket_count": 43,
+             "bucket_count_by_index": {
+                "_audit": 14,
+                "_internal": 26,
+                "_telemetry": 3
+             },
+             "buckets_rf_by_origin_site": {
+                "default": 3,
+                "site1": 21,
+                "site2": 19
+             },
+             "buckets_sf_by_origin_site": {
+                "default": 3,
+                "site1": 21,
+                "site2": 19
+             },
+             "eai:acl": null,
+             "fixup_set": [],
+             "heartbeat_started": true,
+             "host_port_pair": "192.168.11.34:8089",
+             "indexing_disk_space": 15719145472,
+             "is_searchable": true,
+             "is_valid_bundle": true,
+             "label": "splunk-example-site1-indexer-1",
+             "last_dry_run_bundle": "",
+             "last_heartbeat": 1658390158,
+             "last_validated_bundle": "7351975980A20311463444E66492BDD5",
+             "latest_bundle_id": "7351975980A20311463444E66492BDD5",
+             "merging_mode": false,
+             "peer_registered_summaries": true,
+             "pending_job_count": 0,
+             "primary_count": 37,
+             "primary_count_remote": 195,
+             "register_search_address": "192.168.11.34:8089",
+             "replication_count": 0,
+             "replication_port": 9887,
+             "replication_use_ssl": false,
+             "restart_required_for_applying_dry_run_bundle": false,
+             "search_state_counter": {
+                "PendingSearchable": 0,
+                "PendingUnsearchable": 0,
+                "Searchable": 43,
+                "SearchablePendingMask": 0,
+                "Unknown": 0,
+                "Unsearchable": 0
+             },
+             "site": "site1",
+             "splunk_version": "9.0.0",
+             "status": "Up",
+             "status_counter": {
+                "Complete": 30,
+                "NonStreamingTarget": 0,
+                "PendingDiscard": 0,
+                "PendingTruncate": 0,
+                "StreamingError": 0,
+                "StreamingSource": 6,
+                "StreamingTarget": 7,
+                "Unset": 0
+             },
+             "summary_replication_count": 0,
+             "transient_job_count": 0
+          }
+       },
+       {
+          "name": "59E6334A-BA79-43F0-B360-41C079AC75C1",
+          "id": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers/59E6334A-BA79-43F0-B360-41C079AC75C1",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/cluster/manager/peers/59E6334A-BA79-43F0-B360-41C079AC75C1",
+             "list": "/services/cluster/manager/peers/59E6334A-BA79-43F0-B360-41C079AC75C1",
+             "edit": "/services/cluster/manager/peers/59E6334A-BA79-43F0-B360-41C079AC75C1"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "active_bundle_id": "7351975980A20311463444E66492BDD5",
+             "apply_bundle_status": {
+                "invalid_bundle": {
+                   "bundle_validation_errors": [],
+                   "invalid_bundle_id": ""
+                },
+                "reasons_for_restart": [],
+                "restart_required_for_apply_bundle": false,
+                "status": "None"
+             },
+             "base_generation_id": 14,
+             "batched_replication_count": 0,
+             "bucket_count": 27,
+             "bucket_count_by_index": {
+                "_audit": 9,
+                "_internal": 17,
+                "_telemetry": 1
+             },
+             "buckets_rf_by_origin_site": {
+                "default": 3,
+                "site1": 10,
+                "site2": 14
+             },
+             "buckets_sf_by_origin_site": {
+                "default": 3,
+                "site1": 9,
+                "site2": 14
+             },
+             "eai:acl": null,
+             "fixup_set": [],
+             "heartbeat_started": true,
+             "host_port_pair": "192.168.91.15:8089",
+             "indexing_disk_space": 15719145472,
+             "is_searchable": true,
+             "is_valid_bundle": true,
+             "label": "splunk-example-site2-indexer-1",
+             "last_dry_run_bundle": "",
+             "last_heartbeat": 1658390158,
+             "last_validated_bundle": "7351975980A20311463444E66492BDD5",
+             "latest_bundle_id": "7351975980A20311463444E66492BDD5",
+             "merging_mode": false,
+             "peer_registered_summaries": true,
+             "pending_job_count": 0,
+             "primary_count": 12,
+             "primary_count_remote": 194,
+             "register_search_address": "192.168.91.15:8089",
+             "replication_count": 0,
+             "replication_port": 9887,
+             "replication_use_ssl": false,
+             "restart_required_for_applying_dry_run_bundle": false,
+             "search_state_counter": {
+                "PendingSearchable": 0,
+                "PendingUnsearchable": 0,
+                "Searchable": 26,
+                "SearchablePendingMask": 0,
+                "Unknown": 0,
+                "Unsearchable": 1
+             },
+             "site": "site2",
+             "splunk_version": "9.0.0",
+             "status": "Up",
+             "status_counter": {
+                "Complete": 22,
+                "NonStreamingTarget": 0,
+                "PendingDiscard": 0,
+                "PendingTruncate": 0,
+                "StreamingError": 0,
+                "StreamingSource": 4,
+                "StreamingTarget": 1,
+                "Unset": 0
+             },
+             "summary_replication_count": 0,
+             "transient_job_count": 0
+          }
+       },
+       {
+          "name": "7306C50E-C8FD-45EF-A360-E0A03518BE2C",
+          "id": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers/7306C50E-C8FD-45EF-A360-E0A03518BE2C",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/cluster/manager/peers/7306C50E-C8FD-45EF-A360-E0A03518BE2C",
+             "list": "/services/cluster/manager/peers/7306C50E-C8FD-45EF-A360-E0A03518BE2C",
+             "edit": "/services/cluster/manager/peers/7306C50E-C8FD-45EF-A360-E0A03518BE2C"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "active_bundle_id": "7351975980A20311463444E66492BDD5",
+             "apply_bundle_status": {
+                "invalid_bundle": {
+                   "bundle_validation_errors": [],
+                   "invalid_bundle_id": ""
+                },
+                "reasons_for_restart": [],
+                "restart_required_for_apply_bundle": false,
+                "status": "None"
+             },
+             "base_generation_id": 12,
+             "batched_replication_count": 0,
+             "bucket_count": 46,
+             "bucket_count_by_index": {
+                "_audit": 12,
+                "_internal": 32,
+                "_telemetry": 2
+             },
+             "buckets_rf_by_origin_site": {
+                "default": 3,
+                "site1": 21,
+                "site2": 22
+             },
+             "buckets_sf_by_origin_site": {
+                "default": 3,
+                "site1": 19,
+                "site2": 19
+             },
+             "eai:acl": null,
+             "fixup_set": [],
+             "heartbeat_started": true,
+             "host_port_pair": "192.168.69.142:8089",
+             "indexing_disk_space": 15719145472,
+             "is_searchable": true,
+             "is_valid_bundle": true,
+             "label": "splunk-example-site1-indexer-0",
+             "last_dry_run_bundle": "",
+             "last_heartbeat": 1658390158,
+             "last_validated_bundle": "7351975980A20311463444E66492BDD5",
+             "latest_bundle_id": "7351975980A20311463444E66492BDD5",
+             "merging_mode": false,
+             "peer_registered_summaries": true,
+             "pending_job_count": 0,
+             "primary_count": 37,
+             "primary_count_remote": 194,
+             "register_search_address": "192.168.69.142:8089",
+             "replication_count": 0,
+             "replication_port": 9887,
+             "replication_use_ssl": false,
+             "restart_required_for_applying_dry_run_bundle": false,
+             "search_state_counter": {
+                "PendingSearchable": 0,
+                "PendingUnsearchable": 0,
+                "Searchable": 41,
+                "SearchablePendingMask": 0,
+                "Unknown": 0,
+                "Unsearchable": 5
+             },
+             "site": "site1",
+             "splunk_version": "9.0.0",
+             "status": "Up",
+             "status_counter": {
+                "Complete": 37,
+                "NonStreamingTarget": 0,
+                "PendingDiscard": 0,
+                "PendingTruncate": 0,
+                "StreamingError": 0,
+                "StreamingSource": 5,
+                "StreamingTarget": 4,
+                "Unset": 0
+             },
+             "summary_replication_count": 0,
+             "transient_job_count": 0
+          }
+       },
+       {
+          "name": "CA22DE5F-72B1-4324-8844-4BA4765E9CBC",
+          "id": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers/CA22DE5F-72B1-4324-8844-4BA4765E9CBC",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/cluster/manager/peers/CA22DE5F-72B1-4324-8844-4BA4765E9CBC",
+             "list": "/services/cluster/manager/peers/CA22DE5F-72B1-4324-8844-4BA4765E9CBC",
+             "edit": "/services/cluster/manager/peers/CA22DE5F-72B1-4324-8844-4BA4765E9CBC"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "active_bundle_id": "7351975980A20311463444E66492BDD5",
+             "apply_bundle_status": {
+                "invalid_bundle": {
+                   "bundle_validation_errors": [],
+                   "invalid_bundle_id": ""
+                },
+                "reasons_for_restart": [],
+                "restart_required_for_apply_bundle": false,
+                "status": "None"
+             },
+             "base_generation_id": 15,
+             "batched_replication_count": 0,
+             "bucket_count": 33,
+             "bucket_count_by_index": {
+                "_audit": 11,
+                "_internal": 20,
+                "_telemetry": 2
+             },
+             "buckets_rf_by_origin_site": {
+                "default": 3,
+                "site1": 14,
+                "site2": 16
+             },
+             "buckets_sf_by_origin_site": {
+                "default": 3,
+                "site1": 12,
+                "site2": 15
+             },
+             "eai:acl": null,
+             "fixup_set": [],
+             "heartbeat_started": true,
+             "host_port_pair": "192.168.61.159:8089",
+             "indexing_disk_space": 15719145472,
+             "is_searchable": true,
+             "is_valid_bundle": true,
+             "label": "splunk-example-site2-indexer-0",
+             "last_dry_run_bundle": "",
+             "last_heartbeat": 1658390158,
+             "last_validated_bundle": "7351975980A20311463444E66492BDD5",
+             "latest_bundle_id": "7351975980A20311463444E66492BDD5",
+             "merging_mode": false,
+             "peer_registered_summaries": true,
+             "pending_job_count": 0,
+             "primary_count": 13,
+             "primary_count_remote": 193,
+             "register_search_address": "192.168.61.159:8089",
+             "replication_count": 0,
+             "replication_port": 9887,
+             "replication_use_ssl": false,
+             "restart_required_for_applying_dry_run_bundle": false,
+             "search_state_counter": {
+                "PendingSearchable": 0,
+                "PendingUnsearchable": 0,
+                "Searchable": 30,
+                "SearchablePendingMask": 0,
+                "Unknown": 0,
+                "Unsearchable": 3
+             },
+             "site": "site2",
+             "splunk_version": "9.0.0",
+             "status": "Up",
+             "status_counter": {
+                "Complete": 23,
+                "NonStreamingTarget": 0,
+                "PendingDiscard": 0,
+                "PendingTruncate": 0,
+                "StreamingError": 0,
+                "StreamingSource": 4,
+                "StreamingTarget": 6,
+                "Unset": 0
+             },
+             "summary_replication_count": 0,
+             "transient_job_count": 0
+          }
+       },
+       {
+          "name": "FCE8B198-DD45-4D79-A2B8-8663836713FC",
+          "id": "https://splunk-cm-cluster-master-service.default:8089/services/cluster/manager/peers/FCE8B198-DD45-4D79-A2B8-8663836713FC",
+          "updated": "1970-01-01T00:00:00+00:00",
+          "links": {
+             "alternate": "/services/cluster/manager/peers/FCE8B198-DD45-4D79-A2B8-8663836713FC",
+             "list": "/services/cluster/manager/peers/FCE8B198-DD45-4D79-A2B8-8663836713FC",
+             "edit": "/services/cluster/manager/peers/FCE8B198-DD45-4D79-A2B8-8663836713FC"
+          },
+          "author": "system",
+          "acl": {
+             "app": "",
+             "can_list": true,
+             "can_write": true,
+             "modifiable": false,
+             "owner": "system",
+             "perms": {
+                "read": [
+                   "admin",
+                   "splunk-system-role"
+                ],
+                "write": [
+                   "admin",
+                   "splunk-system-role"
+                ]
+             },
+             "removable": false,
+             "sharing": "system"
+          },
+          "content": {
+             "active_bundle_id": "7351975980A20311463444E66492BDD5",
+             "apply_bundle_status": {
+                "invalid_bundle": {
+                   "bundle_validation_errors": [],
+                   "invalid_bundle_id": ""
+                },
+                "reasons_for_restart": [],
+                "restart_required_for_apply_bundle": false,
+                "status": "None"
+             },
+             "base_generation_id": 25,
+             "batched_replication_count": 0,
+             "bucket_count": 30,
+             "bucket_count_by_index": {
+                "_audit": 10,
+                "_internal": 18,
+                "_telemetry": 2
+             },
+             "buckets_rf_by_origin_site": {
+                "default": 3,
+                "site1": 19,
+                "site2": 8
+             },
+             "buckets_sf_by_origin_site": {
+                "default": 3,
+                "site1": 18,
+                "site2": 5
+             },
+             "eai:acl": null,
+             "fixup_set": [],
+             "heartbeat_started": true,
+             "host_port_pair": "192.168.53.162:8089",
+             "indexing_disk_space": 15719145472,
+             "is_searchable": true,
+             "is_valid_bundle": true,
+             "label": "splunk-example-site1-indexer-2",
+             "last_dry_run_bundle": "",
+             "last_heartbeat": 1658390158,
+             "last_validated_bundle": "7351975980A20311463444E66492BDD5",
+             "latest_bundle_id": "7351975980A20311463444E66492BDD5",
+             "merging_mode": false,
+             "peer_registered_summaries": true,
+             "pending_job_count": 0,
+             "primary_count": 23,
+             "primary_count_remote": 194,
+             "register_search_address": "192.168.53.162:8089",
+             "replication_count": 0,
+             "replication_port": 9887,
+             "replication_use_ssl": false,
+             "restart_required_for_applying_dry_run_bundle": false,
+             "search_state_counter": {
+                "PendingSearchable": 0,
+                "PendingUnsearchable": 0,
+                "Searchable": 26,
+                "SearchablePendingMask": 0,
+                "Unknown": 0,
+                "Unsearchable": 4
+             },
+             "site": "site1",
+             "splunk_version": "9.0.0",
+             "status": "Up",
+             "status_counter": {
+                "Complete": 24,
+                "NonStreamingTarget": 0,
+                "PendingDiscard": 0,
+                "PendingTruncate": 0,
+                "StreamingError": 0,
+                "StreamingSource": 5,
+                "StreamingTarget": 1,
+                "Unset": 0
+             },
+             "summary_replication_count": 0,
+             "transient_job_count": 0
+          }
+       }
+    ],
+    "paging": {
+       "total": 6,
+       "perPage": 30,
+       "offset": 0
+    },
+    "messages": []
+ }

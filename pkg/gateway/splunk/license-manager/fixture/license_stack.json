@@ -1,0 +1,137 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/licenser/stacks",
+    "updated": "2023-08-01T21:50:11+00:00",
+    "generator": {
+        "build": "e9494146ae5c",
+        "version": "9.0.5"
+    },
+    "entry": [
+        {
+            "name": "enterprise",
+            "id": "https://localhost:8089/services/licenser/stacks/enterprise",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/stacks/enterprise",
+                "list": "/services/licenser/stacks/enterprise"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "cle_active": 1,
+                "eai:acl": null,
+                "is_unlimited": false,
+                "label": "Splunk Internal License DO NOT DISTRIBUTE",
+                "max_retention_size": 0,
+                "max_violations": 45,
+                "quota": 53687091200,
+                "type": "enterprise",
+                "window_period": 60
+            }
+        },
+        {
+            "name": "forwarder",
+            "id": "https://localhost:8089/services/licenser/stacks/forwarder",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/stacks/forwarder",
+                "list": "/services/licenser/stacks/forwarder"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "cle_active": 0,
+                "eai:acl": null,
+                "is_unlimited": false,
+                "label": "Splunk Forwarder",
+                "max_retention_size": 0,
+                "max_violations": 5,
+                "quota": 1048576,
+                "type": "forwarder",
+                "window_period": 30
+            }
+        },
+        {
+            "name": "free",
+            "id": "https://localhost:8089/services/licenser/stacks/free",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/stacks/free",
+                "list": "/services/licenser/stacks/free"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "cle_active": 0,
+                "eai:acl": null,
+                "is_unlimited": false,
+                "label": "Splunk Free",
+                "max_retention_size": 0,
+                "max_violations": 3,
+                "quota": 524288000,
+                "type": "free",
+                "window_period": 30
+            }
+        }
+    ],
+    "paging": {
+        "total": 3,
+        "perPage": 10000000,
+        "offset": 0
+    },
+    "messages": []
+}

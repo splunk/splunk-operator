@@ -18,12 +18,15 @@ package controllers
 
 import (
 	"context"
+	//"github.com/jinzhu/copier"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"time"
 
 	"github.com/pkg/errors"
 	common "github.com/splunk/splunk-operator/controllers/common"
+	provisioner "github.com/splunk/splunk-operator/pkg/provisioner/splunk"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	managermodel "github.com/splunk/splunk-operator/pkg/splunk/model"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,7 +44,8 @@ import (
 // ClusterManagerReconciler reconciles a ClusterManager object
 type ClusterManagerReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme             *runtime.Scheme
+	ProvisionerFactory provisioner.Factory
 }
 
 //+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermanagers,verbs=get;list;watch;create;update;patch;delete
@@ -112,7 +116,26 @@ func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 // ApplyClusterManager adding to handle unit test case
 var ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
-	return enterprise.ApplyClusterManager(ctx, client, instance)
+	// match the provisioner.EventPublisher interface
+	publishEvent := func(ctx context.Context, eventType, reason, message string) {
+		instance.NewEvent(eventType, reason, message)
+	}
+	info := &managermodel.ReconcileInfo{
+		Kind:       instance.Kind,
+		CommonSpec: instance.Spec.CommonSplunkSpec,
+		Client:     client,
+		Log:        log.FromContext(ctx),
+		Namespace:  instance.GetNamespace(),
+		Name:       instance.GetName(),
+		MetaObject: instance,
+	}
+	//copier.Copy(info.MetaObject, instance.ObjectMeta)
+	mg := enterprise.NewManagerFactory(false)
+	manager, err := mg.NewManager(ctx, info, publishEvent)
+	if err != nil {
+		instance.NewEvent("Warning", "ApplyClusterManager", err.Error())
+	}
+	return manager.ApplyClusterManager(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.

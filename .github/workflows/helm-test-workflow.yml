@@ -2,6 +2,7 @@ name: Helm Test WorkFlow
 on:
   push:
     branches:
+      - verify
       - develop
       - main
 jobs:

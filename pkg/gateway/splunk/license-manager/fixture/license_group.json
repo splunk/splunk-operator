@@ -1,0 +1,198 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/licenser/groups",
+    "updated": "2023-08-01T21:47:15+00:00",
+    "generator": {
+        "build": "e9494146ae5c",
+        "version": "9.0.5"
+    },
+    "entry": [
+        {
+            "name": "Enterprise",
+            "id": "https://localhost:8089/services/licenser/groups/Enterprise",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/groups/Enterprise",
+                "list": "/services/licenser/groups/Enterprise",
+                "edit": "/services/licenser/groups/Enterprise"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "is_active": true,
+                "stack_ids": [
+                    "enterprise"
+                ]
+            }
+        },
+        {
+            "name": "Forwarder",
+            "id": "https://localhost:8089/services/licenser/groups/Forwarder",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/groups/Forwarder",
+                "list": "/services/licenser/groups/Forwarder",
+                "edit": "/services/licenser/groups/Forwarder"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "is_active": false,
+                "stack_ids": [
+                    "forwarder"
+                ]
+            }
+        },
+        {
+            "name": "Free",
+            "id": "https://localhost:8089/services/licenser/groups/Free",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/groups/Free",
+                "list": "/services/licenser/groups/Free",
+                "edit": "/services/licenser/groups/Free"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "is_active": false,
+                "stack_ids": [
+                    "free"
+                ]
+            }
+        },
+        {
+            "name": "Lite",
+            "id": "https://localhost:8089/services/licenser/groups/Lite",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/groups/Lite",
+                "list": "/services/licenser/groups/Lite",
+                "edit": "/services/licenser/groups/Lite"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "is_active": false,
+                "stack_ids": []
+            }
+        },
+        {
+            "name": "Lite_Free",
+            "id": "https://localhost:8089/services/licenser/groups/Lite_Free",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/groups/Lite_Free",
+                "list": "/services/licenser/groups/Lite_Free",
+                "edit": "/services/licenser/groups/Lite_Free"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "is_active": false,
+                "stack_ids": []
+            }
+        }
+    ],
+    "paging": {
+        "total": 5,
+        "perPage": 10000000,
+        "offset": 0
+    },
+    "messages": []
+}

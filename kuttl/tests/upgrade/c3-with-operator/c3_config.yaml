@@ -16,6 +16,9 @@ sva:
       searchHeadClusters:
         - name: shc
 
+      licenseManager:
+        - name: lm
+
 
 indexerCluster:
   enabled: true

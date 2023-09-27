@@ -44,6 +44,12 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -161,13 +167,13 @@ func (shcstr *SearchHeadCluster) NewEvent(eventType, reason, message string) cor
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    shcstr.ObjectMeta.Namespace,
+			Namespace:    shcstr.GetNamespace(),
 		},
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "SearchHeadCluster",
-			Namespace:  shcstr.Namespace,
-			Name:       shcstr.Name,
-			UID:        shcstr.UID,
+			Namespace:  shcstr.GetNamespace(),
+			Name:       shcstr.GetName(),
+			UID:        shcstr.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

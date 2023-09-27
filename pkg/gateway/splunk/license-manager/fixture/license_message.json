@@ -1,0 +1,16 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/licenser/messages",
+    "updated": "2023-08-01T21:48:06+00:00",
+    "generator": {
+        "build": "e9494146ae5c",
+        "version": "9.0.5"
+    },
+    "entry": [],
+    "paging": {
+        "total": 0,
+        "perPage": 10000000,
+        "offset": 0
+    },
+    "messages": []
+}

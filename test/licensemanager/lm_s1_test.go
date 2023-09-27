@@ -58,8 +58,7 @@ var _ = Describe("Licensemanager test", func() {
 			// Download License File
 			downloadDir := "licenseFolder"
 			switch testenv.ClusterProvider {
-			case "eks":
-				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
+			case "eks":				licenseFilePath, err := testenv.DownloadLicenseFromS3Bucket()
 				Expect(err).To(Succeed(), "Unable to download license file from S3")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)

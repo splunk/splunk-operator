@@ -46,6 +46,12 @@ type StandaloneSpec struct {
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
@@ -115,13 +121,13 @@ func (standln *Standalone) NewEvent(eventType, reason, message string) corev1.Ev
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    standln.ObjectMeta.Namespace,
+			Namespace:    standln.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Standalone",
-			Namespace:  standln.Namespace,
-			Name:       standln.Name,
-			UID:        standln.UID,
+			Kind:       "SearchHeadCluster",
+			Namespace:  standln.GetNamespace(),
+			Name:       standln.GetName(),
+			UID:        standln.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

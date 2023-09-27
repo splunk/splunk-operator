@@ -1,0 +1,48 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/licenser/usage",
+    "updated": "2023-08-01T21:50:49+00:00",
+    "generator": {
+        "build": "e9494146ae5c",
+        "version": "9.0.5"
+    },
+    "entry": [
+        {
+            "name": "license_usage",
+            "id": "https://localhost:8089/services/licenser/usage/license_usage",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/services/licenser/usage/license_usage",
+                "list": "/services/licenser/usage/license_usage"
+            },
+            "author": "system",
+            "acl": {
+                "app": "",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "system",
+                "perms": {
+                    "read": [
+                        "*"
+                    ],
+                    "write": []
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "eai:acl": null,
+                "peers_usage_bytes": 0,
+                "quota": 53687091200,
+                "slaves_usage_bytes": 0
+            }
+        }
+    ],
+    "paging": {
+        "total": 1,
+        "perPage": 10000000,
+        "offset": 0
+    },
+    "messages": []
+}

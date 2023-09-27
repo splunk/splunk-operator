@@ -1,0 +1,65 @@
+{
+    "links": {},
+    "origin": "https://localhost:8089/services/licenser/peers",
+    "updated": "2023-08-01T21:48:40+00:00",
+    "generator": {
+        "build": "e9494146ae5c",
+        "version": "9.0.5"
+    },
+    "entry": [
+        {
+            "name": "A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+            "id": "https://localhost:8089/servicesNS/nobody/system/licenser/peers/A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/servicesNS/nobody/system/licenser/peers/A7E343C4-26D4-47A8-86F4-56B3CAD86721",
+                "list": "/servicesNS/nobody/system/licenser/peers/A7E343C4-26D4-47A8-86F4-56B3CAD86721"
+            },
+            "author": "nobody",
+            "acl": {
+                "app": "system",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "nobody",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "active_pool_ids": [
+                    "auto_generated_pool_enterprise"
+                ],
+                "eai:acl": null,
+                "label": "splunk-lm-license-manager-0",
+                "pool_ids": [
+                    "auto_generated_pool_enterprise",
+                    "auto_generated_pool_forwarder",
+                    "auto_generated_pool_free"
+                ],
+                "pool_suggestion": null,
+                "stack_ids": [
+                    "enterprise",
+                    "forwarder",
+                    "free"
+                ],
+                "warning_count": 0
+            }
+        }
+    ],
+    "paging": {
+        "total": 1,
+        "perPage": 0,
+        "offset": 0
+    },
+    "messages": []
+}

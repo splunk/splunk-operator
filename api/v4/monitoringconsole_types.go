@@ -58,6 +58,12 @@ type MonitoringConsoleStatus struct {
 
 	// App Framework status
 	AppContext AppDeploymentContext `json:"appContext,omitempty"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -99,13 +105,13 @@ func (mcnsl *MonitoringConsole) NewEvent(eventType, reason, message string) core
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    mcnsl.ObjectMeta.Namespace,
+			Namespace:    mcnsl.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "MonitoringConsole",
-			Namespace:  mcnsl.Namespace,
-			Name:       mcnsl.Name,
-			UID:        mcnsl.UID,
+			Kind:       "SearchHeadCluster",
+			Namespace:  mcnsl.GetNamespace(),
+			Name:       mcnsl.GetName(),
+			UID:        mcnsl.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

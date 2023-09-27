@@ -32,6 +32,9 @@ const (
 	// ClusterManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
 	ClusterManagerPausedAnnotation = "clustermanager.enterprise.splunk.com/paused"
+	// ClusterManagerPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// an immediate requeue)
+	ClusterManagerMaintenanceAnnotation = "clustermanager.enterprise.splunk.com/maintenance"
 )
 
 // ClusterManagerSpec defines the desired state of ClusterManager
@@ -67,6 +70,15 @@ type ClusterManagerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Indicates if the cluster is in maintenance mode.
+	MaintenanceMode bool `json:"maintenanceMode"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // BundlePushInfo Indicates if bundle push required
@@ -116,13 +128,13 @@ func (cmstr *ClusterManager) NewEvent(eventType, reason, message string) corev1.
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    cmstr.ObjectMeta.Namespace,
+			Namespace:    cmstr.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Clustermanager",
-			Namespace:  cmstr.Namespace,
-			Name:       cmstr.Name,
-			UID:        cmstr.UID,
+			Kind:       "ClusterManager",
+			Namespace:  cmstr.GetNamespace(),
+			Name:       cmstr.GetName(),
+			UID:        cmstr.GetUID(),
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

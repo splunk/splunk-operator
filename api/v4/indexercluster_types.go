@@ -61,6 +61,12 @@ type IndexerClusterMemberStatus struct {
 
 	// Flag indicating if this peer belongs to the current committed generation and is searchable.
 	Searchable bool `json:"is_searchable"`
+
+	// Conditions represent the latest available observations of an object's state
+	Conditions []metav1.Condition `json:"conditions"`
+
+	// ErrorMessage shows current error if there are any
+	ErrorMessage string `json:"errorMessage"`
 }
 
 // IndexerClusterStatus defines the observed state of a Splunk Enterprise indexer cluster
@@ -152,7 +158,7 @@ func (icstr *IndexerCluster) NewEvent(eventType, reason, message string) corev1.
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    icstr.ObjectMeta.Namespace,
+			Namespace:    icstr.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "IndexerCluster",

@@ -1129,7 +1129,8 @@ func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
 	}
 
 	err := client.Create(ctx, &cm)
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	manager := setCreds(t, client, &cm, cm.Spec.CommonSplunkSpec)
+	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
@@ -1161,6 +1162,9 @@ func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
 	}
 
 	err = client.Create(ctx, &mc)
+	if err != nil {
+		t.Errorf("applyMonitoringConsole create mc failed error; err=%v", err)
+	}
 	_, err = ApplyMonitoringConsole(ctx, client, &mc)
 	if err != nil {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
@@ -1168,7 +1172,7 @@ func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
 
 	mc.Spec.Image = "splunk2"
 	cm.Spec.Image = "splunk2"
-	_, err = ApplyClusterManager(ctx, client, &cm)
+	_, err = manager.ApplyClusterManager(ctx, client, &cm)
 
 	monitoringConsole := &enterpriseApi.MonitoringConsole{}
 	namespacedName := types.NamespacedName{
@@ -1235,7 +1239,8 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 
 	// Create the instances
 	client.Create(ctx, cm)
-	_, err := ApplyClusterManager(ctx, client, cm)
+	manager := setCreds(t, client, cm, cm.Spec.CommonSplunkSpec)
+	_, err := manager.ApplyClusterManager(ctx, client, cm)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}

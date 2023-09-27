@@ -55,12 +55,17 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	// based on the custom resource instance type find name, type and create new event
 	switch v := k.instance.(type) {
 	case *enterpriseApi.Standalone:
-	case *enterpriseApiV3.LicenseMaster:
+		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApi.LicenseManager:
+		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApi.IndexerCluster:
+		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApi.ClusterManager:
+		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApiV3.ClusterMaster:
+		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApi.MonitoringConsole:
+		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApi.SearchHeadCluster:
 		event = v.NewEvent(eventType, reason, message)
 	default:

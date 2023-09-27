@@ -76,6 +76,28 @@ const (
 	TmpAppDownloadDir string = "/tmp/appframework/"
 )
 
+func GetInstantTypeFromKind(kind string) InstanceType {
+	switch kind {
+	case "ClusterManager":
+		return SplunkClusterManager
+	case "ClusterMaster":
+		return SplunkClusterManager
+	case "LicenseMaster":
+		return SplunkLicenseManager
+	case "LicenseManager":
+		return SplunkLicenseManager
+	case "IndexerCluster":
+		return SplunkIndexer
+	case "MonitoringConsole":
+		return SplunkMonitoringConsole
+	case "SearchHeadCluster":
+		return SplunkSearchHead
+	case "Standalone":
+		return SplunkStandalone
+	}
+	return SplunkClusterManager
+}
+
 type commonResourceTracker struct {
 	// mutex to serialize the access to commonResourceTracker
 	mutex sync.Mutex

@@ -1,0 +1,156 @@
+{
+    "links": {
+        "create": "/services/licenser/pools/_new",
+        "_reload": "/services/licenser/pools/_reload",
+        "_acl": "/services/licenser/pools/_acl"
+    },
+    "origin": "https://localhost:8089/services/licenser/pools",
+    "updated": "2023-08-01T21:49:16+00:00",
+    "generator": {
+        "build": "e9494146ae5c",
+        "version": "9.0.5"
+    },
+    "entry": [
+        {
+            "name": "auto_generated_pool_enterprise",
+            "id": "https://localhost:8089/servicesNS/nobody/system/licenser/pools/auto_generated_pool_enterprise",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_enterprise",
+                "list": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_enterprise",
+                "_reload": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_enterprise/_reload",
+                "edit": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_enterprise",
+                "remove": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_enterprise"
+            },
+            "author": "nobody",
+            "acl": {
+                "app": "system",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "nobody",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "description": "auto_generated_pool_enterprise",
+                "eai:acl": null,
+                "effective_quota": 53687091200,
+                "is_unlimited": false,
+                "peers": [],
+                "peers_usage_bytes": null,
+                "quota": "MAX",
+                "slaves": [],
+                "slaves_usage_bytes": null,
+                "stack_id": "enterprise",
+                "used_bytes": 0
+            }
+        },
+        {
+            "name": "auto_generated_pool_forwarder",
+            "id": "https://localhost:8089/servicesNS/nobody/system/licenser/pools/auto_generated_pool_forwarder",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_forwarder",
+                "list": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_forwarder",
+                "_reload": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_forwarder/_reload",
+                "edit": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_forwarder",
+                "remove": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_forwarder"
+            },
+            "author": "nobody",
+            "acl": {
+                "app": "system",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "nobody",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "description": "auto_generated_pool_forwarder",
+                "eai:acl": null,
+                "effective_quota": 1048576,
+                "is_unlimited": false,
+                "peers": [],
+                "peers_usage_bytes": null,
+                "quota": "MAX",
+                "slaves": [],
+                "slaves_usage_bytes": null,
+                "stack_id": "forwarder",
+                "used_bytes": 0
+            }
+        },
+        {
+            "name": "auto_generated_pool_free",
+            "id": "https://localhost:8089/servicesNS/nobody/system/licenser/pools/auto_generated_pool_free",
+            "updated": "1970-01-01T00:00:00+00:00",
+            "links": {
+                "alternate": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_free",
+                "list": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_free",
+                "_reload": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_free/_reload",
+                "edit": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_free",
+                "remove": "/servicesNS/nobody/system/licenser/pools/auto_generated_pool_free"
+            },
+            "author": "nobody",
+            "acl": {
+                "app": "system",
+                "can_list": true,
+                "can_write": true,
+                "modifiable": false,
+                "owner": "nobody",
+                "perms": {
+                    "read": [
+                        "admin",
+                        "splunk-system-role"
+                    ],
+                    "write": [
+                        "admin",
+                        "splunk-system-role"
+                    ]
+                },
+                "removable": false,
+                "sharing": "system"
+            },
+            "content": {
+                "description": "auto_generated_pool_free",
+                "eai:acl": null,
+                "effective_quota": 524288000,
+                "is_unlimited": false,
+                "peers": [],
+                "peers_usage_bytes": null,
+                "quota": "MAX",
+                "slaves": [],
+                "slaves_usage_bytes": null,
+                "stack_id": "free",
+                "used_bytes": 0
+            }
+        }
+    ],
+    "paging": {
+        "total": 3,
+        "perPage": 10000000,
+        "offset": 0
+    },
+    "messages": []
+}
