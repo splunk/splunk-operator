@@ -49,10 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: unit-tests
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
-      S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
+      ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+      S3_REGION: ${{ env.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
