@@ -94,11 +94,11 @@ jobs:
   vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
-    env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
-      S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
+    #env:
+    #  SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
+    #  SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+    #  ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
+    #  S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -145,8 +145,8 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
+      #SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
+      #SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
@@ -157,9 +157,9 @@ jobs:
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
-      ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
-      PRIVATE_REGISTRY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
-      S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
+      #ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
+      #PRIVATE_REGISTRY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
+      #S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
