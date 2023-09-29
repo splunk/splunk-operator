@@ -48,10 +48,10 @@ jobs:
   build-operator-image:
     runs-on: ubuntu-latest
     needs: unit-tests
-    #env:
+    env:
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
     #  SPLUNK_ENTERPRISE_IMAGE: ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
     #  SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-    #  ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
     #  S3_REGION: ${{ env.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
@@ -86,18 +86,18 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Make Splunk Operator Image
       run: |
-        make docker-build IMG=${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Push Splunk Operator Image to ECR
       run: |
         echo "Uploading Image to ECR:: ${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push IMG=${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
     #env:
     #  SPLUNK_ENTERPRISE_IMAGE: ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
     #  SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-    #  ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
+    #  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
     #  S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
     steps:
     - uses: actions/checkout@v2
@@ -116,11 +116,11 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Pull Splunk Operator Image Locally
       run: |
-        docker pull ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Setup clair scanner
       run: make setup_clair_scanner
     - name: Scan container image
-      run: make run_clair_scan IMG=${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+      run: make run_clair_scan IMG=${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Stop clair scanner
       run: make stop_clair_scanner
     - name: Save scan results as artifacts
@@ -157,8 +157,8 @@ jobs:
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
-      #ECR_REPOSITORY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
-      #PRIVATE_REGISTRY: ${{ steps.dotenv.outputs.ECR_REPOSITORY }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       #S3_REGION: ${{ steps.dotenv.outputs.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
@@ -231,14 +231,14 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       - name: Tag and Push Splunk Enterprise Image to ECR
         run: |
-          docker tag ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }} ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
-          docker push ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
+          docker tag ${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Pull Splunk Operator Image Locally
         run: |
-          docker pull ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Change Operator Image Tag to latest
         run: |
-          docker tag ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
+          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
       - name: Create EKS cluster
         run: |
            export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
@@ -315,9 +315,9 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Pull Splunk Operator Image Locally
       run: |
-        docker pull ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Change Operator Image Tag to latest
       run: |
-        docker tag ${{ steps.dotenv.outputs.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ steps.dotenv.outputs.TAG }}
+        docker tag ${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ steps.dotenv.outputs.TAG }}
     - name: Push Splunk Operator Image to Docker Hub
       run: docker push ${{ steps.dotenv.outputs.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ steps.dotenv.outputs.TAG }}
