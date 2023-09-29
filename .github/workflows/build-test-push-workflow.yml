@@ -133,7 +133,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        splunk_version: [ splunk/splunk:9.0.5, splunk/splunk:9.1.1 ]
+        splunk_version: [ "splunk/splunk:9.0.5", "splunk/splunk:9.1.1" ]
         test: [
                 basic,
                 appframeworks1,
