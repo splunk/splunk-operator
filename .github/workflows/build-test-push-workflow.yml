@@ -142,6 +142,11 @@ jobs:
                 managersecret,
                 managermc,
                ]
+        include:
+          - splunk_version: "splunk/splunk:9.0.5"
+            row: "9-0-5"
+          - splunk_version: "splunk/splunk:9.1.1"
+            row: "9-1-1"
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -168,7 +173,7 @@ jobs:
     steps:
       - name: Set Test Cluster Name
         run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          echo "TEST_CLUSTER_NAME=eks-integration-test-${{ matrix.row }}-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Chekcout code
         uses: actions/checkout@v2
       - name: Dotenv Action
