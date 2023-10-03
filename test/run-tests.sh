@@ -88,6 +88,7 @@ if [  "${CLUSTER_WIDE}" == "true" ]; then
   kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
   if [ $? -ne 0 ]; then
     kubectl get pods -n splunk-operator
+    kubectl describe pvc -n splunk-operator
     echo "Operator installation not ready..."
     exit 1
   fi
