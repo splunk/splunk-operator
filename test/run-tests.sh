@@ -22,7 +22,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull splunk operator if exists locally since we maybe building it locally
-  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
+  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then
     docker pull ${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
      echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
@@ -55,7 +55,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   docker images
 fi
 
-if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then 
+if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   echo "Installing Splunk Operator using Helm charts"
   helm uninstall splunk-operator -n splunk-operator
   if [ "${CLUSTER_WIDE}" != "true" ]; then
@@ -63,14 +63,15 @@ if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   else
     helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
   fi
-elif [  "${CLUSTER_WIDE}" != "true" ]; then 
+elif [  "${CLUSTER_WIDE}" != "true" ]; then
   # Install the CRDs
   echo "Installing enterprise CRDs..."
-  make kustomize 
+  make kustomize
   make uninstall
   bin/kustomize build config/crd | kubectl create -f -
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo 'make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""'
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 
@@ -79,13 +80,14 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-if [  "${CLUSTER_WIDE}" == "true" ]; then 
+if [  "${CLUSTER_WIDE}" == "true" ]; then
   echo "wait for operator pod to be ready..."
   # sleep before checking for deployment, in slow clusters deployment call may not even started
   # in those cases, kubectl will fail with error:  no matching resources found
   sleep 2
   kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
   if [ $? -ne 0 ]; then
+    kubectl get pods -n splunk-operator
     echo "Operator installation not ready..."
     exit 1
   fi
@@ -98,14 +100,14 @@ if [ -z "$rc" ]; then
   go get github.com/onsi/gomega/...
 
   go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
-fi 
+fi
 
 
 echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
 
 
-# Check if test focus is set 
+# Check if test focus is set
 if [[ -z "${TEST_FOCUS}" ]]; then
   TEST_TO_RUN="${TEST_REGEX}"
   echo "Test focus not set running smoke test by default :: ${TEST_TO_RUN}"
