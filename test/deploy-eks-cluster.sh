@@ -35,7 +35,7 @@ function deleteCluster() {
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
     return 1
   fi
-  rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
+  rolename=$(echo ${TEST_CLUSTER_NAME} |  awk -F- '{print "EBS_" $(NF-1) "_" $(NF-4) "_" $(NF-3) "_" $(NF-2) "_" $(NF)}')
   role_attached_policies=$(aws iam list-attached-role-policies --role-name $rolename --query 'AttachedPolicies[*].PolicyArn' --output text)
   for policy_arn in ${role_attached_policies};
   do
