@@ -1,6 +1,6 @@
 # Getting Started with the Splunk Operator for Kubernetes
 
-The Splunk Operator for Kubernetes enables you to quickly and easily deploy Splunk Enterprise on your choice of private or public cloud provider. The Operator simplifies scaling and management of Splunk Enterprise by automating administrative workflows using Kubernetes best practices. 
+The Splunk Operator for Kubernetes enables you to quickly and easily deploy Splunk Enterprise on your choice of private or public cloud provider. The Operator simplifies scaling and management of Splunk Enterprise by automating administrative workflows using Kubernetes best practices.
 
 The Splunk Operator runs as a container, and uses the Kubernetes [operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) and [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) objects to create and manage a scalable and sustainable Splunk Enterprise environment.
 
@@ -58,8 +58,8 @@ Apps and add-ons can be installed using the Splunk Operator by following the ins
 ### Docker requirements
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.3.0 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.5 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk)
 
 
 All of the Splunk Enterprise images are publicly available on [Docker Hub](https://hub.docker.com/). If your cluster does not have access to pull from Docker Hub, see the [Required Images Documentation](Images.md) page.
@@ -92,7 +92,7 @@ Examples on how to implement these QoS are given at [Examples of Guaranteed and 
 
 
 ### Storage guidelines
-The Splunk Operator uses Kubernetes [Persistent Volume Claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) to store all of your Splunk Enterprise configuration ("$SPLUNK_HOME/etc" path) and event ("$SPLUNK_HOME/var" path) data. If one of the underlying machines fail, Kubernetes will automatically try to recover by restarting the Splunk Enterprise pods on another machine that is able to reuse the same data volumes. This minimizes the maintenance burden on your operations team by reducing the impact of common hardware failures to the equivalent of a service restart. 
+The Splunk Operator uses Kubernetes [Persistent Volume Claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) to store all of your Splunk Enterprise configuration ("$SPLUNK_HOME/etc" path) and event ("$SPLUNK_HOME/var" path) data. If one of the underlying machines fail, Kubernetes will automatically try to recover by restarting the Splunk Enterprise pods on another machine that is able to reuse the same data volumes. This minimizes the maintenance burden on your operations team by reducing the impact of common hardware failures to the equivalent of a service restart.
 The use of Persistent Volume Claims requires that your cluster is configured to support one or more Kubernetes persistent [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/). See the [Setting Up a Persistent Storage for Splunk](StorageClass.md) page for more
 information.
 
@@ -103,7 +103,7 @@ The Kubernetes infrastructure must have access to storage that meets or exceeds 
 
 ### Splunk SmartStore Required
 For production environments, we are requiring the use of Splunk SmartStore. As a Splunk Enterprise deployment's data volume increases, demand for storage typically outpaces demand for compute resources. [Splunk's SmartStore Feature](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) allows you to manage your indexer storage and compute resources in a ___cost-effective___ manner by scaling those resources separately. SmartStore utilizes a fast storage cache on each indexer node to keep recent data locally available for search and keep other data in a remote object store. Look into the [SmartStore Resource Guide](SmartStore.md) document for configuring and using SmartStore through operator.
- 
+
 ## Installing the Splunk Operator
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
@@ -181,11 +181,11 @@ kubectl port-forward splunk-s1-standalone-0 8000
 
 ```
 kubectl delete standalone s1
-``` 
+```
 
 The `Standalone` custom resource is just one of the resources the Splunk Operator provides. You can find more custom resources and the parameters they support on the [Custom Resource Guide](CustomResources.md) page.
 
-For additional deployment examples, including Splunk Enterprise clusters, see the 
+For additional deployment examples, including Splunk Enterprise clusters, see the
 [Configuring Splunk Enterprise Deployments](Examples.md) page.
 
 For additional guidance on making Splunk Enterprise ports accessible outside of Kubernetes, see the [Configuring Ingress](Ingress.md) page.
