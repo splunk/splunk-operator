@@ -11,7 +11,7 @@
 | 9.1.1 |
 
 ### Supported Kubernetes Version
-| Splunk Version|
+| Kubernetes Version|
 | --- |
 | 1.25+ |
 
