@@ -35,9 +35,9 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 ## Prerequisites for the Splunk Operator
 
-### Supported Kubernetes Versions
+## Platform recommendations
 
-- Kubernetes, version 1.20+ and later (x86 64-bit only).
+Please check [release notes](https://github.com/splunk/splunk-operator/releases) for support matrix
 
 The Splunk Operator should work with any [CNCF certified distribution](https://www.cncf.io/certification/software-conformance/) of Kubernetes. We do not have platform recommendations, but this is a table of platforms that our developers, customers, and partners have used successfully with the Splunk Operator.
 
