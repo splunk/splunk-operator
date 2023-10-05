@@ -5,15 +5,15 @@
 * This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
 
 ### Supported Splunk Version
-| Splunk Version|
-| --- |
-| 9.0.6 |
-| 9.1.1 |
+>| Splunk Version|
+>| --- |
+>| 9.0.6 |
+>| 9.1.1 |
 
 ### Supported Kubernetes Version
-| Kubernetes Version|
-| --- |
-| 1.25+ |
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
 
 
 
