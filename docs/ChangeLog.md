@@ -10,7 +10,7 @@
 | 9.0.6 |
 | 9.1.1 |
 
-### Supported Kuberenets Version
+### Supported Kubernetes Version
 | Splunk Version|
 | --- |
 | 1.25+ |

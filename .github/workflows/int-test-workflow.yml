@@ -5,7 +5,6 @@ on:
       - develop
       - main
       - feature**
-      - 2-4-doc-changes
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
