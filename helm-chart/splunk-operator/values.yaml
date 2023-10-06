@@ -1,6 +1,6 @@
 # Splunk image
 image:
-  repository: docker.io/splunk/splunk:9.1.2
+  repository: docker.io/splunk/splunk:9.1.1
 
 # The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC
 # authorization against the Kubernetes API.
