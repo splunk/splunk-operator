@@ -17,13 +17,13 @@ This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported pla
 
 * CSPL-2443: Support private bucket support in Splunk Operator when IRSA used
 
-* Git-1223: Fixed an issue in storageclass in helm chart
-
-* Git-1151: fixed indexer deletion in upgrade scenario
-
 * CSPL-2457: Upgraded Golang to 1.21.1
 
 * CSPL-2459: Upgraded operator-sdk to 1.31.0
+
+* Git-1223: Fixed an issue in Storage Class for splunk operator helm chart
+
+* Git-1151: fixed indexer deletion in upgrade scenario
 
 ### Supported Splunk Version
 >| Splunk Version|
