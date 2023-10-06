@@ -50,7 +50,11 @@ The Splunk Operator should work with any [CNCF certified distribution](https://w
 </table>
 
 ### Splunk Enterprise Compatibility
-Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
+
+Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Splunk Operator can support more than one version of Splunk Enterprise release. Before installing or upgrading the Splunk Operator, review the [release notes](https://github.com/splunk/splunk-operator/releases) to verify version compatibility with Splunk Enterprise releases.
+
+Each release of splunk-operator is preset to latest release mentioned in [release notes](https://github.com/splunk/splunk-operator/releases), if user wants to change that to any release version specified in [release notes](https://github.com/splunk/splunk-operator/releases), they can simply change envionment variable `RELATED_IMAGE_SPLUNK_ENTERPRISE` in splunk-operator deployment manifest file.
+
 
 ### Splunk Apps Installation
 
