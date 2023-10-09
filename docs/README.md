@@ -50,7 +50,11 @@ The Splunk Operator should work with any [CNCF certified distribution](https://w
 </table>
 
 ### Splunk Enterprise Compatibility
-Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Before installing or upgrading the Splunk Operator, review the [Change Log](ChangeLog.md) to verify version compatibility with Splunk Enterprise releases.
+
+Each Splunk Operator release has specific Splunk Enterprise compatibility requirements. Splunk Operator can support more than one version of Splunk Enterprise release. Before installing or upgrading the Splunk Operator, review the [release notes](https://github.com/splunk/splunk-operator/releases) to verify version compatibility with Splunk Enterprise releases.
+
+Each release of splunk-operator is preset to latest release mentioned in [release notes](https://github.com/splunk/splunk-operator/releases), if user wants to change that to any release version specified in [release notes](https://github.com/splunk/splunk-operator/releases), they can simply change envionment variable `RELATED_IMAGE_SPLUNK_ENTERPRISE` in splunk-operator deployment manifest file.
+
 
 ### Splunk Apps Installation
 
@@ -109,12 +113,12 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.3.0/splunk-operator-namespace.yaml --server-side  --force-conflicts
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.4.0/splunk-operator-namespace.yaml --server-side  --force-conflicts
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.3.0/splunk-operator-cluster.yaml --server-side  --force-conflicts
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.4.0/splunk-operator-cluster.yaml --server-side  --force-conflicts
 ```
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.

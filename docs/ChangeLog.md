@@ -2,8 +2,7 @@
 
 ## 2.4.0 (2023-10-13)
 
-This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
-
+* This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
 
 * CSPL-2481: fixed splunk operator usage examples
 
@@ -21,9 +20,16 @@ This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported pla
 
 * CSPL-2459: Upgraded operator-sdk to 1.31.0
 
+* CSPL-2409: Splunk Operator for Kubernetes reorders environment variables
+
 * Git-1223: Fixed an issue in Storage Class for splunk operator helm chart
 
 * Git-1151: fixed indexer deletion in upgrade scenario
+
+* Fixed auth proxy service selector labels
+
+* Host multiple splunk operator helm charts on github.io
+
 
 ### Supported Splunk Version
 >| Splunk Version|
