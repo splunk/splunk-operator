@@ -28,7 +28,7 @@
 
 * Fixed auth proxy service selector labels
 
-* host multiple splunk operator helm charts on github.io
+* Host multiple splunk operator helm charts on github.io
 
 
 ### Supported Splunk Version
