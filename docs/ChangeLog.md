@@ -1,5 +1,43 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.4.0 (2023-10-13)
+
+This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+
+* CSPL-2481: fixed splunk operator usage examples
+
+* CSPL-2399: fixed issue where pods are being stucked in Terminating state
+
+* CSPL-2482: Documents updates related to splunk-ansible
+
+* CSPL-2483: Support for additional labels to operator pod in splunk operator helm chart
+
+* CSPL-2480: Support helm flow control to restrict volume values added to deployment template when using PVC
+
+* CSPL-2443: Support private bucket support in Splunk Operator when IRSA used
+
+* CSPL-2457: Upgraded Golang to 1.21.1
+
+* CSPL-2459: Upgraded operator-sdk to 1.31.0
+
+* Git-1223: Fixed an issue in Storage Class for splunk operator helm chart
+
+* Git-1151: fixed indexer deletion in upgrade scenario
+
+### Supported Splunk Version
+>| Splunk Version|
+>| --- |
+>| 9.0.6 |
+>| 9.1.1 |
+
+### Supported Kubernetes Version
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
+
+
+
 ## 2.3.0 (2023-06-28)
 
 * This is the 2.3.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
