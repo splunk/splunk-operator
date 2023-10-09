@@ -26,11 +26,9 @@
 
 * Git-1151: fixed indexer deletion in upgrade scenario
 
-* fix indentation for replicas. resolves
+* Fixed auth proxy service selector labels
 
-* fix: Fixes auth proxy service selector labels
-
-* host multiple splunk operator helm chart on github.io
+* host multiple splunk operator helm charts on github.io
 
 
 ### Supported Splunk Version
