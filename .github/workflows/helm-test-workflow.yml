@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - promote-develop-to-main-2.4.0
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
