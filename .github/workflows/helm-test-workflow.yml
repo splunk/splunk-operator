@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - devlop-helm-test-fix
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
