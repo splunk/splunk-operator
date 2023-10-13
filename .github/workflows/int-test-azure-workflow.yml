@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - main
-      - azure-last-changes
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -35,8 +34,6 @@ jobs:
       uses: azure/docker-login@v1
       with:
         login-server: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-        #username: ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }}
-        #password: ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }}
         username: ${{ secrets.AZURE_ACR_DOCKER_USERNAME }}
         password: ${{ secrets.AZURE_ACR_DOCKER_PASSWORD }}
     - name: Make Splunk Operator Image
@@ -174,8 +171,6 @@ jobs:
         uses: azure/docker-login@v1
         with:
           login-server: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-          #username: ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }}
-          #password: ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }}
           username: ${{ secrets.AZURE_ACR_DOCKER_USERNAME }}
           password: ${{ secrets.AZURE_ACR_DOCKER_PASSWORD }}
       - name: Pull Splunk Operator Image Locally
