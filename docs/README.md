@@ -35,7 +35,7 @@ Review the [Change Log](ChangeLog.md) page for a history of changes in each rele
 
 ## Prerequisites for the Splunk Operator
 
-Please check [release notes](https://github.com/splunk/splunk-operator/releases) for support matrix
+Please check [release notes](https://github.com/splunk/splunk-operator/releases) for supportability matrix
 
 ## Platform recommendations
 

@@ -3,8 +3,8 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestSuite
 testDirs:
 - ./kuttl/tests/helm
-parallel: 3
-timeout: 5000
+parallel: 1
+timeout: 7000
 startKIND: false
 artifactsDir: kuttl-artifacts
 kindNodeCache: false
