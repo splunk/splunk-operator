@@ -112,9 +112,13 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 	endpoint = regEndSl[1]
 
 	config := &aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(3),
-		HTTPClient: &httpClient,
+		Region:                        aws.String(region),
+		MaxRetries:                    aws.Int(3),
+		HTTPClient:                    &httpClient,
+		DisableSSL:                    aws.Bool(true),
+		LogLevel:                      aws.LogLevel(aws.LogDebug | aws.LogDebugWithHTTPBody | aws.LogDebugWithRequestErrors | aws.LogDebugWithRequestErrors | aws.LogDebugWithSigning),
+		Logger:                        aws.NewDefaultLogger(),
+		CredentialsChainVerboseErrors: aws.Bool(true),
 	}
 
 	if accessKeyID != "" && secretAccessKey != "" {
