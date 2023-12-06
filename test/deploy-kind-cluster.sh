@@ -10,7 +10,7 @@ function deleteCluster() {
     return 1
   fi
 
-  docker rm -f ${reg_name}  
+  docker rm -f ${reg_name}
   if [ $? -ne 0 ]; then
     echo "Unable to delete private registry - ${reg_name}"
     return 1
@@ -41,7 +41,7 @@ function createCluster() {
     workerNodes="- role: worker"
     for i in $(seq 2 $NUM_WORKERS);do
       workerNodes="${workerNodes}"$'\n'"- role: worker"
-    done    
+    done
 
 # create a cluster with the local registry enabled in containerd
 cat <<EOF | kind create cluster --name "${TEST_CLUSTER_NAME}" --config=-
