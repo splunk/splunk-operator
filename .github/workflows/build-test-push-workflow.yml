@@ -133,7 +133,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        splunk_version: [ "splunk/splunk:9.0.5", "splunk/splunk:9.1.1" ]
+        splunk_version: [ "splunk/splunk:9.0.6", "splunk/splunk:9.1.2" ]
         test: [
                 basic,
                 appframeworks1,
@@ -143,10 +143,10 @@ jobs:
                 managermc,
                ]
         include:
-          - splunk_version: "splunk/splunk:9.0.5"
-            row: "9-0-5"
-          - splunk_version: "splunk/splunk:9.1.1"
-            row: "9-1-1"
+          - splunk_version: "splunk/splunk:9.0.6"
+            row: "9-0-6"
+          - splunk_version: "splunk/splunk:9.1.2"
+            row: "9-1-2"
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
