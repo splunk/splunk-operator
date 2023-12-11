@@ -1,5 +1,10 @@
 # Build the manager binary
-FROM golang:1.21.1 as builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64}  golang:1.21.1 as builder
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -18,11 +23,11 @@ COPY tools/ tools/
 COPY hack hack/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM registry.access.redhat.com/ubi8/ubi:latest
+FROM --platform=${TARGETPLATFORM:-linux/amd64} registry.access.redhat.com/ubi8/ubi:latest
 
 ENV OPERATOR=/manager \
     USER_UID=1001 \
