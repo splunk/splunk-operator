@@ -1283,7 +1283,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	}
 	err = c.Get(ctx, namespacedName, &standalone)
 	if err != nil {
-		t.Errorf("Unexpected get standalone %v", err)
+		t.Errorf("Unexpected get standalone. Error=%v", err)
 		debug.PrintStack()
 	}
 	// simulate Ready state

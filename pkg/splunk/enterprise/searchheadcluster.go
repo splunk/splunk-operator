@@ -560,13 +560,13 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
-// used in mocking this function
+// GetSearchHeadClusterMemberInfo used in mocking this function
 var GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
 	c := mgr.getClient(ctx, n)
 	return c.GetSearchHeadClusterMemberInfo()
 }
 
-// used in mocking this function
+// GetSearchHeadCaptainInfo used in mocking this function
 var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
 	c := mgr.getClient(ctx, n)
 	return c.GetSearchHeadCaptainInfo()

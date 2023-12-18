@@ -1558,7 +1558,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 	err = c.Get(ctx, namespacedName, searchheadcluster)
 	if err != nil {
-		t.Errorf("Unexpected get search head cluster %v", err)
+		t.Errorf("Unexpected get search head cluster. Error=%v", err)
 		debug.PrintStack()
 	}
 	// simulate Ready state
@@ -1887,8 +1887,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	// call reconciliation
 	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework  %v", err)
-		debug.PrintStack()
+		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework. Error=%v", err)
 	}
 }
 
@@ -1933,7 +1932,6 @@ func TestIsSearchHeadReadyForUpgrade(t *testing.T) {
 	err = client.Status().Update(ctx, &mc)
 	if err != nil {
 		t.Errorf("Unexpected status update  %v", err)
-		debug.PrintStack()
 	}
 
 	// Create Search Head Cluster

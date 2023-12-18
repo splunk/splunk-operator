@@ -882,7 +882,7 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	}
 	err = c.Get(ctx, namespacedName, monitoringconsole)
 	if err != nil {
-		t.Errorf("Unexpected get monitoring console %v", err)
+		t.Errorf("Unexpected get monitoring console. Error = %v", err)
 		debug.PrintStack()
 	}
 	// simulate Ready state

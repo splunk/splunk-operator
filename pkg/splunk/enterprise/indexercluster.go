@@ -35,6 +35,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -217,7 +218,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mismatch for indexer cluster and indexer container, delete statefulset failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mismatch for indexer cluster and indexer container, delete statefulset failed. Error=%s", err.Error()))
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
 			return result, err
 		}
@@ -1154,7 +1155,7 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 	cm := mgr.getClusterManagerClient(ctx)
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		return false, fmt.Errorf("could not get cluster info from cluster manager")
+		return false, fmt.Errorf("could not get cluster info from cluster manager. Error=%s", err.Error())
 	}
 	if clusterInfo.MultiSite == "true" {
 		opts := []rclient.ListOption{
@@ -1193,7 +1194,7 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 	}
 	searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
 	if err != nil {
-		if err.Error() == "NotFound" {
+		if k8serrors.IsNotFound(err) {
 			return true, nil
 		}
 		return false, err
