@@ -1,6 +1,6 @@
 # Splunk image
 image:
-  repository: docker.io/splunk/splunk:9.0.5
+  repository: docker.io/splunk/splunk:9.1.1
 
 # The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC
 # authorization against the Kubernetes API.
@@ -50,6 +50,9 @@ splunkOperator:
 
   # Add pod annotations to Splunk Operator deployment pod
   podAnnotations: {}
+
+  # Add pod labels to Splunk Operator deployment pod
+  podLabels: {}
 
   # Set security context for manager container, default ensures that no child process of manager can gain more privileges than manager
   # reference: https://kubernetes.io/docs/concepts/security/pod-security-policy/#privilege-escalation

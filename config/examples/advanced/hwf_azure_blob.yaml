@@ -9,7 +9,7 @@ spec:
     name: cm-example
   licenseManagerRef:
     name: lm-example
-    replicas: 1
+  replicas: 1
   appRepo:
     appsRepoPollIntervalSeconds: 600
     defaults:

@@ -45,7 +45,9 @@ Limitation: all the IndexerCluster resources must be located in the same namespa
 
 #### Deploy the cluster-manager
 
-Note: the image version is defined in these resources as this allows to control the upgrade cycle 
+Note: 
+* The image version is defined in these resources as this allows to control the upgrade cycle
+* For all available default parameters refer to [splunk-ansible default.yml.spec.md](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md)
 
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -
@@ -133,6 +135,7 @@ Additional ansible default parameters must be set to activate multisite:
 * `multisite_master`: which should reference the cluster-manager service of the target indexer cluster
 * `site`: which should in general be set to `site: site0` to disable search affinity ([documentation for more details]
 (https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/DeploymultisiteSHC#Integrate_a_search_head_cluster_with_a_multisite_indexer_cluster))
+* For all available default parameters refer to [splunk-ansible default.yml.spec.md](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md)
 
 ```yaml
 cat <<EOF | kubectl apply -n splunk-operator -f -

@@ -322,7 +322,7 @@ spec:
   serviceTemplate:
     spec:
       ports:
-      - name: splunktest
+      - name: tls-splunktest
         port: 9998
         protocol: TCP
         targetPort: 9998

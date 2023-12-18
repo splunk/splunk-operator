@@ -187,11 +187,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	for _, v := range statefulsetPods.Items {
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
-				previousImage := v.Spec.Containers[0].Image
-				currentImage := cr.Spec.Image
 				// get the pod image name
-				if strings.HasPrefix(previousImage, "8") &&
-					strings.HasPrefix(currentImage, "9") {
+				if imageUpdatedTo9(v.Spec.Containers[0].Image, cr.Spec.Image) {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
@@ -442,11 +439,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	for _, v := range statefulsetPods.Items {
 		for _, owner := range v.GetOwnerReferences() {
 			if owner.UID == statefulSet.UID {
-				previousImage := v.Spec.Containers[0].Image
-				currentImage := cr.Spec.Image
 				// get the pod image name
-				if strings.HasPrefix(previousImage, "8") &&
-					strings.HasPrefix(currentImage, "9") {
+				if imageUpdatedTo9(v.Spec.Containers[0].Image, cr.Spec.Image) {
 					// image do not match that means its image upgrade
 					versionUpgrade = true
 					break
@@ -1234,4 +1228,15 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 		return false, nil
 	}
 	return true, nil
+}
+
+// Tells if there is an image migration from 8.x.x to 9.x.x
+func imageUpdatedTo9(previousImage string, currentImage string) bool {
+	// If there is no colon, version can't be detected
+	if !strings.Contains(previousImage, ":") || !strings.Contains(currentImage, ":") {
+		return false
+	}
+	previousVersion := strings.Split(previousImage, ":")[1]
+	currentVersion := strings.Split(currentImage, ":")[1]
+	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
 }

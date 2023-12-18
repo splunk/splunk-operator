@@ -2,15 +2,15 @@
 
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:
 
-* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator) (2.3.0 or later)
-* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk) (9.0.5 or later)
+* `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator)
+* `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk)
 
 All of these images are publicly available, and published on [Docker Hub](https://hub.docker.com/).
 
-If your cluster does not have access to pull directly from Docker Hub, you will need to manually download and push these images to an accessible registry. You will also need to specify the location of these images by using an environment variable passed to the Operator, or by adding additional `spec` parameters to your 
+If your cluster does not have access to pull directly from Docker Hub, you will need to manually download and push these images to an accessible registry. You will also need to specify the location of these images by using an environment variable passed to the Operator, or by adding additional `spec` parameters to your
 custom resource definition.
 
-Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image` custom resource parameter to change the location of your Splunk Enterprise image. 
+Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image` custom resource parameter to change the location of your Splunk Enterprise image.
 
 For additional detail, see the [Advanced Installation Instructions](Install.md) page, and the [Custom Resource Guide](CustomResources.md) page.
 
@@ -19,7 +19,7 @@ For additional detail, see the [Advanced Installation Instructions](Install.md) 
 
 If your Kubernetes workers have access to pull from a private registry, it is easy to retag and push the required images to directly to your private registry.
 
-An example of tagging with an Amazon Elastic Container Registry: 
+An example of tagging with an Amazon Elastic Container Registry:
 
 ```
 $(aws ecr get-login --no-include-email --region us-west-2)
@@ -63,7 +63,7 @@ docker load -i splunk-operator.tar.gz
 
 ## A simple script to push images
 
-The script `build/push_images.sh`  is included to push Docker images to multiple remote hosts using SSH. The script takes the name of a container and an image path, and pushes the image to all the entries in `push_targets`. 
+The script `build/push_images.sh`  is included to push Docker images to multiple remote hosts using SSH. The script takes the name of a container and an image path, and pushes the image to all the entries in `push_targets`.
 
 To use the script:
 
