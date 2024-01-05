@@ -17,7 +17,7 @@ spec:
     matchLabels:
       control-plane: controller-manager
       name: splunk-operator
-  strategy: 
+  strategy:
     type: Recreate
   replicas: 1
   template:
@@ -36,6 +36,8 @@ spec:
       hostNetwork: false
       hostPID: false
       hostIPC: false
+      imagePullSecrets:
+        - name: docker-registry
       containers:
       - command:
         - /manager
@@ -54,6 +56,13 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           runAsNonRoot: true
+          capabilities:
+            drop:
+              - "ALL"
+            add:
+              - "NET_BIND_SERVICE"
+          seccompProfile:
+            type: "RuntimeDefault"
         livenessProbe:
           httpGet:
             path: /healthz
