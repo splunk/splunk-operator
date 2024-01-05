@@ -9,7 +9,7 @@ metadata:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- with .Values.licenseManager.additionalAnnotations }}
-    annotations:
+  annotations:
 {{ toYaml . | indent 4 }}
   {{- end }}
 spec:
