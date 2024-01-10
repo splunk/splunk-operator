@@ -296,6 +296,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 
 	// Without S3 keys, ApplyClusterManager should fail
+	current.Kind = "ClusterMaster"
 	_, err := ApplyClusterMaster(ctx, client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterMaster should fail without S3 secrets configured")
@@ -351,6 +352,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
+	current.Kind = "ClusterMaster"
 	current.Status.BundlePushTracker.NeedToPushMasterApps = true
 	if _, err = ApplyClusterMaster(context.Background(), client, &current); err != nil {
 		t.Errorf("ApplyClusterMaster() should not have returned error")
@@ -572,6 +574,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
+	cm.Kind = "ClusterMaster"
 	_, err = ApplyClusterMaster(context.Background(), client, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterMaster should not have returned error here.")
@@ -667,6 +670,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
 
+	cm.Kind = "ClusterMaster"
 	_, err = ApplyClusterMaster(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterMaster should not have returned error here.")
