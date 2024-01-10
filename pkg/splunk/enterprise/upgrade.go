@@ -92,7 +92,7 @@ ClusterManager:
 		if licenseManagerRef.Name == "" {
 			return true, nil
 		}
-		namespacedName := types.NamespacedName {
+		namespacedName := types.NamespacedName{
 			Namespace: cr.GetNamespace(),
 			Name:      GetSplunkStatefulsetName(SplunkClusterManager, cr.GetName()),
 		}

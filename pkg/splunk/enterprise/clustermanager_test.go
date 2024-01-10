@@ -138,6 +138,7 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	c := spltest.NewMockClient()
 	_ = errors.New(splcommon.Rerr)
+	current.Kind = "ClusterManager"
 	_, err := ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -204,6 +205,7 @@ func TestApplyClusterManager(t *testing.T) {
 		},
 	}
 
+	current.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -220,6 +222,7 @@ func TestApplyClusterManager(t *testing.T) {
 	current.Spec.SmartStore.VolList[0].SecretRef = "s3-secret"
 	current.Status.SmartStore.VolList[0].SecretRef = "s3-secret"
 	current.Status.ResourceRevMap["s3-secret"] = "v2"
+	current.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -234,6 +237,7 @@ func TestApplyClusterManager(t *testing.T) {
 	c.Create(ctx, &cmap)
 	current.Spec.SmartStore.VolList[0].SecretRef = ""
 	current.Spec.SmartStore.Defaults.IndexAndGlobalCommonSpec.VolName = "msos_s2s3_vol"
+	current.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &current)
 	if err != nil {
 		t.Errorf("Don't expected error here")
@@ -290,6 +294,7 @@ func TestApplyClusterManager(t *testing.T) {
 			},
 		},
 	}
+	current.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -307,6 +312,7 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
+	current.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &current)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -583,6 +589,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 
 	// Without S3 keys, ApplyClusterManager should fail
+	current.Kind = "ClusterManager"
 	_, err := ApplyClusterManager(ctx, client, &current)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail without S3 secrets configured")
@@ -612,6 +619,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
+		current.Kind = "ClusterManager"
 		_, err := ApplyClusterManager(context.Background(), c, cr.(*enterpriseApi.ClusterManager))
 		return err
 	}
@@ -639,6 +647,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
+	current.Kind = "ClusterManager"
 	if _, err = ApplyClusterManager(context.Background(), client, &current); err != nil {
 		t.Errorf("ApplyClusterManager() should not have returned error")
 	}
@@ -866,6 +875,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
+	cm.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(context.Background(), client, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
@@ -960,7 +970,7 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
-
+	cm.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, &cm)
 	if err != nil {
 		t.Errorf("ApplyClusterManager should not have returned error here.")
@@ -1456,6 +1466,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		},
 	}
 
+	cm.Kind = "ClusterManager"
 	err = client.Create(ctx, &cm)
 	_, err = ApplyClusterManager(ctx, client, &cm)
 	if err != nil {
@@ -1586,6 +1597,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		return extraEnv, err
 	}
 
+	cm.Kind = "ClusterManager"
 	client.Create(ctx, cm)
 	_, err = ApplyClusterManager(ctx, client, cm)
 	if err != nil {
@@ -1725,6 +1737,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
 
+	clustermanager.Kind = "ClusterManager"
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, clustermanager)
 
@@ -1770,6 +1783,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
+	clustermanager.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
@@ -1888,6 +1902,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	}
 
 	// call reconciliation
+	clustermanager.Kind = "ClusterManager"
 	_, err = ApplyClusterManager(ctx, c, clustermanager)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
