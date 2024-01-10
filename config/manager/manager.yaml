@@ -36,8 +36,6 @@ spec:
       hostNetwork: false
       hostPID: false
       hostIPC: false
-      imagePullSecrets:
-        - name: docker-registry
       containers:
       - command:
         - /manager
