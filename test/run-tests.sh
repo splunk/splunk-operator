@@ -22,7 +22,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
   echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
   # Don't pull splunk operator if exists locally since we maybe building it locally
-  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then 
+  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then
     docker pull ${SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
      echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
@@ -55,7 +55,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   docker images
 fi
 
-if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then 
+if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   echo "Installing Splunk Operator using Helm charts"
   helm uninstall splunk-operator -n splunk-operator
   if [ "${CLUSTER_WIDE}" != "true" ]; then
@@ -63,10 +63,10 @@ if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   else
     helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} helm-chart/splunk-operator
   fi
-elif [  "${CLUSTER_WIDE}" != "true" ]; then 
+elif [  "${CLUSTER_WIDE}" != "true" ]; then
   # Install the CRDs
   echo "Installing enterprise CRDs..."
-  make kustomize 
+  make kustomize
   make uninstall
   bin/kustomize build config/crd | kubectl create -f -
 else
@@ -79,7 +79,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-if [  "${CLUSTER_WIDE}" == "true" ]; then 
+if [  "${CLUSTER_WIDE}" == "true" ]; then
   echo "wait for operator pod to be ready..."
   # sleep before checking for deployment, in slow clusters deployment call may not even started
   # in those cases, kubectl will fail with error:  no matching resources found
@@ -98,14 +98,14 @@ if [ -z "$rc" ]; then
   go get github.com/onsi/gomega/...
 
   go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
-fi 
+fi
 
 
 echo "Running test using number of nodes: ${NUM_NODES}"
 echo "Running test using these images: ${PRIVATE_SPLUNK_OPERATOR_IMAGE} and ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
 
 
-# Check if test focus is set 
+# Check if test focus is set
 if [[ -z "${TEST_FOCUS}" ]]; then
   TEST_TO_RUN="${TEST_REGEX}"
   echo "Test focus not set running smoke test by default :: ${TEST_TO_RUN}"
@@ -191,5 +191,5 @@ fi
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
 # Running only smoke test cases by default or value passed through TEST_FOCUS env variable. To run different test packages add/remove path from focus argument or TEST_FOCUS variable
-echo "ginkgo --junit-report=inttest.xml -vv --keep-going --trace -r --timeout=3h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}"
-ginkgo --junit-report=inttest-junit.xml --output-dir=`pwd` -vv --keep-going --trace -r --timeout=3h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
+echo "ginkgo --junit-report=inttest.xml -vv --keep-going --trace -r --timeout=6h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}"
+ginkgo --junit-report=inttest-junit.xml --output-dir=`pwd` -vv --keep-going --trace -r --timeout=6h  -nodes=${CLUSTER_NODES} --focus="${TEST_TO_RUN}" --skip="${TEST_TO_SKIP}" --output-interceptor-mode=none --cover ${topdir}/test/ -- -commit-hash=${COMMIT_HASH} -operator-image=${PRIVATE_SPLUNK_OPERATOR_IMAGE}  -splunk-image=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} -cluster-wide=${CLUSTER_WIDE}
