@@ -1097,7 +1097,6 @@ func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *
 func getIndexerClusterSortedSiteList(ctx context.Context, c splcommon.ControllerClient, ref corev1.ObjectReference, indexerList enterpriseApi.IndexerClusterList) (enterpriseApi.IndexerClusterList, error) {
 
 	namespaceList := enterpriseApi.IndexerClusterList{}
-
 	for _, v := range indexerList.Items {
 		if v.Spec.ClusterManagerRef == ref {
 			namespaceList.Items = append(namespaceList.Items, v)
@@ -1141,7 +1140,6 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 
 	// get the clusterManagerRef attached to the instance
 	clusterManagerRef := cr.Spec.ClusterManagerRef
-
 	if mgr.c == nil {
 		mgr.c = c
 	}
@@ -1162,7 +1160,6 @@ func (mgr *indexerClusterPodManager) isIndexerClusterReadyForUpgrade(ctx context
 		sortedList, err := getIndexerClusterSortedSiteList(ctx, c, cr.Spec.ClusterManagerRef, indexerList)
 
 		preIdx := enterpriseApi.IndexerCluster{}
-
 		for i, v := range sortedList.Items {
 			if &v == cr {
 				if i > 0 {

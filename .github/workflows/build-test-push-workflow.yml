@@ -134,7 +134,12 @@ jobs:
       fail-fast: false
       matrix:
         test: [
-                managerappframeworkc3t,
+                basic,
+                appframeworks1,
+                managerappframeworkc3,
+                managerappframeworkm4,
+                managersecret,
+                managermc,
                ]
     runs-on: ubuntu-latest
     env:
