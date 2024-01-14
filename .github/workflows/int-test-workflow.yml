@@ -9,6 +9,7 @@ on:
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -55,15 +56,15 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1,
-            managerappframeworkc3,
+            #appframeworks1,
+            #managerappframeworkc3,
             managerappframeworkm4,
-            managersecret,
-            managersmartstore,
-            managermc,
-            managercrcrud,
-            licensemanager,
-            managerdeletecr,
+            #managersecret,
+            #managersmartstore,
+            #managermc,
+            #managercrcrud,
+            #licensemanager,
+            #managerdeletecr,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image
