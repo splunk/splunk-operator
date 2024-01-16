@@ -1,6 +1,9 @@
+splunk-operator:
+  enabled: true
+
 # Splunk image
 image:
-  repository: docker.io/splunk/splunk:9.1.1
+  repository: docker.io/splunk/splunk:9.1.2
 
 # The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC
 # authorization against the Kubernetes API.
@@ -29,7 +32,7 @@ splunkOperator:
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
   image:
-    repository: docker.io/splunk/splunk-operator:2.3.0
+    repository: docker.io/splunk/splunk-operator:2.5.0
     pullPolicy: IfNotPresent
 
   # Set image pull secrets to pull image from a private registry
@@ -58,6 +61,15 @@ splunkOperator:
   # reference: https://kubernetes.io/docs/concepts/security/pod-security-policy/#privilege-escalation
   containerSecurityContext:
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - "ALL"
+      add:
+        - "NET_BIND_SERVICE"
+    seccompProfile:
+      type: "RuntimeDefault"
 
   # Set security context for Splunk Operator pod
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#podsecuritycontext-v1-core
@@ -128,6 +140,10 @@ splunkOperator:
   # Set duration in seconds the pod needs to terminate gracefully
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#pod-v1-core
   terminationGracePeriodSeconds: 10
+
+  # Set storageClassName for the PersistentVolumeClaim
+  persistentVolumeClaim:
+    storageClassName: "default"
 
   # Specify volumes for Splunk Operator pod, append additional volumes to list
   # reference: https://kubernetes.io/docs/concepts/storage/volumes/

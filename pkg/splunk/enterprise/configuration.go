@@ -1009,6 +1009,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		env = removeDuplicateEnvVars(env)
 	}
 
+	privileged := false
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
@@ -1016,6 +1017,23 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
+		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{
+					"ALL",
+				},
+				Add: []corev1.Capability{
+					"NET_BIND_SERVICE",
+				},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		}
 	}
 }
 
