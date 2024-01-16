@@ -240,7 +240,7 @@ clusterManager:
   # Define affinity scheduling rules
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#affinity-v1-core
   affinity: {}
-    ## Example: schedule Splunk instance pod on a node in zone-1a 
+    ## Example: schedule Splunk instance pod on a node in zone-1a
     # nodeAffinity:
     #   requiredDuringSchedulingIgnoredDuringExecution:
     #     nodeSelectorTerms:
@@ -385,9 +385,9 @@ searchHeadCluster:
     #     endpoint:
     #     region:
     #     secretRef:
- 
+
   volumes: []
- 
+
   licenseUrl: ""
 
   defaultsUrl: ""
@@ -397,8 +397,8 @@ searchHeadCluster:
   defaultsUrlApps: ""
 
   extraEnv: []
-  # - name: 
-  #   value: 
+  # - name:
+  #   value:
 
   livenessInitialDelaySeconds: 300
 
@@ -438,7 +438,7 @@ searchHeadCluster:
     #   cpu: "4"
     # limits:
     #   memory: "12Gi"
-    #   cpu: "24"  
+    #   cpu: "24"
 
   serviceAccount: ""
 
@@ -598,7 +598,7 @@ licenseManager:
     #     endpoint:
     #     region:
     #     secretRef:
-  
+
   volumes: []
   ## Example: mounting volume containing license in Splunk instance pod container
   # - name: licenses
