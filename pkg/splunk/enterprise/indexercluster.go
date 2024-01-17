@@ -1111,6 +1111,7 @@ func getIndexerClusterSortedSiteList(ctx context.Context, c splcommon.Controller
 
 func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) string {
 	defaults := cr.Spec.Defaults
+	// site name starts with site:
 	pattern := `site:\s+(\w+)`
 
 	// Compile the regular expression pattern
