@@ -1033,6 +1033,13 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 
+	// call reconciliation
+	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
+		debug.PrintStack()
+	}
+
 	licenseObjRef := corev1.ObjectReference{
 		Kind:      licensemanager.Kind,
 		Name:      licensemanager.Name,
