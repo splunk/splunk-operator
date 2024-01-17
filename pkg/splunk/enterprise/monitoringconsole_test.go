@@ -72,6 +72,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
@@ -81,15 +82,19 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
+
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
+
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
+
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
@@ -875,7 +880,11 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		Name:      monitoringconsole.Name,
 		Namespace: monitoringconsole.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, monitoringconsole)
+	if err != nil {
+		t.Errorf("Unexpected get monitoring console. Error = %v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	monitoringconsole.Status.Phase = enterpriseApi.PhaseReady
 	monitoringconsole.Spec.ServiceTemplate.Annotations = map[string]string{
@@ -1101,96 +1110,6 @@ func TestGetMonitoringConsoleList(t *testing.T) {
 	}
 }
 
-func TestIsMonitoringConsoleReadyForUpgrade(t *testing.T) {
-	ctx := context.TODO()
-
-	builder := fake.NewClientBuilder()
-	client := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
-
-	// Create Cluster Manager
-	cm := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
-				},
-				Volumes: []corev1.Volume{},
-				MonitoringConsoleRef: corev1.ObjectReference{
-					Name: "test",
-				},
-			},
-		},
-	}
-
-	err := client.Create(ctx, &cm)
-	_, err = ApplyClusterManager(ctx, client, &cm)
-	if err != nil {
-		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
-	}
-	cm.Status.Phase = enterpriseApi.PhaseReady
-	err = client.Status().Update(ctx, &cm)
-	if err != nil {
-		t.Errorf("Unexpected status update  %v", err)
-		debug.PrintStack()
-	}
-
-	// Create Monitoring Console
-	mc := enterpriseApi.MonitoringConsole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.MonitoringConsoleSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
-				},
-				Volumes: []corev1.Volume{},
-				ClusterManagerRef: corev1.ObjectReference{
-					Name: "test",
-				},
-			},
-		},
-	}
-
-	err = client.Create(ctx, &mc)
-	_, err = ApplyMonitoringConsole(ctx, client, &mc)
-	if err != nil {
-		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
-	}
-
-	mc.Spec.Image = "splunk2"
-	cm.Spec.Image = "splunk2"
-	_, err = ApplyClusterManager(ctx, client, &cm)
-
-	monitoringConsole := &enterpriseApi.MonitoringConsole{}
-	namespacedName := types.NamespacedName{
-		Name:      cm.Name,
-		Namespace: cm.Namespace,
-	}
-	err = client.Get(ctx, namespacedName, monitoringConsole)
-	if err != nil {
-		t.Errorf("isMonitoringConsoleReadyForUpgrade should not have returned error=%v", err)
-	}
-
-	check, err := isMonitoringConsoleReadyForUpgrade(ctx, client, monitoringConsole)
-
-	if err != nil {
-		t.Errorf("Unexpected upgradeScenario error %v", err)
-	}
-
-	if !check {
-		t.Errorf("isMonitoringConsoleReadyForUpgrade: MC should be ready for upgrade")
-	}
-}
-
 func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	ctx := context.TODO()
 
@@ -1239,6 +1158,14 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}
+	namespacedName := types.NamespacedName{
+		Name:      cm.Name,
+		Namespace: cm.Namespace,
+	}
+	err = client.Get(ctx, namespacedName, cm)
+	if err != nil {
+		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
+	}
 	cm.Status.Phase = enterpriseApi.PhaseReady
 	err = client.Status().Update(ctx, cm)
 	if err != nil {
@@ -1256,7 +1183,7 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
 	}
 	monitoringConsole := &enterpriseApi.MonitoringConsole{}
-	namespacedName := types.NamespacedName{
+	namespacedName = types.NamespacedName{
 		Name:      cm.Name,
 		Namespace: cm.Namespace,
 	}

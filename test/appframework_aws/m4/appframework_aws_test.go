@@ -2422,14 +2422,14 @@ var _ = Describe("m4appfw test", func() {
 			// Ensure that the Cluster Master goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
+			// Ensure Search Head Cluster go to Ready phase
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
 			// Ensure the Indexers of all sites go to Ready phase
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Ensure Indexer Cluster configured as Multisite
 			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Ensure Search Head Cluster go to Ready phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)

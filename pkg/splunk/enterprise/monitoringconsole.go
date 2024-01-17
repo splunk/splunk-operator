@@ -50,6 +50,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "MonitoringConsole"
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -138,7 +139,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// check if the Monitoring Console is ready for version upgrade, if required
-	continueReconcile, err := isMonitoringConsoleReadyForUpgrade(ctx, client, cr)
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 	if err != nil || !continueReconcile {
 		return result, err
 	}
@@ -155,6 +156,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
+
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -361,65 +363,6 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
-}
-
-// isMonitoringConsoleReadyForUpgrade checks if MonitoringConsole can be upgraded if a version upgrade is in-progress
-// No-operation otherwise; returns bool, err accordingly
-func isMonitoringConsoleReadyForUpgrade(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isMonitoringConsoleReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
-
-	// check if a LicenseManager is attached to the instance
-	clusterManagerRef := cr.Spec.ClusterManagerRef
-	if clusterManagerRef.Name == "" {
-		return true, nil
-	}
-
-	namespacedName := types.NamespacedName{
-		Namespace: cr.GetNamespace(),
-		Name:      GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetName()),
-	}
-
-	// check if the stateful set is created at this instance
-	statefulSet := &appsv1.StatefulSet{}
-	err := c.Get(ctx, namespacedName, statefulSet)
-	if err != nil && k8serrors.IsNotFound(err) {
-		return true, nil
-	}
-
-	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
-	clusterManager := &enterpriseApi.ClusterManager{}
-
-	// get the cluster manager referred in monitoring console
-	err = c.Get(ctx, namespacedName, clusterManager)
-	if err != nil {
-		eventPublisher.Warning(ctx, "isMonitoringConsoleReadyForUpgrade", fmt.Sprintf("Could not find the Cluster Manager. Reason %v", err))
-		scopedLog.Error(err, "Unable to get clusterManager")
-		return true, err
-	}
-
-	cmImage, err := getCurrentImage(ctx, c, cr, SplunkClusterManager)
-	if err != nil {
-		eventPublisher.Warning(ctx, "isMonitoringConsoleReadyForUpgrade", fmt.Sprintf("Could not get the Cluster Manager Image. Reason %v", err))
-		scopedLog.Error(err, "Unable to get clusterManager current image")
-		return false, err
-	}
-
-	mcImage, err := getCurrentImage(ctx, c, cr, SplunkMonitoringConsole)
-	if err != nil {
-		eventPublisher.Warning(ctx, "isMonitoringConsolerReadyForUpgrade", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
-		scopedLog.Error(err, "Unable to get monitoring console current image")
-		return false, err
-	}
-
-	// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
-	// further reconcile operations on MC until CM is ready
-	if (cr.Spec.Image != mcImage) && (clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != cr.Spec.Image) {
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // changeMonitoringConsoleAnnotations updates the splunk/image-tag field of the MonitoringConsole annotations to trigger the reconcile loop

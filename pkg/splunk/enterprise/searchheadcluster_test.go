@@ -68,38 +68,51 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
+
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
+
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 		{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 	}
+
 	createFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
+
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
+
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-search-head-secret-v1"},
@@ -122,8 +135,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[11], funcCalls[15], funcCalls[16]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[5], createFuncCalls[11]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[12], funcCalls[16], funcCalls[17]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[5], createFuncCalls[9]}, "List": {listmockCall[0], listmockCall[0]}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -294,7 +307,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		},
 	}
 	method = "searchHeadClusterPodManager.Update(All pods ready)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseReady, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => transition to detention
@@ -307,7 +320,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	})
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => wait for searches to drain
@@ -315,13 +328,13 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"status":"Up"`, `"status":"ManualDetention"`, 1)
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":0`, `"active_historical_search_count":1`, 1)
 	method = "searchHeadClusterPodManager.Update(Draining Searches)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod needs update => delete pod
 	mockHandlers[0].Body = strings.Replace(mockHandlers[0].Body, `"active_historical_search_count":1`, `"active_historical_search_count":0`, 1)
 	method = "searchHeadClusterPodManager.Update(Delete Pod)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5]}, "Create": {funcCalls[1]}, "Delete": {funcCalls[5]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test pod update finished => release from detention
@@ -334,7 +347,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		Body:   ``,
 	})
 	method = "searchHeadClusterPodManager.Update(Release Quarantine)"
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5], funcCalls[2]}, "Create": {funcCalls[1]}}
 	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseUpdating, statefulSet, wantCalls, nil, statefulSet, pod)
 
 	// test scale down => remove member
@@ -361,6 +374,7 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
@@ -1436,7 +1450,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 
 	// mock new search pod manager
-	newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+	newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 		return searchHeadClusterPodManager{
 			log:     log,
 			cr:      cr,
@@ -1542,7 +1556,11 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		Name:      searchheadcluster.Name,
 		Namespace: searchheadcluster.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, searchheadcluster)
+	if err != nil {
+		t.Errorf("Unexpected get search head cluster. Error=%v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	searchheadcluster.Status.Phase = enterpriseApi.PhaseReady
 	searchheadcluster.Spec.ServiceTemplate.Annotations = map[string]string{
@@ -1869,7 +1887,6 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	// call reconciliation
 	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
 	if err != nil {
-		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework  %v", err)
-		debug.PrintStack()
+		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework. Error=%v", err)
 	}
 }

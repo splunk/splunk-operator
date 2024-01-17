@@ -46,6 +46,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyLicenseManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "LicenseManager"
 
 	// validate and updates defaults for CR
 	err := validateLicenseManagerSpec(ctx, client, cr)

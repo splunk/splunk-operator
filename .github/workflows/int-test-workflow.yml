@@ -5,9 +5,11 @@ on:
       - develop
       - main
       - feature**
+      - testing
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
