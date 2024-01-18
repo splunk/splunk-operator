@@ -5,6 +5,8 @@ splunk-operator:
 
   splunkOperator:
     clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
 
     volumes:
     - name: app-staging

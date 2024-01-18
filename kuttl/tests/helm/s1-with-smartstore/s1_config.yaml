@@ -2,6 +2,8 @@ splunk-operator:
   enabled: true
   splunkOperator:
     clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
 sva:
   s1:
     enabled: true
