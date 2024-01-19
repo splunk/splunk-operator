@@ -49,6 +49,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "SearchHeadCluster"
 
 	// validate and updates defaults for CR
 	err := validateSearchHeadClusterSpec(ctx, client, cr)
@@ -160,6 +161,11 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	if err != nil || !continueReconcile {
+		return result, err
+	}
+
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := deployerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -179,7 +185,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	mgr := newSerachHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newSearchHeadClusterPodManager(client, scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
@@ -247,7 +253,7 @@ type searchHeadClusterPodManager struct {
 }
 
 // newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
-var newSerachHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
+var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 	return searchHeadClusterPodManager{
 		log:             log,
 		cr:              cr,
@@ -553,6 +559,18 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
+// GetSearchHeadClusterMemberInfo used in mocking this function
+var GetSearchHeadClusterMemberInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadClusterMemberInfo, error) {
+	c := mgr.getClient(ctx, n)
+	return c.GetSearchHeadClusterMemberInfo()
+}
+
+// GetSearchHeadCaptainInfo used in mocking this function
+var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterPodManager, n int32) (*splclient.SearchHeadCaptainInfo, error) {
+	c := mgr.getClient(ctx, n)
+	return c.GetSearchHeadCaptainInfo()
+}
+
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	// populate members status using REST API to get search head cluster member info
@@ -564,10 +582,10 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		c := mgr.getClient(ctx, n)
+		//c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
-		memberInfo, err := c.GetSearchHeadClusterMemberInfo()
+		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
 		if err == nil {
 			memberStatus.Status = memberInfo.Status
 			memberStatus.Adhoc = memberInfo.Adhoc
@@ -580,7 +598,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 
 		if err == nil && !gotCaptainInfo {
 			// try querying captain api; note that this should work on any node
-			captainInfo, err := c.GetSearchHeadCaptainInfo()
+			captainInfo, err := GetSearchHeadCaptainInfo(ctx, mgr, n)
 			if err == nil {
 				mgr.cr.Status.Captain = captainInfo.Label
 				mgr.cr.Status.CaptainReady = captainInfo.ServiceReady

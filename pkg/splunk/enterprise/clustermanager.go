@@ -23,6 +23,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -31,6 +32,8 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -47,7 +50,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
-
+	cr.Kind = "ClusterManager"
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -121,7 +124,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, _ := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
+			extraEnv, _ := VerifyCMisMultisiteCall(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
@@ -171,9 +174,15 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	extraEnv, err := VerifyCMisMultisite(ctx, cr, namespaceScopedSecret)
+	extraEnv, err := VerifyCMisMultisiteCall(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
+		return result, err
+	}
+
+	// check if the ClusterManager is ready for version upgrade, if required
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	if err != nil || !continueReconcile {
 		return result, err
 	}
 
@@ -223,6 +232,12 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
+
+		// trigger MonitoringConsole reconcile by changing the splunk/image-tag annotation
+		err = changeMonitoringConsoleAnnotations(ctx, client, cr)
+		if err != nil {
+			return result, err
+		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -416,8 +431,8 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return numOfObjects, nil
 }
 
-// VerifyCMisMultisite checks if its a multisite
-func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+// VerifyCMisMultisite checks if its a multisite used also in mock
+var VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -433,4 +448,71 @@ func VerifyCMisMultisite(ctx context.Context, cr *enterpriseApi.ClusterManager, 
 		extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
 	}
 	return extraEnv, err
+}
+
+// changeClusterManagerAnnotations updates the splunk/image-tag field of the ClusterManager annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong
+func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	clusterManagerInstance := &enterpriseApi.ClusterManager{}
+	if len(cr.Spec.ClusterManagerRef.Name) > 0 {
+		// if the LicenseManager holds the ClusterManagerRef
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      cr.Spec.ClusterManagerRef.Name,
+		}
+		err := c.Get(ctx, namespacedName, clusterManagerInstance)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	} else {
+		// List out all the ClusterManager instances in the namespace
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		objectList := enterpriseApi.ClusterManagerList{}
+		err := c.List(ctx, &objectList, opts...)
+		if err != nil {
+			if err.Error() == "NotFound" {
+				return nil
+			}
+			return err
+		}
+		if len(objectList.Items) == 0 {
+			return nil
+		}
+
+		// check if instance has the required LicenseManagerRef
+		for _, cm := range objectList.Items {
+			if cm.Spec.LicenseManagerRef.Name == cr.GetName() {
+				clusterManagerInstance = &cm
+				break
+			}
+		}
+
+		if len(clusterManagerInstance.GetName()) == 0 {
+			return nil
+		}
+	}
+
+	image, err := getCurrentImage(ctx, c, cr, SplunkLicenseManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not get the LicenseManager Image. Reason %v", err))
+		scopedLog.Error(err, "Get LicenseManager Image failed with", "error", err)
+		return err
+	}
+	err = changeAnnotations(ctx, c, image, clusterManagerInstance)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeClusterManagerAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		scopedLog.Error(err, "ClusterManager types update after changing annotations failed with", "error", err)
+		return err
+	}
+
+	return nil
 }

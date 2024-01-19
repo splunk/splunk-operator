@@ -70,8 +70,8 @@ func TestApplyLicenseManager(t *testing.T) {
 		client.MatchingLabels(labels),
 	}
 	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts}}
-
+		{ListOpts: listOpts},
+	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[10]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[9], funcCalls[11], funcCalls[12]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
@@ -927,7 +927,11 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		Name:      licensemanager.Name,
 		Namespace: licensemanager.Namespace,
 	}
-
+	err = c.Get(ctx, namespacedName, licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected get license manager %v", err)
+		debug.PrintStack()
+	}
 	// simulate Ready state
 	licensemanager.Status.Phase = enterpriseApi.PhaseReady
 	licensemanager.Spec.ServiceTemplate.Annotations = map[string]string{
@@ -1026,6 +1030,13 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 	err = c.Get(ctx, namespacedName, licensemanager)
 	if err != nil {
 		t.Errorf("Unexpected get license manager %v", err)
+		debug.PrintStack()
+	}
+
+	// call reconciliation
+	_, err = ApplyLicenseManager(ctx, c, licensemanager)
+	if err != nil {
+		t.Errorf("Unexpected error while running reconciliation for cluster manager with app framework  %v", err)
 		debug.PrintStack()
 	}
 

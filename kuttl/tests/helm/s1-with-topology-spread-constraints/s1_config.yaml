@@ -4,6 +4,8 @@ splunk-operator:
     serviceAccountName: helm-service-account
   splunkOperator:
     clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
 
 standalone:
   enabled: true
