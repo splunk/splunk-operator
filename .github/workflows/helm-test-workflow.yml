@@ -6,6 +6,7 @@ on:
       - main
       - feature**
       - testing
+      - helm-2-5-fix
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
