@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -49,6 +50,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "MonitoringConsole"
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -136,6 +138,12 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	// check if the Monitoring Console is ready for version upgrade, if required
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+	if err != nil || !continueReconcile {
+		return result, err
+	}
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, 1)
 	if err != nil {
@@ -148,6 +156,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
+
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -354,4 +363,71 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 			}
 		}
 	}
+}
+
+// changeMonitoringConsoleAnnotations updates the splunk/image-tag field of the MonitoringConsole annotations to trigger the reconcile loop
+// on update, and returns error if something is wrong.
+func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
+	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {
+		// if the ClusterManager holds the MonitoringConsoleRef
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      cr.Spec.MonitoringConsoleRef.Name,
+		}
+		err := client.Get(ctx, namespacedName, monitoringConsoleInstance)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	} else {
+		// List out all the MonitoringConsole instances in the namespace
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		objectList := enterpriseApi.MonitoringConsoleList{}
+		err := client.List(ctx, &objectList, opts...)
+		if err != nil {
+			if err.Error() == "NotFound" {
+				return nil
+			}
+			return err
+		}
+		if len(objectList.Items) == 0 {
+			return nil
+		}
+
+		// check if instance has the required ClusterManagerRef
+		for _, mc := range objectList.Items {
+			if mc.Spec.ClusterManagerRef.Name == cr.GetName() {
+				monitoringConsoleInstance = &mc
+				break
+			}
+		}
+
+		if len(monitoringConsoleInstance.GetName()) == 0 {
+			return nil
+		}
+	}
+
+	image, err := getCurrentImage(ctx, client, cr, SplunkClusterManager)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not get the ClusterManager Image. Reason %v", err))
+		scopedLog.Error(err, "Get ClusterManager Image failed with", "error", err)
+		return err
+	}
+	err = changeAnnotations(ctx, client, image, monitoringConsoleInstance)
+	if err != nil {
+		eventPublisher.Warning(ctx, "changeMonitoringConsoleAnnotations", fmt.Sprintf("Could not update annotations. Reason %v", err))
+		scopedLog.Error(err, "MonitoringConsole types update after changing annotations failed with", "error", err)
+		return err
+	}
+
+	return nil
 }

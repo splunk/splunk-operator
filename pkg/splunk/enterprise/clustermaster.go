@@ -48,6 +48,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterMaster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "ClusterMaster"
 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)

@@ -86,11 +86,11 @@ var _ = Describe("licensemaster test", func() {
 			// Ensure that the cluster-master goes to Ready phase
 			testenv.ClusterMasterReady(ctx, deployment, testcaseEnvInst)
 
-			// Ensure indexers go to Ready phase
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure search head cluster go to Ready phase
+			// Ensure Search Head Cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure Indexers go to Ready phase
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())

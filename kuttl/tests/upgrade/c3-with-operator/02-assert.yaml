@@ -1,0 +1,24 @@
+---
+# assert for cluster manager custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-cm-cluster-manager
+status:
+  replicas: 1
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-cm-cluster-manager-secret-v1
