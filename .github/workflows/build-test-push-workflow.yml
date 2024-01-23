@@ -153,7 +153,7 @@ jobs:
       # This regex matches any string not containing smoke keyword
       TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_CLUSTER_PLATFORM: eks
-      EKS_INSTANCE_TYPE: m6g.large
+      EKS_INSTANCE_TYPE: m5.2xlarge
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
