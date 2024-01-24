@@ -6,6 +6,18 @@ CSPL-2155: Support for Level-2 Upgrade Strategy in Splunk Operator
 
 CSPL-2505: Pod Security standard set to restricted mode
 
+### Supported Splunk Version
+>| Splunk Version|
+>| --- |
+>| 9.0.8 |
+>| 9.1.3 |
+
+### Supported Kubernetes Version
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
+
+
 ## 2.4.0 (2023-10-13)
 
 * This is the 2.4.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
