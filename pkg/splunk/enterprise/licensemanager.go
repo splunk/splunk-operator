@@ -46,6 +46,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyLicenseManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "LicenseManager"
 
 	// validate and updates defaults for CR
 	err := validateLicenseManagerSpec(ctx, client, cr)
@@ -172,12 +173,19 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
 		result = *finalResult
+
+		// trigger ClusterManager reconcile by changing the splunk/image-tag annotation
+		err = changeClusterManagerAnnotations(ctx, client, cr)
+		if err != nil {
+			return result, err
+		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+
 	return result, nil
 }
 

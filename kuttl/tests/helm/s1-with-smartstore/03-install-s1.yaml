@@ -2,5 +2,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - command: helm install splunk-s1 $HELM_REPO_PATH/splunk-enterprise -f s1_config.yaml --set splunk-operator.splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMAGE} --set splunk-operator.image.repository=${KUTTL_SPLUNK_ENTERPRISE_IMAGE}
+  - command: helm install splunk-s1 $HELM_REPO_PATH/splunk-enterprise -f s1_config.yaml --set splunk-operator.splunkOperator.image.repository=${KUTTL_SPLUNK_OPERATOR_IMAGE}  --set splunk-operator.splunkOperator.clusterWideAccess=false  --set splunk-operator.splunkOperator.persistentVolumeClaim.storageClassName=gp2 --set splunk-operator.image.repository=${KUTTL_SPLUNK_ENTERPRISE_IMAGE}
     namespaced: true

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +56,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
@@ -93,7 +95,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		Name:      cr.Spec.ClusterManagerRef.Name,
 	}
 	managerIdxCluster := &enterpriseApi.ClusterManager{}
-	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
+	err = client.Get(ctx, namespacedName, managerIdxCluster)
 	if err == nil {
 		// when user creates both cluster manager and index cluster yaml file at the same time
 		// cluser manager status is not yet set so it will be blank
@@ -194,6 +196,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 
+	// check if the IndexerCluster is ready for version upgrade
+	cr.Kind = "IndexerCluster"
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+	if err != nil || !continueReconcile {
+		return result, err
+	}
+
 	// check if version upgrade is set
 	if !versionUpgrade {
 		phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
@@ -205,7 +214,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Delete the statefulset and recreate new one
 		err = client.Delete(ctx, statefulSet)
 		if err != nil {
-			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mitmatch for indexer clustre and indexer container, delete statefulset failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("version mismatch for indexer cluster and indexer container, delete statefulset failed. Error=%s", err.Error()))
 			eventPublisher.Warning(ctx, "UpdateManager", fmt.Sprintf("%s-%s, %s-%s", "indexer-image", cr.Spec.Image, "container-image", statefulSet.Spec.Template.Spec.Containers[0].Image))
 			return result, err
 		}
@@ -299,6 +308,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
@@ -337,7 +347,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		Name:      cr.Spec.ClusterMasterRef.Name,
 	}
 	managerIdxCluster := &enterpriseApiV3.ClusterMaster{}
-	err = client.Get(context.TODO(), namespacedName, managerIdxCluster)
+	err = client.Get(ctx, namespacedName, managerIdxCluster)
 	if err == nil {
 		// when user creates both cluster manager and index cluster yaml file at the same time
 		// cluser master status is not yet set so it will be blank
@@ -436,6 +446,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 			}
 		}
+	}
+
+	// check if the IndexerCluster is ready for version upgrade
+	cr.Kind = "IndexerCluster"
+	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+	if err != nil || !continueReconcile {
+		return result, err
 	}
 
 	// check if version upgrade is set
@@ -939,6 +956,16 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 	return nil
 }
 
+var GetClusterManagerInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager) (*splclient.ClusterManagerInfo, error) {
+	c := mgr.getClusterManagerClient(ctx)
+	return c.GetClusterManagerInfo()
+}
+
+var GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
+	c := mgr.getClusterManagerClient(ctx)
+	return c.GetClusterManagerPeers()
+}
+
 // updateStatus for indexerClusterPodManager uses the REST API to update the status for an IndexerCluster custom resource
 func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
 	mgr.cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
@@ -952,8 +979,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	}
 
 	// get indexer cluster info from cluster manager if it's ready
-	c := mgr.getClusterManagerClient(ctx)
-	clusterInfo, err := c.GetClusterManagerInfo()
+	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
 	if err != nil {
 		return err
 	}
@@ -963,7 +989,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	mgr.cr.Status.MaintenanceMode = clusterInfo.MaintenanceMode
 
 	// get peer information from cluster manager
-	peers, err := c.GetClusterManagerPeers()
+	peers, err := GetClusterManagerPeersCall(ctx, mgr)
 	if err != nil {
 		return err
 	}
@@ -1065,6 +1091,43 @@ func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *
 	}
 
 	return "", nil
+}
+
+func getIndexerClusterSortedSiteList(ctx context.Context, c splcommon.ControllerClient, ref corev1.ObjectReference, indexerList enterpriseApi.IndexerClusterList) (enterpriseApi.IndexerClusterList, error) {
+
+	namespaceList := enterpriseApi.IndexerClusterList{}
+	for _, v := range indexerList.Items {
+		if v.Spec.ClusterManagerRef == ref {
+			namespaceList.Items = append(namespaceList.Items, v)
+		}
+	}
+
+	sort.SliceStable(namespaceList.Items, func(i, j int) bool {
+		return getSiteName(ctx, c, &namespaceList.Items[i]) < getSiteName(ctx, c, &namespaceList.Items[j])
+	})
+
+	return namespaceList, nil
+}
+
+func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) string {
+	defaults := cr.Spec.Defaults
+	// site name starts with site:
+	pattern := `site:\s+(\w+)`
+
+	// Compile the regular expression pattern
+	re := regexp.MustCompile(pattern)
+
+	// Find the first match in the input string
+	match := re.FindStringSubmatch(defaults)
+
+	var extractedValue string
+	if len(match) > 1 {
+		// Extracted value is stored in the second element of the match array
+		extractedValue := match[1]
+		return extractedValue
+	}
+
+	return extractedValue
 }
 
 // Tells if there is an image migration from 8.x.x to 9.x.x

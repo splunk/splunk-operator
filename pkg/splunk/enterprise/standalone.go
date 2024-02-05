@@ -49,6 +49,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	cr.Kind = "Standalone"
 
 	// validate and updates defaults for CR
 	err := validateStandaloneSpec(ctx, client, cr)

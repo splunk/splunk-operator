@@ -3,17 +3,17 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 2.2.1
+VERSION ?= 2.5.0
 
 # SPLUNK_ENTERPRISE_IMAGE defines the splunk docker tag that is used as default image.
 SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk:edge"
 
 # WATCH_NAMESPACE defines if its clusterwide operator or namespace specific
-# by default we leave it as clusterwide if it has to be namespace specific, 
+# by default we leave it as clusterwide if it has to be namespace specific,
 # add namespace to this
 WATCH_NAMESPACE ?= ""
 
-# NAMESPACE defines default namespace where operator will be installed 
+# NAMESPACE defines default namespace where operator will be installed
 NAMESPACE ?= "splunk-operator"
 
 # CHANNELS define the bundle channels used in the bundle.

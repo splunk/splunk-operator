@@ -4,6 +4,8 @@ splunk-operator:
     serviceAccountName: "splunk-enterprise-serviceaccount-staging"
   splunkOperator:
     clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
 sva:
   c3:
     enabled: true
