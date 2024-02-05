@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - main
-      - feature**
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
