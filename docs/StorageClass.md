@@ -121,3 +121,7 @@ We have tested basic functionality of the Splunk Operator with the storage optio
 * [Rook Ceph](https://www.rook.io/) (open source)
 
 But we cannot make any specific recommendations, or verify any claims or comparisons regarding performance.
+
+
+## Workload Management(WLM) Support
+Workload management is a rule-based framework that lets you allocate compute and memory resources to search, indexing, and other workloads in Splunk Enterprise. Currently, Splunk Operator deployed workloads do not support this feature.

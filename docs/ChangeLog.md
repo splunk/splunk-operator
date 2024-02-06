@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 2.5.0 (2024-01-31)
+## 2.5.0 (2024-02-05)
 
 CSPL-2155: Support for Level-2 Upgrade Strategy in Splunk Operator
 
