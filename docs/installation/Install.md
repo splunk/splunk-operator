@@ -1,3 +1,9 @@
+---
+title: Advanced Installation
+nav_order: 12
+#nav_exclude: true
+---
+
 # Splunk Operator Advanced Installation
 
 

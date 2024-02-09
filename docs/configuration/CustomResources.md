@@ -1,3 +1,9 @@
+---
+title: Custom Resources
+nav_order: 31
+#nav_exclude: true
+---
+
 # Custom Resource Guide
 
 The Splunk Operator provides a collection of

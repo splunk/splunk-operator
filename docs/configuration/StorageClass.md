@@ -1,3 +1,10 @@
+---
+title: Persistent Storage
+nav_order: 23
+#nav_exclude: true
+---
+
+
 # Setting Up a Persistent Storage for Splunk
 
 The Splunk Operator for Kubernetes uses Kubernetes [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/) to create and manage two Persistent Volumes for all of the Splunk Enterprise pods in your deployment. Two volumes will be mounted for each pod:

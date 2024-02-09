@@ -1,3 +1,8 @@
+---
+title: Change Log
+nav_order: 101
+---
+
 # Splunk Operator for Kubernetes Change Log
 
 ## 2.5.0 (2024-02-05)

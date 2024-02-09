@@ -1,3 +1,8 @@
+---
+title: Red Hat OpenShift
+nav_order: 15
+---
+
 # Red Hat OpenShift Configuration
 
 The Splunk Operator will always start Splunk Enterprise containers using

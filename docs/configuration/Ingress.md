@@ -1,3 +1,9 @@
+---
+title: Ingress
+nav_order: 25
+#nav_exclude: true
+---
+
 # Configuring Ingress 
 
 Using `port-forward` is great for testing, but you will ultimately want to make it easier to access your Splunk cluster outside of Kubernetes. A common approach is through the use of [Kubernetes Ingress Controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/).

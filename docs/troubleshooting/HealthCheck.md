@@ -1,3 +1,9 @@
+---
+title: Health Checks
+nav_order: 51
+#nav_exclude: true
+---
+
 # Splunk Operator Health Check with K8 Probes
 Splunk Operator supports Startup, Liveness and Readiness Probes (with its own default values) for Splunk Custom Resources. The following probe configurations are allowed to be modified through Custom Resources: 
 * initialDelaySeconds

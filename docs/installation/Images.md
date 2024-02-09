@@ -1,3 +1,9 @@
+---
+title: Docker Images
+nav_order: 14
+#nav_exclude: true
+---
+
 # Required Docker Images
 
 The Splunk Operator requires these docker images to be present or available to your Kubernetes cluster:

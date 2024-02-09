@@ -1,3 +1,9 @@
+---
+title: Helm
+nav_order: 13
+#nav_exclude: true
+---
+
 # Splunk Operator Helm Installation
 
 ## Splunk Operator Helm chart Repository

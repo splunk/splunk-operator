@@ -1,3 +1,9 @@
+---
+title: App Framework
+nav_order: 21
+#nav_exclude: true
+---
+
 # App Framework Resource Guide
 
 The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR). 

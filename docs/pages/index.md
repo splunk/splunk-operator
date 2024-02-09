@@ -1,3 +1,9 @@
+---
+title: Getting Started
+nav_order: 1
+permalink: "/"
+---
+
 # Getting Started with the Splunk Operator for Kubernetes
 
 The Splunk Operator for Kubernetes enables you to quickly and easily deploy Splunk Enterprise on your choice of private or public cloud provider. The Operator simplifies scaling and management of Splunk Enterprise by automating administrative workflows using Kubernetes best practices.

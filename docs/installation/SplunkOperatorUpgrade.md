@@ -1,3 +1,8 @@
+---
+title: Upgrade Splunk Operator
+nav_order: 16
+---
+
 # How to upgrade Splunk Operator and Splunk Enterprise Deployments
 
 To upgrade the Splunk Operator for Kubernetes, you will overwrite the prior Operator release with the latest version. Once the lastest version of `splunk-operator-namespace.yaml` ([see below](#upgrading-splunk-operator-and-splunk-operator-deployment)) is applied the CRD's are updated and Operator deployment is updated with newer version of Splunk Operator image. Any new spec defined by the operator will be applied to the pods managed by Splunk Operator for Kubernetes.

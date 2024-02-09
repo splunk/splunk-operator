@@ -1,3 +1,9 @@
+---
+title: K8s Data Collectors
+nav_order: 52
+#nav_exclude: true
+---
+
 # **K8s data collectors**
 The Splunk Operator for K8s deploys Splunk Enterprise custom resources across a single namespace or multiple namespaces. The helper scripts `k8s-splunk-collector.sh` and `k8s-systeminfo-collector.sh` in the [tools directory](https://github.com/splunk/splunk-operator/tree/main/tools/k8s_collectors) collect data from a K8s cluster which runs the Splunk Operator for K8s.
 

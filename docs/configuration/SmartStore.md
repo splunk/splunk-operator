@@ -1,3 +1,9 @@
+---
+title: SmartStore
+nav_order: 24
+#nav_exclude: true
+---
+
 # SmartStore Resource Guide
 
 *NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method may still be used to specify the S3 access keys, which avoids storing them in the S3 buckets (via the App installation framework)*
