@@ -302,7 +302,7 @@ In this configuration Istio passes the encrypted traffic to Splunk Enterprise wi
 
 
 
-<img src="pictures/TLS-End-to-End.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
+<img src="assets/images/TLS-End-to-End.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
 
 When using TLS for Ingress, we recommend you add an additional port for secure communication. By default, port 9997 will be assigned for non-encrypted traffic and you can use any other available port for secure communications. 
 
@@ -393,7 +393,7 @@ In this configuration, Istio is terminating the encryption at the Gateway and fo
 
 
 
-<img src="pictures/TLS-Gateway-Termination.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
+<img src="assets/images/TLS-Gateway-Termination.png?" alt="End-to-End Configuration" align="left" style="zoom:50%;" />
 
 
 1. Create a TLS secret with the certificates needed to decrypt traffic. These are the same commands used on your Indexer to terminate TLS:

@@ -6,13 +6,41 @@ description: >- # this means to ignore newlines until "baseurl:"
   Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you.
 github_username:  mcinnesd
 domain: mcinnesd.github.io 
-baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://mcinnesd.github.io" # the base hostname & protocol for your site, e.g. http://example.com
+
+favicon_ico: /assets/images/favicon.ico
+
+aux_links:
+  "Splunk Operator for Kubernetes on GitHub":
+    - "//github.com/mcinnesd/splunk-operator"
+
 
 # Build settings
 theme: just-the-docs
-plugins:
-  - jekyll-feed
+# plugins:
+#   - jekyll-feed
+
+collections:
+  helm:
+    permalink: "/:path/"
+    output: true
+
+
+# The colors grey-lt, grey-dk, purple,
+# blue, green, yellow, and red are predefined
+callouts:
+  warning:
+    title: Warning
+    color: yellow
+  note:
+    title: Note
+    color: blue
+  highlight:
+    color: yellow
+  important:
+    title: Important
+    color: red
+
 
 # Exclude from processing.
 # The following items will not be processed, by default.

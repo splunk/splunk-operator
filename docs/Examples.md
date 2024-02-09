@@ -775,9 +775,9 @@ type: Opaque
 ```
 
 The kubectl command line tool can be used to decode the splunk secret tokens with the following command:
-
+{% raw  %}
 `kubectl get secret splunk-<desired_namespace>-secret -o go-template='{{range $k,$v := .data}}{{printf "%s: " $k}}{{if not $v}}{{$v}}{{else}}{{$v | base64decode}}{{end}}{{"\n"}}{{end}}'`
-
+{% endraw %}
 A sample global kubernetes secret object with tokens decoded looks like:
 
 ```
