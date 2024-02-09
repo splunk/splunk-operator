@@ -5,29 +5,19 @@ nav_order: 31
 ---
 
 # Custom Resource Guide
-
+{: .no_toc }
 The Splunk Operator provides a collection of
 [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)
 you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
 
-- [Custom Resource Guide](#custom-resource-guide)
-  - [Metadata Parameters](#metadata-parameters)
-  - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
-  - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
-  - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
-  - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
-  - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
-  - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
-  - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
-  - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
-  - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
-    - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
-    - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
-    - [A BestEffort QoS Class example:](#a-besteffort-qos-class-example)
-    - [Pod Resources Management](#pod-resources-management)
-
 For examples on how to use these custom resources, please see
-[Configuring Splunk Enterprise Deployments](Examples.md).
+[Configuring Splunk Enterprise Deployments](/configuration/Examples).
+
+
+#### Table of contents
+{: .no_toc }
+- TOC
+{:toc}
 
 
 ## Metadata Parameters
@@ -295,64 +285,3 @@ The Splunk Operator now includes a CRD for the Monitoring Console (MC). This off
 
 The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
 
-
-## Examples of Guaranteed and Burstable QoS
-
-You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods using the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes). Here are some examples:
-  
-### A Guaranteed QoS Class example:
-Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
-
-*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` values.*
-
-Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM. 
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: Standalone
-metadata:
-  name: example
-spec:
-  imagePullPolicy: Always
-  resources:
-    requests:
-      memory: "12Gi"
-      cpu: "24"
-    limits:
-      memory: "12Gi"
-      cpu: "24"  
-```
-
-### A Burstable QoS Class example:
-Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. 
-
-Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the ```limits``` values.
-
-```yaml
-apiVersion: enterprise.splunk.com/v4
-kind: Standalone
-metadata:
-  name: example
-spec:
-  imagePullPolicy: Always
-  resources:
-    requests:
-      memory: "2Gi"
-      cpu: "4"
-    limits:
-      memory: "12Gi"
-      cpu: "24"  
-```
-
-### A BestEffort QoS Class example:
-With no requests or limits values set for CPU and memory, the QoS class is set to BestEffort. The BestEffort QoS is not recommended for use with Splunk Operator.
-
-### Pod Resources Management
-
-__CPU Throttling__
-
-Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
-
-__POD Eviction - OOM__
-
-As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.

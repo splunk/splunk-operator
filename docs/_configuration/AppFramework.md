@@ -1,7 +1,7 @@
 ---
 title: App Framework
 nav_order: 21
-#nav_exclude: true
+layout: "default"
 ---
 
 # App Framework Resource Guide

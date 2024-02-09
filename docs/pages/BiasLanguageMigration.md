@@ -2,6 +2,7 @@
 title: FAQ - Biased Language Migration
 nav_order: 100
 #nav_exclude: true
+nav_after_collections: true
 ---
 
 # FAQ - Biased Language Migration

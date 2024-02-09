@@ -35,19 +35,19 @@ We provide some examples below for configuring a few of the most popular Ingress
 Before deploying an example, you will need to review the yaml and replace “example.com” with the domain name you would like to use and replace “example” in the service names with the name of your custom resource object. You will also need to point your DNS for all the desired hostnames to the IP addresses of your ingress load balancer.
 
 
-#### Important Notes on using Splunk on Kubernetes 
+### Important Notes on using Splunk on Kubernetes 
 
-#### Load Balancer Requirements
+##### Load Balancer Requirements
 
 When configuring ingress for use with Splunk Forwarders, the configured ingress load balancer must resolve to two or more IPs. This is required so the auto load balancing capability of the forwarders is preserved.
 
-#### Splunk default network ports
+##### Splunk default network ports
 
 When creating a new Splunk instance on Kubernetes, the default network ports will be used for internal communication such as internal logs, replication, and others. Any change in how these ports are configured needs to be consistent across the cluster. 
 
 For Ingress we recommend using separate ports for encrypted and non-encrypted traffic. In this documentation we will use port 9998 for encrypted data coming from outside the cluster, while keeping the default 9997 for non-encrypted intra-cluster communication. For example, this  [ServiceTemplate configuration](#serviceTemplate) creates a standalone instance with port 9998 exposed.
 
-#### Indexer Discovery is not supported
+##### Indexer Discovery is not supported
 Indexer Discovery is not supported on a Kubernetes cluster. Instead, the Ingress controllers will be responsible to connect forwarders to peer nodes in Indexer clusters.
 
 
@@ -63,7 +63,7 @@ Most scenarios for Istio will require the configuration of a Gateway and a Virtu
 
 You can configure Istio to provide direct access to Splunk Web.
 
-#### Standalone Configuration
+##### Standalone Configuration
 
 1. Create a Gateway to receive traffic on port 80
 
@@ -118,7 +118,7 @@ kubectl get svc -n istio-system
 http://<LoadBalancer-External-IP>
 ```
 
-#### Multiple Hosts and HEC Configuration
+##### Multiple Hosts and HEC Configuration
 
 If your deployment has multiple hosts such as Search Heads and Cluster Manager, use this example to configure Splunk Web access, and HTTP Event Collector port. Follow the steps here [HEC Documentation](https://docs.splunk.com/Documentation/Splunk/latest/Data/UsetheHTTPEventCollector) to learn how to create a HEC token and how to send data using HTTP. 
 
@@ -303,7 +303,7 @@ kubectl get svc -n istio-system
 ### Configuring Ingress for Splunk Forwarder data with TLS
 It is highly recommended that you always use TLS encryption for your Splunk Enterprise endpoints. The following sections will cover the two main configurations supported by Istio.
 
-#### Splunk Forwarder data with end-to-end TLS
+##### Splunk Forwarder data with end-to-end TLS
 In this configuration Istio passes the encrypted traffic to Splunk Enterprise without any termination. Note that you need to configure the TLS certificates on the Forwarder as well as any Splunk Enterprise indexers, cluster peers, or standalone instances.
 
 
@@ -393,7 +393,7 @@ If you only have one indexer cluster that you would like to use as the destinati
 
 Configure the Forwarder's outputs.conf and the Indexer's inputs.conf using the documentation [Configure Secure Forwarding](https://docs.splunk.com/Documentation/Splunk/latest/Security/Aboutsecuringdatafromforwarders)
 
-#### Splunk Forwarder data with TLS Gateway Termination
+##### Splunk Forwarder data with TLS Gateway Termination
 
 In this configuration, Istio is terminating the encryption at the Gateway and forwarding the decrypted traffic to Splunk Enterprise. Note that in this case the Forwarder's outputs.conf should be configured for TLS, while the Indexer's input.conf should be configured to accept non-encrypted traffic.
 
@@ -688,7 +688,7 @@ The Nginx Ingress Controller is an open source version of the F5 product. Please
 We followed the product's Helm Chart installation guide. It requires a cluster with internet access.
 [NGINX Ingress Controller Helm Installation]( https://docs.nginx.com/nginx-ingress-controller/installation/installation-with-helm/)
 
-#### Setup Helm
+##### Setup Helm
 
 ```shell
 # clone the repo and check out the current production branch
@@ -704,7 +704,7 @@ $ helm repo update
 $ kubectl create -f crds/
 ```
 
-#### Install Ingress
+##### Install Ingress
 ```shell
 cd deployments/helm-chart
 
@@ -721,7 +721,7 @@ splunk-nginx  default     5  2020-10-29 15:03:47.6 EDT    deployed    nginx-ingr
 helm upgrade splunk-nginx  nginx-stable/nginx-ingress
 ```
 
-#### Configure Ingress services
+##### Configure Ingress services
 
 ##### Configure Ingress for Splunk Web and HEC
 
@@ -777,7 +777,6 @@ status:
 Enable the global configuration to setup a listener and transport server
 
 1. Create the GlobalConfiguration:
-
 ```yaml
 apiVersion: k8s.nginx.org/v1alpha1
 kind: GlobalConfiguration
@@ -806,19 +805,17 @@ spec:
 ```
 
 2. Edit the service to establish a node-port for the port being setup as the listener:
-   1.   List the service:
+  1. List the service:
+  ```yaml
+  kubectl get svc
+  NAME                                         TYPE           CLUSTER-IP       EXTERNAL-IP                                                               PORT(S)                                                            AGE
+  splunk-nginx-nginx-ingress                 LoadBalancer   172.20.195.54    aa725344587a4443b97c614c6c78419c-1675645062.us-east-2.elb.amazonaws.com   80:31452/TCP,443:30402/TCP,30403:30403/TCP                         7d1h
+  ```
 
-```yaml
-kubectl get svc
-NAME                                         TYPE           CLUSTER-IP       EXTERNAL-IP                                                               PORT(S)                                                            AGE
-splunk-nginx-nginx-ingress                 LoadBalancer   172.20.195.54    aa725344587a4443b97c614c6c78419c-1675645062.us-east-2.elb.amazonaws.com   80:31452/TCP,443:30402/TCP,30403:30403/TCP                         7d1h
-```
-
-​		2. Edit the service and add the Splunk Forwarder ingress port:
-
-```
-kubectl edit service splunk-nginx-nginx-ingress
-```
+  2. Edit the service and add the Splunk Forwarder ingress port:
+  ```
+  kubectl edit service splunk-nginx-nginx-ingress
+  ```
 
 Example Service:
 ```yaml

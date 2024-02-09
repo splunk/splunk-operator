@@ -5,46 +5,14 @@ nav_order: 28
 ---
 
 # Configuring Splunk Enterprise Deployments
-
+{: .no_toc }
 This document includes various examples for configuring Splunk Enterprise deployments with the Splunk Operator.
+For more information about the custom resources that you can use with the Splunk Operator, refer to the [Custom Resource Guide](/configuration/CustomResources).
 
-
-- [Configuring Splunk Enterprise Deployments](#configuring-splunk-enterprise-deployments)
-  - [Creating a Clustered Deployment](#creating-a-clustered-deployment)
-    - [Indexer Clusters](#indexer-clusters)
-      - [Cluster Manager](#cluster-manager)
-      - [Indexer cluster peers](#indexer-cluster-peers)
-      - [Scaling cluster peers using replicas](#scaling-cluster-peers-using-replicas)
-      - [Scaling cluster peers using pod autoscaling](#scaling-cluster-peers-using-pod-autoscaling)
-      - [Create a search head for your index cluster](#create-a-search-head-for-your-index-cluster)
-      - [Another Cluster Manager example](#another-cluster-manager-example)
-    - [Monitoring Console](#monitoring-console)
-    - [Search Head Clusters](#search-head-clusters)
-    - [Cluster Services](#cluster-services)
-    - [Cleaning Up](#cleaning-up)
-  - [SmartStore Index Management](#smartstore-index-management)
-  - [Using Default Settings](#using-default-settings)
-  - [Installing Splunk Apps](#installing-splunk-apps)
-  - [Creating a LicenseManager Using a ConfigMap](#creating-a-licensemanager-using-a-configmap)
-  - [Configuring Standalone to use License Manager](#configuring-standalone-to-use-license-manager)
-  - [Configuring Indexer Clusters to use License Manager](#configuring-indexer-clusters-to-use-license-manager)
-  - [Using an External License Manager](#using-an-external-license-manager)
-    - [Configuring pass4Symmkey:](#configuring-pass4symmkey)
-      - [Approach 1](#approach-1)
-      - [Approach 2](#approach-2)
-    - [Configuring license\_master\_url:](#configuring-license_master_url)
-  - [Using an External Indexer Cluster](#using-an-external-indexer-cluster)
-    - [Configuring IDXC pass4Symmkey:](#configuring-idxc-pass4symmkey)
-      - [Approach 1](#approach-1-1)
-      - [Approach 2](#approach-2-1)
-    - [Configuring cluster\_master\_url:](#configuring-cluster_master_url)
-  - [Managing global kubernetes secret object](#managing-global-kubernetes-secret-object)
-    - [Creating global kubernetes secret object](#creating-global-kubernetes-secret-object)
-    - [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object)
-    - [Updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
-    - [Deleting global kubernetes secret object](#deleting-global-kubernetes-secret-object)
-
-For more information about the custom resources that you can use with the Splunk Operator, refer to the [Custom Resource Guide](CustomResources.md).
+#### Table of contents
+{: .no_toc }
+- TOC
+{:toc}
 
 ## Creating a Clustered Deployment
 
@@ -68,6 +36,7 @@ When customers outgrow the capabilites of single instance for indexing and searc
 The Splunk Operator makes creation of a cluster easy by utilizing a `ClusterManager` resource for Cluster Manager, and using the `IndexerCluster` resource for the cluster peers:
 
 #### Cluster Manager
+{: .no_toc }
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v4
@@ -100,11 +69,12 @@ metadata:
 EOF
 ```
 
-The process is similar to build a multisite cluster, through defining a different zone affinity and site in each child IndexerCluster resource. See [Multisite cluster examples](MultisiteExamples.md)
+The process is similar to build a multisite cluster, through defining a different zone affinity and site in each child IndexerCluster resource. See [Multisite cluster examples](/configuration/MultisiteExamples)
 
 The passwords for the instance are generated automatically. To review the passwords, refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
 
 #### Indexer cluster peers
+{: .no_toc }
 ```yaml
 cat <<EOF | kubectl apply -f -
 apiVersion: enterprise.splunk.com/v4
@@ -123,7 +93,8 @@ EOF
 ```
 This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
-NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterManager,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
+{: .note }
+If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterManager,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
 
 After starting the cluster manager, indexer cluster peers, and monitoring console pods using the examples above, use the `kubectl get pods` command to verify your environment:
 ```
@@ -138,6 +109,7 @@ splunk-operator-7c5599546c-wt4xl            1/1     Running   0          14h
 ```
 
 #### Scaling cluster peers using replicas
+{: .no_toc }
 If you want to add more indexers as cluster peers, update your `IndexerCluster` CR and define the `replicas` parameter:
 
 ```yaml
@@ -177,13 +149,14 @@ $ kubectl patch indexercluster example --type=json -p '[{"op": "replace", "path"
 indexercluster.enterprise.splunk.com/example patched
 ```
 
-For efficiency, note that you can use the following short names with `kubectl`:
-
+{: .note }
+For efficiency, you can use the following short names with `kubectl`:
 * `clustermanager`: `cmanager-idxc`
 * `indexercluster`: `idc` or `idxc`
 * `searchheadcluster`: `shc`
 * `LicenseManager`: `lm`
 * `monitoringconsole`: `mc`
+
 
 All CR's that support a `replicas` field can be scaled using the `kubectl scale` command. For example:
 
@@ -192,6 +165,7 @@ $ kubectl scale idc example --replicas=5
 indexercluster.enterprise.splunk.com/example scaled
 ```
 #### Scaling cluster peers using pod autoscaling
+{: .no_toc }
 You can also create [Horizontal Pod Autoscalers](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) to manage dynamic scaling for you. For example:
 
 ```yaml
@@ -219,6 +193,7 @@ idc-example   IndexerCluster/example   16%/50%   5         10        5          
 ```
 
 #### Create a search head for your index cluster
+{: .no_toc }
 To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterManagerRef` parameter:
 
 ```yaml
@@ -238,7 +213,8 @@ spec:
 EOF
 ```
 
-Note that the `clusterManagerRef` field points to the cluster manager for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
+{: .note }
+The `clusterManagerRef` field points to the cluster manager for the indexer cluster. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
 ```
 $ kubectl get pods
@@ -253,6 +229,7 @@ splunk-operator-7c5599546c-wt4xl              1/1     Running   0          14h
 ```
 
 #### Another Cluster Manager example
+{: .no_toc }
 Having a separate CR for cluster manager allows you to define parameters differently than the indexers, such as storage capacity and the storage class used by persistent volumes.
 
 ```yaml
@@ -399,7 +376,7 @@ Similar to other examples, the default administrator password can be obtained fr
 kubectl get secret splunk-`<namespace`>-secret -o jsonpath='{.data.password}' | base64 --decode
 ```
 
-See [Configuring Ingress](Ingress.md) for guidance on making your Splunk Enterprise clusters accessible from outside of Kubernetes.
+See [Configuring Ingress](/configuration/Ingress) for guidance on making your Splunk Enterprise clusters accessible from outside of Kubernetes.
 
 ### Cleaning Up
 
@@ -417,7 +394,7 @@ kubectl delete -n splunk-opertaor clustermanager cm
 
 ## SmartStore Index Management
 
-Indexes can be managed through the Splunk Operator. Every index configured through the Splunk Operator must be SmartStore enabled. See [SmartStore Resource Guide](SmartStore.md).
+Indexes can be managed through the Splunk Operator. Every index configured through the Splunk Operator must be SmartStore enabled. See [SmartStore Resource Guide](/configuration/SmartStore).
 
 ## Using Default Settings
 
@@ -468,15 +445,16 @@ app installation.
 Inline `defaults` are always processed last, after any `defaultsUrl` files.
 
 Any password management related configuration via `defaults` and `defaultsUrl`
-has been disabled. Please review [`PasswordManagement.md`](PasswordManagement.md)
+has been disabled. Please review [`PasswordManagement.md`](/configuration/PasswordManagement)
 and [`Managing global kubernetes secret object`](#managing-global-kubernetes-secret-object)
 for more details.
 
 ## Installing Splunk Apps
 
-*Note that this requires using the Splunk Enterprise container version 9.0.0 or later*
+{: .note }
+This requires using the Splunk Enterprise container version 9.0.0 or later*
 
-With the Splunk Operator 2.0 release, new App Framework is available to centrally store and deploy apps. See [AppFramework](AppFramework.md) for information and examples.
+With the Splunk Operator 2.0 release, new App Framework is available to centrally store and deploy apps. See [AppFramework](/configuration/AppFramework) for information and examples.
 
 ## Creating a LicenseManager Using a ConfigMap
 
@@ -519,9 +497,8 @@ the `enterprise.lic` file within it.
 licenseUrl: "/mnt/licenses/enterprise1.lic,/mnt/licenses/enterprise2.lic"
 ```
 
-Note that `licenseUrl` may specify a local path or URL such as
-"https://myco.com/enterprise.lic", and the `volumes` parameter can
-be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
+{: .note }
+`licenseUrl` may specify a local path or URL such as "https://myco.com/enterprise.lic", and the `volumes` parameter can be used to mount any type of [Kubernetes Volumes](https://kubernetes.io/docs/concepts/storage/volumes/).
 
 ## Configuring Standalone to use License Manager
 
@@ -543,7 +520,7 @@ spec:
 
 ## Configuring Indexer Clusters to use License Manager
 
-While configuring [`Indexer Clusters`](Examples.md#indexer-clusters) to use the `LicenseManager`, you need to add `licenseManagerRef` only to the `ClusterManager` spec as follows:
+While configuring [`Indexer Clusters`](#indexer-clusters) to use the `LicenseManager`, you need to add `licenseManagerRef` only to the `ClusterManager` spec as follows:
 
 ```yaml
 cat <<EOF | kubectl apply -f -
@@ -593,7 +570,8 @@ spec:
 
 ## Using an External License Manager
 
-*Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
+{: .note }
+This requires using the Splunk Enterprise container version 8.1.0 or later*
 
 The Splunk Operator for Kubernetes allows you to use an external License
 Manager(LM) with the custom resources it manages. To do this, you will
@@ -607,10 +585,12 @@ pass4SymmKey for authentication.
 There are two ways to configure `pass4Symmkey` with an External LM:
 
 #### Approach 1
-- Setup the desired plain-text [`pass4Symmkey`](PasswordManagement.md#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
+{: .no_toc }
+- Setup the desired plain-text [`pass4Symmkey`](/configuration/PasswordManagement#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
 - Setup the same plain-text `pass4SymmKey` in the `[general]` section of your LM's `server.conf` file.
 
 #### Approach 2
+{: .no_toc }
 - Retrieve the plain-text `pass4SymmKey` in the `[general]` section of your LM's `server.conf` file.
   ```
   cat $SPLUNK_HOME/etc/system/local/server.conf
@@ -626,7 +606,7 @@ There are two ways to configure `pass4Symmkey` with an External LM:
   ```
   $SPLUNK_HOME/bin/splunk show-decrypted --value '$7$Sw0A+wvJdTztMcA2Ge7u435XmpTzPqyaq49kUZqn0yfAgwFpwrArM2JjWJ3mUyf/FyHAnCZkE/U='
   ```
-- Setup the above decrypted plain-text [`pass4Symmkey`](PasswordManagement.md#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
+- Setup the above decrypted plain-text [`pass4Symmkey`](/configuration/PasswordManagement#pass4Symmkey) in the global secret object(Note: The `pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
 
 ### Configuring license_master_url:
 
@@ -665,7 +645,8 @@ spec:
 
 ## Using an External Indexer Cluster
 
-*Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
+{: .note }
+This requires using the Splunk Enterprise container version 8.1.0 or later*
 
 The Splunk Operator for Kubernetes allows you to use an external cluster of
 indexers with its `Standalone`, `SearchHeadCluster` and `LicenseManager`
@@ -677,10 +658,12 @@ operator & the external indexer cluster, and configure the `splunk.cluster_maste
 
 There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Cluster:
 #### Approach 1
-- Setup the desired plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
+{: .no_toc }
+- Setup the desired plain-text [`IDXC pass4Symmkey`](/configuration/PasswordManagement#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object).
 - Setup the same plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster manager's and indexers' `server.conf` file.
 
 #### Approach 2
+{: .no_toc }
 - Retrieve the plain-text `IDXC pass4SymmKey` in the `[clustering]` section of your cluster manager's `server.conf` file.
   ```
   cat $SPLUNK_HOME/etc/system/local/server.conf
@@ -696,7 +679,7 @@ There are two ways to configure `IDXC pass4Symmkey` with an External Indexer Clu
   ```
   $SPLUNK_HOME/bin/splunk show-decrypted --value '$7$Sw0A+wvJdTztMcA2Ge7u435XmpTzPqyaq49kUZqn0yfAgwFpwrArM2JjWJ3mUyf/FyHAnCZkE/U='
   ```
-- Setup the above decrypted plain-text [`IDXC pass4Symmkey`](PasswordManagement.md#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
+- Setup the above decrypted plain-text [`IDXC pass4Symmkey`](/configuration/PasswordManagement#idxc-pass4Symmkey) in the global secret object(Note: The `IDXC pass4Symmkey` would be stored in a base64 encoded format). For details see [updating global kubernetes secret object](#updating-global-kubernetes-secret-object)
 
 ### Configuring cluster_master_url:
 
@@ -738,9 +721,11 @@ spec:
 
 Use the kubectl command to create the global kubernetes secret object:
 
-1. Verify the namespace. You can retrieve the namespace in the current context using `kubectl config view --minify --output 'jsonpath={..namespace}'`. Make a note of the output. If the command doesn't display an output it indicates that we are in the `default` namespace.  **NOTE**: If you already have a desired namespace, you can set current context to the same using the following command: `kubectl config set-context --current --namespace=<desired_namespace>`
+1. Verify the namespace. You can retrieve the namespace in the current context using `kubectl config view --minify --output 'jsonpath={..namespace}'`. Make a note of the output. If the command doesn't display an output it indicates that we are in the `default` namespace.  
+{: .note }
+If you already have a desired namespace, you can set current context to the same using the following command: `kubectl config set-context --current --namespace=<desired_namespace>`
 
-2. Gather the password values for the secret tokens you want to configure. To see all available secret tokens defined for the global kubernetes secret object, review [password management](PasswordManagement.md#splunk-secret-tokens-in-the-global-secret-object)
+2. Gather the password values for the secret tokens you want to configure. To see all available secret tokens defined for the global kubernetes secret object, review [password management](/configuration/PasswordManagement#splunk-secret-tokens-in-the-global-secret-object)
 
 3. Create a kubernetes secret object referencing the namespace. Example: splunk-`<desired_namespace`>-secret.
 In the example below, we are creating the global kubernetes secret object, defining the default administrator and pass4Symmkey tokens, and passing in the values.  
@@ -799,7 +784,7 @@ shc_secret: dGGXnNogsL8V4yhp1bajbrZ5
 Use the kubectl command to update the global kubernetes secret object:
 
 1. Base64 encode the plain-text value of the secret token using the following command: `echo -n <plain_text_value> | base64`
-2. Obtain the key name for the secret token you are populating. The list of tokens is available in [password management](PasswordManagement.md#splunk-secret-tokens-in-the-global-secret-object). 
+2. Obtain the key name for the secret token you are populating. The list of tokens is available in [password management](/configuration/PasswordManagement#splunk-secret-tokens-in-the-global-secret-object). 
 3. Update the global kubernetes secret object using the key and the encoded value: `kubectl patch secret splunk-<desired_namespace>-secret -p='{"data":{"<key_name_for_secret_token>": "<encoded_value>"}}' -v=1`
 
 ### Deleting global kubernetes secret object

@@ -1,6 +1,7 @@
 ---
 title: Contributing
 nav_order: 102
+nav_after_collections: true
 ---
 
 # Contributing to the Project

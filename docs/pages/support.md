@@ -1,6 +1,7 @@
 ---
 title: Support
 nav_order: 90
+nav_after_collections: true
 ---
 
 ## Support Resources

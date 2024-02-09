@@ -100,7 +100,7 @@ kubectl delete standalone s1
 The `Standalone` custom resource is just one of the resources the Splunk Operator provides. You can find more custom resources and the parameters they support on the [Custom Resource Guide](/configuration/CustomResources) page.
 
 For additional deployment examples, including Splunk Enterprise clusters, see the
-[Configuring Splunk Enterprise Deployments](/configuration/examples) page.
+[Configuring Splunk Enterprise Deployments](/configuration/Examples) page.
 
 For additional guidance on making Splunk Enterprise ports accessible outside of Kubernetes, see the [Configuring Ingress](/configuration/Ingress) page.
 

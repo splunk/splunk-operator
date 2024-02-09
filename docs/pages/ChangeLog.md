@@ -1,6 +1,7 @@
 ---
 title: Change Log
 nav_order: 101
+nav_after_collections: true
 ---
 
 # Splunk Operator for Kubernetes Change Log
