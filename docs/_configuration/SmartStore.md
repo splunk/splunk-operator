@@ -6,9 +6,10 @@ nav_order: 24
 
 # SmartStore Resource Guide
 
-*NOTE: The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method may still be used to specify the S3 access keys, which avoids storing them in the S3 buckets (via the App installation framework)*
+{: .note }
+The below method is a temporary way of installing SmartStore configuration & indexes. Starting from the Splunk Operator release 1.0.2, an enhanced App installation framework is introduced which is the recommended method to install SmartStore indexes & configuration. The below method may still be used to specify the S3 access keys, which avoids storing them in the S3 buckets (via the App installation framework)
 
-The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](https://splunk.github.io/splunk-operator/CustomResources.html). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
+The Splunk Operator includes a method for configuring a SmartStore remote storage volume with index support using a [Custom Resource](/configuration/CustomResources). The SmartStore integration is not implemented as a StorageClass. This feature and its settings rely on support integrated into Splunk Enterprise. See [SmartStore](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/AboutSmartStore) for information on the feature and implementation considerations.
 
  * SmartStore configuration is supported on these Custom Resources: Standalone and ClusterManager.
  * SmartStore support in the Splunk Operator is limited to Amazon S3 & S3-API-compliant object stores only if you are using the CRD configuration for S3 as described below."
@@ -70,7 +71,8 @@ spec:
 
 The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In the case of a standalone deployment, the app is located at `/opt/splunk/etc/apps/`
 
-Note: Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
+{: .note }
+Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
  
  
  
@@ -82,7 +84,7 @@ Note: Custom apps with higher precedence can potentially overwrite the index and
 3. Confirm the name of the Splunk indexes being used with the SmartStore volume. 
 4. Create/Update the Cluster Manager custom resource specification with volume and index configuration (see Example below)
 5. Apply the custom resource specification: kubectl -f apply Clustermanager.yaml
-6. Follow the rest of the steps to Create an Indexer Cluster. See [Examples](Examples.md)
+6. Follow the rest of the steps to Create an Indexer Cluster. See [Example Deployments](/configuration/Examples)
 
 
 Example. Clustermanager.yaml:
@@ -117,127 +119,12 @@ spec:
 The SmartStore parameters will be placed into the required .conf files in an app. The app is named as `splunk-operator`. In case of a Indexer cluster deployment, the app is located on Cluster manager at `/opt/splunk/etc/manager-apps/`. 
 Once the SmartStore configuration is populated to Cluster Manager's `splunk-operator` app, Operator issues a bundle push command to Cluster Manager, so that the SmartStore configuration is distributed to all the peers in that indexer cluster
 
-Note: Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
+{: .note }
+Custom apps with higher precedence can potentially overwrite the index and volume configuration in the splunk-operator app. Hence, care should be taken to avoid conflicting SmartStore configuration in custom apps. See  [Configuration file precedence order](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Wheretofindtheconfigurationfiles#How_Splunk_determines_precedence_order)
 
 
 ## SmartStore Resource Spec Parameters
-There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise.  The SmartStore resource applies to the `Standalone` and `ClusterManager` Custom Resources, and adds the following `Spec` configuration parameters:
-
-
-```yaml
-smartstore:
-  description:
-    Splunk Smartstore configuration. Refer to indexes.conf.spec and
-    server.conf.spec on docs.splunk.com
-  properties:
-    cacheManager:
-      description: Defines Cache manager settings
-      properties:
-        evictionPadding:
-          description: Additional size beyond 'minFreeSize' before eviction kicks in
-          type: integer
-        evictionPolicy:
-          description: Eviction policy to use
-          type: string
-        hotlistBloomFilterRecencyHours:
-          description:
-            Time period relative to the bucket's age, during which the bloom
-            filter file is protected from cache eviction
-          type: integer
-        hotlistRecencySecs:
-          description:
-            Time period relative to the bucket's age, during which the bucket is
-            protected from cache eviction
-          type: integer
-        maxCacheSize:
-          description: Max cache size per partition
-          type: integer
-        maxConcurrentDownloads:
-          description:
-            Maximum number of buckets that can be downloaded from remote storage
-            in parallel
-          type: integer
-        maxConcurrentUploads:
-          description: 
-            Maximum number of buckets that can be uploaded to remote storage in
-            parallel
-          type: integer
-      type: object
-    defaults:
-      description: Default configuration for indexes
-      properties:
-        maxGlobalDataSizeMB:
-          description: 
-            MaxGlobalDataSizeMB defines the maximum amount of space for warm and
-            cold buckets of an index
-          type: integer
-        maxGlobalRawDataSizeMB:
-          description: 
-            MaxGlobalDataSizeMB defines the maximum amount of cumulative space
-            for warm and cold buckets of an index
-          type: integer
-        volumeName:
-          description: Remote Volume name
-          type: string
-      type: object
-    indexes:
-      description: List of Splunk indexes
-      items:
-        description: IndexSpec defines Splunk index name and storage path
-        properties:
-          hotlistBloomFilterRecencyHours:
-            description: 
-              Time period relative to the bucket's age, during which the bloom
-              filter file is protected from cache eviction
-            type: integer
-          hotlistRecencySecs:
-            description: 
-              Time period relative to the bucket's age, during which the bucket
-              is protected from cache eviction
-            type: integer
-          maxGlobalDataSizeMB:
-            description: 
-              MaxGlobalDataSizeMB defines the maximum amount of space for warm
-              and cold buckets of an index
-            type: integer
-          maxGlobalRawDataSizeMB:
-            description: 
-              MaxGlobalDataSizeMB defines the maximum amount of cumulative space
-              for warm and cold buckets of an index
-            type: integer
-          name:
-            description: Splunk index name
-            type: string
-          remotePath:
-            description: Index location relative to the remote volume path
-            type: string
-          volumeName:
-            description: Remote Volume name
-            type: string
-        type: object
-      type: array
-    volumes:
-      description: List of remote storage volumes
-      items:
-        description: VolumeSpec defines remote volume name and remote volume URI
-        properties:
-          endpoint:
-            description: Remote volume URI
-            type: string
-          name:
-            description: Remote volume name
-            type: string
-          path:
-            description: Remote volume path
-            type: string
-          secretRef:
-            description: Secret object name
-            type: string
-        type: object
-      type: array
-  type: object
-
-```
+There are additional SmartStore settings available for tuning and storage management. The settings are equivalent to the SmartStore settings defined in indexes.conf and server.conf for Splunk Enterprise. The SmartStore resource applies to the `Standalone` and `ClusterManager` Custom Resources. Refer to [Custom Resources Reference](/configuration/CustomResources#smartstore-resource-spec-parameters) for all settings.
 
 
 ## Following is the table that maps the Custom Resource SmartStore spec to the Splunk docs. 
@@ -253,11 +140,11 @@ See [indexes.conf](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Ind
 | hotlistBloomFilterRecencyHours |hotlist_bloom_filter_recency_hours  | [\<index name\>], [cachemanager] |
 | endpoint  |remote.s3.endpoint  | [volume:\<name\>] |
 | path | path  | [volume:\<name\>] |
-| maxConcurrentUploads | max_concurrent_uploads |[cachemanager] |
+| maxConcurrentUploads | max_concurrent_uploads | [cachemanager] |
 | maxConcurrentDownloads | max_concurrent_downloads  |[cachemanager] |
 | maxCacheSize | max_cache_size  | [cachemanager] |
-| evictionPolicy |eviction_policy  |[cachemanager] |
-| evictionPadding | eviction_padding  |[cachemanager] |
+| evictionPolicy |eviction_policy  | [cachemanager] |
+| evictionPadding | eviction_padding  | [cachemanager] |
 
 ## Additional configuration
 
@@ -266,7 +153,7 @@ If there is a need to configure additional settings, this can be achieved by con
 1. Create an App with the additional configuration
 For example, in order to set the remote S3 encryption scheme as `sse-s3`, create an app with the config in indexes.conf file under default/local sub-directory as follows:
 ```
-[volume:\<remote_volume_name\>]]
+[volume:\<remote_volume_name\>]
 path = <remote_volume_path>
 remote.s3.encryption = sse-s3
 ```

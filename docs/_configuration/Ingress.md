@@ -5,6 +5,7 @@ nav_order: 25
 ---
 
 # Configuring Ingress 
+{: .no_toc }
 
 Using `port-forward` is great for testing, but you will ultimately want to make it easier to access your Splunk cluster outside of Kubernetes. A common approach is through the use of [Kubernetes Ingress Controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/).
 
@@ -34,6 +35,10 @@ We provide some examples below for configuring a few of the most popular Ingress
 
 Before deploying an example, you will need to review the yaml and replace “example.com” with the domain name you would like to use and replace “example” in the service names with the name of your custom resource object. You will also need to point your DNS for all the desired hostnames to the IP addresses of your ingress load balancer.
 
+#### Table of contents
+{: .no_toc }
+- TOC
+{:toc}
 
 ### Important Notes on using Splunk on Kubernetes 
 
@@ -385,7 +390,8 @@ spec:
           number: 9998
 ```
 
-*Note*: this TLS example requires that `outputs.conf` on your forwarders includes the setting `tlsHostname = splunk.example.com`. Istio requires the TLS header to be defined so it to know which indexers to forward the traffic to. If this parameter is not defined, your forwarder connections will fail.
+{: .note }
+This TLS example requires that `outputs.conf` on your forwarders includes the setting `tlsHostname = splunk.example.com`. Istio requires the TLS header to be defined so it to know which indexers to forward the traffic to. If this parameter is not defined, your forwarder connections will fail.
 
 If you only have one indexer cluster that you would like to use as the destination for all S2S traffic, you can optionally replace `splunk.example.com` in the above examples with the wildcard `*`. When you use this wildcard, you do not have to set the `tlsHostname` parameter in `outputs.conf` on your forwarders.
 
@@ -395,7 +401,9 @@ Configure the Forwarder's outputs.conf and the Indexer's inputs.conf using the d
 
 ##### Splunk Forwarder data with TLS Gateway Termination
 
-In this configuration, Istio is terminating the encryption at the Gateway and forwarding the decrypted traffic to Splunk Enterprise. Note that in this case the Forwarder's outputs.conf should be configured for TLS, while the Indexer's input.conf should be configured to accept non-encrypted traffic.
+In this configuration, Istio is terminating the encryption at the Gateway and forwarding the decrypted traffic to Splunk Enterprise. 
+{: .note }
+In this case the Forwarder's outputs.conf should be configured for TLS, while the Indexer's input.conf should be configured to accept non-encrypted traffic.
 
 
 
@@ -451,7 +459,8 @@ spec:
           number: 9997
         host: splunk-standalone-standalone-service
 ```
-Note that the Virtual Service no longer handles TLS since it has been terminated at the gateway.
+{: .note }
+The Virtual Service no longer handles TLS since it has been terminated at the gateway.
 
 4. Configure your Forwarder and Indexer or Standalone certificates using the documentation: [Securing data from forwarders](https://docs.splunk.com/Documentation/Splunk/latest/Security/Aboutsecuringdatafromforwarders). 
 
@@ -463,7 +472,8 @@ Istio is a popular choice for its Service Mesh capabilities. However, Service Me
 
 ## Configuring Ingress Using NGINX
 
-**NOTE**: There are at least 3 flavors of the Nginx Ingress controller.
+{: .note }
+There are at least 3 flavors of the Nginx Ingress controller.
 
 - Kubernetes Ingress Nginx (open source)
 - Nginx Ingress Open Source (F5's open source version)
@@ -564,7 +574,8 @@ There are a few important configurations to be aware of in the TLS configuration
 * The `nginx.ingress.kubernetes.io/backend-protocol:` annotation requires `"HTTPS"` when TLS is configured on the backend services.
 * The secretName must reference a [valid TLS secret](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets).
 
-Note: This example assumes that https is enabled for Splunk Web.
+{: .note }
+This example assumes that https is enabled for Splunk Web.
 
 ```
 apiVersion: networking.k8s.io/v1beta1
@@ -613,7 +624,8 @@ spec:
 ### Configuring Ingress NGINX for Splunk Forwarders with End-to-End TLS
 
 
-Note: In this example we used port 9997 for non-encrypted communication, and 9998 for encrypted.
+{: .note }
+In this example we used port 9997 for non-encrypted communication, and 9998 for encrypted.
 
 Update the default Ingress NGINX configuration to add the ConfigMap and Service ports:
 
@@ -1000,7 +1012,8 @@ spec:
     - "license-manager.splunk.example.com"
 ```
 
-Note that the `credentialName` references the same `secretName` created and managed by the Certificate object. 
+{: .note }
+The `credentialName` references the same `secretName` created and managed by the Certificate object. 
 
 3. If you are manually importing your certificates into separate Secrets for each hostname, you can reference these by instead using multiple `port` objects in your Gateway:
 

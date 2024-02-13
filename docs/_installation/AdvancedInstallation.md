@@ -6,14 +6,12 @@ nav_order: 12
 
 # Splunk Operator Advanced Installation
 
-
-
 ## Downloading Installation YAML for modifications
 
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.5.0/splunk-operator-cluster.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/{{ page.splunk_operator_version }}/splunk-operator-cluster.yaml
 ```
 
 ## Default Installation
@@ -23,7 +21,7 @@ Based on the file used Splunk Operator can be installed cluster-wide or namespac
 By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
-wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.5.0/splunk-operator-cluster.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/{{ page.splunk_operator_version }}/splunk-operator-cluster.yaml
 kubectl apply -f splunk-operator-cluster.yaml
 ```
 
@@ -37,7 +35,7 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
         - name: WATCH_NAMESPACE
           value: "namespace1,namespace2"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.3-a2
+          value: splunk/splunk:{{ page.splunk_enterprise_version }}
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -50,10 +48,10 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
 
 ## Install operator to watch single namespace with restrictive permission
 
-In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/2.5.0/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace
+In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/{{ page.splunk_operator_version }}/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace
 
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.5.0/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/{{ page.splunk_operator_version }}/splunk-operator-namespace.yaml
 kubectl apply -f splunk-operator-namespace.yaml
 ```
 
@@ -74,7 +72,7 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
         - name: WATCH_NAMESPACE
           value: "namespace1,namespace2"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.0.3-a2
+          value: splunk/splunk:{{ page.splunk_enterprise_version }}
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME

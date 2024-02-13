@@ -5,8 +5,13 @@ layout: "default"
 ---
 
 # App Framework Resource Guide
+{: .no_toc }
+The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](/configuration/CustomResource) (CR). 
 
-The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR). 
+#### Table of contents
+{: .no_toc }
+- TOC
+{:toc}
 
 ## Prerequisites
 
@@ -31,14 +36,13 @@ Utilizing the App Framework requires one of the following remote storage provide
 
 Splunk apps and add-ons deployed or installed outside of the App Framework are not managed, and are unsupported.
 
-Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+{: .note }
+For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
 ## Examples of App Framework usage
 Following section shows examples of using App Framework for both remote data storages. First, the examples for S3 based remote object storage are given and then same examples are covered for Azure blob. The examples in both the cases have lot of commonalities and the places they differ are mainly in the values for `storageType`, `provider` and `endpoint`. There are also some differences in the authoriziation setup for using IAM /Managed Identity in both remote data storages.
 
-### Examples of App Framework usage
-
-#### How to use the App Framework on a Standalone CR
+### How to use the App Framework on a Standalone CR
 
 In this example, you'll deploy a Standalone CR with a remote storage volume, the location of the app archive, and set the installation location for the Splunk Enterprise Pod instance by using `scope`.
 
@@ -134,7 +138,7 @@ By default, the App Framework polls the remote object storage location for new o
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
-#### How to use the App Framework on Indexer Cluster
+### How to use the App Framework on Indexer Cluster
 
 This example describes the installation of apps on an Indexer Cluster and Cluster Manager. This is achieved by deploying a ClusterManager CR with a remote storage volume, setting the location of the app archives, and the installation scope to support both local and cluster app path distribution.
 
@@ -231,7 +235,8 @@ The App Framework detects the Splunk app or add-on archive files available in th
 
 The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster peers. The cluster manager is responsible for deploying those apps to the cluster peers. 
 
-Note: The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+{: .note }
+The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
 The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
@@ -239,7 +244,7 @@ By default, the App Framework polls the remote object storage location for new o
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields)
 
-#### How to use the App Framework on Search Head Cluster
+### How to use the App Framework on Search Head Cluster
 
 This example describes the installation of apps on the Deployer and the Search Head Cluster. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
 
@@ -340,7 +345,8 @@ The App Framework detects the Splunk app or add-on archive files available in th
 
 The apps in the `searchApps` and `machineLearningApps` folders are deployed to the Deployer for use on the clustered search heads. The Deployer is responsible for deploying those apps to the search heads. 
 
-Note: The Splunk search head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
+{: .note }
+The Splunk search head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
 The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
@@ -349,6 +355,7 @@ By default, the App Framework polls the remote object storage location for new o
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
 ## Description of App Framework Specification fields
+
 The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterManager, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
 
 * Remote Source of Apps: Define the remote storage location, including unique folders, and the path to each folder.
@@ -435,10 +442,12 @@ Here is a typical App framework configuration in a Custom Resource definition:
 ```
 
 ### appRepo
+{: .no_toc }
 
 `appRepo` is the start of the App Framework specification, and contains all the configurations required for App Framework to be successfully configured.
 
 ### volumes
+{: .no_toc }
 
 `volumes` defines the remote storage configurations. The App Framework expects any apps to be installed in various Splunk deployments to be hosted in one or more remote storage volumes.
 
@@ -450,6 +459,7 @@ Here is a typical App framework configuration in a Custom Resource definition:
 * `path` describes the path (including the folder) of one or more app sources on the remote store.
 
 ### appSources
+{: .no_toc }
 
 `appSources` defines the name and scope of the appSource, the remote storage volume, and its location.
 
@@ -472,6 +482,7 @@ Here is a typical App framework configuration in a Custom Resource definition:
 * `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed.  
 
 ### appsRepoPollIntervalSeconds
+{: .no_toc }
 
 If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage. 
 
@@ -479,7 +490,8 @@ When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework wil
 
 ## Add a persistent storage volume to the Operator pod
 
-Note:- If the persistent storage volume is not configured for the Operator, by default, the App Framework uses the main memory(RAM) as the staging area for app package downloads. In order to avoid pressure on the main memory, it is strongly advised to use a persistent volume for the operator pod.
+{: .note }
+If the persistent storage volume is not configured for the Operator, by default, the App Framework uses the main memory(RAM) as the staging area for app package downloads. In order to avoid pressure on the main memory, it is strongly advised to use a persistent volume for the operator pod.
 
 1. Create the persistent volume used by the Operator pod to cache apps and add-ons:
 
@@ -548,7 +560,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.5.0"
+        image: "docker.io/splunk/splunk-operator:{{ page.splunk_operator_version }}"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging
@@ -565,7 +577,7 @@ spec:
         - name: OPERATOR_NAME
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: "docker.io/splunk/splunk:9.0.3-a2"
+          value: "docker.io/splunk/splunk:{{ page.splunk_enterprise_version }}"
 
       volumes:
       - name: app-staging
@@ -618,7 +630,8 @@ The App Framework will perform its checks, update or install apps, and reset the
 
 To reinstate automatic polling, update the CR `appsRepoPollIntervalSeconds` setting to a value greater than 0.
 
-NOTE: All CRs of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CRs of the same type before updating the polling interval. You can experience unexpected polling behavior if there are CRs configured with a mix of polling enabled and disabled.
+{: .note }
+All CRs of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CRs of the same type before updating the polling interval. You can experience unexpected polling behavior if there are CRs configured with a mix of polling enabled and disabled.
 
 ## App Framework Limitations
 
@@ -691,8 +704,9 @@ Example:
 ```
 $ principalId=$(az identity show --name splunkOperatorCluster-agentpool --resource-group "MC_splunkOperatorResourceGroup_splunkOperatorCluster_westus2" --query 'principalId' --output tsv)
 $ echo $principalId
-```
 f0f04120-6a36-49bc--**************
+```
+
 
 5. Assign read access for Kubelet user managed identity to the storage account
 

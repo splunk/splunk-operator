@@ -5,24 +5,14 @@ nav_after_collections: true
 ---
 
 # Contributing to the Project
+{: .no_toc }
 
 This document is the single source of truth on contributing towards this codebase. Feel free to browse the [open issues](https://github.com/splunk/splunk-operator/issues) and file new ones - all feedback is welcome!
 
-## Navigation
-
-- [Contributing to the Project](#contributing-to-the-project)
-  - [Navigation](#navigation)
-  - [Prerequisites](#prerequisites)
-      - [Contributor License Agreement](#contributor-license-agreement)
-      - [Code of Conduct](#code-of-conduct)
-  - [Contribution Workflow](#contribution-workflow)
-      - [Bug reports and feature requests](#bug-reports-and-feature-requests)
-      - [Fixing issues](#fixing-issues)
-      - [Pull requests](#pull-requests)
-      - [Code Review](#code-review)
-      - [Testing](#testing)
-      - [Documentation](#documentation)
-  - [Maintainers](#maintainers)
+#### Table of contents
+{: .no_toc }
+- TOC
+{:toc}
 
 ## Prerequisites
 When contributing to this repository, first discuss the issue with a [repository maintainer](#maintainers) via GitHub issue, Slack message, or email.

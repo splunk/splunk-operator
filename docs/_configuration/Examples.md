@@ -1,23 +1,22 @@
 ---
-title: Examples
+title: Example Deployments
 nav_order: 28
 #nav_exclude: true
 ---
 
-# Configuring Splunk Enterprise Deployments
+# Example Splunk Enterprise Deployments
 {: .no_toc }
 This document includes various examples for configuring Splunk Enterprise deployments with the Splunk Operator.
-For more information about the custom resources that you can use with the Splunk Operator, refer to the [Custom Resource Guide](/configuration/CustomResources).
+For more information about the custom resources that you can use with the Splunk Operator, refer to the [Custom Resource Reference](/configuration/CustomResources).
 
 #### Table of contents
 {: .no_toc }
 - TOC
 {:toc}
 
-## Creating a Clustered Deployment
+## Creating a Standalone Deployment
 
-The two basic building blocks of Splunk Enterprise infrastructure are search heads and indexers. A `Standalone` resource can be used to create a single instance
-that can perform either, or both of these roles.
+The two basic building blocks of Splunk Enterprise infrastructure are search heads and indexers. A `Standalone` resource can be used to create a single instance that can perform either, or both of these roles.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -29,6 +28,8 @@ metadata:
 ```
 
 The passwords for the instance are generated automatically. To review the passwords, please refer to the [Reading global kubernetes secret object](#reading-global-kubernetes-secret-object) instructions.
+
+## Creating a Clustered Deployment
 
 ### Indexer Clusters
 
@@ -268,6 +269,7 @@ EOF
 ```
 
 ### Monitoring Console
+
 The Monitoring Console provides detailed topology and performance information about your Splunk Enterprise deployment. The monitoring console (MC) pod is referenced by using the `monitoringConsoleRef` parameter. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods. 
 
 
@@ -379,7 +381,7 @@ kubectl get secret splunk-`<namespace`>-secret -o jsonpath='{.data.password}' | 
 See [Configuring Ingress](/configuration/Ingress) for guidance on making your Splunk Enterprise clusters accessible from outside of Kubernetes.
 
 ### Cleaning Up
-
+{: .no_toc }
 As these examples demonstrate, the Splunk Operator makes it easy to create and manage clustered deployments of Splunk Enterprise. Given the reduced complexity, the comparable resource requirements from leveraging containers, and the ability to easily start small and scale as necessary, we recommend that you use the `IndexerCluster` and `SearchHeadCluster` resources when creating deployments using the Splunk Operator. 
 
 To remove the resources created from this example, run:

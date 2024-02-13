@@ -1,24 +1,21 @@
 ---
-title: Multisite Examples
+title: Examples Multisite Deployments
 nav_order: 29
 #nav_exclude: true
 ---
 
 # Configuring Splunk Enterprise Multisite Deployments
+{: .no_toc }
+This document provides examples to configure a multisite cluster using the splunk-operator. 
 
-This document provides examples to configure a multisite cluster using the splunk-operator.
+Please refer to the [Example Deployments](/configuration/Examples) for more information and examples about deploying the different Splunk resources in single site mode.
 
 
-- [Configuring Splunk Enterprise Multisite Deployments](#configuring-splunk-enterprise-multisite-deployments)
-  - [Multisite Indexer Clusters in Kubernetes](#multisite-indexer-clusters-in-kubernetes)
-  - [Multipart IndexerCluster](#multipart-indexercluster)
-      - [Deploy the cluster-manager](#deploy-the-cluster-manager)
-      - [Deploy the indexer sites](#deploy-the-indexer-sites)
-  - [Connecting a search-head cluster to a multisite indexer-cluster](#connecting-a-search-head-cluster-to-a-multisite-indexer-cluster)
+#### Table of contents
+{: .no_toc }
+- TOC
+{:toc}
 
-Please refer to the [Configuring Splunk Enterprise Deployments Guide](Example.md)
-for more information and examples about deploying the different Splunk resources
-in single site mode.
 
 ## Multisite Indexer Clusters in Kubernetes
 
@@ -154,7 +151,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 3
-  image: "splunk/splunk:9.0.3-a2"
+  image: "splunk/splunk:{{ page.splunk_enterprise_version }}"
   clusterManagerRef:
     name: example
   defaults: |-

@@ -24,12 +24,12 @@ Splunk Operator for Kubernetes.
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.5.0/splunk-operator-namespace.yaml --server-side  --force-conflicts
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/{{ page.splunk_operator_version }}/splunk-operator-namespace.yaml --server-side  --force-conflicts
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.5.0/splunk-operator-cluster.yaml --server-side  --force-conflicts
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/{{ page.splunk_operator_version }}/splunk-operator-cluster.yaml --server-side  --force-conflicts
 ```
 
 The [Advanced Installation Instructions](/installation/AdvancedInstallation) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](/installation/OpenShift) page.
@@ -78,7 +78,8 @@ splunk-operator-7c5599546c-wt4xl        1/1    Running   0          11h
 splunk-s1-standalone-0                  1/1    Running   0          45s
 ```
 
-*Note: if your shell prints a `%` at the end, leave that out when you copy the output.*
+{: .note }
+If your shell prints a `%` at the end, leave that out when you copy the output.
 
 2. You can use a simple network port forward to open port 8000 for Splunk Web access:
 
