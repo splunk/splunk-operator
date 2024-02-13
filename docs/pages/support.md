@@ -2,6 +2,7 @@
 title: Support
 nav_order: 90
 nav_after_collections: true
+permalink: /Support 
 ---
 
 ## Support Resources
@@ -10,7 +11,7 @@ SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for d
 
 COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
 
-If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](CONTRIBUTING.md) page.
+If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](/Contributing) page.
 
 **Community Support & Discussions on
 [Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator-for-kubernetes

@@ -3,6 +3,7 @@ title: FAQ - Biased Language Migration
 nav_order: 100
 #nav_exclude: true
 nav_after_collections: true
+permalink: /BiasLanguageMigration
 ---
 
 # FAQ - Biased Language Migration
@@ -20,7 +21,7 @@ Starting in the Operator version 2.1.0 we are introducing new CRDs for ClusterMa
 
 ## Which CRD should I choose for a new deployment?
 
-All new deployments are recommended to use the new ClusterManager and LicenseManager CRDs. The examples in our documentation have been updated to use the new CRDs. Please check [Configuring Splunk Enterprise Deployments](https://github.com/splunk/splunk-operator/blob/master/docs/Examples.md) for details.
+All new deployments are recommended to use the new ClusterManager and LicenseManager CRDs. The examples in our documentation have been updated to use the new CRDs. Please check [Example Deployments](/configuration/Examples) for details.
 
 ## How to plan for a migration?
 

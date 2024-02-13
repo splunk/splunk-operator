@@ -2,6 +2,7 @@
 title: Contributing
 nav_order: 102
 nav_after_collections: true
+permalink: /Contributing 
 ---
 
 # Contributing to the Project
@@ -23,7 +24,7 @@ We only accept pull requests submitted from:
 * Individuals who have signed the [Splunk Contributor License Agreement](https://www.splunk.com/en_us/form/contributions.html)
 
 #### Code of Conduct
-All contributors are expected to read our [Code of Conduct](contributing/code-of-conduct.md) and observe it in all interactions involving this project.
+All contributors are expected to read our [Code of Conduct](/Contributing#code-of-conduct) and observe it in all interactions involving this project.
 
 ## Contribution Workflow
 Help is always welcome! For example, documentation can always use improvement. There's always code that can be clarified, functionality that can be extended, and tests to be added to guarantee behavior. If you see something you think should be fixed, don't be afraid to own it.
@@ -86,7 +87,7 @@ A PR is easy to review if you:
 * Write good commit messages, concise and descriptive.
 * Break large changes into a logical series of smaller patches. Patches individually make easily understandable changes, and in aggregate, solve a broader issue.
 
-Reviewers are highly encouraged to revisit the [Code of Conduct](contributing/code-of-conduct.md) and must go above and beyond to promote a collaborative, respectful community.
+Reviewers are highly encouraged to revisit the [Code of Conduct](/Contributing#code-of-conduct) and must go above and beyond to promote a collaborative, respectful community.
 
 When reviewing PRs from others, [The Gentle Art of Patch Review](http://sage.thesharps.us/2014/09/01/the-gentle-art-of-patch-review/) suggests an iterative series of focuses, designed to lead new contributors to positive collaboration without inundating them initially with nuances:
 * Is the idea behind the contribution sound?
