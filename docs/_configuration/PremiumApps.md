@@ -12,11 +12,11 @@ The Splunk Operator automates the installation of Enterprise Security (ES) with 
 
 ### Before you begin
 
-* You need the ability to utilize the Splunk Operator [app framework](https://splunk.github.io/splunk-operator/AppFramework.html) method of installation.
+* You need the ability to utilize the Splunk Operator [app framework](/configuration/AppFramework) method of installation.
 * You need the access to the [Splunk ES](https://splunkbase.splunk.com/app/263/) app package.
 * ES support in Splunk Operator is starting from Splunk Operator Release `2.2.0` which requires Splunk Enterprise `9.0.3-a2` or later. Per the [Splunk Enterprise and Enterprise Security version compatibility matrix](https://docs.splunk.com/Documentation/VersionCompatibility/current/Matrix/CompatMatrix), Splunk ES versions `7.1.0, 7.0.2, 7.0.1, 7.0.0 or 6.6.2` are supported currently.
 * You need to make sure pod resource specs meet the [ES hardware requirements](https://docs.splunk.com/Documentation/ES/latest/Install/DeploymentPlanning#Hardware_requirements).
-* In the following sections, AWS S3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](https://splunk.github.io/splunk-operator/AppFramework.html), you can use Azure Blob remote buckets also.
+* In the following sections, AWS S3 remote bucket is used for placing the splunk apps, but as given in the [app framework doc](/configuration/AppFramework), you can use Azure Blob remote buckets also.
 * You need to deploy add-ons to forwarders manually (or through your own methods).
 * You need to deploy Stream App manually
 * For ES version 7.1 or higher, [Behavioral Analytics Service](https://docs.splunk.com/Documentation/ES/7.1.0/User/BehavioralAnalyticsIntro#Provision_behavioral_analytics_service_with_Splunk_Enterprise_Security_7.1.0_or_higher) is unavailable for containerized Splunk deployments (supported for cloud releases only)
@@ -52,7 +52,7 @@ When installing ES in an indexer clustering environment through the Splunk Opera
 
 When crafting your Custom Resource(CR) to create a Splunk Enterprise Deployment it is necessary to take the following configurations into account.
 
-##### [appSources](https://splunk.github.io/splunk-operator/AppFramework.html#appsources) scope
+##### [appSources](/configuration/AppFramework) scope
    
    - When deploying ES to a Standalone or to a Search Head Cluster, it must be configured with an appSources scope of "premiumApps".
    - When deploying the Splunk_TA_ForIndexers app to an Indexer Cluster, it must be configured with an appSources scope of "cluster".
@@ -363,5 +363,5 @@ Check the pod log (e.g deployer pod) in case you want to monitor the pod while i
 Common issues that may be encountered are : 
 * ES installation failed as you used default sslEnablement mode ("strict") - enable Splunk Web SSL in web.conf. See the section [Special consideration while using ssl enabled mode of strict in SHC](#special-consideration-while-using-ssl-enabled-mode-of-strict-in-shc)
 * Ansible task timeouts - raise associated timeout (splunkdConnectionTimeout in web.conf, rcv_timeout, send_timeeout, cxn_timeeout etc values in server.conf)
-* Pod Recycles - raise livenessProbe value. More details on this at [Health Check doc](HealthCheck.md)
+* Pod Recycles - raise livenessProbe value. More details on this at [Health Check doc](/troubleshooting/HealthCheck)
 

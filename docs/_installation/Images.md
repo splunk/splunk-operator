@@ -18,7 +18,7 @@ custom resource definition.
 
 Use the `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable or the `image` custom resource parameter to change the location of your Splunk Enterprise image.
 
-For additional detail, see the [Advanced Installation Instructions](Install.md) page, and the [Custom Resource Guide](CustomResources.md) page.
+For additional detail, see the [Advanced Installation Instructions](/installation/AdvancedInstallation) page, and the [Custom Resource Reference](/configuration/CustomResources) page.
 
 
 ## Using a private registry

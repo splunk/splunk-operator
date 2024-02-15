@@ -46,40 +46,44 @@ Splunk apps and add-ons deployed or installed outside of the App Framework are n
 
 ## Add a persistent storage volume to the Operator pod
 
-If the persistent storage volume is not configured for the Operator, by default, the App Framework uses the main memory (RAM) as the staging area for app package downloads. In order to avoid pressure on the main memory, it is strongly advised to use a persistent volume for the operator pod.
+If the persistent storage volume is not configured for the Operator, by default, the App Framework uses the main memory (RAM) as the staging area for app package downloads. In order to avoid pressure on the main memory, it is strongly advised to use a persistent volume for the operator pod.  
 
 
+{:style="counter-reset:step-counter"}
 1. Create the persistent volume used by the Operator pod to cache apps and add-ons  
-```bash
-cat <<EOF | kubectl apply -f -
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: operator-volume-claim
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 8Gi
-  storageClassName: gp2
-EOF
-```
 
+  ```yaml
+  kind: PersistentVolumeClaim
+  apiVersion: v1
+  metadata:
+    name: "operator-volume-claim"
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 8Gi
+    storageClassName: gp2  
+  ```
+
+{:style="counter-reset:none"}
 2. Associate the persistent volume with the Operator pod by updating the Operator configuration  
-```
-volumes:
-- name: app-staging
-  persistentVolumeClaim:
-    claimName: operator-volume-claim
-```
+  
+  ```yaml
+  volumes:
+    - name: app-staging
+      persistentVolumeClaim:
+        claimName: "operator-volume-claim"
+  ```
 
+{:style="counter-reset:none"}
 3. Mount the volume on the path  
-```
-volumeMounts:
-- mountPath: /opt/splunk/appframework/
-  name: app-staging
-```
+
+  ```yaml
+  volumeMounts:
+    - mountPath: /opt/splunk/appframework/
+      name: app-staging
+  ```
 
 
 A full example of the Operator configuration:
@@ -212,25 +216,26 @@ The names used below, such as resource-group name and AKS cluster name, are for 
 These steps cover creating resource group and AKS cluster also but you can skip them if you already have them created.
 
 1. Create an Azure resource group
-  ```bash
-  az group create --name splunkOperatorResourceGroup --location westus2
-  ```
+```bash
+az group create --name splunkOperatorResourceGroup --location westus2
+```
 
 2. Create AKS Cluster
-  ```bash
-  az aks create -g splunkOperatorResourceGroup -n splunkOperatorCluster --enable-managed-identity
-  ```
+```bash
+az aks create -g splunkOperatorResourceGroup -n splunkOperatorCluster --enable-managed-identity
+```
 
 3. Get credentials to access cluster
-  ```bash
-  az aks get-credentials --resource-group splunkOperatorResourceGroup --name splunkOperatorCluster
-  ```
+```bash
+az aks get-credentials --resource-group splunkOperatorResourceGroup --name splunkOperatorCluster
+```
 
 4. Get the Kubelet user managed identity 
-  ```bash
-  az identity list 
-  ```
-  Find the object that has <AKS Cluster Name>-agentpool in the name field eg. `"name": "splunkOperatorCluster-agentpool"`
+```bash
+az identity list 
+```
+
+Find the object that has <AKS Cluster Name>-agentpool in the name field eg. `"name": "splunkOperatorCluster-agentpool"`
 
   ```json
   {
@@ -276,9 +281,6 @@ After this, you can use App framework for Azure blob without secrets.
 Azure allows "Managed Identities" assignment at the "storage accounts" level as well as at specific buckets levels. A managed identity that is assigned read permissions at a storage account level will have read access for all the buckets within that storage account. As a good security practice, you should assign the managed identity to only the specific buckets and not to the whole storage account.
 
 In contrast to "Managed Identities", Azure allows the "shared access keys" configurable only at the storage accounts level. When using the "secretRef" configuration in the CRD, the underlying secret key will allow both read and write access to the storage account (and all the buckets within it). So, based on your security needs, you may want to consider using "Managed Identities" instead of secrets. Also note that there isn't an automated way of rotating the secret key, so in case you are using these keys, please rotate them at regular intervals of times such as 90 days interval.
-
-
-
 
 
 ## Examples of App Framework usage
@@ -443,7 +445,6 @@ spec:
 ```
 
 Example using Azure Blob: ClusterManager.yaml
-
 ```yaml
 apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
@@ -595,46 +596,3 @@ The Splunk search head restarts are triggered by the contents of the Splunk apps
 
 The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
 
-
-
-
-
-
-
-
-
-
-
-
-
-## Description of App Framework Specification fields
-
-### appSources
-{: .no_toc }
-
-`appSources` defines the name and scope of the appSource, the remote storage volume, and its location.
-
-* `name` uniquely identifies the App source configuration within a CR. This used locally by the Operator to identify the App source.
-* `scope` defines the scope of the app to be installed. 
-  * If the scope is `local`, the apps will be installed and run locally on the pod referred to by the CR. 
-  * If the scope is `cluster`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) for deployment across the cluster referred to by the CR.
-  * The cluster scope is only supported on CRs that manage cluster-wide app deployment.
-  
-    | CRD Type          | Scope support                          | App Framework support |
-    | :---------------- | :------------------------------------- | :-------------------- |
-    | ClusterManager    | cluster, local                         | Yes                   |
-    | SearchHeadCluster | cluster, local                         | Yes                   |
-    | Standalone        | local                                  | Yes                   |
-    | LicenceManager    | local                                  | Yes                   |
-    | MonitoringConsole | local                                  | Yes                   |
-    | IndexerCluster    | N/A                                    | No                    |
-
-* `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section.)
-* `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed.  
-
-### appsRepoPollIntervalSeconds
-{: .no_toc }
-
-If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage. 
-
-When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manual_initiation_of_app_management).

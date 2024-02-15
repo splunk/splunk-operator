@@ -1,7 +1,6 @@
 ---
 title: Ingress
 nav_order: 25
-nav_exclude: true
 ---
 
 # Configuring Ingress 
@@ -395,7 +394,7 @@ This TLS example requires that `outputs.conf` on your forwarders includes the se
 
 If you only have one indexer cluster that you would like to use as the destination for all S2S traffic, you can optionally replace `splunk.example.com` in the above examples with the wildcard `*`. When you use this wildcard, you do not have to set the `tlsHostname` parameter in `outputs.conf` on your forwarders.
 
-4. Deploy an app to the standalone instance with the inputs.conf settings needed to open port 9998 and configure the relevant TLS settings. For details on app management using the Splunk Operator, see [Using Apps for Splunk Configuration](https://splunk.github.io/splunk-operator/Examples.html#installing-splunk-apps).
+4. Deploy an app to the standalone instance with the inputs.conf settings needed to open port 9998 and configure the relevant TLS settings. For details on app management using the Splunk Operator, see [Using Apps for Splunk Configuration](/configuration/Examples#installing-splunk-apps).
 
 Configure the Forwarder's outputs.conf and the Indexer's inputs.conf using the documentation [Configure Secure Forwarding](https://docs.splunk.com/Documentation/Splunk/latest/Security/Aboutsecuringdatafromforwarders)
 

@@ -25,7 +25,7 @@ The procedures to secure your deployment are the same regardless of your choice 
 |Splunk Web   | Gateway Termination | NO  |
 |REST API   | Gateway Termination | NO  |
 
-For more information about how to setup Ingress Controllers using the Operator visit [Ingress Documentation](https://github.com/splunk/splunk-operator/blob/develop/docs/Ingress.md).
+For more information about how to setup Ingress Controllers using the Operator visit [Ingress Documentation](/configuration/Ingress).
 
 ## Prerequisites
 
@@ -80,7 +80,7 @@ privKeyPath = $SPLUNK_HOME/etc/apps/myapp/mycerts/mySplunkPrivateKey.key
 serverCert =  $SPLUNK_HOME/etc/apps/myapp/mycerts/mySplunkCertificate.pem
 ```
 
-* Deploy the app to the Splunk Enterprise instance. See [Install Apps using Splunk Operator](https://github.com/splunk/splunk-operator/blob/develop/docs/Examples.md#installing-splunk-apps). 
+* Deploy the app to the Splunk Enterprise instance. See [Install Apps using Splunk Operator](/configuration/Examples#installing-splunk-apps). 
 
 * Create the Ingress configuration to allow access to port 8000. This configuration creates a gateway and virtual service for passing the traffic through to the Splunk Enterprise instance.
 
@@ -225,9 +225,9 @@ Learn more about APIs available here: [REST Manual](https://docs.splunk.com/Docu
 
 ## Securing Forwarders
 
-For examples on configuring the Ingress controller to accept data from Forwarders, and securing the data in Kubernetes, see: [Secure Forwarding](https://github.com/splunk/splunk-operator/blob/develop/docs/Ingress.md)
+For examples on configuring the Ingress controller to accept data from Forwarders, and securing the data in Kubernetes, see: [Secure Forwarding](/configuration/Ingress)
 
 
 ## Password Management 
 
-In Kubernetes, sensitive information such as passwords, OAuth tokens, and ssh keys should be stored using the Secrets objects. Learn how to manage your passwords for Splunk Enterprise deployments in: [Password Management](https://github.com/splunk/splunk-operator/blob/develop/docs/PasswordManagement.md)
+In Kubernetes, sensitive information such as passwords, OAuth tokens, and ssh keys should be stored using the Secrets objects. Learn how to manage your passwords for Splunk Enterprise deployments in: [Password Management](/configuration/PasswordManagement)

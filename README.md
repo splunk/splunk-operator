@@ -18,7 +18,7 @@ This repository is used to build the Splunk
 [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
 for Kubernetes (SOK). If you are just looking for documentation on how to
 deploy and use the latest release, please see the
-[Getting Started Documentation](docs/README.md).
+[Getting Started Documentation](https://splunk.github.io/splunk-operator/).
 
 ## Prerequisites
 
