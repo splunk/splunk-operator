@@ -4,10 +4,6 @@
 
 CSPL-2532: fix for leader election lost issue (#1281)
 
-## 2.5.0 (2024-02-05)
-
-CSPL-2155: Support for Level-2 Upgrade Strategy in Splunk Operator
-
 ### Supported Splunk Version
 >| Splunk Version|
 >| --- |
@@ -18,6 +14,11 @@ CSPL-2155: Support for Level-2 Upgrade Strategy in Splunk Operator
 >| Kubernetes Version|
 >| --- |
 >| 1.25+ |
+
+
+## 2.5.0 (2024-02-05)
+
+CSPL-2155: Support for Level-2 Upgrade Strategy in Splunk Operator
 
 CSPL-2505: Pod Security standard set to restricted mode
 
