@@ -1,7 +1,7 @@
 name: Nightly Integration Test WorkFlow
 on:
   schedule:
-    - cron: "0 06 * * *"
+    - cron: "0 06 * * 0"
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
