@@ -1,7 +1,7 @@
 ---
 title: Ingress
 nav_order: 25
-#nav_exclude: true
+nav_exclude: true
 ---
 
 # Configuring Ingress 

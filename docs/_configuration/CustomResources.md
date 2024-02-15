@@ -244,6 +244,70 @@ spec:
 ```
 
 
+## App Framework Resource Spec Parameters
+
+The `appRepo` section contains the App Framework configuration parameters listed below and may be used the following Splunk Enterprise resources: 
+  - `Standalone`
+  - `LicenseManager`
+  - `MonitoringConsole`
+  - `SearchHeadCluster`
+  - `ClusterManager`
+
+
+| Key        | Type    | Description                                       |
+| ---------- | ------- | ------------------------------------------------- |
+| appSources[] | array | List of App sources on remote storage |
+| AppSourceSpec | object | AppSourceSpec defines list of App package (*.spl, *.tgz) locations on remote volumes |
+| AppSourceSpec.location | string | Location relative to the volume path |
+| AppSourceSpec.name | string | Logical name for the set of apps placed in this location. Logical name must be unique to the appRepo |
+| AppSourceSpec.scope | string | Scope of the App deployment: cluster, local. Scope determines whether the App(s) is/are installed locally or cluster-wide |
+| AppSourceSpec.volumeName | string | Remote Storage Volume name |
+| appsRepoPollIntervalSeconds | string | Remote Storage Volume name |
+| defaults | object | Defines the default configuration settings for App sources |
+| defaults.scope | string | Scope of the App deployment: cluster, local. Scope determines whether the App(s) is/are installed locally or cluster-wide |
+| defaults.volumeName | string | Remote Storage Volume name |
+| volumes[] | array | List of remote storage volumes |
+| VolumeSpec | object | VolumeSpec defines remote volume config |
+| VolumeSpec.endpoint | string | Remote volume URI |
+| VolumeSpec.name | string | Remote volume name |
+| VolumeSpec.path | string | Remote volume path |
+| VolumeSpec.provider | string | App Package Remote Store provider. Currently supported proiders are aws, minio and azure |
+| VolumeSpec.region | string | Region of the remote storage volume where apps reside. Not required for azure. |
+| VolumeSpec.secretRef | string | Secret object name |
+| VolumeSpec.storageType | string | Remote Storage type. Possible values are s3 (works with aws and minio) or blob (works with azure) |
+
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: s1
+  namespace: splunk
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_au
+      scope: cluster
+    appSources:
+      - name: searchApps
+        location: searchAppsLoc/
+      - name: machineLearningApps
+        location: machineLearningAppsLoc/
+      - name: adminApps
+        location: adminAppsLoc/
+        scope: local
+    volumes:
+      - name: volume_app_repo_au
+        storageType: s3
+        provider: aws
+        path: bucket-app-framework/shcLoc-au/
+        endpoint: https://s3-ap-southeast-2.amazonaws.com
+        region: ap-southeast-2
+        secretRef: s3-secret
+```
+
+
 ## LicenseManager Resource Spec Parameters
 
 Please see [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources) and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources). The `LicenseManager` resource does not provide any additional configuration parameters.
