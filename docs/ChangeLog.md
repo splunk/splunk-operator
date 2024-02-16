@@ -1,5 +1,21 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.5.1 (2024-02-16)
+
+CSPL-2532: fix for leader election lost issue (#1281)
+
+### Supported Splunk Version
+>| Splunk Version|
+>| --- |
+>| 9.0.8 |
+>| 9.1.3 |
+
+### Supported Kubernetes Version
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
+
+
 ## 2.5.0 (2024-02-05)
 
 CSPL-2155: Support for Level-2 Upgrade Strategy in Splunk Operator
