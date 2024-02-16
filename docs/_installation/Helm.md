@@ -22,7 +22,7 @@ Upgrading to latest version of splunk operator using helm chart will not upgrade
 
 ```
 git clone https://github.com/splunk/splunk-operator.git .
-git checkout release/{{ site.operator_release_version }}
+git checkout release/{{ page.operator_release_version }}
 make install
 ```
 

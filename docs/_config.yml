@@ -4,13 +4,13 @@ description: >-
   The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. 
   
   Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you.
-github_username:  mcinnesd
-domain: mcinnesd.github.io 
-url: "https://mcinnesd.github.io" 
+github_username:  splunk
+domain: splunk.github.io 
+url: "https://splunk.github.io" 
 favicon_ico: /assets/images/favicon.ico
 aux_links:
   "Splunk Operator for Kubernetes on GitHub":
-    - "//github.com/mcinnesd/splunk-operator"
+    - "//github.com/splunk/splunk-operator"
 
 # Build settings
 theme: just-the-docs
@@ -62,7 +62,7 @@ defaults:
       path: ""
     values:
       splunk_operator_version: "2.5.0"
-      splunk_enterprise_version: "9.0.3-a2"
+      splunk_enterprise_version: "9.1.3"
   -
     scope:
       path: ""
