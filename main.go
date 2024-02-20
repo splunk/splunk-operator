@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -66,14 +67,34 @@ func main() {
 	var logEncoder string
 	var logLevel int
 
-	flag.StringVar(&logEncoder, "logEncoder", "json", "log encoding ('json' or 'console')")
+	var leaseDuration time.Duration
+	var renewDeadline time.Duration
+	var leaseDurationSecond int
+	var renewDeadlineSecond int
+
+	flag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
-	flag.IntVar(&logLevel, "loglevel", int(zapcore.InfoLevel), "set log level")
+	flag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
+	flag.IntVar(&leaseDurationSecond, "lease-duration", int(leaseDurationSecond), "manager lease duration in seconds")
+	flag.IntVar(&renewDeadlineSecond, "renew-duration", int(renewDeadlineSecond), "manager renew duration in seconds")
+
+	// see https://github.com/operator-framework/operator-sdk/issues/1813
+	if leaseDurationSecond < 30 {
+		leaseDuration = 30 * time.Second
+	} else {
+		leaseDuration = time.Duration(leaseDurationSecond) * time.Second
+	}
+
+	if renewDeadlineSecond < 20 {
+		renewDeadline = 20 * time.Second
+	} else {
+		renewDeadline = time.Duration(renewDeadlineSecond) * time.Second
+	}
 
 	opts := zap.Options{
 		Development: true,
@@ -92,6 +113,8 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "270bec8c.splunk.com",
+		LeaseDuration:          &leaseDuration,
+		RenewDeadline:          &renewDeadline,
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), config.ManagerOptionsWithNamespaces(setupLog, options))
