@@ -149,11 +149,13 @@ imagePullPolicy: IfNotPresent
 This is an example of the process followed by the Splunk Operator if the operator version is upgraded and a later Splunk Enterprise Docker image is available:
 ​
 
-1. A new Splunk Operator pod will be created, and the existing operator pod will be terminated.
-3. Any existing License Manager, Standalone, Monitoring console, Cluster manager, Search Head, ClusterManager, Indexer pods will be terminated to be redeployed with the upgraded spec.
-4. Splunk Operator follows the upgrade path steps mentioned in Splunk documentation. The termination and redeployment of the pods happen in a particular order based on a recommended upgrade path.
-5. After a ClusterManager pod is restarted, the Indexer Cluster pods which are connected to it are terminated and redeployed.
-6. After all pods in the Indexer cluster and Search head cluster are redeployed, the Monitoring Console pod is terminated and redeployed.
-7. Each pod upgrade is verified to ensure the process was successful and everything is working as expected.
+1. Initiation of a new Splunk Operator pod will lead to the termination of the existing operator pod.
+2. All existing License Manager, Standalone, Monitoring Console, Cluster Manager, Search Head, ClusterManager, and Indexer pods will undergo termination for subsequent redeployment with upgraded specifications.
+3. The Splunk Operator adheres to the upgrade path steps delineated in the Splunk documentation. Pod termination and redeployment occur in a specific order based on the recommended upgrade path.
+4. Standalone or License manager will be the first to be redeployed
+5. Next ClusterManager pod will be redeployed, next the Monitoring Console pod undergoes termination and redeployment.
+6. Subsequently, the Search Head cluster pods connected to it are terminated and redeployed.
+7. Afterwards, all pods in the Indexer cluster are redeployed sequentially. In cases where multi-zone Indexer clusters are utilized, they undergo redeployment zone by zone.
+8. Each pod upgrade is meticulously verified to ensure a successful process, with thorough checks conducted to confirm that everything is functioning as expected.
 
 * Note: If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first
