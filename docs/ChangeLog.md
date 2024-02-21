@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 2.5.1 (2024-02-16)
+## 2.5.1 (2024-02-20)
 
 CSPL-2532: fix for leader election lost issue (#1281)
 

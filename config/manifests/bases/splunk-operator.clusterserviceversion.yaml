@@ -12,7 +12,7 @@ metadata:
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.9"}]'
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.2.1
+  name: splunk-operator.v2.5.1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -274,5 +274,5 @@ spec:
   provider:
     name: Splunk Inc.
     url: www.splunk.com
-  replaces: splunk-operator.v2.2.0
-  version: 2.2.1
+  replaces: splunk-operator.v2.5.0
+  version: 2.5.1
