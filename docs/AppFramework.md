@@ -1,6 +1,6 @@
 # App Framework Resource Guide
 
-The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR). 
+The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR).
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Utilizing the App Framework requires one of the following remote storage provide
 
 ### Prerequisites common to both remote storage providers
 * The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket or Azure blob container.
-* Splunk apps and add-ons in a .tgz or .spl archive format.  
+* Splunk apps and add-ons in a .tgz or .spl archive format.
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. See [Add a persistent storage volume to the Operator pod](#add-a-persistent-storage-volume-to-the-operator-pod).
 
@@ -25,7 +25,7 @@ Utilizing the App Framework requires one of the following remote storage provide
 
 Splunk apps and add-ons deployed or installed outside of the App Framework are not managed, and are unsupported.
 
-Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+Note: For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
 ## Examples of App Framework usage
 Following section shows examples of using App Framework for both remote data storages. First, the examples for S3 based remote object storage are given and then same examples are covered for Azure blob. The examples in both the cases have lot of commonalities and the places they differ are mainly in the values for `storageType`, `provider` and `endpoint`. There are also some differences in the authoriziation setup for using IAM /Managed Identity in both remote data storages.
@@ -39,7 +39,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
 1. Confirm your remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by:
-   * s3 based remote storage: 
+   * s3 based remote storage:
        * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations.
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
@@ -120,9 +120,9 @@ spec:
 
 6. Apply the Custom Resource specification: `kubectl apply -f Standalone.yaml`
 
-The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys them to the standalone instance path for local use. 
+The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys them to the standalone instance path for local use.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
@@ -135,7 +135,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
 1. Confirm your remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by:
-   * s3 based remote storage: 
+   * s3 based remote storage:
        * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations.
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
@@ -145,7 +145,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the cluster manager, and select apps that will be distributed to all cluster peers by the cluster manager. 
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the cluster manager, and select apps that will be distributed to all cluster peers by the cluster manager.
    * The apps are split across three folders named `networkApps`, `clusterBase`, and `adminApps`. The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
@@ -221,13 +221,13 @@ spec:
 ```
 6. Apply the Custom Resource specification: `kubectl apply -f ClusterManager.yaml`
 
-The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps` folder to the cluster manager instance for local use. 
+The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps` folder to the cluster manager instance for local use.
 
-The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster peers. The cluster manager is responsible for deploying those apps to the cluster peers. 
+The apps in the `networkApps` and `clusterBase` folders are deployed to the cluster manager for use on the cluster peers. The cluster manager is responsible for deploying those apps to the cluster peers.
 
 Note: The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
@@ -240,7 +240,7 @@ This example describes the installation of apps on the Deployer and the Search H
 1. Confirm your remote storage volume path and URL.
 
 2. Configure credentials to connect to remote store by:
-   * s3 based remote storage: 
+   * s3 based remote storage:
        * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations.
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
@@ -251,15 +251,15 @@ This example describes the installation of apps on the Deployer and the Search H
 
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
-   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the Deployer, and select apps that will be distributed to all cluster search heads by the Deployer. 
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the Deployer, and select apps that will be distributed to all cluster search heads by the Deployer.
    * The apps are split across three folders named `searchApps`, `machineLearningApps` and `adminApps`. The apps placed into `searchApps` and `machineLearningApps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
    * In this example, the Splunk apps for the search heads are located at `bucket-app-framework/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework/shcLoc-us/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
 
 5. Update the SearchHeadCluster CR specification, and append the volume, App Source configuration, and scope.
-   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. 
-      * For CRs where the Splunk Enterprise instance will deploy the apps to search heads, set the `scope:cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes. 
+   * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance.
+      * For CRs where the Splunk Enterprise instance will deploy the apps to search heads, set the `scope:cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes.
    * In this example, the Deployer will run some apps locally, and deploy other apps to the clustered search heads. The App Source folder `adminApps` contains Splunk apps that are installed and run on the Deployer, and will use a local scope. The apps in the App Source folders `searchApps` and `machineLearningApps` will be deployed from the Deployer to the search heads, and will use a cluster scope.
 
 Example using S3: SearchHeadCluster.yaml
@@ -268,7 +268,7 @@ Example using S3: SearchHeadCluster.yaml
 apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
-  name: shc 
+  name: shc
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -302,7 +302,7 @@ Example using Azure blob: SearchHeadCluster.yaml
 apiVersion: enterprise.splunk.com/v4
 kind: SearchHeadCluster
 metadata:
-  name: shc 
+  name: shc
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
@@ -330,13 +330,13 @@ spec:
 ```
 6. Apply the Custom Resource specification: `kubectl apply -f SearchHeadCluster.yaml`
 
-The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the Deployer instance for local use. 
+The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the Deployer instance for local use.
 
-The apps in the `searchApps` and `machineLearningApps` folders are deployed to the Deployer for use on the clustered search heads. The Deployer is responsible for deploying those apps to the search heads. 
+The apps in the `searchApps` and `machineLearningApps` folders are deployed to the Deployer for use on the clustered search heads. The Deployer is responsible for deploying those apps to the search heads.
 
 Note: The Splunk search head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one. 
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
@@ -448,11 +448,11 @@ Here is a typical App framework configuration in a Custom Resource definition:
 `appSources` defines the name and scope of the appSource, the remote storage volume, and its location.
 
 * `name` uniquely identifies the App source configuration within a CR. This used locally by the Operator to identify the App source.
-* `scope` defines the scope of the app to be installed. 
-  * If the scope is `local`, the apps will be installed and run locally on the pod referred to by the CR. 
+* `scope` defines the scope of the app to be installed.
+  * If the scope is `local`, the apps will be installed and run locally on the pod referred to by the CR.
   * If the scope is `cluster`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) for deployment across the cluster referred to by the CR.
   * The cluster scope is only supported on CRs that manage cluster-wide app deployment.
-  
+
     | CRD Type          | Scope support                          | App Framework support |
     | :---------------- | :------------------------------------- | :-------------------- |
     | ClusterManager    | cluster, local                         | Yes                   |
@@ -463,11 +463,11 @@ Here is a typical App framework configuration in a Custom Resource definition:
     | IndexerCluster    | N/A                                    | No                    |
 
 * `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section.)
-* `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed.  
+* `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed.
 
 ### appsRepoPollIntervalSeconds
 
-If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage. 
+If app framework is enabled, the Splunk Operator creates a namespace scoped configMap named **splunk-\<namespace\>-manual-app-update**, which is used to manually trigger the app updates. The App Framework uses the polling interval `appsRepoPollIntervalSeconds` to check for additional apps, or modified apps on the remote object storage.
 
 When `appsRepoPollIntervalSeconds` is set to `0` for a CR, the App Framework will not perform a check until the configMap `status` field is updated manually. See [Manual initiation of app management](#manual_initiation_of_app_management).
 
@@ -542,7 +542,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.5.0"
+        image: "docker.io/splunk/splunk-operator:2.5.1"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging
@@ -573,7 +573,7 @@ You can prevent the App Framework from automatically polling the remote storage 
 
 When you're ready to initiate an app check using the App Framework, manually update the `status` field in the configMap for that CR type to `on`. The 'status' field defaults to 'off'.
 
-For example, you deployed one Standalone CR with app framework enabled. 
+For example, you deployed one Standalone CR with app framework enabled.
 
 ```
 kubectl get standalone
@@ -620,15 +620,15 @@ The App Framework does not preview, analyze, verify versions, or enable Splunk A
 
 1. The App Framework has no support to remove an app or add-on once it’s been deployed. To disable an app, update the archive contents located in the App Source, and set the app.conf state to disabled.
 
-2. The App Framework defines one worker per CR type. For example, if you have multiple clusters receiveing app updates, a delay while managing one cluster will delay the app updates to the other cluster. 
+2. The App Framework defines one worker per CR type. For example, if you have multiple clusters receiveing app updates, a delay while managing one cluster will delay the app updates to the other cluster.
 
 ## Setup Azure bob access with Managed Indentity
 
-Azure Managed identities can be used to provide IAM access to the blobs. With managed identities, the AKS nodes, that host the pods, can retrieve a OAuth token that provides authorization for the Splunk operator pod to read the app packages stored in the Azure Storage account. The key point here is that the AKS node is associated with a Managed Identity and this managed identity is given a `role` for read access called `Storage Blob Data Reader` to the azure storage account. 
+Azure Managed identities can be used to provide IAM access to the blobs. With managed identities, the AKS nodes, that host the pods, can retrieve a OAuth token that provides authorization for the Splunk operator pod to read the app packages stored in the Azure Storage account. The key point here is that the AKS node is associated with a Managed Identity and this managed identity is given a `role` for read access called `Storage Blob Data Reader` to the azure storage account.
 
 Here are the steps showing an example of assiging managed identity:
 
-*Assumptions:* 
+*Assumptions:*
 
 Familiarize yourself with [AKS managed identity concepts](https://learn.microsoft.com/en-us/azure/aks/use-managed-identity)
 
@@ -652,11 +652,11 @@ az aks create -g splunkOperatorResourceGroup -n splunkOperatorCluster --enable-m
 ```
 az aks get-credentials --resource-group splunkOperatorResourceGroup --name splunkOperatorCluster
 ```
-4. Get the Kubelet user managed identity 
+4. Get the Kubelet user managed identity
 
 Run
 ```
-$ az identity list 
+$ az identity list
 ```
 
 Find the section that has <AKS Cluster Name>-agentpool under name
@@ -677,7 +677,7 @@ That is look for the block that contains "name": "splunkOperatorCluster-agentpoo
 }
 ```
 
-Extract the principalId value from the outout above. Or you can use the following command to get the principalId 
+Extract the principalId value from the outout above. Or you can use the following command to get the principalId
 ```
 $ az identity show --name <identityName> --resource-group "<resourceGroup>" --query 'principalId' --output tsv
 ```
