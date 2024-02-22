@@ -679,6 +679,10 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 	} else {
 		volMntName = fmt.Sprintf(splcommon.PvcNamePrefix, splcommon.EtcVolumeStorage)
 	}
+	// update security context
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
 	containerSpec := corev1.Container{
 		Image:           Image,
 		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
@@ -697,6 +701,23 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 			Limits: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("1"),
 				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{
+					"ALL",
+				},
+				Add: []corev1.Capability{
+					"NET_BIND_SERVICE",
+				},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
 	}
