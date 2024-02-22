@@ -1,4 +1,4 @@
-name: Build and Test
+name: Graviton Build and Test
 on: push
 jobs:
   check-formating:
