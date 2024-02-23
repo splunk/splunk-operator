@@ -22,9 +22,9 @@ fi
 
 if [[ -z "${EKS_CLUSTER_INSTANCE_TYPE}" ]]; then
   echo "EKS_INSTANCE_TYPE not set. Chaning to env.sh value"
-  export EKS_CLUSTER_INSTANCE_TYPE = "${EKS_INSTANCE_TYPE}"
+  export EKS_CLUSTER_INSTANCE_TYPE="${EKS_INSTANCE_TYPE}"
 else
-  export EKS_CLUSTER_INSTANCE_TYPE = "m5.2xlarge"
+  export EKS_CLUSTER_INSTANCE_TYPE="m5.2xlarge"
 fi
 
 
