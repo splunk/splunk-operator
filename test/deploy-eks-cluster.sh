@@ -20,12 +20,8 @@ if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
   export EKS_CLUSTER_K8_VERSION="1.26"
 fi
 
-if [[ -z "${EKS_CLUSTER_INSTANCE_TYPE}" ]]; then
-  echo "EKS_INSTANCE_TYPE not set. Chaning to env.sh value"
-  export EKS_CLUSTER_INSTANCE_TYPE="${EKS_INSTANCE_TYPE}"
-else
-  export EKS_CLUSTER_INSTANCE_TYPE="m5.2xlarge"
-fi
+echo "EKS_INSTANCE_TYPE not set. Chaning to env.sh value"
+export EKS_CLUSTER_INSTANCE_TYPE="c6g.4xlarge"
 
 
 
