@@ -90,6 +90,8 @@ jobs:
         if: runner.os == 'macos'
         run: |
           brew install docker
+          brew install colima
+          colima version
           colima start
       - name: Set Test Cluster Name
         run: |
