@@ -253,7 +253,7 @@ jobs:
   push-latest:
     needs: smoke-tests
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     env:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: latest
