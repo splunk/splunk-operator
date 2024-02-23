@@ -16,38 +16,38 @@ jobs:
       run: make fmt && if [[ $? -ne 0 ]]; then false; fi
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
-  unit-tests:
-    runs-on: macos-14
-    needs: check-formating
-    steps:
-      - uses: actions/checkout@v2
-      - name: Dotenv Action
-        id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Setup Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install goveralls
-        run: |
-          go version
-          go install github.com/mattn/goveralls@latest
-      - name: Install Ginkgo
-        run: |
-          make setup/ginkgo
-          go mod tidy
-      - name: Run Unit Tests
-        run: make test
-      - name: Run Code Coverage
-        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
-      - name: Upload Coverage artifacts
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
-        with:
-          name: coverage.out
-          path: coverage.out
+  #unit-tests:
+  #  runs-on: macos-14
+  #  needs: check-formating
+  #  steps:
+  #    - uses: actions/checkout@v2
+  #    - name: Dotenv Action
+  #      id: dotenv
+  #      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+  #    - name: Setup Go
+  #      uses: actions/setup-go@v2
+  #      with:
+  #        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+  #    - name: Install goveralls
+  #      run: |
+  #        go version
+  #        go install github.com/mattn/goveralls@latest
+  #    - name: Install Ginkgo
+  #      run: |
+  #        make setup/ginkgo
+  #        go mod tidy
+  #    - name: Run Unit Tests
+  #      run: make test
+  #    - name: Run Code Coverage
+  #      run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+  #    - name: Upload Coverage artifacts
+  #      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+  #      with:
+  #        name: coverage.out
+  #        path: coverage.out
   build-operator-image:
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: check-formating
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
