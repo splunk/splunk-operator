@@ -128,7 +128,7 @@ vet: setup/ginkgo ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
-	echo "test disabled"
+	@echo Unit testing disabled
 
 ##@ Build
 
