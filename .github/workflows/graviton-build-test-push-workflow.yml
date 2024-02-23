@@ -2,7 +2,7 @@ name: Graviton Build and Test
 on: push
 jobs:
   check-formating:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -17,7 +17,7 @@ jobs:
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
   unit-tests:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     needs: check-formating
     steps:
       - uses: actions/checkout@v2
@@ -46,7 +46,7 @@ jobs:
           name: coverage.out
           path: coverage.out
   build-operator-image:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     needs: unit-tests
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
@@ -100,7 +100,7 @@ jobs:
                 #managersecret,
                 #managermc,
                ]
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
