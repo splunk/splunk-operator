@@ -190,6 +190,11 @@ jobs:
       - name: Create EKS cluster
         run: |
             export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+            export PLATFORMS=linux/arm64
+            export BUILDPLATFORM=linux/arm64
+            export TARGETOS=linux
+            export TARGETARCH=arm64
+            export EKS_INSTANCE_TYPE=c6g.4xlarge
             make cluster-up
       - name: install metric server
         run: |
