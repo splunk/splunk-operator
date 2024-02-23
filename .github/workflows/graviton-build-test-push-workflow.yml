@@ -65,8 +65,6 @@ jobs:
     - name: Install Ginkgo
       run: |
           make setup/ginkgo
-    - name: Set up Docker
-      uses: crazy-max/ghaction-setup-docker@v3
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
     - name: Install Operator SDK
@@ -127,8 +125,11 @@ jobs:
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
     steps:
-      - name: Set up Docker
-        uses: crazy-max/ghaction-setup-docker@v3
+      - name: Setup docker (missing on MacOS)
+        if: runner.os == 'macos'
+        run: |
+          brew install docker
+          colima start
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
