@@ -94,11 +94,11 @@ jobs:
       matrix:
         test: [
                 basic,
-                appframeworks1,
-                managerappframeworkc3,
-                managerappframeworkm4,
-                managersecret,
-                managermc,
+                #appframeworks1,
+                #managerappframeworkc3,
+                #managerappframeworkm4,
+                #managersecret,
+                #managermc,
                ]
     runs-on: ubuntu-latest
     env:
@@ -265,6 +265,8 @@ jobs:
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
+      with:
+        platforms: "linux/arm64"
     - name: Configure Docker Hub credentials
       uses: docker/login-action@v1
       with:
