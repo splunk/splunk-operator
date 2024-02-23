@@ -143,12 +143,11 @@ jobs:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install Python
         uses: actions/setup-python@v2
-      - id: install-aws-cli
-        uses: unfor19/install-aws-cli-action@v1
-        with:
-          version: 2                         # default
-          verbose: false                     # default
-          arch: arm64
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+          sudo installer -pkg AWSCLIV2.pkg -target /
+          aws --version
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
