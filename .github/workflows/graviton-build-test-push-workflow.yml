@@ -127,6 +127,8 @@ jobs:
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
     steps:
+      - name: Set up Docker
+        uses: crazy-max/ghaction-setup-docker@v3
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
