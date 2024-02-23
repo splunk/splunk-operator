@@ -86,7 +86,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Make Splunk Operator Image and Push to ECR
       run: |
-        make docker-buildx docker-push IMAGE_TAG_BASE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }} VERSION=$GITHUB_SHA IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA PLATFORMS=linux/arm64 BUILDPLATFORM=linux/arm64  TARGETOS=linux TARGETARCH=arm64
+        make docker-buildx IMAGE_TAG_BASE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }} VERSION=$GITHUB_SHA IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA PLATFORMS=linux/arm64 BUILDPLATFORM=linux/arm64  TARGETOS=linux TARGETARCH=arm64
   smoke-tests:
     needs: build-operator-image
     strategy:
