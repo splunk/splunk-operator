@@ -211,7 +211,7 @@ jobs:
         id: smoketest
         run: |
           export SPLUNK_OPERATOR_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-          export SPLUNK_ENTERPRISE_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          export SPLUNK_ENTERPRISE_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
