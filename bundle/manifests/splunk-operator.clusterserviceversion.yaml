@@ -120,7 +120,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.31.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.5.1
+  name: splunk-operator.v2.5.2
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -815,7 +815,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:2.5.1
+                image: docker.io/splunk/splunk-operator:2.5.2
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -929,5 +929,5 @@ spec:
   relatedImages:
   - image: docker.io/splunk/splunk:9.1.3
     name: splunk-enterprise
-  replaces: splunk-operator.v2.5.0
-  version: 2.5.1
+  replaces: splunk-operator.v2.5.1
+  version: 2.5.2
