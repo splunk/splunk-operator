@@ -30,7 +30,7 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
   bin/kustomize build config/crd | kubectl create -f -
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
-  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
+  make deploy IMAGE_TAG_BASE=docker.io/splunk/splunk-operator IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 
 if [ $? -ne 0 ]; then
