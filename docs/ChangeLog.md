@@ -1,6 +1,6 @@
 # Splunk Operator for Kubernetes Change Log
 
-## 2.5.1 (2024-02-20)
+## 2.5.2 (2024-02-28)
 
 CSPL-2535 security context for init container not set (#1290)
 
