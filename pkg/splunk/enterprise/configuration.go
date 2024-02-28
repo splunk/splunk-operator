@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/wk8/go-ordered-map/v2"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -833,10 +833,12 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
 	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
-		RunAsUser:    &runAsUser,
-		FSGroup:      &fsGroup,
-		RunAsNonRoot: &runAsNonRoot,
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
 	}
 
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)

@@ -35,7 +35,7 @@ There are a couple ways you can configure your operator deployment
 
 1. Using a ```new_values.yaml``` file to override default values (Recommended)
 ```
-helm install -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+helm install -f new_values.yaml --set installCRDs=true <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
 ```
 
 2. Using the Helm CLI directly to set new values
@@ -46,7 +46,7 @@ helm install --set <KEY>=<VALUE> <RELEASE_NAME> splunk/splunk-operator -n <RELEA
 If the release already exists, we can use ```helm upgrade``` to configure and upgrade the deployment using a file or the CLI directly as above.
 
 ```
-helm upgrade -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+helm upgrade -f new_values.yaml --set installCRDs=true <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
 ```
 
 Read more about configuring values [here](https://helm.sh/docs/intro/using_helm/).
@@ -74,7 +74,7 @@ The ```helm list``` command can be used to retrieve all deployed releases.
 
 By default, the Splunk Operator has cluster-wide access. Let's upgrade the ```splunk-operator-test``` release by revoking cluster-wide access:
 ```
-helm upgrade --set splunkOperator.clusterWideAccess=false splunk-operator-test splunk/splunk-operator -n splunk-operator
+helm upgrade --set splunkOperator.clusterWideAccess=false --set installCRDs=true splunk-operator-test splunk/splunk-operator -n splunk-operator
 ```
 ```
 NAME: splunk-operator-test
@@ -100,7 +100,7 @@ helm dependency build splunk/splunk-enterprise
 ```
 If the operator is already installed then you will need to disable the dependency:
 ```
-helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
+helm install --set splunk-operator.enabled=false --set installCRDs=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
 Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise custom resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
 
@@ -124,7 +124,7 @@ helm show values splunk/splunk-enterprise
 
 To install a Splunk Enterprise deployment according to our configurations above:
 ```
-helm install -f new_values.yaml splunk-enterprise-test splunk/splunk-enterprise -n splunk-operator
+helm install --set installCRDs=true -f new_values.yaml splunk-enterprise-test splunk/splunk-enterprise -n splunk-operator
 ```
 ```
 NAME: splunk-enterprise-test
@@ -166,6 +166,6 @@ The Splunk Enterprise chart has support for three Splunk Validated Architectures
 
 Install a Standalone deployment using the following command:
 ```
-helm install --set s1.enabled=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
+helm install --set s1.enabled=true --set installCRDs=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
 ```
 Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-operator/values.yaml) and [splunk/splunk-enterprise](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-enterprise/values.yaml).
