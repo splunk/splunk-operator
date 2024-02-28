@@ -33,6 +33,7 @@ spec:
         runAsUser: 1001
         fsGroup: 1001
         runAsNonRoot: true
+        fsGroupChangePolicy: "OnRootMismatch"
       hostNetwork: false
       hostPID: false
       hostIPC: false
