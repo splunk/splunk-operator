@@ -45,7 +45,7 @@ Limitation: all the IndexerCluster resources must be located in the same namespa
 
 #### Deploy the cluster-manager
 
-Note: 
+Note:
 * The image version is defined in these resources as this allows to control the upgrade cycle
 * For all available default parameters refer to [splunk-ansible default.yml.spec.md](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md)
 
@@ -148,7 +148,7 @@ metadata:
   - enterprise.splunk.com/delete-pvc
 spec:
   replicas: 3
-  image: "splunk/splunk:9.0.3-a2"
+  image: "splunk/splunk:9.1.3"
   clusterManagerRef:
     name: example
   defaults: |-
@@ -157,4 +157,3 @@ spec:
       site: site0
 EOF
 ```
-
