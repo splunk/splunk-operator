@@ -72,11 +72,11 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
-  kubectl describe pod -n splunk-operator
 fi
 
 if [ $? -ne 0 ]; then
   echo "Unable to install the operator. Exiting..."
+  kubectl describe pod -n splunk-operator
   exit 1
 fi
 
@@ -88,6 +88,7 @@ if [  "${CLUSTER_WIDE}" == "true" ]; then
   kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
   if [ $? -ne 0 ]; then
     echo "Operator installation not ready..."
+    kubectl describe pod -n splunk-operator
     exit 1
   fi
 fi
