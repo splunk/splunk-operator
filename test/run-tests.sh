@@ -31,6 +31,7 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
   make deploy IMAGE_TAG_BASE=docker.io/splunk/splunk-operator IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
+  kubectl describe pod -n splunk-operator
 fi
 
 if [ $? -ne 0 ]; then
