@@ -328,8 +328,8 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Upload V1 apps to S3 for Monitoring Console
-			oldImage := "splunk/splunk:9.0.3-a2"
-			newImage := "splunk/splunk:9.0.5"
+			oldImage := "splunk/splunk:9.0.5"
+			newImage := "splunk/splunk:9.1.3"
 
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
 			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
