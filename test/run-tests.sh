@@ -76,6 +76,7 @@ fi
 
 if [ $? -ne 0 ]; then
   echo "Unable to install the operator. Exiting..."
+  kubectl describe pod -n splunk-operator
   exit 1
 fi
 
@@ -86,6 +87,16 @@ if [  "${CLUSTER_WIDE}" == "true" ]; then
   sleep 2
   kubectl wait --for=condition=ready pod -l control-plane=controller-manager --timeout=600s -n splunk-operator
   if [ $? -ne 0 ]; then
+    echo "kubectl get pods -n kube-system ---"
+    kubectl get pods -n kube-system
+    echo "kubectl get deployement ebs-csi-controller -n kube-system ---"
+    kubectl get deployement ebs-csi-controller -n kube-system
+    echo "kubectl describe pvc -n splunk-operator ---"
+    kubectl describe pvc -n splunk-operator
+    echo "kubectl describe pv ---"
+    kubectl describe pv
+    echo "kubectl describe pod -n splunk-operator ---"
+    kubectl describe pod -n splunk-operator
     echo "Operator installation not ready..."
     exit 1
   fi
