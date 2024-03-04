@@ -92,6 +92,7 @@ function createCluster() {
     aws iam attach-role-policy  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy  --role-name ${rolename}
     kubectl annotate serviceaccount -n $namespace $service_account eks.amazonaws.com/role-arn=arn:aws:iam::$account_id:role/${rolename}
     eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::$account_id:role/${rolename} --force
+    eksctl utils update-cluster-logging --cluster ${TEST_CLUSTER_NAME}
   else
     echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"
     # Cluster exists but kubeconfig may not
