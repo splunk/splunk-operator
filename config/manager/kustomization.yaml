@@ -18,3 +18,4 @@ images:
 - name: controller
   newName: docker.io/splunk/splunk-operator
   newTag: 2.5.2
+
