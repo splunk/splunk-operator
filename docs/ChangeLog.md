@@ -1,5 +1,20 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.5.2 (2024-02-28)
+
+CSPL-2535 security context for init container not set (#1290)
+
+### Supported Splunk Version
+>| Splunk Version|
+>| --- |
+>| 9.0.8 |
+>| 9.1.3 |
+
+### Supported Kubernetes Version
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
+
 ## 2.5.1 (2024-02-20)
 
 CSPL-2532: fix for leader election lost issue (#1281)
