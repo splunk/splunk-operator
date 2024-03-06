@@ -683,6 +683,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 	runAsUser := int64(41812)
 	runAsNonRoot := true
 	privileged := false
+	roFs := true
 	containerSpec := corev1.Container{
 		Image:           Image,
 		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
@@ -706,6 +707,7 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
+			ReadOnlyRootFilesystem:   &roFs,
 			AllowPrivilegeEscalation: &[]bool{false}[0],
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{
