@@ -33,6 +33,7 @@ else
   echo "Installing enterprise splunk image from ${SPLUNK_ENTERPRISE_IMAGE_GRAVITON}..."
   make deploy IMAGE_TAG_BASE=docker.io/splunk/splunk-operator IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
   sleep 30; kubectl describe pod -n splunk-operator
+  sleep 15; echo ${SPLUNK_ENTERPRISE_IMAGE_GRAVITON} > ~/tmp_aj; cat ~/tmp_aj;
 fi
 
 if [ $? -ne 0 ]; then
