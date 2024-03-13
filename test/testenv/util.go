@@ -720,7 +720,7 @@ func newMonitoringConsoleSpecWithGivenSpec(name string, ns string, spec enterpri
 
 // DumpGetPods prints and returns list of pods in the namespace
 func DumpGetPods(ns string) []string {
-	output, err := exec.Command("kubectl", "get", "pods", "-n", ns).Output()
+	output, err := exec.Command("kubectl", "get", "pods", "-o", "yaml", "-n", ns).Output()
 	var splunkPods []string
 	if err != nil {
 		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
