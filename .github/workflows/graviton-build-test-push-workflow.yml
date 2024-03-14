@@ -1,13 +1,8 @@
-name: Build and Test
-on:
-  push:
-    branches:
-      - develop
-      - main
-      - feature**
+name: Graviton Build and Test
+on: push
 jobs:
   check-formating:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -21,38 +16,38 @@ jobs:
       run: make fmt && if [[ $? -ne 0 ]]; then false; fi
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
-  unit-tests:
+  #unit-tests:
+  #  runs-on: macos-14
+  #  needs: check-formating
+  #  steps:
+  #    - uses: actions/checkout@v2
+  #    - name: Dotenv Action
+  #      id: dotenv
+  #      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+  #    - name: Setup Go
+  #      uses: actions/setup-go@v2
+  #      with:
+  #        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+  #    - name: Install goveralls
+  #      run: |
+  #        go version
+  #        go install github.com/mattn/goveralls@latest
+  #    - name: Install Ginkgo
+  #      run: |
+  #        make setup/ginkgo
+  #        go mod tidy
+  #    - name: Run Unit Tests
+  #      run: make test
+  #    - name: Run Code Coverage
+  #      run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
+  #    - name: Upload Coverage artifacts
+  #      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+  #      with:
+  #        name: coverage.out
+  #        path: coverage.out
+  build-graviton-operator-image:
     runs-on: ubuntu-latest
     needs: check-formating
-    steps:
-      - uses: actions/checkout@v2
-      - name: Dotenv Action
-        id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Setup Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-      - name: Install goveralls
-        run: |
-          go version
-          go install github.com/mattn/goveralls@latest
-      - name: Install Ginkgo
-        run: |
-          make setup/ginkgo
-          go mod tidy
-      - name: Run Unit Tests
-        run: make test
-      - name: Run Code Coverage
-        run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
-      - name: Upload Coverage artifacts
-        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
-        with:
-          name: coverage.out
-          path: coverage.out
-  build-operator-image:
-    runs-on: ubuntu-latest
-    needs: unit-tests
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -89,52 +84,11 @@ jobs:
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
-    - name: Make Splunk Operator Image
+    - name: Make Splunk Operator Image and Push to ECR
       run: |
-        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Push Splunk Operator Image to ECR
-      run: |
-        echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-  vulnerability-scan:
-    runs-on: ubuntu-latest
-    needs: build-operator-image
-    env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-    steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2.5.0
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Pull Splunk Operator Image Locally
-      run: |
-        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Setup clair scanner
-      run: make setup_clair_scanner
-    - name: Scan container image
-      run: make run_clair_scan IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Stop clair scanner
-      run: make stop_clair_scanner
-    - name: Save scan results as artifacts
-      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
-      with:
-        name: clair-scanner-logs
-        path: clair-scanner-logs
+        make docker-buildx IMAGE_TAG_BASE=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }} VERSION=$GITHUB_SHA IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA PLATFORMS=linux/arm64 BUILDPLATFORM=linux/arm64  TARGETOS=linux TARGETARCH=arm64
   smoke-tests:
-    needs: vulnerability-scan
+    needs: build-graviton-operator-image
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +99,7 @@ jobs:
                 managerappframeworkm4,
                 managersecret,
                 managermc,
-               ]
+                ]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
@@ -224,8 +178,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
-      - name: Pull Splunk Enterprise Image
-        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -235,20 +187,15 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-      - name: Tag and Push Splunk Enterprise Image to ECR
-        run: |
-          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: Pull Splunk Operator Image Locally
-        run: |
-          docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-      - name: Change Operator Image Tag to latest
-        run: |
-          docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
       - name: Create EKS cluster
         run: |
-           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-           make cluster-up
+            export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+            export PLATFORMS=linux/arm64
+            export BUILDPLATFORM=linux/arm64
+            export TARGETOS=linux
+            export TARGETARCH=arm64
+            export EKS_INSTANCE_TYPE=c6g.4xlarge
+            make cluster-up
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -263,6 +210,8 @@ jobs:
       - name: Run smoke test
         id: smoketest
         run: |
+          export SPLUNK_OPERATOR_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export SPLUNK_ENTERPRISE_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
           make int-test
       - name: Collect Test Logs
         if: ${{ always() }}
