@@ -37,6 +37,7 @@ ENV OPERATOR=/manager \
 # RUN sudo apt-get install -y libvshadow-utils
 RUN sudo useradd -ms /bin/bash nonroot -u 1001
 # RUN sudo apt-get install -y krb5-user
+RUN sudo apt install -y unattended-upgrades
 RUN sudo unattended-upgrade -d
 
 LABEL name="splunk" \
