@@ -1,4 +1,4 @@
-name: AWSLinux Graviton Build and Test
+name: AmazonLinux Graviton Build and Test
 on: push
 jobs:
   check-formating:

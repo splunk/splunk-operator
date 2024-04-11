@@ -1,4 +1,4 @@
-name: Graviton Integration Test WorkFlow
+name: UBI Graviton Integration Test WorkFlow
 on:
   push:
     branches:
