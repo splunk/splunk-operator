@@ -33,9 +33,9 @@ ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
 
-RUN yum -y install shadow-utils
+RUN apt-get install -y libvshadow-utils
 RUN useradd -ms /bin/bash nonroot -u 1001
-RUN apt-get install krb5-user
+RUN apt-get install -y krb5-user
 RUN unattended-upgrade -d
 
 LABEL name="splunk" \
