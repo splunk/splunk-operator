@@ -1,53 +1,15 @@
-name: AWSLinux Graviton Build and Test
-on: push
+name: Graviton Integration Test WorkFlow
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - feature**
+      - graviton-sok
 jobs:
-  check-formating:
-    runs-on: macos-14
-    steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Setup Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    - name: Check Source formatting
-      run: make fmt && if [[ $? -ne 0 ]]; then false; fi
-    - name: Lint source code
-      run: make vet && if [[ $? -ne 0 ]]; then false; fi
-  #unit-tests:
-  #  runs-on: macos-14
-  #  needs: check-formating
-  #  steps:
-  #    - uses: actions/checkout@v2
-  #    - name: Dotenv Action
-  #      id: dotenv
-  #      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-  #    - name: Setup Go
-  #      uses: actions/setup-go@v2
-  #      with:
-  #        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-  #    - name: Install goveralls
-  #      run: |
-  #        go version
-  #        go install github.com/mattn/goveralls@latest
-  #    - name: Install Ginkgo
-  #      run: |
-  #        make setup/ginkgo
-  #        go mod tidy
-  #    - name: Run Unit Tests
-  #      run: make test
-  #    - name: Run Code Coverage
-  #      run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
-  #    - name: Upload Coverage artifacts
-  #      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
-  #      with:
-  #        name: coverage.out
-  #        path: coverage.out
   build-graviton-operator-image:
     runs-on: ubuntu-latest
-    needs: check-formating
+    timeout-minutes: 360
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -62,9 +24,6 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    - name: Install Ginkgo
-      run: |
-          make setup/ginkgo
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2.5.0
     - name: Install Operator SDK
@@ -84,37 +43,38 @@ jobs:
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
-    - name: Make Splunk Operator Image and Push to ECR
+    - name: Make Splunk Operator Image and Push Image
       run: |
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:aws-$GITHUB_SHA -f Dockerfile .
         docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubi-$GITHUB_SHA -f Dockerfile.ubi .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubuntu-$GITHUB_SHA -f Dockerfile.ubuntu .
-  smoke-tests:
-    needs: build-graviton-operator-image
+  int-tests:
     strategy:
       fail-fast: false
       matrix:
-        test: [
-                basic,
-                appframeworks1,
-                managerappframeworkc3,
-                managerappframeworkm4,
-                managersecret,
-                managermc,
-                ]
+        test:
+          [
+            appframeworks1,
+            managerappframeworkc3,
+            managerappframeworkm4,
+            managersecret,
+            managersmartstore,
+            managermc,
+            managercrcrud,
+            licensemanager,
+            managerdeletecr,
+          ]
     runs-on: ubuntu-latest
+    needs: build-graviton-operator-image
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      EKS_INSTANCE_TYPE: c6g.4xlarge
       TEST_FOCUS: "${{ matrix.test }}"
-      # This regex matches any string not containing smoke keyword
-      TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
+      # This regex matches any string not containing integration keyword
+      TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: eks
-      EKS_INSTANCE_TYPE: m5.2xlarge
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
@@ -123,14 +83,19 @@ jobs:
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
-      EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
     steps:
       - name: Set Test Cluster Name
         run: |
           echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
-      - name: Chekcout code
+      - name: Set Test Cluster Nodes and Parallel Runs
+        run: >-
+          if grep -q "appframework" <<< "${{ matrix.test }}"; then
+            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
+            echo "CLUSTER_NODES=2" >> $GITHUB_ENV
+          fi
+      - name: Checkcout code
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
@@ -171,15 +136,13 @@ jobs:
           eksctl version
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
-      - name: Install Operator SDK
-        run: |
-          sudo curl -L -o /usr/local/bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}/operator-sdk-${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}-x86_64-linux-gnu
-          sudo chmod +x /usr/local/bin/operator-sdk
       - name: Configure Docker Hub credentials
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
+      - name: Pull Splunk Enterprise Image
+        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -189,15 +152,19 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
+      - name: Tag and Push Splunk Enterprise Image to ECR
+        run: |
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Create EKS cluster
         run: |
-            export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-            export PLATFORMS=linux/arm64
-            export BUILDPLATFORM=linux/arm64
-            export TARGETOS=linux
-            export TARGETARCH=arm64
-            export EKS_INSTANCE_TYPE=c6g.4xlarge
-            make cluster-up
+          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+          export PLATFORMS=linux/arm64
+          export BUILDPLATFORM=linux/arm64
+          export TARGETOS=linux
+          export TARGETARCH=arm64
+          export EKS_INSTANCE_TYPE=c6g.4xlarge
+          make cluster-up
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -209,10 +176,9 @@ jobs:
           sudo snap install kustomize
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
-      - name: Run smoke test
-        id: smoketest
+      - name: Run Integration test
         run: |
-          export SPLUNK_OPERATOR_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:aws-$GITHUB_SHA
+          export SPLUNK_OPERATOR_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubi-$GITHUB_SHA
           export SPLUNK_ENTERPRISE_IMAGE_GRAVITON=${{ secrets.ECR_REPOSITORY }}/${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
           make int-test
       - name: Collect Test Logs
@@ -235,36 +201,3 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-  push-latest:
-    needs: smoke-tests
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    env:
-      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      TAG: latest
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2.5.0
-    - name: Configure Docker Hub credentials
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Pull Splunk Operator Image Locally and Push to docker hub
-      run: |
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:aws-${{ env.TAG }} -f Dockefile .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubi-${{ env.TAG }} -f Dockerfile.ubi .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubuntu-${{ env.TAG }} -f Dockerfile.ubuntu .
