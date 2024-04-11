@@ -33,7 +33,7 @@ ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
 
-# RUN sudo apt-get update -y
+RUN apt-get update -y
 RUN apt-get install -y sudo
 # RUN sudo apt-get install -y libvshadow-utils
 RUN sudo useradd -ms /bin/bash nonroot -u 1001
