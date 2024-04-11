@@ -87,8 +87,6 @@ jobs:
     - name: Make Splunk Operator Image and Push to ECR
       run: |
         docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:aws-$GITHUB_SHA -f Dockerfile .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubi-$GITHUB_SHA -f Dockerfile.ubi .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubuntu-$GITHUB_SHA -f Dockerfile.ubuntu .
   smoke-tests:
     needs: build-graviton-operator-image
     strategy:
@@ -266,5 +264,3 @@ jobs:
     - name: Pull Splunk Operator Image Locally and Push to docker hub
       run: |
         docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:aws-${{ env.TAG }} -f Dockefile .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubi-${{ env.TAG }} -f Dockerfile.ubi .
-        docker buildx build --push --platform linux/arm64,linux/amd64 --tag ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:ubuntu-${{ env.TAG }} -f Dockerfile.ubuntu .
