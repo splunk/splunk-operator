@@ -206,11 +206,15 @@ jobs:
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
-      - name: Setup Kustomize
-        run: |
-          sudo snap install kustomize
-          mkdir -p ./bin
-          cp /snap/bin/kustomize ./bin/kustomize
+      #- name: Setup Kustomize
+      #  run: |
+      #    sudo snap install kustomize
+      #    mkdir -p ./bin
+      #    cp /snap/bin/kustomize ./bin/kustomize
+      - name: Install Kustomize
+        uses: multani/action-setup-kustomize@v1
+        with:
+          version: 4.5.4
       - name: Run smoke test
         id: smoketest
         run: |
