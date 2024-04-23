@@ -2,10 +2,8 @@ name: UBI Graviton Integration Test WorkFlow
 on:
   push:
     branches:
-      - develop
-      - main
       - feature**
-      - graviton-sok
+      #- graviton-sok
 jobs:
   build-graviton-operator-image:
     runs-on: ubuntu-latest

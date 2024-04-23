@@ -1,5 +1,9 @@
 name: UBI Graviton Build and Test
-on: push
+on:
+  push:
+    branches:
+      - feature**
+      #- graviton-sok
 jobs:
   check-formating:
     runs-on: macos-14

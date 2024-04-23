@@ -1928,7 +1928,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standalone and MC CR's", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
