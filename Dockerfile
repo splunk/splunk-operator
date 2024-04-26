@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager m
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+FROM --platform=${BUILDPLATFORM:-linux/amd64} public.ecr.aws/amazonlinux/amazonlinux:2023
 
 ENV OPERATOR=/manager \
     USER_UID=1001 \
