@@ -815,14 +815,13 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 
 	if stdErr != "" || err != nil {
 		// CSPL-2598 - Log warnings/errors.
-		// Return an error only when the extraction of app name
-		// fails i.e name is empty
-		// In a scenario where there is a non-empty incorrect
-		// name, we are ok just error logging as this API is used
-		// only to avoid re-installation of apps(Eg. ES post install
-		// failures)
-		// The onus falls on the user to make sure the app packages
-		// are tarred appropriately
+		// Return an error only when an empty app name is extracted.
+		// In a scenario where there is a non-empty incorrect name,
+		// we are ok just error logging as this API is used
+		// only to avoid re-installation of apps(Eg. ES post install failures).
+		// The onus falls on the user to make sure the app packages are tarred appropriately
+		// to avoid the re-installation cycles as it is prudent to continue
+		// to the install step for harmless warnings
 		scopedLog.Error(err, "could not get installed app name stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
 		if stdOut == "" {
 			return "Empty app package name, could not get installed app name", err
