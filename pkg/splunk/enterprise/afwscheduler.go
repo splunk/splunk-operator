@@ -822,7 +822,7 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 		// The onus falls on the user to make sure the app packages are tarred appropriately
 		// to avoid the re-installation cycles as it is prudent to continue
 		// to the install step for harmless warnings
-		scopedLog.Error(err, "could not get installed app name stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+		scopedLog.Error(err, "could not get installed app name", "stdOut", stdOut, "stdErr", stdErr, "command", command, "appPkgPathOnPod", appPkgPathOnPod)
 		if stdOut == "" {
 			return "Empty app package name, could not get installed app name", err
 		}
