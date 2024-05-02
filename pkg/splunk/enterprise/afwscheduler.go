@@ -741,7 +741,6 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 		scopedLog.Info("Check if app is already installed ", "name", worker.appDeployInfo.AppPackageTopFolder)
 
 		appInstalled, err := isAppAlreadyInstalled(rctx, cr, localCtx.podExecClient, worker.appDeployInfo.AppPackageTopFolder)
-
 		if err != nil {
 			scopedLog.Error(err, "local scoped app package install failed while checking if app is already installed")
 			return err
@@ -804,7 +803,6 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 // get the name of top folder from the package.
 // this name is later used as installed app name
 func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, appPkgPathOnPod string, podExecClient splutil.PodExecClientImpl) (string, error) {
-
 	reqLogger := log.FromContext(rctx)
 	scopedLog := reqLogger.WithName("getAppTopFolderFromPackage").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace(), "appPkgPathOnPod", appPkgPathOnPod)
 
@@ -816,7 +814,18 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 	scopedLog.Info("Pod exec result", "stdOut", stdOut)
 
 	if stdErr != "" || err != nil {
-		return "", fmt.Errorf("could not get installed app name stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+		// CSPL-2598 - Log warnings/errors.
+		// Return an error only when an empty app name is extracted.
+		// In a scenario where there is a non-empty incorrect name,
+		// we are ok just error logging as this API is used
+		// only to avoid re-installation of apps(Eg. ES post install failures).
+		// The onus falls on the user to make sure the app packages are tarred appropriately
+		// to avoid the re-installation cycles as it is prudent to continue
+		// to the install step for harmless warnings
+		scopedLog.Error(err, "could not get installed app name", "stdOut", stdOut, "stdErr", stdErr, "command", command, "appPkgPathOnPod", appPkgPathOnPod)
+		if stdOut == "" {
+			return "Empty app package name, could not get installed app name", err
+		}
 	}
 
 	//output contains a trailing \n also, something like "SplunkEnterpriseSecuritySuite\n"

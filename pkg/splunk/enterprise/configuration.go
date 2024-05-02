@@ -1425,7 +1425,7 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
 
-        // CSPL-2574 - Assign just in case invalid scope is passed through!
+	// CSPL-2574 - Assign just in case invalid scope is passed through!
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
 
