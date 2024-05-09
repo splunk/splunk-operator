@@ -3,7 +3,7 @@ module github.com/splunk/splunk-operator
 go 1.21
 
 require (
-	github.com/aws/aws-sdk-go v1.42.16
+	github.com/aws/aws-sdk-go v1.52.5
 	github.com/go-logr/logr v1.3.0
 	github.com/google/go-cmp v0.6.0
 	github.com/minio/minio-go/v7 v7.0.16
