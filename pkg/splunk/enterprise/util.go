@@ -193,8 +193,13 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 	scopedLog.Info("Creating the client", "volume", vol.Name, "bucket", bucket, "bucket path", prefix)
 
 	var err error
+	var s3PathUrl bool
 
-	remoteDataClient.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, fn)
+	if vol.S3PathUrl {
+		s3PathUrl = true
+	}
+
+	remoteDataClient.Client, err = getClient(ctx, bucket, accessKeyID, secretAccessKey, prefix, prefix /* startAfter*/, vol.Region, vol.Endpoint, s3PathUrl, fn)
 
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")

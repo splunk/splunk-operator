@@ -17,9 +17,10 @@ package client
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"testing"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -71,7 +72,7 @@ func TestNewMockAWSS3Client(t *testing.T) {
 		return cl
 	}
 
-	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
@@ -81,7 +82,7 @@ func TestNewMockAWSS3Client(t *testing.T) {
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err == nil {
 		t.Errorf("NewMockAWSS3Client should have returned an error since we passed nil client in init function.")
@@ -96,7 +97,7 @@ func TestNewMockAWMinioClient(t *testing.T) {
 		return cl
 	}
 
-	_, err := NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
@@ -106,7 +107,7 @@ func TestNewMockAWMinioClient(t *testing.T) {
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err == nil {
 		t.Errorf("NewMockMinioS3Client should have returned an error since we passed nil client in init function.")
@@ -121,7 +122,7 @@ func TestNewMockAzureBlobClient(t *testing.T) {
 		return cl
 	}
 
-	_, err := NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAzureBlobClient should have returned a Mock AWS client.")
@@ -131,7 +132,7 @@ func TestNewMockAzureBlobClient(t *testing.T) {
 	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		return nil
 	}
-	_, err = NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err == nil {
 		t.Errorf("NewMockAzureBlobClient should have returned an error since we passed nil client in init function.")

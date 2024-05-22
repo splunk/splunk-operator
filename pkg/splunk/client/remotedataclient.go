@@ -104,7 +104,8 @@ type GetInitFunc func(context.Context, string, string, string) interface{}
 
 // GetRemoteDataClient gets the required RemoteDataClient based on the storageType and provider
 type GetRemoteDataClient func(context.Context, string /* bucket */, string, /* Access key ID */
-	string /* Secret access key */, string /* Prefix */, string /* StartAfter */, string /* Region */, string /* Endpoint */, GetInitFunc) (RemoteDataClient, error)
+	string /* Secret access key */, string /* Prefix */, string /* StartAfter */, string, /* Region */
+	string /* Endpoint */, bool /* pathStyleUrl */, GetInitFunc) (RemoteDataClient, error)
 
 // SplunkRemoteDataClient is a simple object used to connect to RemoteDataClient
 type SplunkRemoteDataClient struct {

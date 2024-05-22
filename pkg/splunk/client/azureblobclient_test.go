@@ -52,7 +52,7 @@ func TestNewAzureBlobClient(t *testing.T) {
 	ctx := context.TODO()
 	fn := InitAzureBlobClientWrapper
 
-	azureBlobClient, err := NewAzureBlobClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://mystorageaccount.blob.core.windows.net", fn)
+	azureBlobClient, err := NewAzureBlobClient(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://mystorageaccount.blob.core.windows.net", false, fn)
 	if azureBlobClient == nil || err != nil {
 		t.Errorf("NewAzureBlobClient should have returned a valid Azure Blob client.")
 	}

@@ -32,7 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	log "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // blank assignment to verify that AWSS3Client implements RemoteDataClient
@@ -146,7 +146,7 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, pathStyleUrl bool, fn GetInitFunc) (RemoteDataClient, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 
@@ -160,7 +160,6 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 	}
 
 	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
-
 	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
@@ -171,6 +170,10 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 	if !ok {
 		return nil, fmt.Errorf("unable to get s3 client")
 	}
+
+	// Set path style URL
+	cl.(*s3.S3).Client.Config.S3ForcePathStyle = &pathStyleUrl
+
 	downloader := s3manager.NewDownloaderWithClient(cl.(*s3.S3))
 
 	return &AWSS3Client{

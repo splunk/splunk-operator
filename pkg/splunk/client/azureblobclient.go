@@ -198,7 +198,7 @@ func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) 
 }
 
 // NewAzureBlobClient returns an AzureBlob client
-func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, pathStyleUrl bool, fn GetInitFunc) (RemoteDataClient, error) {
 	// Get http client
 	azureHTTPClient := fn(ctx, endpoint, storageAccountName, secretAccessKey)
 
