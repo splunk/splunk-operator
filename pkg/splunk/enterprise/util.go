@@ -16,6 +16,7 @@
 package enterprise
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"gopkg.in/ini.v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -594,6 +596,31 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	// 2. Prepare server.conf entries
 	iniServerConf := GetServerConfigEntries(&smartstore.DeepCopy().CacheManagerConf)
 	mapSplunkConfDetails["server.conf"] = iniServerConf
+
+	serverCfg, err := ini.Load([]byte(iniServerConf))
+	if err == nil {
+		err = GetNoahClientConfiguration(serverCfg, &smartstore.NoahSpec.NoahClient)
+		if err != nil {
+			scopedLog.Error(err, "unable to read noah client config", "error", err.Error())
+
+		}
+		err = GetNoahServerConfiguration(serverCfg, &smartstore.NoahSpec.NoahService)
+		if err != nil {
+			scopedLog.Error(err, "unable to read noah server config", "error", err.Error())
+		}
+		GetNoahSettingConf(serverCfg, &smartstore.NoahSpec.NoahSettings)
+		if err != nil {
+			scopedLog.Error(err, "unable to read noah setting config", "error", err.Error())
+		}
+		GetNoahLatestBucketMapConf(serverCfg, &smartstore.NoahSpec.NoahClientBucketSettings)
+		if err != nil {
+			scopedLog.Error(err, "unable to read noah laster bucket map config", "error", err.Error())
+		}
+		var buf bytes.Buffer
+		_, err = serverCfg.WriteTo(&buf)
+		mapSplunkConfDetails["server.conf"] = buf.String()
+	}
+	scopedLog.Error(err, "unable to read server config ignore ..", "error", err.Error())
 
 	// Create smartstore config consisting indexes.conf
 	configMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), crKind)

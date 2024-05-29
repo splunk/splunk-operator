@@ -267,6 +267,62 @@ type SmartStoreSpec struct {
 
 	// Defines Cache manager settings
 	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty"`
+
+	NoahSpec NoahSpec `json:"noahConfiguration,omitempty"`
+}
+
+type NoahSpec struct {
+	NoahService              NoahService              `json:"noahService,omitempty"`
+	NoahClient               NoahClient               `json:"noahClient,omitempty"`
+	NoahClientBucketSettings NoahClientBucketSettings `json:"noahClientBucketSettings,omitempty"`
+	NoahSettings             NoahSettings             `json:"noahSettings,omitempty"`
+}
+
+// NoahClient
+// [noahClient]
+// timeout.connect = 12
+// timeout.read = 12
+// timeout.write = 12
+// retry_policy = max_count
+// max_count.max_retries_per_part = 5
+type NoahClient struct {
+	TimeoutConnect            int `json:"timeoutConnect,omitempty" `
+	TimeoutRead               int `json:"timeoutRead,omitempty"`
+	TimeoutWrite              int `json:"timeoutWrite,omitempty"`
+	RetryPolicy               int `json:"retryPolicy,omitempty"`
+	MaxCountMaxRetriesPerPart int `json:"maxCountMaxRetriesPerPart,omitempty"`
+}
+
+// NoahService
+type NoahService struct {
+	// [noahService]
+	Uri                          string `json:"uri,omitempty"`
+	HeartbeatPeriod              int    `json:"heartbeatPeriod,omitempty"`
+	HeartbeatAsPercentageOfLease int    `json:"heartbeatAsPercentageOfLease,omitempty"`
+	Tenant                       string `json:"tenant,omitempty"`
+	RemoteBundle                 string `json:"remoteBundle,omitempty"`
+	Pass4SymmKey                 string `json:"pass4SymmKey,omitempty"`
+	AdvertisedAddr               string `json:"advertiseAddr,omitempty"`
+	UsePeers                     bool   `json:"usePeers,omitempty"`
+	Pass4SymmKey_minLength       int    `json:"pass4SymmKeyMinLength,omitempty"`
+	ReportIndexDeletion          bool   `json:"reportIndexDeletion,omitempty"`
+	CacheBucketTimeout           int    `json:"cacheBucketTimeout,omitempty"`
+}
+
+// NoahClientBucketSetting
+type NoahClientBucketSettings struct {
+	//[noahClient:get_latest_bucket_map]
+	RetryPolicy                  string `json:"retryPolicy,omitempty"`
+	MaxCountMaxRetriesPerPart    int    `json:"maxCountMaxRetriesPerPart,omitempty"`
+	BackoffStrategy              string `json:"BackoffStrategy,omitempty"`
+	BackoffStrategyConstantDelay int    `json:"BackoffStrategyConstantDelay,omitempty"`
+}
+
+// NoahSettings
+type NoahSettings struct {
+	//[noah_settings]
+	SkipBucketReloadPeriod int `json:"SkipBucketReloadPeriod,omitempty"`
+	ListFrozenBucketPeriod int `json:"ListFrozenBucketPeriod,omitempty"`
 }
 
 // CacheManagerSpec defines cachemanager specific configuration

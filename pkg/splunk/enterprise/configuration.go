@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/wk8/go-ordered-map/v2"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,6 +39,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"gopkg.in/ini.v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -833,10 +834,12 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
 	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
-		RunAsUser:    &runAsUser,
-		FSGroup:      &fsGroup,
-		RunAsNonRoot: &runAsNonRoot,
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
 	}
 
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
@@ -1423,10 +1426,9 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
 
-	if !localOrPremScope {
-		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
-		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
-	}
+	// CSPL-2574 - Assign just in case invalid scope is passed through!
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
 
 	duplicateAppSourceNameChecker := make(map[string]bool)
 
@@ -1869,6 +1871,149 @@ max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploa
 `, serverConfIni)
 
 	return serverConfIni
+}
+
+// GetNoahServerConfiguration prepares the server.conf entries, and returns as a string
+func GetNoahServerConfiguration(serverCfg *ini.File, noahService *enterpriseApi.NoahService) error {
+	if noahService == nil {
+		return nil
+	}
+
+	// uri = http://sok-noah.noah.svc.cluster.local:8443
+	// heartbeatPeriod = 0
+	// heartbeatAsPercentageOfLease = 25.0%
+	// tenant = test3
+	// remoteBundle = s3://noahappframework/test3/smartstore/
+	// pass4SymmKey = $7$COX5QF9IQyRQPjWS8+NQl2f8KTehCnxWLfbICmf11aQTFE9+PsFVB5kTIo7ZTZzlghEqNcOiv6s=
+	// # advertisedAddr = https://splunk-stdln-shc-standalone-service.test3.svc.cluster.local:8089
+	// # usePeers = false
+	// pass4SymmKey_minLength = 10
+	// reportIndexDeletion = true
+	// cacheBucketTimeout = 3
+
+	if noahService.Uri != "" {
+		serverCfg.Section("noahService").Key("uri").SetValue(noahService.Uri)
+	}
+	if noahService.HeartbeatPeriod != 0 {
+		serverCfg.Section("noahService").Key("heartbeatPeriod").SetValue(strconv.Itoa(noahService.HeartbeatPeriod))
+	}
+
+	if noahService.HeartbeatAsPercentageOfLease != 0 {
+		serverCfg.Section("noahService").Key("heartbeatAsPercentageOfLease").SetValue(strconv.Itoa(noahService.HeartbeatAsPercentageOfLease))
+	}
+	if noahService.Tenant != "" {
+		serverCfg.Section("noahService").Key("tenant").SetValue(noahService.Tenant)
+	}
+	if noahService.RemoteBundle != "" {
+		serverCfg.Section("noahService").Key("remoteBundle").SetValue(noahService.RemoteBundle)
+	}
+	if noahService.Pass4SymmKey != "" {
+		serverCfg.Section("noahService").Key("pass4SymmKey").SetValue(noahService.Pass4SymmKey)
+	}
+	if noahService.AdvertisedAddr != "" {
+		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(noahService.AdvertisedAddr)
+	}
+	if noahService.UsePeers != true {
+		serverCfg.Section("noahService").Key("usePeers").SetValue("true")
+	} else {
+		serverCfg.Section("noahService").Key("usePeers").SetValue("false")
+	}
+	if noahService.Pass4SymmKey_minLength != 0 {
+		serverCfg.Section("noahService").Key("pass4SymmKey_minLength").SetValue(strconv.Itoa(noahService.Pass4SymmKey_minLength))
+	}
+	if noahService.ReportIndexDeletion {
+		serverCfg.Section("noahService").Key("reportIndexDeletion").SetValue("true")
+	} else {
+		serverCfg.Section("noahService").Key("reportIndexDeletion").SetValue("false")
+	}
+	if noahService.CacheBucketTimeout != 0 {
+		serverCfg.Section("noahService").Key("cacheBucketTimeout").SetValue(strconv.Itoa(noahService.CacheBucketTimeout))
+	}
+
+	return nil
+}
+
+// GetNoahClientConfiguration prepares the server.conf entries, and returns as a string
+func GetNoahClientConfiguration(serverCfg *ini.File, noahClientConf *enterpriseApi.NoahClient) error {
+	if noahClientConf == nil {
+		return nil
+	}
+
+	//timeout.connect = 12
+	//timeout.read = 12
+	//timeout.write = 12
+	//retry_policy = max_count
+	//max_count.max_retries_per_part = 5
+
+	if noahClientConf.MaxCountMaxRetriesPerPart != 0 {
+		serverCfg.Section("noahClient").Key("max_count.max_retries_per_part").SetValue(strconv.Itoa(noahClientConf.MaxCountMaxRetriesPerPart))
+	}
+
+	if noahClientConf.TimeoutConnect != 0 {
+		serverCfg.Section("noahClient").Key("timeout.connect").SetValue(strconv.Itoa(noahClientConf.TimeoutConnect))
+	}
+
+	if noahClientConf.TimeoutRead != 0 {
+		serverCfg.Section("noahClient").Key("timeout.read").SetValue(strconv.Itoa(noahClientConf.TimeoutRead))
+	}
+
+	if noahClientConf.TimeoutWrite != 0 {
+		serverCfg.Section("noahClient").Key("timeout.write").SetValue(strconv.Itoa(noahClientConf.TimeoutWrite))
+	}
+
+	if noahClientConf.TimeoutWrite != 0 {
+		serverCfg.Section("noahClient").Key("retry_policy").SetValue(strconv.Itoa(noahClientConf.RetryPolicy))
+	}
+
+	return nil
+}
+
+// GetNoahSettingConf prepares the server.conf entries, and returns as a string
+func GetNoahSettingConf(serverCfg *ini.File, noahSettings *enterpriseApi.NoahSettings) error {
+	if noahSettings == nil {
+		return nil
+	}
+
+	// [noah_settings]
+	// skip_bucket_reload_period = 0
+	// list_frozen_bucket_period = 0
+
+	if noahSettings.SkipBucketReloadPeriod != 0 {
+		serverCfg.Section("noah_settings").Key("skip_bucket_reload_period").SetValue(strconv.Itoa(noahSettings.SkipBucketReloadPeriod))
+	}
+	if noahSettings.ListFrozenBucketPeriod != 0 {
+		serverCfg.Section("noah_settings").Key("list_frozen_bucket_period").SetValue(strconv.Itoa(noahSettings.ListFrozenBucketPeriod))
+	}
+
+	return nil
+}
+
+// GetNoahLatestBucketMapConf prepares the server.conf entries, and returns as a string
+func GetNoahLatestBucketMapConf(serverCfg *ini.File, noahBucketMapConf *enterpriseApi.NoahClientBucketSettings) error {
+	if noahBucketMapConf == nil {
+		return nil
+	}
+
+	// [noahClient:get_latest_bucket_map]
+	// retry_policy = max_count
+	// max_count.max_retries_per_part = 4
+	// backoff_strategy = exponential
+	// backoff_strategy.constant.delay = 500ms
+
+	if noahBucketMapConf.RetryPolicy != "" {
+		serverCfg.Section("noahClient:get_latest_bucket_map").Key("retry_policy").SetValue(noahBucketMapConf.RetryPolicy)
+	}
+	if noahBucketMapConf.MaxCountMaxRetriesPerPart != 0 {
+		serverCfg.Section("noahClient:get_latest_bucket_map").Key("max_count.max_retries_per_part").SetValue(strconv.Itoa(noahBucketMapConf.MaxCountMaxRetriesPerPart))
+	}
+	if noahBucketMapConf.BackoffStrategy != "" {
+		serverCfg.Section("noahClient:get_latest_bucket_map").Key("backoff_strategy").SetValue(noahBucketMapConf.BackoffStrategy)
+	}
+	if noahBucketMapConf.BackoffStrategyConstantDelay != 0 {
+		serverCfg.Section("noahClient:get_latest_bucket_map").Key("backoff_strategy.constant.delay").SetValue(strconv.Itoa(noahBucketMapConf.BackoffStrategyConstantDelay))
+	}
+
+	return nil
 }
 
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
