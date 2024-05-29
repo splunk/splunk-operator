@@ -39,12 +39,16 @@ sva:
   m4:
 
     enabled: false
-
+    
     clusterManager: {}
       # allSites: "site1,site2"
       # site: site1
       # zone: us-west-1a
-
+    
+    totalCluster: []
+    # - name: cm-1
+    # - name: cm-2
+    
     indexerClusters: []
       # - name: idx1
       #   site: site1
