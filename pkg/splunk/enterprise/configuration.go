@@ -1899,7 +1899,8 @@ func GetNoahServerConfiguration(serverCfg *ini.File, noahService *enterpriseApi.
 	}
 
 	if noahService.HeartbeatAsPercentageOfLease != 0 {
-		serverCfg.Section("noahService").Key("heartbeatAsPercentageOfLease").SetValue(strconv.Itoa(noahService.HeartbeatAsPercentageOfLease))
+		value := fmt.Sprintf("%d.0%%", noahService.HeartbeatAsPercentageOfLease)
+		serverCfg.Section("noahService").Key("heartbeatAsPercentageOfLease").SetValue(value)
 	}
 	if noahService.Tenant != "" {
 		serverCfg.Section("noahService").Key("tenant").SetValue(noahService.Tenant)
@@ -1913,13 +1914,13 @@ func GetNoahServerConfiguration(serverCfg *ini.File, noahService *enterpriseApi.
 	if noahService.AdvertisedAddr != "" {
 		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(noahService.AdvertisedAddr)
 	}
-	if noahService.UsePeers != true {
+	if noahService.UsePeers {
 		serverCfg.Section("noahService").Key("usePeers").SetValue("true")
 	} else {
 		serverCfg.Section("noahService").Key("usePeers").SetValue("false")
 	}
-	if noahService.Pass4SymmKey_minLength != 0 {
-		serverCfg.Section("noahService").Key("pass4SymmKey_minLength").SetValue(strconv.Itoa(noahService.Pass4SymmKey_minLength))
+	if noahService.Pass4SymmKeyMinLength != 0 {
+		serverCfg.Section("noahService").Key("pass4SymmKey_minLength").SetValue(strconv.Itoa(noahService.Pass4SymmKeyMinLength))
 	}
 	if noahService.ReportIndexDeletion {
 		serverCfg.Section("noahService").Key("reportIndexDeletion").SetValue("true")
@@ -2010,7 +2011,8 @@ func GetNoahLatestBucketMapConf(serverCfg *ini.File, noahBucketMapConf *enterpri
 		serverCfg.Section("noahClient:get_latest_bucket_map").Key("backoff_strategy").SetValue(noahBucketMapConf.BackoffStrategy)
 	}
 	if noahBucketMapConf.BackoffStrategyConstantDelay != 0 {
-		serverCfg.Section("noahClient:get_latest_bucket_map").Key("backoff_strategy.constant.delay").SetValue(strconv.Itoa(noahBucketMapConf.BackoffStrategyConstantDelay))
+		value := fmt.Sprintf("%dms", noahBucketMapConf.BackoffStrategyConstantDelay)
+		serverCfg.Section("noahClient:get_latest_bucket_map").Key("backoff_strategy.constant.delay").SetValue(value)
 	}
 
 	return nil

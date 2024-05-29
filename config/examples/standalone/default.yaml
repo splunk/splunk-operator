@@ -2,4 +2,31 @@ apiVersion: enterprise.splunk.com/v4
 kind: Standalone
 metadata:
   name: test
-spec: {}
+spec:
+  noahSpec:
+    noahService:
+      uri:  http://sok-noah.noah.svc.cluster.local:8443
+      heartbeatPeriod: 0
+      heartbeatAsPercentageOfLease: 25.0%
+      tenant: test3
+      remoteBundle: s3://noahappframework/test3/smartstore/
+      pass4SymmKey: $7$COX5QF9IQyRQPjWS8+NQl2f8KTehCnxWLfbICmf11aQTFE9+PsFVB5kTIo7ZTZzlghEqNcOiv6s=
+      advertisedAddr: https://splunk-stdln-shc-standalone-service.test3.svc.cluster.local:8089  
+      usePeers: false
+      pass4SymmKeyMinLength: 10
+      reportIndexDeletion: true
+      cacheBucketTimeout: 3
+    noahClient: 
+      timeoutConnect: 12
+      timeoutRead: 12
+      timeoutWrite: 12
+      retryPolicy: max_count
+      maxCountMaxRetriesPerPart: 5
+    noahClientBucketSetting:
+      retryPolicy: max_count
+      maxCountMaxRetriesPerPart: 4
+      backoffStrategy: exponential
+      backoffStrategyConstantDelay: 500
+    noahSettings:
+      skipBucketReloadPeriod: 0
+      listFrozenBucketPeriod: 0

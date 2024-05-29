@@ -268,7 +268,7 @@ type SmartStoreSpec struct {
 	// Defines Cache manager settings
 	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty"`
 
-	NoahSpec NoahSpec `json:"noahConfiguration,omitempty"`
+	NoahSpec NoahSpec `json:"noahSpec,omitempty"`
 }
 
 type NoahSpec struct {
@@ -304,7 +304,7 @@ type NoahService struct {
 	Pass4SymmKey                 string `json:"pass4SymmKey,omitempty"`
 	AdvertisedAddr               string `json:"advertiseAddr,omitempty"`
 	UsePeers                     bool   `json:"usePeers,omitempty"`
-	Pass4SymmKey_minLength       int    `json:"pass4SymmKeyMinLength,omitempty"`
+	Pass4SymmKeyMinLength        int    `json:"pass4SymmKeyMinLength,omitempty"`
 	ReportIndexDeletion          bool   `json:"reportIndexDeletion,omitempty"`
 	CacheBucketTimeout           int    `json:"cacheBucketTimeout,omitempty"`
 }
