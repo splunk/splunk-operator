@@ -286,11 +286,11 @@ type NoahSpec struct {
 // retry_policy = max_count
 // max_count.max_retries_per_part = 5
 type NoahClient struct {
-	TimeoutConnect            int `json:"timeoutConnect,omitempty" `
-	TimeoutRead               int `json:"timeoutRead,omitempty"`
-	TimeoutWrite              int `json:"timeoutWrite,omitempty"`
-	RetryPolicy               int `json:"retryPolicy,omitempty"`
-	MaxCountMaxRetriesPerPart int `json:"maxCountMaxRetriesPerPart,omitempty"`
+	TimeoutConnect            int    `json:"timeoutConnect,omitempty" `
+	TimeoutRead               int    `json:"timeoutRead,omitempty"`
+	TimeoutWrite              int    `json:"timeoutWrite,omitempty"`
+	RetryPolicy               string `json:"retryPolicy,omitempty"`
+	MaxCountMaxRetriesPerPart int    `json:"maxCountMaxRetriesPerPart,omitempty"`
 }
 
 // NoahService
@@ -314,15 +314,15 @@ type NoahClientBucketSettings struct {
 	//[noahClient:get_latest_bucket_map]
 	RetryPolicy                  string `json:"retryPolicy,omitempty"`
 	MaxCountMaxRetriesPerPart    int    `json:"maxCountMaxRetriesPerPart,omitempty"`
-	BackoffStrategy              string `json:"BackoffStrategy,omitempty"`
-	BackoffStrategyConstantDelay int    `json:"BackoffStrategyConstantDelay,omitempty"`
+	BackoffStrategy              string `json:"backoffStrategy,omitempty"`
+	BackoffStrategyConstantDelay int    `json:"backoffStrategyConstantDelay,omitempty"`
 }
 
 // NoahSettings
 type NoahSettings struct {
 	//[noah_settings]
-	SkipBucketReloadPeriod int `json:"SkipBucketReloadPeriod,omitempty"`
-	ListFrozenBucketPeriod int `json:"ListFrozenBucketPeriod,omitempty"`
+	SkipBucketReloadPeriod int `json:"skipBucketReloadPeriod,omitempty"`
+	ListFrozenBucketPeriod int `json:"listFrozenBucketPeriod,omitempty"`
 }
 
 // CacheManagerSpec defines cachemanager specific configuration
@@ -403,6 +403,20 @@ type IndexAndGlobalCommonSpec struct {
 
 	// MaxGlobalDataSizeMB defines the maximum amount of cumulative space for warm and cold buckets of an index
 	MaxGlobalRawDataSizeMB uint `json:"maxGlobalRawDataSizeMB,omitempty"`
+
+	HotBucketStreaming HotBucketStreaming `json:"hotBucketStreaming,omitempty"`
+
+	Metric Metric `json:"meric,omitempty"`
+}
+
+type HotBucketStreaming struct {
+	ReportStatus           bool `json:"reportStatus,omitempty"`
+	SendSlices             bool `json:"sendSlices,omitempty"`
+	DeleteHotsAfterRestart bool `json:"deleteHotsAfterRestart,omitempty"`
+}
+
+type Metric struct {
+	StubOutRawdataJournal bool `json:"stubOutRawdataJournal,omitempty"`
 }
 
 // IndexAndCacheManagerCommonSpec defines configurations that can be configured at index level or at server level

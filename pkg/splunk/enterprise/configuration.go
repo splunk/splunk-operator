@@ -1730,7 +1730,7 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format
-func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, mapData map[string]string) (string, error) {
+func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, indexIni *ini.File) (string, error) {
 	var volumesConf string
 
 	reqLogger := log.FromContext(ctx)
@@ -1743,25 +1743,22 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 			if err != nil {
 				return "", fmt.Errorf("unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
 			}
-
-			volumesConf = fmt.Sprintf(`%s
-[volume:%s]
-storageType = remote
-path = s3://%s
-remote.s3.access_key = %s
-remote.s3.secret_key = %s
-remote.s3.endpoint = %s
-remote.s3.auth_region = %s
-`, volumesConf, volumes[i].Name, volumes[i].Path, s3AccessKey, s3SecretKey, volumes[i].Endpoint, volumes[i].Region)
+			volumeName := fmt.Sprintf("volume:%s", volumes[i].Name)
+			path := fmt.Sprintf("s3://%s", volumes[i].Path)
+			indexIni.Section(volumeName).Key("storageType").SetValue("remote")
+			indexIni.Section(volumeName).Key("path").SetValue(path)
+			indexIni.Section(volumeName).Key("remote.s3.access_key").SetValue(s3AccessKey)
+			indexIni.Section(volumeName).Key("remote.s3.secret_key").SetValue(s3SecretKey)
+			indexIni.Section(volumeName).Key("remote.s3.endpoint").SetValue(volumes[i].Endpoint)
+			indexIni.Section(volumeName).Key("remote.s3.auth_region").SetValue(volumes[i].Region)
 		} else {
 			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
-			volumesConf = fmt.Sprintf(`%s
-[volume:%s]
-storageType = remote
-path = s3://%s
-remote.s3.endpoint = %s
-remote.s3.auth_region = %s
-`, volumesConf, volumes[i].Name, volumes[i].Path, volumes[i].Endpoint, volumes[i].Region)
+			volumeName := fmt.Sprintf("volume:%s", volumes[i].Name)
+			path := fmt.Sprintf("s3://%s", volumes[i].Path)
+			indexIni.Section(volumeName).Key("storageType").SetValue("remote")
+			indexIni.Section(volumeName).Key("path").SetValue(path)
+			indexIni.Section(volumeName).Key("endpoint").SetValue(volumes[i].Endpoint)
+			indexIni.Section(volumeName).Key("remote.s3.auth_region").SetValue(volumes[i].Region)
 		}
 	}
 
@@ -1769,43 +1766,40 @@ remote.s3.auth_region = %s
 }
 
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
-func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec) string {
+func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec, indexIni *ini.File) string {
 
 	var indexesConf string
 
 	defaultRemotePath := "$_index_name"
 
 	for i := 0; i < len(indexes); i++ {
-		// Write the index stanza name
-		indexesConf = fmt.Sprintf(`%s
-[%s]`, indexesConf, indexes[i].Name)
-
+		indexName := indexes[i].Name
 		if indexes[i].RemotePath != "" && indexes[i].VolName != "" {
-			indexesConf = fmt.Sprintf(`%s
-remotePath = volume:%s/%s`, indexesConf, indexes[i].VolName, indexes[i].RemotePath)
+			indexesRemotePath := fmt.Sprintf(`volume:%s/%s`, indexes[i].VolName, indexes[i].RemotePath)
+			indexIni.Section(indexName).Key("remotePath").SetValue(indexesRemotePath)
 		} else if indexes[i].VolName != "" {
-			indexesConf = fmt.Sprintf(`%s
-remotePath = volume:%s/%s`, indexesConf, indexes[i].VolName, defaultRemotePath)
+			indexesRemotePath := fmt.Sprintf(`volume:%s/%s`, indexes[i].VolName, defaultRemotePath)
+			indexIni.Section(indexName).Key("remotePath").SetValue(indexesRemotePath)
 		}
 
 		if indexes[i].HotlistBloomFilterRecencyHours != 0 {
-			indexesConf = fmt.Sprintf(`%s
-hotlist_bloom_filter_recency_hours = %d`, indexesConf, indexes[i].HotlistBloomFilterRecencyHours)
+			hotlistBloomFilterRecencyHours := fmt.Sprintf(`%d`, indexes[i].HotlistBloomFilterRecencyHours)
+			indexIni.Section(indexName).Key("hotlist_bloom_filter_recency_hours").SetValue(hotlistBloomFilterRecencyHours)
 		}
 
 		if indexes[i].HotlistRecencySecs != 0 {
-			indexesConf = fmt.Sprintf(`%s
-hotlist_recency_secs = %d`, indexesConf, indexes[i].HotlistRecencySecs)
+			hotlistRecencySecs := fmt.Sprintf(`%d`, indexes[i].HotlistRecencySecs)
+			indexIni.Section(indexName).Key("hotlist_recency_secs").SetValue(hotlistRecencySecs)
 		}
 
 		if indexes[i].MaxGlobalDataSizeMB != 0 {
-			indexesConf = fmt.Sprintf(`%s
-maxGlobalDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalDataSizeMB)
+			maxGlobalDataSizeMB := fmt.Sprintf(`%d`, indexes[i].MaxGlobalDataSizeMB)
+			indexIni.Section(indexName).Key("maxGlobalDataSizeMB").SetValue(maxGlobalDataSizeMB)
 		}
 
 		if indexes[i].MaxGlobalRawDataSizeMB != 0 {
-			indexesConf = fmt.Sprintf(`%s
-maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
+			maxGlobalRawDataSizeMB := fmt.Sprintf(`%d`, indexes[i].MaxGlobalRawDataSizeMB)
+			indexIni.Section(indexName).Key("maxGlobalRawDataSizeMB").SetValue(maxGlobalRawDataSizeMB)
 		}
 
 		// Add a new line in betwen index stanzas
@@ -1818,7 +1812,7 @@ maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 }
 
 // GetServerConfigEntries prepares the server.conf entries, and returns as a string
-func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) string {
+func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec, serverCfg *ini.File) string {
 	if cacheManagerConf == nil {
 		return ""
 	}
@@ -1829,38 +1823,37 @@ func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec) st
 	emptyStanza := serverConfIni
 
 	if cacheManagerConf.EvictionPaddingSizeMB != 0 {
-		serverConfIni = fmt.Sprintf(`%s
-eviction_padding = %d`, serverConfIni, cacheManagerConf.EvictionPaddingSizeMB)
+		evictionPaddingSizeMB := fmt.Sprintf(`%d`, cacheManagerConf.EvictionPaddingSizeMB)
+		serverCfg.Section("cachemanager").Key("eviction_padding").SetValue(evictionPaddingSizeMB)
 	}
 
 	if cacheManagerConf.EvictionPolicy != "" {
-		serverConfIni = fmt.Sprintf(`%s
-eviction_policy = %s`, serverConfIni, cacheManagerConf.EvictionPolicy)
+		serverCfg.Section("cachemanager").Key("eviction_policy").SetValue(cacheManagerConf.EvictionPolicy)
 	}
 
 	if cacheManagerConf.HotlistBloomFilterRecencyHours != 0 {
-		serverConfIni = fmt.Sprintf(`%s
-hotlist_bloom_filter_recency_hours = %d`, serverConfIni, cacheManagerConf.HotlistBloomFilterRecencyHours)
+		hotlistBloomFilterRecencyHours := fmt.Sprintf(`%d`, cacheManagerConf.HotlistBloomFilterRecencyHours)
+		serverCfg.Section("cachemanager").Key("hotlist_bloom_filter_recency_hours").SetValue(hotlistBloomFilterRecencyHours)
 	}
 
 	if cacheManagerConf.HotlistRecencySecs != 0 {
-		serverConfIni = fmt.Sprintf(`%s
-hotlist_recency_secs = %d`, serverConfIni, cacheManagerConf.HotlistRecencySecs)
+		hotlistRecencySecs := fmt.Sprintf(`%d`, cacheManagerConf.HotlistRecencySecs)
+		serverCfg.Section("cachemanager").Key("hotlist_recency_secs").SetValue(hotlistRecencySecs)
 	}
 
 	if cacheManagerConf.MaxCacheSizeMB != 0 {
-		serverConfIni = fmt.Sprintf(`%s
-max_cache_size = %d`, serverConfIni, cacheManagerConf.MaxCacheSizeMB)
+		maxCacheSizeMB := fmt.Sprintf(`%d`, cacheManagerConf.MaxCacheSizeMB)
+		serverCfg.Section("cachemanager").Key("max_cache_size").SetValue(maxCacheSizeMB)
 	}
 
 	if cacheManagerConf.MaxConcurrentDownloads != 0 {
-		serverConfIni = fmt.Sprintf(`%s
-max_concurrent_downloads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentDownloads)
+		maxConcurrentDownloads := fmt.Sprintf(`%d`, cacheManagerConf.MaxConcurrentDownloads)
+		serverCfg.Section("cachemanager").Key("max_concurrent_downloads").SetValue(maxConcurrentDownloads)
 	}
 
 	if cacheManagerConf.MaxConcurrentUploads != 0 {
-		serverConfIni = fmt.Sprintf(`%s
-max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploads)
+		maxConcurrentUploads := fmt.Sprintf(`%d`, cacheManagerConf.MaxConcurrentUploads)
+		serverCfg.Section("cachemanager").Key("max_concurrent_uploads").SetValue(maxConcurrentUploads)
 	}
 
 	if emptyStanza == serverConfIni {
@@ -1874,7 +1867,7 @@ max_concurrent_uploads = %d`, serverConfIni, cacheManagerConf.MaxConcurrentUploa
 }
 
 // GetNoahServerConfiguration prepares the server.conf entries, and returns as a string
-func GetNoahServerConfiguration(serverCfg *ini.File, noahService *enterpriseApi.NoahService) error {
+func GetNoahServerConfiguration(noahService *enterpriseApi.NoahService, serverCfg *ini.File) error {
 	if noahService == nil {
 		return nil
 	}
@@ -1894,9 +1887,7 @@ func GetNoahServerConfiguration(serverCfg *ini.File, noahService *enterpriseApi.
 	if noahService.Uri != "" {
 		serverCfg.Section("noahService").Key("uri").SetValue(noahService.Uri)
 	}
-	if noahService.HeartbeatPeriod != 0 {
-		serverCfg.Section("noahService").Key("heartbeatPeriod").SetValue(strconv.Itoa(noahService.HeartbeatPeriod))
-	}
+	serverCfg.Section("noahService").Key("heartbeatPeriod").SetValue(strconv.Itoa(noahService.HeartbeatPeriod))
 
 	if noahService.HeartbeatAsPercentageOfLease != 0 {
 		value := fmt.Sprintf("%d.0%%", noahService.HeartbeatAsPercentageOfLease)
@@ -1919,23 +1910,19 @@ func GetNoahServerConfiguration(serverCfg *ini.File, noahService *enterpriseApi.
 	} else {
 		serverCfg.Section("noahService").Key("usePeers").SetValue("false")
 	}
-	if noahService.Pass4SymmKeyMinLength != 0 {
-		serverCfg.Section("noahService").Key("pass4SymmKey_minLength").SetValue(strconv.Itoa(noahService.Pass4SymmKeyMinLength))
-	}
+	serverCfg.Section("noahService").Key("pass4SymmKey_minLength").SetValue(strconv.Itoa(noahService.Pass4SymmKeyMinLength))
 	if noahService.ReportIndexDeletion {
 		serverCfg.Section("noahService").Key("reportIndexDeletion").SetValue("true")
 	} else {
 		serverCfg.Section("noahService").Key("reportIndexDeletion").SetValue("false")
 	}
-	if noahService.CacheBucketTimeout != 0 {
-		serverCfg.Section("noahService").Key("cacheBucketTimeout").SetValue(strconv.Itoa(noahService.CacheBucketTimeout))
-	}
+	serverCfg.Section("noahService").Key("cacheBucketTimeout").SetValue(strconv.Itoa(noahService.CacheBucketTimeout))
 
 	return nil
 }
 
 // GetNoahClientConfiguration prepares the server.conf entries, and returns as a string
-func GetNoahClientConfiguration(serverCfg *ini.File, noahClientConf *enterpriseApi.NoahClient) error {
+func GetNoahClientConfiguration(noahClientConf *enterpriseApi.NoahClient, serverCfg *ini.File) error {
 	if noahClientConf == nil {
 		return nil
 	}
@@ -1946,31 +1933,20 @@ func GetNoahClientConfiguration(serverCfg *ini.File, noahClientConf *enterpriseA
 	//retry_policy = max_count
 	//max_count.max_retries_per_part = 5
 
-	if noahClientConf.MaxCountMaxRetriesPerPart != 0 {
-		serverCfg.Section("noahClient").Key("max_count.max_retries_per_part").SetValue(strconv.Itoa(noahClientConf.MaxCountMaxRetriesPerPart))
-	}
+	serverCfg.Section("noahClient").Key("max_count.max_retries_per_part").SetValue(strconv.Itoa(noahClientConf.MaxCountMaxRetriesPerPart))
 
-	if noahClientConf.TimeoutConnect != 0 {
-		serverCfg.Section("noahClient").Key("timeout.connect").SetValue(strconv.Itoa(noahClientConf.TimeoutConnect))
-	}
+	serverCfg.Section("noahClient").Key("timeout.connect").SetValue(strconv.Itoa(noahClientConf.TimeoutConnect))
 
-	if noahClientConf.TimeoutRead != 0 {
-		serverCfg.Section("noahClient").Key("timeout.read").SetValue(strconv.Itoa(noahClientConf.TimeoutRead))
-	}
+	serverCfg.Section("noahClient").Key("timeout.read").SetValue(strconv.Itoa(noahClientConf.TimeoutRead))
 
-	if noahClientConf.TimeoutWrite != 0 {
-		serverCfg.Section("noahClient").Key("timeout.write").SetValue(strconv.Itoa(noahClientConf.TimeoutWrite))
-	}
-
-	if noahClientConf.TimeoutWrite != 0 {
-		serverCfg.Section("noahClient").Key("retry_policy").SetValue(strconv.Itoa(noahClientConf.RetryPolicy))
-	}
+	serverCfg.Section("noahClient").Key("timeout.write").SetValue(strconv.Itoa(noahClientConf.TimeoutWrite))
+	serverCfg.Section("noahClient").Key("retry_policy").SetValue(noahClientConf.RetryPolicy)
 
 	return nil
 }
 
 // GetNoahSettingConf prepares the server.conf entries, and returns as a string
-func GetNoahSettingConf(serverCfg *ini.File, noahSettings *enterpriseApi.NoahSettings) error {
+func GetNoahSettingConf(noahSettings *enterpriseApi.NoahSettings, serverCfg *ini.File) error {
 	if noahSettings == nil {
 		return nil
 	}
@@ -1979,18 +1955,14 @@ func GetNoahSettingConf(serverCfg *ini.File, noahSettings *enterpriseApi.NoahSet
 	// skip_bucket_reload_period = 0
 	// list_frozen_bucket_period = 0
 
-	if noahSettings.SkipBucketReloadPeriod != 0 {
-		serverCfg.Section("noah_settings").Key("skip_bucket_reload_period").SetValue(strconv.Itoa(noahSettings.SkipBucketReloadPeriod))
-	}
-	if noahSettings.ListFrozenBucketPeriod != 0 {
-		serverCfg.Section("noah_settings").Key("list_frozen_bucket_period").SetValue(strconv.Itoa(noahSettings.ListFrozenBucketPeriod))
-	}
+	serverCfg.Section("noah_settings").Key("skip_bucket_reload_period").SetValue(strconv.Itoa(noahSettings.SkipBucketReloadPeriod))
+	serverCfg.Section("noah_settings").Key("list_frozen_bucket_period").SetValue(strconv.Itoa(noahSettings.ListFrozenBucketPeriod))
 
 	return nil
 }
 
 // GetNoahLatestBucketMapConf prepares the server.conf entries, and returns as a string
-func GetNoahLatestBucketMapConf(serverCfg *ini.File, noahBucketMapConf *enterpriseApi.NoahClientBucketSettings) error {
+func GetNoahLatestBucketMapConf(noahBucketMapConf *enterpriseApi.NoahClientBucketSettings, serverCfg *ini.File) error {
 	if noahBucketMapConf == nil {
 		return nil
 	}
@@ -2019,38 +1991,62 @@ func GetNoahLatestBucketMapConf(serverCfg *ini.File, noahBucketMapConf *enterpri
 }
 
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
-func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec) string {
+func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec, serverCfg *ini.File) string {
 
 	remotePath := "$_index_name"
 
-	indexDefaults := fmt.Sprintf(`[default]
-repFactor = auto
-maxDataSize = auto
-homePath = $SPLUNK_DB/%s/db
-coldPath = $SPLUNK_DB/%s/colddb
-thawedPath = $SPLUNK_DB/%s/thaweddb`,
-		remotePath, remotePath, remotePath)
+	homePathvalue := fmt.Sprintf("$SPLUNK_DB/%s/db", remotePath)
+	coldPathvalue := fmt.Sprintf("$SPLUNK_DB/%s/colddb", remotePath)
+	thawedPathvalue := fmt.Sprintf("$SPLUNK_DB/%s/thaweddb", remotePath)
+
+	serverCfg.Section("default").Key("repFactor").SetValue("auto")
+	serverCfg.Section("default").Key("maxDataSize").SetValue("auto")
+	serverCfg.Section("default").Key("homePath").SetValue(homePathvalue)
+	serverCfg.Section("default").Key("coldPath").SetValue(coldPathvalue)
+	serverCfg.Section("default").Key("thawedPath").SetValue(thawedPathvalue)
 
 	// Do not change any of the following Sprintf formats(Intentionally indented)
 	if defaults.VolName != "" {
 		//if defaults.VolName != "" && defaults.RemotePath != "" {
-		indexDefaults = fmt.Sprintf(`%s
-remotePath = volume:%s/%s`, indexDefaults, defaults.VolName, remotePath)
+		value := fmt.Sprintf("volume:%s/%s", defaults.VolName, remotePath)
+		serverCfg.Section("default").Key("remotePath").SetValue(value)
 	}
 
 	if defaults.MaxGlobalDataSizeMB != 0 {
-		indexDefaults = fmt.Sprintf(`%s
-maxGlobalDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalDataSizeMB)
+		value := fmt.Sprintf("%d", defaults.MaxGlobalDataSizeMB)
+		serverCfg.Section("default").Key("maxGlobalDataSizeMB").SetValue(value)
 	}
 
 	if defaults.MaxGlobalRawDataSizeMB != 0 {
-		indexDefaults = fmt.Sprintf(`%s
-maxGlobalRawDataSizeMB = %d`, indexDefaults, defaults.MaxGlobalRawDataSizeMB)
+		value := fmt.Sprintf("%d", defaults.MaxGlobalRawDataSizeMB)
+		serverCfg.Section("default").Key("maxGlobalRawDataSizeMB").SetValue(value)
 	}
 
-	indexDefaults = fmt.Sprintf(`%s
-`, indexDefaults)
-	return indexDefaults
+	if defaults.HotBucketStreaming.ReportStatus {
+		serverCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("true")
+	} else {
+		serverCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("false")
+	}
+
+	if defaults.HotBucketStreaming.SendSlices {
+		serverCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("true")
+	} else {
+		serverCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("false")
+	}
+
+	if defaults.HotBucketStreaming.DeleteHotsAfterRestart {
+		serverCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("true")
+	} else {
+		serverCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("false")
+	}
+
+	if defaults.Metric.StubOutRawdataJournal {
+		serverCfg.Section("default").Key("metric.stubOutRawdataJournal").SetValue("true")
+	} else {
+		serverCfg.Section("default").Key("metric.stubOutRawdataJournal").SetValue("false")
+	}
+
+	return ""
 }
 
 // validateProbe validates a generic probe values

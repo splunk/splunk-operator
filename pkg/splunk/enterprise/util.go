@@ -566,11 +566,13 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySmartStoreConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
+	indexerIni, _ := ini.Load([]byte(""))
+
 	// 1. Prepare the indexes.conf entries
 	mapSplunkConfDetails := make(map[string]string)
 
 	// Get the list of volumes in INI format
-	volumesConfIni, err := GetSmartstoreVolumesConfig(ctx, client, cr, smartstore, mapSplunkConfDetails)
+	volumesConfIni, err := GetSmartstoreVolumesConfig(ctx, client, cr, smartstore, indexerIni)
 	if err != nil {
 		return nil, configMapDataChanged, err
 	}
@@ -580,7 +582,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	}
 
 	// Get the list of indexes in INI format
-	indexesConfIni := GetSmartstoreIndexesConfig(smartstore.IndexList)
+	indexesConfIni := GetSmartstoreIndexesConfig(smartstore.IndexList, indexerIni)
 
 	if indexesConfIni == "" {
 		scopedLog.Info("Index stanza list is empty")
@@ -588,39 +590,49 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 		return nil, configMapDataChanged, fmt.Errorf("indexes without Volume configuration is not allowed")
 	}
 
-	defaultsConfIni := GetSmartstoreIndexesDefaults(smartstore.Defaults)
+	_ = GetSmartstoreIndexesDefaults(smartstore.Defaults, indexerIni)
 
-	iniSmartstoreConf := fmt.Sprintf(`%s %s %s`, defaultsConfIni, volumesConfIni, indexesConfIni)
-	mapSplunkConfDetails["indexes.conf"] = iniSmartstoreConf
+	//iniSmartstoreConf := fmt.Sprintf(`%s %s %s`, defaultsConfIni, volumesConfIni, indexesConfIni)
+	var buf bytes.Buffer
+	_, err = indexerIni.WriteTo(&buf)
+	if err != nil {
+		return nil, configMapDataChanged, fmt.Errorf("writing indexer buffer failed")
+	}
+	mapSplunkConfDetails["indexes.conf"] = buf.String()
 
 	// 2. Prepare server.conf entries
-	iniServerConf := GetServerConfigEntries(&smartstore.DeepCopy().CacheManagerConf)
+	serverCfg, err := ini.Load([]byte(""))
+	iniServerConf := GetServerConfigEntries(&smartstore.DeepCopy().CacheManagerConf, serverCfg)
 	mapSplunkConfDetails["server.conf"] = iniServerConf
 
-	serverCfg, err := ini.Load([]byte(iniServerConf))
 	if err == nil {
-		err = GetNoahClientConfiguration(serverCfg, &smartstore.NoahSpec.NoahClient)
+		err = GetNoahClientConfiguration(&smartstore.NoahSpec.NoahClient, serverCfg)
 		if err != nil {
 			scopedLog.Error(err, "unable to read noah client config", "error", err.Error())
 
 		}
-		err = GetNoahServerConfiguration(serverCfg, &smartstore.NoahSpec.NoahService)
+		err = GetNoahServerConfiguration(&smartstore.NoahSpec.NoahService, serverCfg)
 		if err != nil {
 			scopedLog.Error(err, "unable to read noah server config", "error", err.Error())
 		}
-		GetNoahSettingConf(serverCfg, &smartstore.NoahSpec.NoahSettings)
+		GetNoahSettingConf(&smartstore.NoahSpec.NoahSettings, serverCfg)
 		if err != nil {
 			scopedLog.Error(err, "unable to read noah setting config", "error", err.Error())
 		}
-		GetNoahLatestBucketMapConf(serverCfg, &smartstore.NoahSpec.NoahClientBucketSettings)
+		GetNoahLatestBucketMapConf(&smartstore.NoahSpec.NoahClientBucketSettings, serverCfg)
 		if err != nil {
 			scopedLog.Error(err, "unable to read noah laster bucket map config", "error", err.Error())
 		}
 		var buf bytes.Buffer
 		_, err = serverCfg.WriteTo(&buf)
-		mapSplunkConfDetails["server.conf"] = buf.String()
+		if err == nil {
+			mapSplunkConfDetails["server.conf"] = buf.String()
+		} else {
+			scopedLog.Error(err, "unable to server config to buffer", "error", err.Error())
+		}
+	} else {
+		scopedLog.Error(err, "unable to read server config ignore ..", "error", err.Error())
 	}
-	scopedLog.Error(err, "unable to read server config ignore ..", "error", err.Error())
 
 	// Create smartstore config consisting indexes.conf
 	configMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), crKind)

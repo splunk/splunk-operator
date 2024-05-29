@@ -26,6 +26,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/ini.v1"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -1140,8 +1141,8 @@ hotlist_recency_secs = 86400
 maxGlobalDataSizeMB = 4000
 maxGlobalRawDataSizeMB = 5000
 `
-
-	indexesConfIni := GetSmartstoreIndexesConfig(SmartStoreIndexes.IndexList)
+	indexerIni, _ := ini.Load([]byte(""))
+	indexesConfIni := GetSmartstoreIndexesConfig(SmartStoreIndexes.IndexList, indexerIni)
 	if indexesConfIni != expectedINIFormatString {
 		t.Errorf("expected: %s, returned: %s", expectedINIFormatString, indexesConfIni)
 	}
@@ -1170,14 +1171,15 @@ max_cache_size = 20480
 max_concurrent_downloads = 6
 max_concurrent_uploads = 6
 `
-	serverConfForCacheManager := GetServerConfigEntries(&SmartStoreCacheManager)
+	serverIni, _ := ini.Load([]byte(""))
+	serverConfForCacheManager := GetServerConfigEntries(&SmartStoreCacheManager, serverIni)
 
 	if expectedIniContents != serverConfForCacheManager {
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, serverConfForCacheManager)
 	}
 
 	// Empty config should return empty string
-	serverConfForCacheManager = GetServerConfigEntries(nil)
+	serverConfForCacheManager = GetServerConfigEntries(nil, serverIni)
 	if serverConfForCacheManager != "" {
 		t.Errorf("Expected empty string, but received: %s", serverConfForCacheManager)
 	}
@@ -1205,8 +1207,8 @@ remotePath = volume:s2s3_vol/$_index_name
 maxGlobalDataSizeMB = 51200
 maxGlobalRawDataSizeMB = 61440
 `
-
-	SmartstoreDefaultIniConfig := GetSmartstoreIndexesDefaults(SmartStoreDefaultsConf)
+	indexerIni, _ := ini.Load([]byte(""))
+	SmartstoreDefaultIniConfig := GetSmartstoreIndexesDefaults(SmartStoreDefaultsConf, indexerIni)
 
 	if expectedIniContents != SmartstoreDefaultIniConfig {
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, SmartstoreDefaultIniConfig)
