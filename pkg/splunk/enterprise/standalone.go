@@ -54,11 +54,15 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// validate and updates defaults for CR
 	err := validateStandaloneSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate standalone spec")
+		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -100,8 +104,6 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-standalone", cr.GetName())
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkStandalone)

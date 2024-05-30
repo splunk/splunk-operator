@@ -54,9 +54,15 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// validate and updates defaults for CR
 	err := validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
+		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -94,9 +100,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.AdminPasswordChangedSecrets == nil {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)

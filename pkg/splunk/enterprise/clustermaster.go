@@ -57,9 +57,14 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// validate and updates defaults for CR
 	err := validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateClusterMasterSpec", fmt.Sprintf("validate clustermaster spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate clustermaster spec")
 		return result, err
 	}
 
@@ -92,9 +97,6 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if err != nil {
 		return result, err
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)

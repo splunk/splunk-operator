@@ -58,9 +58,15 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// validate and updates defaults for CR
 	err := validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate monitoring console spec")
+		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -83,9 +89,6 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-monitoring-console", cr.GetName())
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole)

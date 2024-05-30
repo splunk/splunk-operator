@@ -61,9 +61,15 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateIndexerClusterSpec", fmt.Sprintf("validate indexercluster spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate indexercluster spec")
+		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -80,9 +86,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if cr.Status.IdxcPasswordChangedSecrets == nil {
 		cr.Status.IdxcPasswordChangedSecrets = make(map[string]bool)
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)

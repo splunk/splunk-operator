@@ -58,9 +58,15 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr)
+
 	// validate and updates defaults for CR
 	err := validateClusterManagerSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateClusterManagerSpec", fmt.Sprintf("validate clustermanager spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate clustermanager spec")
+		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -93,9 +99,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if err != nil {
 		return result, err
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
