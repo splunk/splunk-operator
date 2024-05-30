@@ -58,6 +58,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "IndexerCluster"
 
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
 	// validate and updates defaults for CR
 	err := validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
@@ -65,7 +68,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())

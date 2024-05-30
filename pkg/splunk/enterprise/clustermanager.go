@@ -55,6 +55,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
 	// validate and updates defaults for CR
 	err := validateClusterManagerSpec(ctx, client, cr)
 	if err != nil {
@@ -62,7 +65,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), "cluster-manager")
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||

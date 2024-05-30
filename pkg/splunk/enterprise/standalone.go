@@ -51,6 +51,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "Standalone"
 
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
 	// validate and updates defaults for CR
 	err := validateStandaloneSpec(ctx, client, cr)
 	if err != nil {
@@ -60,7 +63,6 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, Migrate the app framework status

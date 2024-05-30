@@ -51,6 +51,9 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "SearchHeadCluster"
 
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
 	// validate and updates defaults for CR
 	err := validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
@@ -76,7 +79,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetName())

@@ -48,6 +48,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "LicenseManager"
 
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
 	// validate and updates defaults for CR
 	err := validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
@@ -72,9 +75,6 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 	}
-
-	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr)

@@ -55,15 +55,14 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// validate and updates defaults for CR
 	err := validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
-
-	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
