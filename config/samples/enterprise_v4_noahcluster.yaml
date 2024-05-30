@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v4
+kind: NoahCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: noahcluster
+    app.kubernetes.io/instance: noahcluster-sample
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: splunk-operator
+  name: noahcluster-sample
+spec:
+  # TODO(user): Add fields here

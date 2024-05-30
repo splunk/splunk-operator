@@ -12,6 +12,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/stretchr/testify v1.8.4
+	github.com/tiendc/go-deepcopy v0.0.0-20230923150521-f91fb0442007
 	github.com/wk8/go-ordered-map/v2 v2.1.7
 	go.uber.org/zap v1.24.0
 	gopkg.in/ini.v1 v1.66.4

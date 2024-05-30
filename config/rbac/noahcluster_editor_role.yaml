@@ -1,0 +1,31 @@
+# permissions for end users to edit noahclusters.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: noahcluster-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: splunk-operator
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: noahcluster-editor-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters/status
+  verbs:
+  - get

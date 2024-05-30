@@ -2,4 +2,13 @@ apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
 metadata:
   name: test
-spec: {}
+  annotations:
+    kubernetes.io/ingress.class: alb
+spec:
+  replicas: 3
+  serviceTemplate:
+    spec:
+      type: LoadBalancer 
+  clusterManagerRef: 
+    name: cm
+    namespace: test

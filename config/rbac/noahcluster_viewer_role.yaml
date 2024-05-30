@@ -1,0 +1,27 @@
+# permissions for end users to view noahclusters.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: noahcluster-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: splunk-operator
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: noahcluster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - noahclusters/status
+  verbs:
+  - get
