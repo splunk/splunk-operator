@@ -1431,6 +1431,74 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              noahSpec:
+                properties:
+                  noahClient:
+                    description: NoahClient [noahClient] timeout.connect = 12 timeout.read
+                      = 12 timeout.write = 12 retry_policy = max_count max_count.max_retries_per_part
+                      = 5
+                    properties:
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        type: string
+                      timeoutConnect:
+                        type: integer
+                      timeoutRead:
+                        type: integer
+                      timeoutWrite:
+                        type: integer
+                    type: object
+                  noahClientBucketSettings:
+                    description: NoahClientBucketSetting
+                    properties:
+                      backoffStrategy:
+                        type: string
+                      backoffStrategyConstantDelay:
+                        type: integer
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        description: '[noahClient:get_latest_bucket_map]'
+                        type: string
+                    type: object
+                  noahService:
+                    description: NoahService
+                    properties:
+                      advertiseAddr:
+                        type: string
+                      cacheBucketTimeout:
+                        type: integer
+                      heartbeatAsPercentageOfLease:
+                        type: integer
+                      heartbeatPeriod:
+                        type: integer
+                      pass4SymmKey:
+                        type: string
+                      pass4SymmKeyMinLength:
+                        type: integer
+                      remoteBundle:
+                        type: string
+                      reportIndexDeletion:
+                        type: boolean
+                      tenant:
+                        type: string
+                      uri:
+                        description: '[noahService]'
+                        type: string
+                      usePeers:
+                        type: boolean
+                    type: object
+                  noahSettings:
+                    description: NoahSettings
+                    properties:
+                      listFrozenBucketPeriod:
+                        type: integer
+                      skipBucketReloadPeriod:
+                        description: '[noah_settings]'
+                        type: integer
+                    type: object
+                type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
@@ -2057,6 +2125,15 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      hotBucketStreaming:
+                        properties:
+                          deleteHotsAfterRestart:
+                            type: boolean
+                          reportStatus:
+                            type: boolean
+                          sendSlices:
+                            type: boolean
+                        type: object
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -2065,6 +2142,11 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      metric:
+                        properties:
+                          stubOutRawdataJournal:
+                            type: boolean
+                        type: object
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -2075,6 +2157,15 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        hotBucketStreaming:
+                          properties:
+                            deleteHotsAfterRestart:
+                              type: boolean
+                            reportStatus:
+                              type: boolean
+                            sendSlices:
+                              type: boolean
+                          type: object
                         hotlistBloomFilterRecencyHours:
                           description: Time period relative to the bucket's age, during
                             which the bloom filter file is protected from cache eviction
@@ -2091,6 +2182,11 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        metric:
+                          properties:
+                            stubOutRawdataJournal:
+                              type: boolean
+                          type: object
                         name:
                           description: Splunk index name
                           type: string
@@ -2103,74 +2199,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  noahSpec:
-                    properties:
-                      noahClient:
-                        description: NoahClient [noahClient] timeout.connect = 12
-                          timeout.read = 12 timeout.write = 12 retry_policy = max_count
-                          max_count.max_retries_per_part = 5
-                        properties:
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            type: integer
-                          timeoutConnect:
-                            type: integer
-                          timeoutRead:
-                            type: integer
-                          timeoutWrite:
-                            type: integer
-                        type: object
-                      noahClientBucketSettings:
-                        description: NoahClientBucketSetting
-                        properties:
-                          BackoffStrategy:
-                            type: string
-                          BackoffStrategyConstantDelay:
-                            type: integer
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            description: '[noahClient:get_latest_bucket_map]'
-                            type: string
-                        type: object
-                      noahService:
-                        description: NoahService
-                        properties:
-                          advertiseAddr:
-                            type: string
-                          cacheBucketTimeout:
-                            type: integer
-                          heartbeatAsPercentageOfLease:
-                            type: integer
-                          heartbeatPeriod:
-                            type: integer
-                          pass4SymmKey:
-                            type: string
-                          pass4SymmKeyMinLength:
-                            type: integer
-                          remoteBundle:
-                            type: string
-                          reportIndexDeletion:
-                            type: boolean
-                          tenant:
-                            type: string
-                          uri:
-                            description: '[noahService]'
-                            type: string
-                          usePeers:
-                            type: boolean
-                        type: object
-                      noahSettings:
-                        description: NoahSettings
-                        properties:
-                          ListFrozenBucketPeriod:
-                            type: integer
-                          SkipBucketReloadPeriod:
-                            description: '[noah_settings]'
-                            type: integer
-                        type: object
-                    type: object
                   volumes:
                     description: List of remote storage volumes
                     items:
@@ -4358,6 +4386,15 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      hotBucketStreaming:
+                        properties:
+                          deleteHotsAfterRestart:
+                            type: boolean
+                          reportStatus:
+                            type: boolean
+                          sendSlices:
+                            type: boolean
+                        type: object
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -4366,6 +4403,11 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      metric:
+                        properties:
+                          stubOutRawdataJournal:
+                            type: boolean
+                        type: object
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -4376,6 +4418,15 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        hotBucketStreaming:
+                          properties:
+                            deleteHotsAfterRestart:
+                              type: boolean
+                            reportStatus:
+                              type: boolean
+                            sendSlices:
+                              type: boolean
+                          type: object
                         hotlistBloomFilterRecencyHours:
                           description: Time period relative to the bucket's age, during
                             which the bloom filter file is protected from cache eviction
@@ -4392,6 +4443,11 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        metric:
+                          properties:
+                            stubOutRawdataJournal:
+                              type: boolean
+                          type: object
                         name:
                           description: Splunk index name
                           type: string
@@ -4404,74 +4460,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  noahSpec:
-                    properties:
-                      noahClient:
-                        description: NoahClient [noahClient] timeout.connect = 12
-                          timeout.read = 12 timeout.write = 12 retry_policy = max_count
-                          max_count.max_retries_per_part = 5
-                        properties:
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            type: integer
-                          timeoutConnect:
-                            type: integer
-                          timeoutRead:
-                            type: integer
-                          timeoutWrite:
-                            type: integer
-                        type: object
-                      noahClientBucketSettings:
-                        description: NoahClientBucketSetting
-                        properties:
-                          BackoffStrategy:
-                            type: string
-                          BackoffStrategyConstantDelay:
-                            type: integer
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            description: '[noahClient:get_latest_bucket_map]'
-                            type: string
-                        type: object
-                      noahService:
-                        description: NoahService
-                        properties:
-                          advertiseAddr:
-                            type: string
-                          cacheBucketTimeout:
-                            type: integer
-                          heartbeatAsPercentageOfLease:
-                            type: integer
-                          heartbeatPeriod:
-                            type: integer
-                          pass4SymmKey:
-                            type: string
-                          pass4SymmKeyMinLength:
-                            type: integer
-                          remoteBundle:
-                            type: string
-                          reportIndexDeletion:
-                            type: boolean
-                          tenant:
-                            type: string
-                          uri:
-                            description: '[noahService]'
-                            type: string
-                          usePeers:
-                            type: boolean
-                        type: object
-                      noahSettings:
-                        description: NoahSettings
-                        properties:
-                          ListFrozenBucketPeriod:
-                            type: integer
-                          SkipBucketReloadPeriod:
-                            description: '[noah_settings]'
-                            type: integer
-                        type: object
-                    type: object
                   volumes:
                     description: List of remote storage volumes
                     items:
@@ -5933,6 +5921,74 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              noahSpec:
+                properties:
+                  noahClient:
+                    description: NoahClient [noahClient] timeout.connect = 12 timeout.read
+                      = 12 timeout.write = 12 retry_policy = max_count max_count.max_retries_per_part
+                      = 5
+                    properties:
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        type: string
+                      timeoutConnect:
+                        type: integer
+                      timeoutRead:
+                        type: integer
+                      timeoutWrite:
+                        type: integer
+                    type: object
+                  noahClientBucketSettings:
+                    description: NoahClientBucketSetting
+                    properties:
+                      backoffStrategy:
+                        type: string
+                      backoffStrategyConstantDelay:
+                        type: integer
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        description: '[noahClient:get_latest_bucket_map]'
+                        type: string
+                    type: object
+                  noahService:
+                    description: NoahService
+                    properties:
+                      advertiseAddr:
+                        type: string
+                      cacheBucketTimeout:
+                        type: integer
+                      heartbeatAsPercentageOfLease:
+                        type: integer
+                      heartbeatPeriod:
+                        type: integer
+                      pass4SymmKey:
+                        type: string
+                      pass4SymmKeyMinLength:
+                        type: integer
+                      remoteBundle:
+                        type: string
+                      reportIndexDeletion:
+                        type: boolean
+                      tenant:
+                        type: string
+                      uri:
+                        description: '[noahService]'
+                        type: string
+                      usePeers:
+                        type: boolean
+                    type: object
+                  noahSettings:
+                    description: NoahSettings
+                    properties:
+                      listFrozenBucketPeriod:
+                        type: integer
+                      skipBucketReloadPeriod:
+                        description: '[noah_settings]'
+                        type: integer
+                    type: object
+                type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
@@ -6559,6 +6615,15 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      hotBucketStreaming:
+                        properties:
+                          deleteHotsAfterRestart:
+                            type: boolean
+                          reportStatus:
+                            type: boolean
+                          sendSlices:
+                            type: boolean
+                        type: object
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -6567,6 +6632,11 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      metric:
+                        properties:
+                          stubOutRawdataJournal:
+                            type: boolean
+                        type: object
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -6577,6 +6647,15 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        hotBucketStreaming:
+                          properties:
+                            deleteHotsAfterRestart:
+                              type: boolean
+                            reportStatus:
+                              type: boolean
+                            sendSlices:
+                              type: boolean
+                          type: object
                         hotlistBloomFilterRecencyHours:
                           description: Time period relative to the bucket's age, during
                             which the bloom filter file is protected from cache eviction
@@ -6593,6 +6672,11 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        metric:
+                          properties:
+                            stubOutRawdataJournal:
+                              type: boolean
+                          type: object
                         name:
                           description: Splunk index name
                           type: string
@@ -6605,74 +6689,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  noahSpec:
-                    properties:
-                      noahClient:
-                        description: NoahClient [noahClient] timeout.connect = 12
-                          timeout.read = 12 timeout.write = 12 retry_policy = max_count
-                          max_count.max_retries_per_part = 5
-                        properties:
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            type: integer
-                          timeoutConnect:
-                            type: integer
-                          timeoutRead:
-                            type: integer
-                          timeoutWrite:
-                            type: integer
-                        type: object
-                      noahClientBucketSettings:
-                        description: NoahClientBucketSetting
-                        properties:
-                          BackoffStrategy:
-                            type: string
-                          BackoffStrategyConstantDelay:
-                            type: integer
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            description: '[noahClient:get_latest_bucket_map]'
-                            type: string
-                        type: object
-                      noahService:
-                        description: NoahService
-                        properties:
-                          advertiseAddr:
-                            type: string
-                          cacheBucketTimeout:
-                            type: integer
-                          heartbeatAsPercentageOfLease:
-                            type: integer
-                          heartbeatPeriod:
-                            type: integer
-                          pass4SymmKey:
-                            type: string
-                          pass4SymmKeyMinLength:
-                            type: integer
-                          remoteBundle:
-                            type: string
-                          reportIndexDeletion:
-                            type: boolean
-                          tenant:
-                            type: string
-                          uri:
-                            description: '[noahService]'
-                            type: string
-                          usePeers:
-                            type: boolean
-                        type: object
-                      noahSettings:
-                        description: NoahSettings
-                        properties:
-                          ListFrozenBucketPeriod:
-                            type: integer
-                          SkipBucketReloadPeriod:
-                            description: '[noah_settings]'
-                            type: integer
-                        type: object
-                    type: object
                   volumes:
                     description: List of remote storage volumes
                     items:
@@ -8796,6 +8812,75 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
+              noahStatus:
+                description: NoahStatus Status
+                properties:
+                  noahClient:
+                    description: NoahClient [noahClient] timeout.connect = 12 timeout.read
+                      = 12 timeout.write = 12 retry_policy = max_count max_count.max_retries_per_part
+                      = 5
+                    properties:
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        type: string
+                      timeoutConnect:
+                        type: integer
+                      timeoutRead:
+                        type: integer
+                      timeoutWrite:
+                        type: integer
+                    type: object
+                  noahClientBucketSettings:
+                    description: NoahClientBucketSetting
+                    properties:
+                      backoffStrategy:
+                        type: string
+                      backoffStrategyConstantDelay:
+                        type: integer
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        description: '[noahClient:get_latest_bucket_map]'
+                        type: string
+                    type: object
+                  noahService:
+                    description: NoahService
+                    properties:
+                      advertiseAddr:
+                        type: string
+                      cacheBucketTimeout:
+                        type: integer
+                      heartbeatAsPercentageOfLease:
+                        type: integer
+                      heartbeatPeriod:
+                        type: integer
+                      pass4SymmKey:
+                        type: string
+                      pass4SymmKeyMinLength:
+                        type: integer
+                      remoteBundle:
+                        type: string
+                      reportIndexDeletion:
+                        type: boolean
+                      tenant:
+                        type: string
+                      uri:
+                        description: '[noahService]'
+                        type: string
+                      usePeers:
+                        type: boolean
+                    type: object
+                  noahSettings:
+                    description: NoahSettings
+                    properties:
+                      listFrozenBucketPeriod:
+                        type: integer
+                      skipBucketReloadPeriod:
+                        description: '[noah_settings]'
+                        type: integer
+                    type: object
+                type: object
               phase:
                 description: current phase of the standalone instances
                 enum:
@@ -8860,6 +8945,15 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      hotBucketStreaming:
+                        properties:
+                          deleteHotsAfterRestart:
+                            type: boolean
+                          reportStatus:
+                            type: boolean
+                          sendSlices:
+                            type: boolean
+                        type: object
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -8868,6 +8962,11 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      metric:
+                        properties:
+                          stubOutRawdataJournal:
+                            type: boolean
+                        type: object
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -8878,6 +8977,15 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        hotBucketStreaming:
+                          properties:
+                            deleteHotsAfterRestart:
+                              type: boolean
+                            reportStatus:
+                              type: boolean
+                            sendSlices:
+                              type: boolean
+                          type: object
                         hotlistBloomFilterRecencyHours:
                           description: Time period relative to the bucket's age, during
                             which the bloom filter file is protected from cache eviction
@@ -8894,6 +9002,11 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        metric:
+                          properties:
+                            stubOutRawdataJournal:
+                              type: boolean
+                          type: object
                         name:
                           description: Splunk index name
                           type: string
@@ -8906,74 +9019,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  noahSpec:
-                    properties:
-                      noahClient:
-                        description: NoahClient [noahClient] timeout.connect = 12
-                          timeout.read = 12 timeout.write = 12 retry_policy = max_count
-                          max_count.max_retries_per_part = 5
-                        properties:
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            type: integer
-                          timeoutConnect:
-                            type: integer
-                          timeoutRead:
-                            type: integer
-                          timeoutWrite:
-                            type: integer
-                        type: object
-                      noahClientBucketSettings:
-                        description: NoahClientBucketSetting
-                        properties:
-                          BackoffStrategy:
-                            type: string
-                          BackoffStrategyConstantDelay:
-                            type: integer
-                          maxCountMaxRetriesPerPart:
-                            type: integer
-                          retryPolicy:
-                            description: '[noahClient:get_latest_bucket_map]'
-                            type: string
-                        type: object
-                      noahService:
-                        description: NoahService
-                        properties:
-                          advertiseAddr:
-                            type: string
-                          cacheBucketTimeout:
-                            type: integer
-                          heartbeatAsPercentageOfLease:
-                            type: integer
-                          heartbeatPeriod:
-                            type: integer
-                          pass4SymmKey:
-                            type: string
-                          pass4SymmKeyMinLength:
-                            type: integer
-                          remoteBundle:
-                            type: string
-                          reportIndexDeletion:
-                            type: boolean
-                          tenant:
-                            type: string
-                          uri:
-                            description: '[noahService]'
-                            type: string
-                          usePeers:
-                            type: boolean
-                        type: object
-                      noahSettings:
-                        description: NoahSettings
-                        properties:
-                          ListFrozenBucketPeriod:
-                            type: integer
-                          SkipBucketReloadPeriod:
-                            description: '[noah_settings]'
-                            type: integer
-                        type: object
-                    type: object
                   volumes:
                     description: List of remote storage volumes
                     items:

@@ -1436,6 +1436,74 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              noahSpec:
+                properties:
+                  noahClient:
+                    description: NoahClient [noahClient] timeout.connect = 12 timeout.read
+                      = 12 timeout.write = 12 retry_policy = max_count max_count.max_retries_per_part
+                      = 5
+                    properties:
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        type: string
+                      timeoutConnect:
+                        type: integer
+                      timeoutRead:
+                        type: integer
+                      timeoutWrite:
+                        type: integer
+                    type: object
+                  noahClientBucketSettings:
+                    description: NoahClientBucketSetting
+                    properties:
+                      backoffStrategy:
+                        type: string
+                      backoffStrategyConstantDelay:
+                        type: integer
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        description: '[noahClient:get_latest_bucket_map]'
+                        type: string
+                    type: object
+                  noahService:
+                    description: NoahService
+                    properties:
+                      advertiseAddr:
+                        type: string
+                      cacheBucketTimeout:
+                        type: integer
+                      heartbeatAsPercentageOfLease:
+                        type: integer
+                      heartbeatPeriod:
+                        type: integer
+                      pass4SymmKey:
+                        type: string
+                      pass4SymmKeyMinLength:
+                        type: integer
+                      remoteBundle:
+                        type: string
+                      reportIndexDeletion:
+                        type: boolean
+                      tenant:
+                        type: string
+                      uri:
+                        description: '[noahService]'
+                        type: string
+                      usePeers:
+                        type: boolean
+                    type: object
+                  noahSettings:
+                    description: NoahSettings
+                    properties:
+                      listFrozenBucketPeriod:
+                        type: integer
+                      skipBucketReloadPeriod:
+                        description: '[noah_settings]'
+                        type: integer
+                    type: object
+                type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
@@ -5645,6 +5713,74 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              noahSpec:
+                properties:
+                  noahClient:
+                    description: NoahClient [noahClient] timeout.connect = 12 timeout.read
+                      = 12 timeout.write = 12 retry_policy = max_count max_count.max_retries_per_part
+                      = 5
+                    properties:
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        type: string
+                      timeoutConnect:
+                        type: integer
+                      timeoutRead:
+                        type: integer
+                      timeoutWrite:
+                        type: integer
+                    type: object
+                  noahClientBucketSettings:
+                    description: NoahClientBucketSetting
+                    properties:
+                      backoffStrategy:
+                        type: string
+                      backoffStrategyConstantDelay:
+                        type: integer
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        description: '[noahClient:get_latest_bucket_map]'
+                        type: string
+                    type: object
+                  noahService:
+                    description: NoahService
+                    properties:
+                      advertiseAddr:
+                        type: string
+                      cacheBucketTimeout:
+                        type: integer
+                      heartbeatAsPercentageOfLease:
+                        type: integer
+                      heartbeatPeriod:
+                        type: integer
+                      pass4SymmKey:
+                        type: string
+                      pass4SymmKeyMinLength:
+                        type: integer
+                      remoteBundle:
+                        type: string
+                      reportIndexDeletion:
+                        type: boolean
+                      tenant:
+                        type: string
+                      uri:
+                        description: '[noahService]'
+                        type: string
+                      usePeers:
+                        type: boolean
+                    type: object
+                  noahSettings:
+                    description: NoahSettings
+                    properties:
+                      listFrozenBucketPeriod:
+                        type: integer
+                      skipBucketReloadPeriod:
+                        description: '[noah_settings]'
+                        type: integer
+                    type: object
+                type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)
@@ -8394,6 +8530,75 @@ spec:
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret
                 type: string
+              noahStatus:
+                description: NoahStatus Status
+                properties:
+                  noahClient:
+                    description: NoahClient [noahClient] timeout.connect = 12 timeout.read
+                      = 12 timeout.write = 12 retry_policy = max_count max_count.max_retries_per_part
+                      = 5
+                    properties:
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        type: string
+                      timeoutConnect:
+                        type: integer
+                      timeoutRead:
+                        type: integer
+                      timeoutWrite:
+                        type: integer
+                    type: object
+                  noahClientBucketSettings:
+                    description: NoahClientBucketSetting
+                    properties:
+                      backoffStrategy:
+                        type: string
+                      backoffStrategyConstantDelay:
+                        type: integer
+                      maxCountMaxRetriesPerPart:
+                        type: integer
+                      retryPolicy:
+                        description: '[noahClient:get_latest_bucket_map]'
+                        type: string
+                    type: object
+                  noahService:
+                    description: NoahService
+                    properties:
+                      advertiseAddr:
+                        type: string
+                      cacheBucketTimeout:
+                        type: integer
+                      heartbeatAsPercentageOfLease:
+                        type: integer
+                      heartbeatPeriod:
+                        type: integer
+                      pass4SymmKey:
+                        type: string
+                      pass4SymmKeyMinLength:
+                        type: integer
+                      remoteBundle:
+                        type: string
+                      reportIndexDeletion:
+                        type: boolean
+                      tenant:
+                        type: string
+                      uri:
+                        description: '[noahService]'
+                        type: string
+                      usePeers:
+                        type: boolean
+                    type: object
+                  noahSettings:
+                    description: NoahSettings
+                    properties:
+                      listFrozenBucketPeriod:
+                        type: integer
+                      skipBucketReloadPeriod:
+                        description: '[noah_settings]'
+                        type: integer
+                    type: object
+                type: object
               phase:
                 description: current phase of the search head cluster
                 enum:

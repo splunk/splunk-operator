@@ -108,6 +108,9 @@ type IndexerClusterStatus struct {
 
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
+
+	//NoahStatus Status
+	NoahStatus NoahSpec `json:"noahStatus,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

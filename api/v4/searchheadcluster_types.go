@@ -119,6 +119,9 @@ type SearchHeadClusterStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	//NoahStatus Status
+	NoahStatus NoahSpec `json:"noahStatus,omitempty"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster

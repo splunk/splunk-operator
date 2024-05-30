@@ -18,10 +18,11 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/tiendc/go-deepcopy"
+	"gopkg.in/ini.v1"
 	"reflect"
 	"time"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -70,6 +71,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
+		!reflect.DeepEqual(cr.Status.NoahStatus, cr.Spec.NoahSpec) ||
 		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
 		if err != nil {
@@ -77,10 +79,22 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			return result, err
 		}
 
-		_, _, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
+		indexerIni, err := ini.Load([]byte(""))
+		serverIni, err := ini.Load([]byte(""))
+		authorizeIni, err := ini.Load([]byte(""))
+		if cr.Spec.NoahSpec.NoahService.Uri != "" {
+			err = ApplyNoahConfiguration(ctx, client, cr, &cr.Spec.CommonSplunkSpec, indexerIni, serverIni, authorizeIni)
+			if err != nil {
+				return result, err
+			}
+			deepcopy.Copy(&cr.Status.NoahStatus, cr.Spec.NoahSpec)
+		}
+
+		err = ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore, indexerIni, serverIni)
 		if err != nil {
 			return result, err
 		}
+		_, _, err = ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
 
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}

@@ -1085,6 +1085,8 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 }
 
 func TestGetSmartstoreIndexesConfig(t *testing.T) {
+	ctx := context.TODO()
+
 	SmartStoreIndexes := enterpriseApi.SmartStoreSpec{
 		IndexList: []enterpriseApi.IndexSpec{
 			{Name: "salesdata1", RemotePath: "remotepath1",
@@ -1142,12 +1144,13 @@ maxGlobalDataSizeMB = 4000
 maxGlobalRawDataSizeMB = 5000
 `
 	indexerIni, _ := ini.Load([]byte(""))
-	indexesConfIni := GetSmartstoreIndexesConfig(SmartStoreIndexes.IndexList, indexerIni)
+	indexesConfIni := GetSmartstoreIndexesConfig(ctx, SmartStoreIndexes.IndexList, indexerIni)
 	if indexesConfIni != expectedINIFormatString {
 		t.Errorf("expected: %s, returned: %s", expectedINIFormatString, indexesConfIni)
 	}
 }
 func TestGetServerConfigEntries(t *testing.T) {
+	ctx := context.TODO()
 
 	SmartStoreCacheManager := enterpriseApi.CacheManagerSpec{
 		IndexAndCacheManagerCommonSpec: enterpriseApi.IndexAndCacheManagerCommonSpec{
@@ -1172,14 +1175,14 @@ max_concurrent_downloads = 6
 max_concurrent_uploads = 6
 `
 	serverIni, _ := ini.Load([]byte(""))
-	serverConfForCacheManager := GetServerConfigEntries(&SmartStoreCacheManager, serverIni)
+	serverConfForCacheManager := GetServerConfigEntries(ctx, &SmartStoreCacheManager, serverIni)
 
 	if expectedIniContents != serverConfForCacheManager {
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, serverConfForCacheManager)
 	}
 
 	// Empty config should return empty string
-	serverConfForCacheManager = GetServerConfigEntries(nil, serverIni)
+	serverConfForCacheManager = GetServerConfigEntries(ctx, nil, serverIni)
 	if serverConfForCacheManager != "" {
 		t.Errorf("Expected empty string, but received: %s", serverConfForCacheManager)
 	}
@@ -1187,6 +1190,7 @@ max_concurrent_uploads = 6
 }
 
 func TestGetSmartstoreIndexesDefaults(t *testing.T) {
+	ctx := context.TODO()
 
 	SmartStoreDefaultsConf := enterpriseApi.IndexConfDefaultsSpec{
 		IndexAndGlobalCommonSpec: enterpriseApi.IndexAndGlobalCommonSpec{
@@ -1208,7 +1212,7 @@ maxGlobalDataSizeMB = 51200
 maxGlobalRawDataSizeMB = 61440
 `
 	indexerIni, _ := ini.Load([]byte(""))
-	SmartstoreDefaultIniConfig := GetSmartstoreIndexesDefaults(SmartStoreDefaultsConf, indexerIni)
+	SmartstoreDefaultIniConfig := GetSmartstoreIndexesDefaults(ctx, SmartStoreDefaultsConf, indexerIni)
 
 	if expectedIniContents != SmartstoreDefaultIniConfig {
 		t.Errorf("Expected: %s \n Received: %s", expectedIniContents, SmartstoreDefaultIniConfig)

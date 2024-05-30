@@ -22,6 +22,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"gopkg.in/ini.v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -73,7 +74,15 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
-		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
+		indexerIni, _ := ini.Load([]byte(""))
+		serverIni, _ := ini.Load([]byte(""))
+		authorizeIni, _ := ini.Load([]byte(""))
+		err = ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore, indexerIni, serverIni)
+		if err != nil {
+			return result, err
+		}
+		_, configMapDataChanged, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
+
 		if err != nil {
 			return result, err
 		} else if configMapDataChanged {

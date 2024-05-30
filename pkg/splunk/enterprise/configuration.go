@@ -1766,7 +1766,7 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 }
 
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
-func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec, indexIni *ini.File) string {
+func GetSmartstoreIndexesConfig(ctx context.Context, indexes []enterpriseApi.IndexSpec, indexIni *ini.File) string {
 
 	var indexesConf string
 
@@ -1812,7 +1812,7 @@ func GetSmartstoreIndexesConfig(indexes []enterpriseApi.IndexSpec, indexIni *ini
 }
 
 // GetServerConfigEntries prepares the server.conf entries, and returns as a string
-func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec, serverCfg *ini.File) string {
+func GetServerConfigEntries(ctx context.Context, cacheManagerConf *enterpriseApi.CacheManagerSpec, serverCfg *ini.File) string {
 	if cacheManagerConf == nil {
 		return ""
 	}
@@ -1867,7 +1867,11 @@ func GetServerConfigEntries(cacheManagerConf *enterpriseApi.CacheManagerSpec, se
 }
 
 // GetNoahServerConfiguration prepares the server.conf entries, and returns as a string
-func GetNoahServerConfiguration(noahService *enterpriseApi.NoahService, serverCfg *ini.File) error {
+func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.NoahService, secret *corev1.Secret, serverCfg *ini.File) error {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("GetNoahServerConfiguration")
+
 	if noahService == nil {
 		return nil
 	}
@@ -1899,8 +1903,11 @@ func GetNoahServerConfiguration(noahService *enterpriseApi.NoahService, serverCf
 	if noahService.RemoteBundle != "" {
 		serverCfg.Section("noahService").Key("remoteBundle").SetValue(noahService.RemoteBundle)
 	}
-	if noahService.Pass4SymmKey != "" {
-		serverCfg.Section("noahService").Key("pass4SymmKey").SetValue(noahService.Pass4SymmKey)
+	symPassword, foundSecret := secret.Data["pass4SymmKey"]
+	if foundSecret {
+		serverCfg.Section("noahService").Key("pass4SymmKey").SetValue(string(symPassword))
+	} else {
+		scopedLog.Error(nil, "unable to get pass4SymmKey")
 	}
 	if noahService.AdvertisedAddr != "" {
 		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(noahService.AdvertisedAddr)
@@ -1922,7 +1929,7 @@ func GetNoahServerConfiguration(noahService *enterpriseApi.NoahService, serverCf
 }
 
 // GetNoahClientConfiguration prepares the server.conf entries, and returns as a string
-func GetNoahClientConfiguration(noahClientConf *enterpriseApi.NoahClient, serverCfg *ini.File) error {
+func GetNoahClientConfiguration(ctx context.Context, noahClientConf *enterpriseApi.NoahClient, serverCfg *ini.File) error {
 	if noahClientConf == nil {
 		return nil
 	}
@@ -1946,7 +1953,7 @@ func GetNoahClientConfiguration(noahClientConf *enterpriseApi.NoahClient, server
 }
 
 // GetNoahSettingConf prepares the server.conf entries, and returns as a string
-func GetNoahSettingConf(noahSettings *enterpriseApi.NoahSettings, serverCfg *ini.File) error {
+func GetNoahSettingConf(ctx context.Context, noahSettings *enterpriseApi.NoahSettings, serverCfg *ini.File) error {
 	if noahSettings == nil {
 		return nil
 	}
@@ -1962,7 +1969,7 @@ func GetNoahSettingConf(noahSettings *enterpriseApi.NoahSettings, serverCfg *ini
 }
 
 // GetNoahLatestBucketMapConf prepares the server.conf entries, and returns as a string
-func GetNoahLatestBucketMapConf(noahBucketMapConf *enterpriseApi.NoahClientBucketSettings, serverCfg *ini.File) error {
+func GetNoahLatestBucketMapConf(ctx context.Context, noahBucketMapConf *enterpriseApi.NoahClientBucketSettings, serverCfg *ini.File) error {
 	if noahBucketMapConf == nil {
 		return nil
 	}
@@ -1990,8 +1997,15 @@ func GetNoahLatestBucketMapConf(noahBucketMapConf *enterpriseApi.NoahClientBucke
 	return nil
 }
 
+// GetAuthorizeConf prepares the server.conf entries, and returns as a string
+func GetAuthorizeConf(ctx context.Context, aurhorizeCfg *ini.File) error {
+	aurhorizeCfg.NewSection("capability::run_noah_command")
+	aurhorizeCfg.Section("role_admin").Key("run_noah_command").SetValue("run_noah_command")
+	return nil
+}
+
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
-func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec, serverCfg *ini.File) string {
+func GetSmartstoreIndexesDefaults(ctx context.Context, defaults enterpriseApi.IndexConfDefaultsSpec, indexesCfg *ini.File) string {
 
 	remotePath := "$_index_name"
 
@@ -1999,58 +2013,58 @@ func GetSmartstoreIndexesDefaults(defaults enterpriseApi.IndexConfDefaultsSpec, 
 	coldPathvalue := fmt.Sprintf("$SPLUNK_DB/%s/colddb", remotePath)
 	thawedPathvalue := fmt.Sprintf("$SPLUNK_DB/%s/thaweddb", remotePath)
 
-	serverCfg.Section("default").Key("repFactor").SetValue("auto")
-	serverCfg.Section("default").Key("maxDataSize").SetValue("auto")
-	serverCfg.Section("default").Key("homePath").SetValue(homePathvalue)
-	serverCfg.Section("default").Key("coldPath").SetValue(coldPathvalue)
-	serverCfg.Section("default").Key("thawedPath").SetValue(thawedPathvalue)
+	indexesCfg.Section("default").Key("repFactor").SetValue("auto")
+	indexesCfg.Section("default").Key("maxDataSize").SetValue("auto")
+	indexesCfg.Section("default").Key("homePath").SetValue(homePathvalue)
+	indexesCfg.Section("default").Key("coldPath").SetValue(coldPathvalue)
+	indexesCfg.Section("default").Key("thawedPath").SetValue(thawedPathvalue)
 
 	// Do not change any of the following Sprintf formats(Intentionally indented)
 	if defaults.VolName != "" {
 		//if defaults.VolName != "" && defaults.RemotePath != "" {
 		value := fmt.Sprintf("volume:%s/%s", defaults.VolName, remotePath)
-		serverCfg.Section("default").Key("remotePath").SetValue(value)
+		indexesCfg.Section("default").Key("remotePath").SetValue(value)
 	}
 
 	if defaults.MaxGlobalDataSizeMB != 0 {
 		value := fmt.Sprintf("%d", defaults.MaxGlobalDataSizeMB)
-		serverCfg.Section("default").Key("maxGlobalDataSizeMB").SetValue(value)
+		indexesCfg.Section("default").Key("maxGlobalDataSizeMB").SetValue(value)
 	}
 
 	if defaults.MaxGlobalRawDataSizeMB != 0 {
 		value := fmt.Sprintf("%d", defaults.MaxGlobalRawDataSizeMB)
-		serverCfg.Section("default").Key("maxGlobalRawDataSizeMB").SetValue(value)
+		indexesCfg.Section("default").Key("maxGlobalRawDataSizeMB").SetValue(value)
 	}
 
 	if defaults.HotBucketStreaming.ReportStatus {
-		serverCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("true")
+		indexesCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("true")
 	} else {
-		serverCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("false")
+		indexesCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("false")
 	}
 
 	if defaults.HotBucketStreaming.SendSlices {
-		serverCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("true")
+		indexesCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("true")
 	} else {
-		serverCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("false")
+		indexesCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("false")
 	}
 
 	if defaults.HotBucketStreaming.DeleteHotsAfterRestart {
-		serverCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("true")
+		indexesCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("true")
 	} else {
-		serverCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("false")
+		indexesCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("false")
 	}
 
 	if defaults.Metric.StubOutRawdataJournal {
-		serverCfg.Section("default").Key("metric.stubOutRawdataJournal").SetValue("true")
+		indexesCfg.Section("default").Key("metric.stubOutRawdataJournal").SetValue("true")
 	} else {
-		serverCfg.Section("default").Key("metric.stubOutRawdataJournal").SetValue("false")
+		indexesCfg.Section("default").Key("metric.stubOutRawdataJournal").SetValue("false")
 	}
 
 	return ""
 }
 
 // validateProbe validates a generic probe values
-func validateProbe(probe *enterpriseApi.Probe) error {
+func validateProbe(ctx context.Context, probe *enterpriseApi.Probe) error {
 	if probe.InitialDelaySeconds < 0 || probe.TimeoutSeconds < 0 || probe.PeriodSeconds < 0 || probe.FailureThreshold < 0 {
 		return fmt.Errorf("negative values are not allowed. Configured values InitialDelaySeconds = %d, TimeoutSeconds = %d, PeriodSeconds = %d, FailureThreshold = %d", probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold)
 	}
@@ -2068,7 +2082,7 @@ func validateLivenessProbe(ctx context.Context, cr splcommon.MetaObject, livenes
 		return err
 	}
 
-	err = validateProbe(livenessProbe)
+	err = validateProbe(ctx, livenessProbe)
 	if err != nil {
 		return fmt.Errorf("invalid Liveness Probe config. Reason: %s", err)
 	}
@@ -2103,7 +2117,7 @@ func validateReadinessProbe(ctx context.Context, cr splcommon.MetaObject, readin
 		return err
 	}
 
-	err = validateProbe(readinessProbe)
+	err = validateProbe(ctx, readinessProbe)
 	if err != nil {
 		return fmt.Errorf("invalid Readiness Probe config. Reason: %s", err)
 	}
@@ -2137,7 +2151,7 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 		return err
 	}
 
-	err = validateProbe(startupProbe)
+	err = validateProbe(ctx, startupProbe)
 	if err != nil {
 		return fmt.Errorf("invalid Startup Probe config. Reason: %s", err)
 	}

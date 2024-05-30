@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/ini.v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -454,7 +455,11 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 	test := func(client *spltest.MockClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, want string) {
 		f := func() (interface{}, error) {
-			configMap, _, err := ApplySmartstoreConfigMap(ctx, client, cr, smartstore)
+			indexerIni, err := ini.Load([]byte(""))
+			serverIni, err := ini.Load([]byte(""))
+			authorizeIni, err := ini.Load([]byte(""))
+			err = ApplySmartstoreConfigMap(ctx, client, cr, smartstore, indexerIni, serverIni)
+			configMap, _, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
 			configMap.Data["conftoken"] = "1601945361"
 			return configMap, err
 		}
@@ -465,7 +470,11 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 
 	// Missing Volume config should return an error
 	cr.Spec.SmartStore.VolList = nil
-	_, _, err = ApplySmartstoreConfigMap(ctx, client, &cr, &cr.Spec.SmartStore)
+	indexerIni, err := ini.Load([]byte(""))
+	serverIni, err := ini.Load([]byte(""))
+	authorizeIni, err := ini.Load([]byte(""))
+	err = ApplySmartstoreConfigMap(ctx, client, &cr, &cr.Spec.SmartStore, indexerIni, serverIni)
+	_, _, err = ApplyConfigMapChanges(ctx, client, &cr, indexerIni, serverIni, authorizeIni)
 	if err == nil {
 		t.Errorf("Configuring Indexes without volumes should return an error")
 	}

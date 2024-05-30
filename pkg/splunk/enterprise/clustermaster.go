@@ -22,6 +22,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"gopkg.in/ini.v1"
 
 	"github.com/go-logr/logr"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -72,7 +73,14 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 			return result, err
 		}
 
-		_, configMapDataChanged, err := ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore)
+		indexerIni, err := ini.Load([]byte(""))
+		serverIni, err := ini.Load([]byte(""))
+		authorizeIni, err := ini.Load([]byte(""))
+		err = ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore, indexerIni, serverIni)
+		if err != nil {
+			return result, err
+		}
+		_, configMapDataChanged, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
 		if err != nil {
 			return result, err
 		} else if configMapDataChanged {

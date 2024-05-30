@@ -238,6 +238,8 @@ type CommonSplunkSpec struct {
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	NoahSpec NoahSpec `json:"noahSpec,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
@@ -267,8 +269,6 @@ type SmartStoreSpec struct {
 
 	// Defines Cache manager settings
 	CacheManagerConf CacheManagerSpec `json:"cacheManager,omitempty"`
-
-	NoahSpec NoahSpec `json:"noahSpec,omitempty"`
 }
 
 type NoahSpec struct {
@@ -406,7 +406,7 @@ type IndexAndGlobalCommonSpec struct {
 
 	HotBucketStreaming HotBucketStreaming `json:"hotBucketStreaming,omitempty"`
 
-	Metric Metric `json:"meric,omitempty"`
+	Metric Metric `json:"metric,omitempty"`
 }
 
 type HotBucketStreaming struct {

@@ -73,6 +73,9 @@ type StandaloneStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	//NoahStatus Status
+	NoahStatus NoahSpec `json:"noahStatus,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
