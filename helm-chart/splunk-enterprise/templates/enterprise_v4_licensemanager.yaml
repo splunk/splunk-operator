@@ -31,9 +31,7 @@ spec:
   {{- end }}
 {{- else if .Values.sva.m4.enabled }}
   clusterManagerRef:
-    {{- with (first .Values.sva.m4.totalCluster) }}
-    name: {{ .name }}
-    {{- end }}
+    name: {{ include "cm_name_first" . }}
   {{- if .Values.clusterManager.namespaceOverride }}
     namespace: {{ .Values.clusterManager.namespaceOverride }}
   {{- end }}
