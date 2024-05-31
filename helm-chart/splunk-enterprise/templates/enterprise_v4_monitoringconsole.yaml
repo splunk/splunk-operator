@@ -72,6 +72,11 @@ spec:
 {{- if .Values.monitoringConsole.defaults }}
   defaults: |-
 {{ toYaml .Values.monitoringConsole.defaults | indent 4 }}
+{{- else if $.Values.sva.m4.enabled }}
+  defaults: |-
+    splunk:
+      multisite_master: {{ include "cmlist" . }}
+      site: {{ .site }}
 {{- end }}
 {{- if .Values.monitoringConsole.defaultsUrlApps }}
   defaultsUrlApps: {{ .Values.monitoringConsole.defaultsUrlApps }}
