@@ -94,13 +94,9 @@ items:
     defaultsUrl: {{ $.Values.searchHeadCluster.defaultsUrl }}
   {{- end }}
   {{- if $.Values.sva.m4.enabled }}
-    {{- $cm_name := $.Values.clusterManager.name -}}
-    {{- if and $.Values.existingClusterManager $.Values.existingClusterManager.name }}
-      {{- $cm_name = $.Values.existingClusterManager.name -}}
-    {{- end }}
     defaults: |-
       splunk:
-        multisite_master: splunk-{{ $cm_name }}-cluster-manager-service
+        multisite_master: {{ include "cmlist" . }}
         site: {{ .site }}
   {{- else if $.Values.searchHeadCluster.defaults }}
     defaults: |-
