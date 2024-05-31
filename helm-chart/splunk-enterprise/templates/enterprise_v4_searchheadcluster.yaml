@@ -96,7 +96,7 @@ items:
   {{- if $.Values.sva.m4.enabled }}
     defaults: |-
       splunk:
-        multisite_master: {{ include "cmlist" . }}
+        multisite_master: {{ include "cmlist" $ }}
         site: {{ .site }}
   {{- else if $.Values.searchHeadCluster.defaults }}
     defaults: |-
