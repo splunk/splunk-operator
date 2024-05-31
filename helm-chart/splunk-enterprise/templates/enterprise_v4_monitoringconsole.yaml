@@ -23,9 +23,15 @@ spec:
   {{- if .Values.existingClusterManager.namespace }}
     namespace: {{ .Values.existingClusterManager.namespace }}
   {{- end }}
-{{- else if or .Values.clusterManager.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+{{- else if or .Values.clusterManager.enabled .Values.sva.c3.enabled }}
   clusterManagerRef:
     name: {{ .Values.clusterManager.name }}
+  {{- if .Values.clusterManager.namespaceOverride }}
+    namespace: {{ .Values.clusterManager.namespaceOverride }}
+  {{- end }}
+{{- else if .Values.sva.m4.enabled }}
+  clusterManagerRef:
+    name: {{ include "cm_name_first" . }}
   {{- if .Values.clusterManager.namespaceOverride }}
     namespace: {{ .Values.clusterManager.namespaceOverride }}
   {{- end }}
