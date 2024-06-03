@@ -181,6 +181,10 @@ func getSplunkService(ctx context.Context, cr splcommon.MetaObject, spec *enterp
 			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
 			// in the app.kubernetes.io/part-of label
 			partOfIdentifier = spec.ClusterManagerRef.Name
+		} else if len(spec.NoahClusterRef.Name) > 0 {
+			// And for child parts of multisite / multipart Noah Cluster, use the name of the part containing the noah-cluster
+			// in the app.kubernetes.io/part-of label
+			partOfIdentifier = spec.NoahClusterRef.Name
 		} else if len(spec.ClusterMasterRef.Name) > 0 {
 			// And for child parts of multisite / multipart IndexerCluster, use the name of the part containing the cluster-manager
 			// in the app.kubernetes.io/part-of label
@@ -338,6 +342,10 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 	// if not specified via spec or env, image defaults to splunk/splunk
 	spec.Image = GetSplunkImage(spec.Image)
 
+	if cr.GroupVersionKind().Kind == "NoahCluster" {
+		spec.Image = GetNoahImage(spec.Image)
+	}
+
 	defaultResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("0.1"),
@@ -404,6 +412,19 @@ func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient,
 	}
 
 	return nil
+}
+
+// getNoahDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
+func getNoahDefaults(identifier, namespace string, instanceType InstanceType, defaults string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetSplunkDefaultsName(identifier, instanceType),
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"default.yml": defaults,
+		},
+	}
 }
 
 // getSplunkDefaults returns a Kubernetes ConfigMap containing defaults for a Splunk Enterprise resource.
@@ -615,6 +636,107 @@ func addProbeConfigMapVolume(configMap *corev1.ConfigMap, statefulSet *appsv1.St
 	})
 }
 
+// getNoahDeployment returns a Kubernetes Deployment object for Noah instances
+func getNoahDeployment(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.Deployment, error) {
+
+	// prepare misc values
+	ports := splcommon.SortContainerPorts(getSplunkContainerPorts(instanceType)) // note that port order is important for tests
+	annotations := splcommon.GetIstioAnnotations(ports)
+	selectLabels := getSplunkLabels(cr.GetName(), instanceType, spec.NoahClusterRef.Name)
+	if len(spec.NoahClusterRef.Name) > 0 && len(spec.NoahClusterRef.Name) == 0 {
+		selectLabels = getSplunkLabels(cr.GetName(), instanceType, spec.NoahClusterRef.Name)
+	}
+	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
+
+	// start with same labels as selector; note that this object gets modified by splcommon.AppendParentMeta()
+	labels := make(map[string]string)
+	for k, v := range selectLabels {
+		labels[k] = v
+	}
+
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+	}
+	deployment := &appsv1.Deployment{}
+	err := client.Get(ctx, namespacedName, deployment)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if k8serrors.IsNotFound(err) {
+		// create statefulset configuration
+		deployment = &appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Deployment",
+				APIVersion: "apps/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
+				Namespace: cr.GetNamespace(),
+			},
+		}
+	}
+
+	deployment.Spec = appsv1.DeploymentSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: selectLabels,
+		},
+		Replicas: &replicas,
+		Strategy: appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      labels,
+				Annotations: annotations,
+			},
+			Spec: corev1.PodSpec{
+				Affinity:                  affinity,
+				Tolerations:               spec.Tolerations,
+				TopologySpreadConstraints: spec.TopologySpreadConstraints,
+				SchedulerName:             spec.SchedulerName,
+				ImagePullSecrets:          spec.ImagePullSecrets,
+				Containers: []corev1.Container{
+					{
+						Image:           spec.Image,
+						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
+						Name:            "noah",
+						Ports:           ports,
+					},
+				},
+			},
+		},
+	}
+
+	// add serviceaccount if configured
+	if spec.ServiceAccount != "" {
+		namespacedName := types.NamespacedName{Namespace: deployment.GetNamespace(), Name: spec.ServiceAccount}
+		_, err := splctrl.GetServiceAccount(ctx, client, namespacedName)
+		if err == nil {
+			// serviceAccount exists
+			deployment.Spec.Template.Spec.ServiceAccountName = spec.ServiceAccount
+		}
+	}
+
+	// append labels and annotations from parent
+	splcommon.AppendParentMeta(deployment.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+
+	// retrieve the secret to upload to the statefulSet pod
+	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), deployment.GetName())
+	if err != nil || statefulSetSecret == nil {
+		return deployment, err
+	}
+
+	// update statefulset's pod template with common splunk pod config
+	updateSplunkPodTemplateWithConfig(ctx, client, &deployment.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
+
+	// make Splunk Enterprise object the owner
+	deployment.SetOwnerReferences(append(deployment.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	return deployment, nil
+}
+
 // getSplunkStatefulSet returns a Kubernetes StatefulSet object for Splunk instances configured for a Splunk Enterprise resource.
 func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, replicas int32, extraEnv []corev1.EnvVar) (*appsv1.StatefulSet, error) {
 
@@ -816,6 +938,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Items: []corev1.KeyToPath{
 					{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
 					{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
+					{Key: "authorize.conf", Path: "authorize.conf", Mode: &configMapVolDefaultMode},
 					{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
 				},
 			},
@@ -996,6 +1119,122 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Value: spec.MonitoringConsoleRef.Name,
 		})
 	}
+
+	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
+	extraEnv = append(spec.ExtraEnv, extraEnv...)
+
+	// append any extra variables adding environment variable from extraEnv in the first
+	// so when duplicates are removed the last ones are removed from the list
+	env = append(extraEnv, env...)
+	//env = append(env, extraEnv...)
+
+	// check if there are any duplicate entries
+	// we use orderedmap so the test case can pass as json marshal
+	// expects order
+	if len(env) > 0 {
+		env = removeDuplicateEnvVars(env)
+	}
+
+	privileged := false
+	// update each container in pod
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
+		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
+		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
+		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
+		podTemplateSpec.Spec.Containers[idx].Env = env
+		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{
+					"ALL",
+				},
+				Add: []corev1.Capability{
+					"NET_BIND_SERVICE",
+				},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		}
+	}
+}
+
+// updateNoahPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
+func updateNoahPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateNoahPodTemplateWithConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	// Add custom ports to splunk containers
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range podTemplateSpec.Spec.Containers {
+			for _, p := range spec.ServiceTemplate.Spec.Ports {
+
+				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
+					Name:          p.Name,
+					ContainerPort: int32(p.TargetPort.IntValue()),
+					Protocol:      p.Protocol,
+				})
+			}
+		}
+	}
+
+	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  secretToMount,
+			DefaultMode: &secretVolDefaultMode,
+		},
+	})
+
+	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
+
+	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
+	if spec.Defaults != "" {
+		configMapName := GetSplunkDefaultsName(cr.GetName(), instanceType)
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: configMapName,
+				},
+				DefaultMode: &configMapVolDefaultMode,
+			},
+		})
+
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+		// We will update the annotation for resource version in the pod template spec
+		// so that any change in the ConfigMap will lead to recycle of the pod.
+		configMapResourceVersion, err := splctrl.GetConfigMapResourceVersion(ctx, client, namespacedName)
+		if err == nil {
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = configMapResourceVersion
+		} else {
+			scopedLog.Error(err, "Updation of default configMap annotation failed")
+		}
+	}
+
+	// update security context
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
+	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
+	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
+	}
+
+	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
+	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec)
+	startupProbe := getStartupProbe(ctx, cr, instanceType, spec)
+
+	env := []corev1.EnvVar{}
 
 	// Add extraEnv from the CommonSplunkSpec config to the extraEnv variable list
 	extraEnv = append(spec.ExtraEnv, extraEnv...)
@@ -2000,7 +2239,7 @@ func GetNoahLatestBucketMapConf(ctx context.Context, noahBucketMapConf *enterpri
 // GetAuthorizeConf prepares the server.conf entries, and returns as a string
 func GetAuthorizeConf(ctx context.Context, aurhorizeCfg *ini.File) error {
 	aurhorizeCfg.NewSection("capability::run_noah_command")
-	aurhorizeCfg.Section("role_admin").Key("run_noah_command").SetValue("run_noah_command")
+	aurhorizeCfg.Section("role_admin").Key("run_noah_command").SetValue("enabled")
 	return nil
 }
 

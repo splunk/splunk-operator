@@ -13,6 +13,12 @@ const (
 	//ClusterManagerURL = "SPLUNK_CLUSTER_MASTER_URL"
 	ClusterManagerURL = "SPLUNK_CLUSTER_MASTER_URL"
 
+	// ClusterManager
+	NoahCluster = "noah-cluster"
+
+	// NoahClusterURL
+	NoahClusterURL = "NOAH_CLUSTER_URL"
+
 	//URIClusterManagerClusterConfig = "/services/cluster/config"
 	URIClusterManagerClusterConfig = "/services/cluster/config"
 

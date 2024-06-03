@@ -235,6 +235,35 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	return namespaceScopedSecret, nil
 }
 
+// ApplyNoahConfig reconciles the state of Kubernetes Secrets, ConfigMaps and other general settings for Splunk Enterprise instances.
+func ApplyNoahConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, instanceType InstanceType) (*corev1.Secret, error) {
+	var err error
+
+	// Creates/updates the namespace scoped "noah-secrets" K8S secret object
+	namespaceScopedSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	// Set secret owner references
+	err = splutil.SetSecretOwnerRef(ctx, client, namespaceScopedSecret.GetName(), cr)
+	if err != nil {
+		return nil, err
+	}
+
+	// create splunk defaults (for inline config)
+	if spec.Defaults != "" {
+		defaultsMap := getNoahDefaults(cr.GetName(), cr.GetNamespace(), instanceType, spec.Defaults)
+		defaultsMap.SetOwnerReferences(append(defaultsMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+		_, err = splctrl.ApplyConfigMap(ctx, client, defaultsMap)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return namespaceScopedSecret, nil
+}
+
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
 func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
@@ -247,6 +276,16 @@ func getClusterMasterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.Commo
 
 // getClusterManagerExtraEnv returns extra environment variables used by indexer clusters
 func getClusterManagerExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  splcommon.ClusterManagerURL,
+			Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false),
+		},
+	}
+}
+
+// getNoahClusterExtraEnv returns extra environment variables used by indexer clusters
+func getNoahClusterExtraEnv(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  splcommon.ClusterManagerURL,
@@ -641,6 +680,10 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 		scopedLog.Error(err, "unable to read latest secret", "error", err.Error())
 	}
 	err = GetNoahServerConfiguration(ctx, &commonSpec.NoahSpec.NoahService, secret, serverIni)
+	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
+	advertisedAddr := fmt.Sprintf("https://%s:8089", fqdnName)
+	serverIni.Section("noahService").Key("advertisedAddr").SetValue(advertisedAddr)
+
 	if err != nil {
 		scopedLog.Error(err, "unable to read noah server config", "error", err.Error())
 	}

@@ -201,6 +201,9 @@ type CommonSplunkSpec struct {
 	// ClusterManagerRef refers to a Splunk Enterprise indexer cluster managed by the operator within Kubernetes
 	ClusterManagerRef corev1.ObjectReference `json:"clusterManagerRef"`
 
+	// NoahClusterRef refers to a Splunk noah cluster managed by the operator within Kubernetes
+	NoahClusterRef corev1.ObjectReference `json:"naohClusterRef"`
+
 	// MonitoringConsoleRef refers to a Splunk Enterprise monitoring console managed by the operator within Kubernetes
 	MonitoringConsoleRef corev1.ObjectReference `json:"monitoringConsoleRef"`
 

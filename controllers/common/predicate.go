@@ -123,6 +123,38 @@ func StatefulsetChangedPredicate() predicate.Predicate {
 	return err
 }
 
+// DeploymentChangedPredicate .
+func DeploymentChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// This update is in fact a Delete event, process it
+			if _, ok := e.ObjectNew.(*appsv1.Deployment); !ok {
+				return false
+			}
+
+			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			// if old and new data is the same, don't reconcile
+			newObj, ok := e.ObjectNew.DeepCopyObject().(*appsv1.Deployment)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.DeepCopyObject().(*appsv1.Deployment)
+			if !ok {
+				return false
+			}
+			return !cmp.Equal(newObj.Status, oldObj.Status)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
 // PodChangedPredicate .
 func PodChangedPredicate() predicate.Predicate {
 	err := predicate.Funcs{

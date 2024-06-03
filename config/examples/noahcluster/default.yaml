@@ -1,0 +1,26 @@
+apiVersion: enterprise.splunk.com/v4
+kind: NoahCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: noahcluster
+    app.kubernetes.io/instance: noahcluster-sample
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: splunk-operator
+    app: sok-noah
+  annotations:
+    iam.amazonaws.com/role: arn:aws:iam::607692001714:role/noah-role
+    istio-pod-network-controller/initialize: "true"
+    sidecar.istio.io/inject: "true"
+    splunk8s.io.iam/init-container: "true"
+    splunk8s.io.vault/init-container: "true"
+  name: noahcluster-sample
+spec:
+ database: "noahsokdb"
+ databaseHost: "noahsokcluster.cluster-ckl6xup1vcoo.us-west-2.rds.amazonaws.com"
+ databaseHostReader: "noahsok-inst2-64zhmchfu4c6.ckl6xup1vcoo.us-west-2.rds.amazonaws.com"
+ enableDatabaseAccessLogging: True
+ authEnv:  "dev"
+ autoCreateTenants: True
+ region: "us-west-2"
+ authMock: "true"

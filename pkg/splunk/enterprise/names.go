@@ -89,6 +89,9 @@ const (
 	// default docker image used for Splunk instances
 	defaultSplunkImage = "splunk/splunk"
 
+	// default docker image used for Noah instances
+	defaultNoahImage = "splunk/noah"
+
 	// identifier used for S3 access key
 	s3AccessKey = "s3_access_key"
 
@@ -123,13 +126,13 @@ const (
 	cmdSetFilePermissionsToRW = "chmod +660 -R %s"
 
 	// command for init container on a standalone
-	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf"
+	commandForStandaloneSmartstore = "mkdir -p /opt/splk/etc/apps/splunk-operator/local && ln -sfn  /mnt/splunk-operator/local/indexes.conf /opt/splk/etc/apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splk/etc/apps/splunk-operator/local/server.conf && ln -sfn  /mnt/splunk-operator/local/authorize.conf /opt/splk/etc/apps/splunk-operator/local/authorize.conf"
 
 	// command for init container on a CM
 	commandForCMSmartstore = "mkdir -p " + splcommon.OperatorClusterManagerAppsLocal + " && ln -sfn " + splcommon.OperatorMountLocalIndexesConf + " " + splcommon.OperatorClusterManagerAppsLocalIndexesConf + " && ln -sfn " + splcommon.OperatorMountLocalServerConf + " " + splcommon.OperatorClusterManagerAppsLocalServerConf
 
 	// setSymbolicLinkCmanager
-	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf"
+	setSymbolicLinkCmanager = "ln -sfn /mnt/splunk-operator/local/indexes.conf /opt/splunk/etc/manager-apps/splunk-operator/local/indexes.conf && ln -sfn  /mnt/splunk-operator/local/server.conf /opt/splunk/etc/manager-apps/splunk-operator/local/server.conf &&  ln -sfn  /mnt/splunk-operator/local/authorize.conf /opt/splunk/etc/manager-apps/splunk-operator/local/authorize.conf"
 
 	// configToken used to track if the config is reflecting on Pod or not
 	configToken = "conftoken"
@@ -278,6 +281,22 @@ func GetSplunkStatefulsetURL(namespace string, instanceType InstanceType, identi
 			podName,
 			GetSplunkServiceName(instanceType, identifier, true),
 		))
+}
+
+// GetNoahImage returns the docker image to use for Noah instances.
+func GetNoahImage(specImage string) string {
+	var name string
+
+	if specImage != "" {
+		name = specImage
+	} else {
+		name = os.Getenv("RELATED_IMAGE_NOAH")
+		if name == "" {
+			name = defaultSplunkImage
+		}
+	}
+
+	return name
 }
 
 // GetSplunkImage returns the docker image to use for Splunk instances.

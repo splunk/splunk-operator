@@ -23,19 +23,58 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	// NoahClusterPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// an immediate requeue)
+	NoahClusterPausedAnnotation = "noahcluster.enterprise.splunk.com/paused"
+)
+
 // NoahClusterSpec defines the desired state of NoahCluster
 type NoahClusterSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of NoahCluster. Edit noahcluster_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Database is an example field of NoahCluster. Edit noahcluster_types.go to remove/update
+	Database string `json:"database,omitempty"`
+	//DatabaseHost
+	DatabaseHost string `json:"databaseHost,omitempty"`
+	// DatabaseHostReader
+	DatabaseHostReader string `json:"databaseHostReader,omitempty"`
+	// EnableDatabaseAccessLogging
+	EnableDatabaseAccessLogging bool `json:"enableDatabaseAccessLogging,omitempty"`
+	// AuthEnv
+	AuthEnv string `json:"authEnv,omitempty"`
+	// AutoCreateTenants
+	AutoCreateTenants bool `json:"autoCreateTenants,omitempty"`
+	// Region
+	Region string `json:"region,omitempty"`
+	// AuthMock
+	AuthMock string `json:"authMock,omitempty"`
+
+	//DatabaseSecretRef
+	DatabaseSecretRef string `json:"databaseSecretRef"`
+
+	CommonSplunkSpec `json:",inline"`
 }
 
 // NoahClusterStatus defines the observed state of NoahCluster
 type NoahClusterStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	// Foo is an example field of NoahCluster. Edit noahcluster_types.go to remove/update
+	Database                    string `json:"database,omitempty"`
+	DatabaseHost                string `json:"databaseHost,omitempty"`
+	DatabaseHostReader          string `json:"databaseHostReader,omitempty"`
+	EnableDatabaseAccessLogging bool   `json:"enableDatabaseAccessLogging,omitempty"`
+	AuthEnv                     string `json:"authEnv,omitempty"`
+	AutoCreateTenants           string `json:"autoCreateTenants,omitempty"`
+	Region                      string `json:"region,omitempty"`
+	AuthMock                    string `json:"authMock,omitempty"`
+
+	// selector for pods, used by HorizontalPodAutoscaler
+	Selector string `json:"selector"`
+	// current phase of the noah manager
+	Phase Phase `json:"phase"`
 }
 
 //+kubebuilder:object:root=true

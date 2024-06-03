@@ -54,6 +54,8 @@ const (
 	// SplunkClusterManager is the manager node of an indexer cluster, see https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Basicclusterarchitecture
 	SplunkClusterManager InstanceType = "cluster-manager"
 
+	SplunkNoahCluster InstanceType = "noah-cluster"
+
 	// SplunkSearchHead may be a standalone or clustered search head instance
 	SplunkSearchHead InstanceType = "search-head"
 
