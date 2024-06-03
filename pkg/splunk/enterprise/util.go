@@ -606,12 +606,12 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 	scopedLog := reqLogger.WithName("ApplySmartStoreConfigMap").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get the list of volumes in INI format
-	volumesConfIni, err := GetSmartstoreVolumesConfig(ctx, client, cr, smartstore, indexerIni)
+	volumesConfigured, err := GetSmartstoreVolumesConfig(ctx, client, cr, smartstore, indexerIni)
 	if err != nil {
 		return err
 	}
 
-	if volumesConfIni == "" {
+	if !volumesConfigured {
 		scopedLog.Info("Volume stanza list is empty")
 	}
 
@@ -620,7 +620,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 	if indexesConfIni == "" {
 		scopedLog.Info("Index stanza list is empty")
-	} else if volumesConfIni == "" {
+	} else if !volumesConfigured {
 		return fmt.Errorf("indexes without Volume configuration is not allowed")
 	}
 
@@ -679,10 +679,9 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		scopedLog.Error(err, "unable to read latest secret", "error", err.Error())
 	}
-	err = GetNoahServerConfiguration(ctx, &commonSpec.NoahSpec.NoahService, secret, serverIni)
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
 	advertisedAddr := fmt.Sprintf("https://%s:8089", fqdnName)
-	serverIni.Section("noahService").Key("advertisedAddr").SetValue(advertisedAddr)
+	err = GetNoahServerConfiguration(ctx, &commonSpec.NoahSpec.NoahService, secret, advertisedAddr ,serverIni)
 
 	if err != nil {
 		scopedLog.Error(err, "unable to read noah server config", "error", err.Error())

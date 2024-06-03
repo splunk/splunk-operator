@@ -3,6 +3,16 @@ kind: Standalone
 metadata:
   name: test
 spec:
+  readinessInitialDelaySeconds: 100
+  readinessProbe:
+    timeoutSeconds: 5
+    periodSeconds:  5
+    failureThreshold: 3
+  livenessInitialDelaySeconds: 300
+  livenessProbe:
+    timeoutSeconds: 30
+    periodSeconds:  30
+    failureThreshold:  3
   smartstore:
     cacheManager:
       evictionPadding: 1024
@@ -24,6 +34,7 @@ spec:
       name: noahappframework
       path: noahappframework/test3/smartstore/
       secretRef: s3-secret
+      region: us-west-2
     defaults:
       volumeName: noahappframework
       hotBucketStreaming:
@@ -34,13 +45,13 @@ spec:
         stubOutRawdataJournal: False
   noahSpec:
     noahService:
-      uri:  http://sok-noah.noah.svc.cluster.local:8443
-      heartbeatPeriod: 0
+      uri:  http://afe190b14a50f491db1d4710f62d3412-d8a927b5641e21a8.elb.us-west-2.amazonaws.com:8443
+      heartbeatPeriod: 3
       heartbeatAsPercentageOfLease: 25
       tenant: test3
       remoteBundle: s3://noahappframework/test3/smartstore/
-      pass4SymmKey: $7$COX5QF9IQyRQPjWS8+NQl2f8KTehCnxWLfbICmf11aQTFE9+PsFVB5kTIo7ZTZzlghEqNcOiv6s=
-      advertiseAddr: https://splunk-stdln-shc-standalone-service.test3.svc.cluster.local:8089  
+      #pass4SymmKey: $7$COX5QF9IQyRQPjWS8+NQl2f8KTehCnxWLfbICmf11aQTFE9+PsFVB5kTIo7ZTZzlghEqNcOiv6s=
+      #advertiseAddr: https://splunk-stdln-shc-standalone-service.test3.svc.cluster.local:8089  
       usePeers: false
       pass4SymmKeyMinLength: 10
       reportIndexDeletion: True

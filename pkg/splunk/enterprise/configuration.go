@@ -1969,8 +1969,8 @@ func ValidateSplunkSmartstoreSpec(ctx context.Context, smartstore *enterpriseApi
 }
 
 // GetSmartstoreVolumesConfig returns the list of Volumes configuration in INI format
-func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, indexIni *ini.File) (string, error) {
-	var volumesConf string
+func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, indexIni *ini.File) (bool, error) {
+	var volumesConfigured bool
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetSmartstoreVolumesConfig")
@@ -1980,7 +1980,7 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 		if volumes[i].SecretRef != "" {
 			s3AccessKey, s3SecretKey, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volumes[i], client, cr, smartstore)
 			if err != nil {
-				return "", fmt.Errorf("unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
+				return volumesConfigured, fmt.Errorf("unable to read the secrets for volume = %s. %s", volumes[i].Name, err)
 			}
 			volumeName := fmt.Sprintf("volume:%s", volumes[i].Name)
 			path := fmt.Sprintf("s3://%s", volumes[i].Path)
@@ -1990,6 +1990,7 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 			indexIni.Section(volumeName).Key("remote.s3.secret_key").SetValue(s3SecretKey)
 			indexIni.Section(volumeName).Key("remote.s3.endpoint").SetValue(volumes[i].Endpoint)
 			indexIni.Section(volumeName).Key("remote.s3.auth_region").SetValue(volumes[i].Region)
+			volumesConfigured = true
 		} else {
 			scopedLog.Info("No valid secretRef configured.  Configure volume without access/secret keys", "volumeName", volumes[i].Name)
 			volumeName := fmt.Sprintf("volume:%s", volumes[i].Name)
@@ -1998,10 +1999,11 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 			indexIni.Section(volumeName).Key("path").SetValue(path)
 			indexIni.Section(volumeName).Key("endpoint").SetValue(volumes[i].Endpoint)
 			indexIni.Section(volumeName).Key("remote.s3.auth_region").SetValue(volumes[i].Region)
+			volumesConfigured = true
 		}
 	}
 
-	return volumesConf, nil
+	return volumesConfigured, nil
 }
 
 // GetSmartstoreIndexesConfig returns the list of indexes configuration in INI format
@@ -2106,7 +2108,7 @@ func GetServerConfigEntries(ctx context.Context, cacheManagerConf *enterpriseApi
 }
 
 // GetNoahServerConfiguration prepares the server.conf entries, and returns as a string
-func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.NoahService, secret *corev1.Secret, serverCfg *ini.File) error {
+func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.NoahService, secret *corev1.Secret, indexerUrl string, serverCfg *ini.File) error {
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetNoahServerConfiguration")
@@ -2149,7 +2151,7 @@ func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.
 		scopedLog.Error(nil, "unable to get pass4SymmKey")
 	}
 	if noahService.AdvertisedAddr != "" {
-		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(noahService.AdvertisedAddr)
+		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(indexerUrl)
 	}
 	if noahService.UsePeers {
 		serverCfg.Section("noahService").Key("usePeers").SetValue("true")
