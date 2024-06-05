@@ -792,8 +792,6 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 
 	// Just make the lint conversion checks happy
-	//var client splcommon.ControllerClient = getConvertedClient(c)
-
 	capacity := 1
 	var workerList []*PipelineWorker = make([]*PipelineWorker, capacity)
 	for i := range workerList {
@@ -1948,7 +1946,6 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 	// Just make the lint conversion checks happy
 	var client splcommon.ControllerClient = getConvertedClient(c)
 
-	//var client splcommon.ControllerClient
 	worker := &PipelineWorker{
 		appSrcName:    "appSrc1",
 		afwConfig:     &cr.Spec.AppFrameworkConfig,
@@ -2076,7 +2073,6 @@ func TestRunPodCopyWorker(t *testing.T) {
 	var client splcommon.ControllerClient = getConvertedClient(c)
 	var waiter sync.WaitGroup
 
-	//var client splcommon.ControllerClient
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-clustermanager-0",
