@@ -1523,8 +1523,6 @@ spec:
                       uri:
                         description: '[noahService]'
                         type: string
-                      usePeers:
-                        type: boolean
                     type: object
                   noahSettings:
                     description: NoahSettings
@@ -1535,6 +1533,8 @@ spec:
                         description: '[noah_settings]'
                         type: integer
                     type: object
+                  searchHead:
+                    type: boolean
                 type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See
@@ -5751,8 +5751,6 @@ spec:
                       uri:
                         description: '[noahService]'
                         type: string
-                      usePeers:
-                        type: boolean
                     type: object
                   noahSettings:
                     description: NoahSettings
@@ -5763,6 +5761,8 @@ spec:
                         description: '[noah_settings]'
                         type: integer
                     type: object
+                  searchHead:
+                    type: boolean
                 type: object
               readinessInitialDelaySeconds:
                 description: 'ReadinessInitialDelaySeconds defines initialDelaySeconds(See

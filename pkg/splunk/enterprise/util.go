@@ -643,8 +643,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
 	commonSpec *enterpriseApi.CommonSplunkSpec, indexerIni *ini.File, serverIni *ini.File, authorizeIni *ini.File) error {
 
-	var crKind string
-	crKind = cr.GetObjectKind().GroupVersionKind().Kind
+	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyNoahConfiguration").WithValues("kind", crKind, "name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -661,14 +660,14 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 		instanceID = SplunkStandalone
 	case "LicenseManager":
 		instanceID = SplunkLicenseManager
-	case "LicenseMaster":
-		instanceID = SplunkLicenseMaster
+	case "IndexerCluster":
+		instanceID = SplunkIndexer
 	case "SearchHeadCluster":
 		instanceID = SplunkDeployer
 	case "ClusterMaster":
 		instanceID = SplunkClusterMaster
-	case "ClusterManager":
-		instanceID = SplunkClusterManager
+	case "SplunkSearchHead":
+		instanceID = SplunkSearchHead
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
 	default:
@@ -679,26 +678,36 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		scopedLog.Error(err, "unable to read latest secret", "error", err.Error())
 	}
-	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
-	advertisedAddr := fmt.Sprintf("https://%s:8089", fqdnName)
-	err = GetNoahServerConfiguration(ctx, &commonSpec.NoahSpec.NoahService, secret, advertisedAddr ,serverIni)
 
+	if commonSpec.NoahSpec.NoahService.AdvertisedAddr != "" {
+		fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
+		commonSpec.NoahSpec.NoahService.AdvertisedAddr = fmt.Sprintf("https://%s:8089", fqdnName)
+	}
+	if commonSpec.NoahSpec.NoahService.Tenant == "" {
+		commonSpec.NoahSpec.NoahService.Tenant = cr.GetNamespace()
+	}
+	err = GetNoahServerConfiguration(ctx, &commonSpec.NoahSpec.NoahService, secret, commonSpec.NoahSpec.SearchHead, serverIni)
 	if err != nil {
 		scopedLog.Error(err, "unable to read noah server config", "error", err.Error())
 	}
-	err = GetNoahSettingConf(ctx, &commonSpec.NoahSpec.NoahSettings, serverIni)
-	if err != nil {
-		scopedLog.Error(err, "unable to read noah setting config", "error", err.Error())
-	}
-	err = GetNoahLatestBucketMapConf(ctx, &commonSpec.NoahSpec.NoahClientBucketSettings, serverIni)
-	if err != nil {
-		scopedLog.Error(err, "unable to read noah latest bucket map config", "error", err.Error())
-	}
 
-	err = GetAuthorizeConf(ctx, authorizeIni)
-	if err != nil {
-		scopedLog.Error(err, "unable to aurhorize config", "error", err.Error())
+	if commonSpec.NoahSpec.SearchHead {
 
+		err = GetNoahSettingConf(ctx, &commonSpec.NoahSpec.NoahSettings, serverIni)
+		if err != nil {
+			scopedLog.Error(err, "unable to read noah setting config", "error", err.Error())
+		}
+
+		err = GetNoahLatestBucketMapConf(ctx, &commonSpec.NoahSpec.NoahClientBucketSettings, serverIni)
+		if err != nil {
+			scopedLog.Error(err, "unable to read noah latest bucket map config", "error", err.Error())
+		}
+
+		err = GetAuthorizeConf(ctx, authorizeIni)
+		if err != nil {
+			scopedLog.Error(err, "unable to aurhorize config", "error", err.Error())
+
+		}
 	}
 
 	return err

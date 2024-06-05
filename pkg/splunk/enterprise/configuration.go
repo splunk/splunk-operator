@@ -2108,7 +2108,7 @@ func GetServerConfigEntries(ctx context.Context, cacheManagerConf *enterpriseApi
 }
 
 // GetNoahServerConfiguration prepares the server.conf entries, and returns as a string
-func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.NoahService, secret *corev1.Secret, indexerUrl string, serverCfg *ini.File) error {
+func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.NoahService, secret *corev1.Secret, searchHead bool, serverCfg *ini.File) error {
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetNoahServerConfiguration")
@@ -2141,6 +2141,7 @@ func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.
 	if noahService.Tenant != "" {
 		serverCfg.Section("noahService").Key("tenant").SetValue(noahService.Tenant)
 	}
+
 	if noahService.RemoteBundle != "" {
 		serverCfg.Section("noahService").Key("remoteBundle").SetValue(noahService.RemoteBundle)
 	}
@@ -2150,14 +2151,12 @@ func GetNoahServerConfiguration(ctx context.Context, noahService *enterpriseApi.
 	} else {
 		scopedLog.Error(nil, "unable to get pass4SymmKey")
 	}
-	if noahService.AdvertisedAddr != "" {
-		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(indexerUrl)
-	}
-	if noahService.UsePeers {
-		serverCfg.Section("noahService").Key("usePeers").SetValue("true")
-	} else {
+
+	if !searchHead {
+		serverCfg.Section("noahService").Key("advertisedAddr").SetValue(noahService.AdvertisedAddr)
 		serverCfg.Section("noahService").Key("usePeers").SetValue("false")
 	}
+
 	serverCfg.Section("noahService").Key("pass4SymmKey_minLength").SetValue(strconv.Itoa(noahService.Pass4SymmKeyMinLength))
 	if noahService.ReportIndexDeletion {
 		serverCfg.Section("noahService").Key("reportIndexDeletion").SetValue("true")
@@ -2279,20 +2278,14 @@ func GetSmartstoreIndexesDefaults(ctx context.Context, defaults enterpriseApi.In
 
 	if defaults.HotBucketStreaming.ReportStatus {
 		indexesCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("true")
-	} else {
-		indexesCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("false")
 	}
 
 	if defaults.HotBucketStreaming.SendSlices {
 		indexesCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("true")
-	} else {
-		indexesCfg.Section("default").Key("hotBucketStreaming.sendSlices").SetValue("false")
 	}
 
 	if defaults.HotBucketStreaming.DeleteHotsAfterRestart {
 		indexesCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("true")
-	} else {
-		indexesCfg.Section("default").Key("hotBucketStreaming.deleteHotsAfterRestart").SetValue("false")
 	}
 
 	if defaults.Metric.StubOutRawdataJournal {
