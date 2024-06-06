@@ -1113,7 +1113,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			appFrameworkRef: &cm.Spec.AppFrameworkConfig,
 			vol:             &vol,
 			location:        appSource.Location,
-			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 				cl := spltest.MockAWSS3Client{}
 				cl.Objects = mockAwsObjects[index].Objects
 				return cl
@@ -1238,7 +1238,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		appFrameworkRef: &cm.Spec.AppFrameworkConfig,
 		vol:             &vol,
 		location:        appSource.Location,
-		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		initFn: func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 			// Purposefully return nil here so that we test the error scenario
 			return nil
 		},
@@ -1296,7 +1296,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
 
-	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl

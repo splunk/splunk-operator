@@ -100,7 +100,7 @@ func (c *GetRemoteDataClientWrapper) GetRemoteDataClientInitFuncPtr(ctx context.
 }
 
 // GetInitFunc gets the init function pointer which returns the new RemoteDataClient session client object
-type GetInitFunc func(context.Context, string, string, string) interface{}
+type GetInitFunc func(context.Context, string, string, string, bool) interface{}
 
 // GetRemoteDataClient gets the required RemoteDataClient based on the storageType and provider
 type GetRemoteDataClient func(context.Context, string /* bucket */, string, /* Access key ID */

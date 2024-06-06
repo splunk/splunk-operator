@@ -27,19 +27,19 @@ import (
 
 func TestInitMinioClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	minioS3ClientSession := InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "abcd", "1234")
+	minioS3ClientSession := InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "abcd", "1234", false)
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
 
 	// Test case without access and secret keys
-	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "", "")
+	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com", "", "", false)
 	if minioS3ClientSession == nil {
 		t.Errorf("We should have got a valid Minio S3 client object")
 	}
 
 	// Test erroneous minio session
-	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com:-9000", "", "")
+	minioS3ClientSession = InitMinioClientWrapper(ctx, "https://s3.us-east-1.amazonaws.com:-9000", "", "", false)
 	if minioS3ClientSession != nil {
 		t.Errorf("Should have gotten a nil session due to error in URL")
 	}
@@ -178,7 +178,7 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 		getClientWrapper := RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 			cl := spltest.MockMinioS3Client{}
 			cl.Objects = mockMinioObjects[index].Objects
 			return cl
@@ -187,7 +187,7 @@ func TestMinioGetAppsListShouldNotFail(t *testing.T) {
 		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 		getS3ClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockMinioS3Client)
 
 		RemoteDataListResponse, err := minioClient.GetAppsList(ctx)
 		if err != nil {
@@ -278,7 +278,7 @@ func TestMinioGetAppsListShouldFail(t *testing.T) {
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockMinioS3Client{}
 		// return empty objects list here to test the negative scenario
 		return cl
@@ -287,7 +287,7 @@ func TestMinioGetAppsListShouldFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	getS3ClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockMinioS3Client)
 
 	_, err = minioClient.GetAppsList(ctx)
 	if err == nil {
@@ -380,7 +380,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 		getClientWrapper := RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 			cl := spltest.MockMinioS3Client{}
 			return cl
 		}
@@ -389,7 +389,7 @@ func TestMinioDownloadAppShouldNotFail(t *testing.T) {
 
 		getS3ClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+		minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockMinioS3Client)
 
 		downloadRequest := RemoteDataDownloadRequest{
 			LocalFile:  LocalFiles[index],
@@ -473,7 +473,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockMinioS3Client)
 
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockMinioS3Client{}
 		return cl
 	}
@@ -482,7 +482,7 @@ func TestMinioDownloadAppShouldFail(t *testing.T) {
 
 	getS3ClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockMinioS3Client)
+	minioClient.Client = getS3ClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockMinioS3Client)
 
 	downloadRequest := RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],

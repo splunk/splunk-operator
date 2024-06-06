@@ -34,7 +34,7 @@ func NewMockAWSS3Client(ctx context.Context, bucketName string, accessKeyID stri
 	var err error
 
 	region = fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
-	cl := fn(ctx, region, accessKeyID, secretAccessKey)
+	cl := fn(ctx, region, accessKeyID, secretAccessKey, false)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
@@ -60,7 +60,7 @@ func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID st
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
-	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey)
+	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey, false)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
@@ -83,7 +83,7 @@ func NewMockMinioS3Client(ctx context.Context, bucketName string, accessKeyID st
 func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, s3PathUrl bool, fn GetInitFunc) (RemoteDataClient, error) {
 	var err error
 
-	cl := fn(ctx, endpoint, storageAccountName, secretAccessKey)
+	cl := fn(ctx, endpoint, storageAccountName, secretAccessKey, false)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an Azure blob client")
 		return nil, err

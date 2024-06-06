@@ -42,7 +42,7 @@ func (errReader) Read(p []byte) (n int, err error) {
 
 func TestInitAzureBlobClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	azureBlobClientSession := InitAzureBlobClientWrapper(ctx, "https://mystorageaccount.blob.core.windows.net", "abcd", "1234")
+	azureBlobClientSession := InitAzureBlobClientWrapper(ctx, "https://mystorageaccount.blob.core.windows.net", "abcd", "1234", false)
 	if azureBlobClientSession == nil {
 		t.Errorf("We should not have got a nil Azure Blob Client")
 	}
@@ -185,14 +185,14 @@ func TestAzureBlobGetAppsListShouldNotFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -338,14 +338,14 @@ func TestAzureBlobGetAppsListShouldFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 
@@ -445,14 +445,14 @@ func TestAzureBlobDownloadAppShouldNotFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -556,14 +556,14 @@ func TestAzureBlobDownloadAppShouldFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -652,14 +652,14 @@ func TestAzureBlobGetAppsListShouldFailBadSecret(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -736,14 +736,14 @@ func TestAzureBlobGetAppsListShouldFailBadXmlResponse(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -822,14 +822,14 @@ func TestAzureBlobGetAppsListShouldFailNoIdentity(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -917,14 +917,14 @@ func TestAzureBlobGetAppsListShouldFailInvalidIdentity(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -996,14 +996,14 @@ func TestAzureBlobDownloadFailBadSecret(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -1080,14 +1080,14 @@ func TestAzureBlobDownloadAppShouldFailNoIdentity(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint
@@ -1172,14 +1172,14 @@ func TestAzureBlobDownloadAppShouldFailInvalidIdentity(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAzureBlobClient)
 
 	// Update the GetRemoteDataClientInit function pointer
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return &mclient
 	}
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	// Init azure blob client
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(*spltest.MockHTTPClient)
+	azureBlobClient.HTTPClient = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(*spltest.MockHTTPClient)
 	azureBlobClient.BucketName = vol.Path
 	azureBlobClient.Prefix = appSource.Location
 	azureBlobClient.Endpoint = vol.Endpoint

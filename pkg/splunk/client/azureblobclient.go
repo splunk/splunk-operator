@@ -200,7 +200,7 @@ func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) 
 // NewAzureBlobClient returns an AzureBlob client
 func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, pathStyleUrl bool, fn GetInitFunc) (RemoteDataClient, error) {
 	// Get http client
-	azureHTTPClient := fn(ctx, endpoint, storageAccountName, secretAccessKey)
+	azureHTTPClient := fn(ctx, endpoint, storageAccountName, secretAccessKey, false)
 
 	return &AzureBlobClient{
 		BucketName:         bucketName,
@@ -214,7 +214,7 @@ func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountNa
 }
 
 // InitAzureBlobClientWrapper is a wrapper around InitAzureBlobClientSession
-func InitAzureBlobClientWrapper(ctx context.Context, appAzureBlobEndPoint string, storageAccountName string, secretAccessKey string) interface{} {
+func InitAzureBlobClientWrapper(ctx context.Context, appAzureBlobEndPoint string, storageAccountName string, secretAccessKey string, pathStyleUrl bool) interface{} {
 	return InitAzureBlobClientSession(ctx)
 }
 

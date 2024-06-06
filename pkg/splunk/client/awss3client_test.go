@@ -30,24 +30,24 @@ import (
 
 func TestInitAWSClientWrapper(t *testing.T) {
 	ctx := context.TODO()
-	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
+	awsS3ClientSession := InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234", false)
 	if awsS3ClientSession == nil {
 		t.Errorf("We should have got a valid AWS S3 client session object")
 	}
 
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "", "")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "", "", false)
 	if awsS3ClientSession == nil {
 		t.Errorf("Case: Invalid secret/access keys, still returns a session")
 	}
 
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2", "", "", false)
 	if awsS3ClientSession != nil {
 		t.Errorf("Endpoint not resolved, should receive a nil session")
 	}
 
 	// Invalid session test
 	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "abcde")
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
+	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234", false)
 	os.Unsetenv("AWS_STS_REGIONAL_ENDPOINTS")
 }
 
@@ -90,7 +90,7 @@ func TestNewAWSS3Client(t *testing.T) {
 	}
 
 	// Test for invalid scenario, where we return nil client
-	fn = func(context.Context, string, string, string) interface{} {
+	fn = func(context.Context, string, string, string, bool) interface{} {
 		return nil
 	}
 	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", false, fn)
@@ -99,7 +99,7 @@ func TestNewAWSS3Client(t *testing.T) {
 	}
 
 	// Test for invalid scenario, where we return invalid client
-	fn = func(context.Context, string, string, string) interface{} {
+	fn = func(context.Context, string, string, string, bool) interface{} {
 		return "abcd"
 	}
 	_, err = NewAWSS3Client(ctx, "sample_bucket", "abcd", "xyz", "admin/", "admin", "us-west-2", "https://s3.us-west-2.amazonaws.com", false, fn)
@@ -216,7 +216,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		getClientWrapper := RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 			cl := spltest.MockAWSS3Client{}
 			cl.Objects = mockAwsObjects[index].Objects
 			return cl
@@ -225,7 +225,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockAWSS3Client)
 
 		RemoteDataListResponse, err := awsClient.GetAppsList(ctx)
 		if err != nil {
@@ -316,7 +316,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		// return empty objects list here to test the negative scenario
 		return cl
@@ -325,7 +325,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockAWSS3Client)
 
 	remoteDataClientResponse, err := awsClient.GetAppsList(ctx)
 	if err != nil {
@@ -337,7 +337,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
-	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockAWSS3ClientError{}
 		// return empty objects list here to test the negative scenario
 		return cl
@@ -345,7 +345,7 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 	getRemoteDataClientFn = getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3ClientError)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockAWSS3ClientError)
 
 	remoteDataClientResponse, err = awsClient.GetAppsList(ctx)
 	if err == nil {
@@ -440,7 +440,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 		getClientWrapper := RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+		initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 			cl := spltest.MockAWSS3Client{}
 			return cl
 		}
@@ -449,7 +449,7 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockAWSS3Client)
 
 		downloadRequest := RemoteDataDownloadRequest{
 			LocalFile:  LocalFiles[index],
@@ -534,7 +534,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 	getClientWrapper := RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, NewMockAWSS3Client)
 
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
@@ -543,7 +543,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234", false).(spltest.MockAWSS3Client)
 
 	downloadRequest := RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
