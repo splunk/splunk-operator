@@ -2,7 +2,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -322,6 +321,32 @@ rules:
   - enterprise.splunk.com
   resources:
   - searchheadclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - splunkapps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - splunkapps/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - splunkapps/status
   verbs:
   - get
   - patch
