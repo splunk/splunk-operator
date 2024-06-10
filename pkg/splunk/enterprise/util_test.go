@@ -458,8 +458,10 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 			indexerIni, err := ini.Load([]byte(""))
 			serverIni, err := ini.Load([]byte(""))
 			authorizeIni, err := ini.Load([]byte(""))
+			limitsIni, _ := ini.Load([]byte(""))
+			outputsIni, _ := ini.Load([]byte(""))
 			err = ApplySmartstoreConfigMap(ctx, client, cr, smartstore, indexerIni, serverIni)
-			configMap, _, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
+			configMap, _, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
 			configMap.Data["conftoken"] = "1601945361"
 			return configMap, err
 		}
@@ -473,8 +475,10 @@ func TestApplySmartstoreConfigMap(t *testing.T) {
 	indexerIni, err := ini.Load([]byte(""))
 	serverIni, err := ini.Load([]byte(""))
 	authorizeIni, err := ini.Load([]byte(""))
+	limitsIni, _ := ini.Load([]byte(""))
+	outputsIni, _ := ini.Load([]byte(""))
 	err = ApplySmartstoreConfigMap(ctx, client, &cr, &cr.Spec.SmartStore, indexerIni, serverIni)
-	_, _, err = ApplyConfigMapChanges(ctx, client, &cr, indexerIni, serverIni, authorizeIni)
+	_, _, err = ApplyConfigMapChanges(ctx, client, &cr, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
 	if err == nil {
 		t.Errorf("Configuring Indexes without volumes should return an error")
 	}

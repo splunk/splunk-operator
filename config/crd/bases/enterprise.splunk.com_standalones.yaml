@@ -2148,6 +2148,8 @@ spec:
                         description: Time period relative to the bucket's age, during
                           which the bucket is protected from cache eviction
                         type: integer
+                      localDeleteSummaryMetadataTtl:
+                        type: integer
                       maxCacheSize:
                         description: Max cache size per partition
                         type: integer
@@ -2163,6 +2165,12 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      bucketMerging:
+                        type: boolean
+                      enableOnlineBucketRepair:
+                        type: boolean
+                      frozenTimePeriodInSecs:
+                        type: integer
                       hotBucketStreaming:
                         properties:
                           deleteHotsAfterRestart:
@@ -2172,6 +2180,12 @@ spec:
                           sendSlices:
                             type: boolean
                         type: object
+                      journalCompression:
+                        type: string
+                      lastChanceIndex:
+                        type: string
+                      maxDataSize:
+                        type: integer
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -2180,11 +2194,19 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      maxHotBuckets:
+                        type: integer
+                      maxHotSpanSecs:
+                        type: integer
                       metric:
                         properties:
                           stubOutRawdataJournal:
                             type: boolean
                         type: object
+                      minHotIdleSecsBeforeForceRoll:
+                        type: string
+                      tsidxWritingLevel:
+                        type: integer
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -2195,6 +2217,12 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        bucketMerging:
+                          type: boolean
+                        enableOnlineBucketRepair:
+                          type: boolean
+                        frozenTimePeriodInSecs:
+                          type: integer
                         hotBucketStreaming:
                           properties:
                             deleteHotsAfterRestart:
@@ -2212,6 +2240,12 @@ spec:
                           description: Time period relative to the bucket's age, during
                             which the bucket is protected from cache eviction
                           type: integer
+                        journalCompression:
+                          type: string
+                        lastChanceIndex:
+                          type: string
+                        maxDataSize:
+                          type: integer
                         maxGlobalDataSizeMB:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of space for warm and cold buckets of an index
@@ -2220,11 +2254,17 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        maxHotBuckets:
+                          type: integer
+                        maxHotSpanSecs:
+                          type: integer
                         metric:
                           properties:
                             stubOutRawdataJournal:
                               type: boolean
                           type: object
+                        minHotIdleSecsBeforeForceRoll:
+                          type: string
                         name:
                           description: Splunk index name
                           type: string
@@ -2232,6 +2272,8 @@ spec:
                           description: Index location relative to the remote volume
                             path
                           type: string
+                        tsidxWritingLevel:
+                          type: integer
                         volumeName:
                           description: Remote Volume name
                           type: string
@@ -4409,6 +4451,8 @@ spec:
                         description: Time period relative to the bucket's age, during
                           which the bucket is protected from cache eviction
                         type: integer
+                      localDeleteSummaryMetadataTtl:
+                        type: integer
                       maxCacheSize:
                         description: Max cache size per partition
                         type: integer
@@ -4424,6 +4468,12 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      bucketMerging:
+                        type: boolean
+                      enableOnlineBucketRepair:
+                        type: boolean
+                      frozenTimePeriodInSecs:
+                        type: integer
                       hotBucketStreaming:
                         properties:
                           deleteHotsAfterRestart:
@@ -4433,6 +4483,12 @@ spec:
                           sendSlices:
                             type: boolean
                         type: object
+                      journalCompression:
+                        type: string
+                      lastChanceIndex:
+                        type: string
+                      maxDataSize:
+                        type: integer
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -4441,11 +4497,19 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      maxHotBuckets:
+                        type: integer
+                      maxHotSpanSecs:
+                        type: integer
                       metric:
                         properties:
                           stubOutRawdataJournal:
                             type: boolean
                         type: object
+                      minHotIdleSecsBeforeForceRoll:
+                        type: string
+                      tsidxWritingLevel:
+                        type: integer
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -4456,6 +4520,12 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        bucketMerging:
+                          type: boolean
+                        enableOnlineBucketRepair:
+                          type: boolean
+                        frozenTimePeriodInSecs:
+                          type: integer
                         hotBucketStreaming:
                           properties:
                             deleteHotsAfterRestart:
@@ -4473,6 +4543,12 @@ spec:
                           description: Time period relative to the bucket's age, during
                             which the bucket is protected from cache eviction
                           type: integer
+                        journalCompression:
+                          type: string
+                        lastChanceIndex:
+                          type: string
+                        maxDataSize:
+                          type: integer
                         maxGlobalDataSizeMB:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of space for warm and cold buckets of an index
@@ -4481,11 +4557,17 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        maxHotBuckets:
+                          type: integer
+                        maxHotSpanSecs:
+                          type: integer
                         metric:
                           properties:
                             stubOutRawdataJournal:
                               type: boolean
                           type: object
+                        minHotIdleSecsBeforeForceRoll:
+                          type: string
                         name:
                           description: Splunk index name
                           type: string
@@ -4493,6 +4575,8 @@ spec:
                           description: Index location relative to the remote volume
                             path
                           type: string
+                        tsidxWritingLevel:
+                          type: integer
                         volumeName:
                           description: Remote Volume name
                           type: string
@@ -6676,6 +6760,8 @@ spec:
                         description: Time period relative to the bucket's age, during
                           which the bucket is protected from cache eviction
                         type: integer
+                      localDeleteSummaryMetadataTtl:
+                        type: integer
                       maxCacheSize:
                         description: Max cache size per partition
                         type: integer
@@ -6691,6 +6777,12 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      bucketMerging:
+                        type: boolean
+                      enableOnlineBucketRepair:
+                        type: boolean
+                      frozenTimePeriodInSecs:
+                        type: integer
                       hotBucketStreaming:
                         properties:
                           deleteHotsAfterRestart:
@@ -6700,6 +6792,12 @@ spec:
                           sendSlices:
                             type: boolean
                         type: object
+                      journalCompression:
+                        type: string
+                      lastChanceIndex:
+                        type: string
+                      maxDataSize:
+                        type: integer
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -6708,11 +6806,19 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      maxHotBuckets:
+                        type: integer
+                      maxHotSpanSecs:
+                        type: integer
                       metric:
                         properties:
                           stubOutRawdataJournal:
                             type: boolean
                         type: object
+                      minHotIdleSecsBeforeForceRoll:
+                        type: string
+                      tsidxWritingLevel:
+                        type: integer
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -6723,6 +6829,12 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        bucketMerging:
+                          type: boolean
+                        enableOnlineBucketRepair:
+                          type: boolean
+                        frozenTimePeriodInSecs:
+                          type: integer
                         hotBucketStreaming:
                           properties:
                             deleteHotsAfterRestart:
@@ -6740,6 +6852,12 @@ spec:
                           description: Time period relative to the bucket's age, during
                             which the bucket is protected from cache eviction
                           type: integer
+                        journalCompression:
+                          type: string
+                        lastChanceIndex:
+                          type: string
+                        maxDataSize:
+                          type: integer
                         maxGlobalDataSizeMB:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of space for warm and cold buckets of an index
@@ -6748,11 +6866,17 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        maxHotBuckets:
+                          type: integer
+                        maxHotSpanSecs:
+                          type: integer
                         metric:
                           properties:
                             stubOutRawdataJournal:
                               type: boolean
                           type: object
+                        minHotIdleSecsBeforeForceRoll:
+                          type: string
                         name:
                           description: Splunk index name
                           type: string
@@ -6760,6 +6884,8 @@ spec:
                           description: Index location relative to the remote volume
                             path
                           type: string
+                        tsidxWritingLevel:
+                          type: integer
                         volumeName:
                           description: Remote Volume name
                           type: string
@@ -9006,6 +9132,8 @@ spec:
                         description: Time period relative to the bucket's age, during
                           which the bucket is protected from cache eviction
                         type: integer
+                      localDeleteSummaryMetadataTtl:
+                        type: integer
                       maxCacheSize:
                         description: Max cache size per partition
                         type: integer
@@ -9021,6 +9149,12 @@ spec:
                   defaults:
                     description: Default configuration for indexes
                     properties:
+                      bucketMerging:
+                        type: boolean
+                      enableOnlineBucketRepair:
+                        type: boolean
+                      frozenTimePeriodInSecs:
+                        type: integer
                       hotBucketStreaming:
                         properties:
                           deleteHotsAfterRestart:
@@ -9030,6 +9164,12 @@ spec:
                           sendSlices:
                             type: boolean
                         type: object
+                      journalCompression:
+                        type: string
+                      lastChanceIndex:
+                        type: string
+                      maxDataSize:
+                        type: integer
                       maxGlobalDataSizeMB:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of space for warm and cold buckets of an index
@@ -9038,11 +9178,19 @@ spec:
                         description: MaxGlobalDataSizeMB defines the maximum amount
                           of cumulative space for warm and cold buckets of an index
                         type: integer
+                      maxHotBuckets:
+                        type: integer
+                      maxHotSpanSecs:
+                        type: integer
                       metric:
                         properties:
                           stubOutRawdataJournal:
                             type: boolean
                         type: object
+                      minHotIdleSecsBeforeForceRoll:
+                        type: string
+                      tsidxWritingLevel:
+                        type: integer
                       volumeName:
                         description: Remote Volume name
                         type: string
@@ -9053,6 +9201,12 @@ spec:
                       description: IndexSpec defines Splunk index name and storage
                         path
                       properties:
+                        bucketMerging:
+                          type: boolean
+                        enableOnlineBucketRepair:
+                          type: boolean
+                        frozenTimePeriodInSecs:
+                          type: integer
                         hotBucketStreaming:
                           properties:
                             deleteHotsAfterRestart:
@@ -9070,6 +9224,12 @@ spec:
                           description: Time period relative to the bucket's age, during
                             which the bucket is protected from cache eviction
                           type: integer
+                        journalCompression:
+                          type: string
+                        lastChanceIndex:
+                          type: string
+                        maxDataSize:
+                          type: integer
                         maxGlobalDataSizeMB:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of space for warm and cold buckets of an index
@@ -9078,11 +9238,17 @@ spec:
                           description: MaxGlobalDataSizeMB defines the maximum amount
                             of cumulative space for warm and cold buckets of an index
                           type: integer
+                        maxHotBuckets:
+                          type: integer
+                        maxHotSpanSecs:
+                          type: integer
                         metric:
                           properties:
                             stubOutRawdataJournal:
                               type: boolean
                           type: object
+                        minHotIdleSecsBeforeForceRoll:
+                          type: string
                         name:
                           description: Splunk index name
                           type: string
@@ -9090,6 +9256,8 @@ spec:
                           description: Index location relative to the remote volume
                             path
                           type: string
+                        tsidxWritingLevel:
+                          type: integer
                         volumeName:
                           description: Remote Volume name
                           type: string

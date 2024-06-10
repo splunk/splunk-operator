@@ -641,7 +641,7 @@ func ApplySmartstoreConfigMap(ctx context.Context, client splcommon.ControllerCl
 
 // ApplyNoahConfiguration creates the configMap with Smartstore config in INI format
 func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-	commonSpec *enterpriseApi.CommonSplunkSpec, indexerIni *ini.File, serverIni *ini.File, authorizeIni *ini.File) error {
+	commonSpec *enterpriseApi.CommonSplunkSpec, indexerIni *ini.File, serverIni *ini.File, authorizeIni *ini.File, limitsIni *ini.File, outputsIni *ini.File) error {
 
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
@@ -679,7 +679,7 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 		scopedLog.Error(err, "unable to read latest secret", "error", err.Error())
 	}
 
-	if commonSpec.NoahSpec.NoahService.AdvertisedAddr != "" {
+	if commonSpec.NoahSpec.NoahService.AdvertisedAddr == "" && !commonSpec.NoahSpec.SearchHead {
 		fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
 		commonSpec.NoahSpec.NoahService.AdvertisedAddr = fmt.Sprintf("https://%s:8089", fqdnName)
 	}
@@ -703,18 +703,23 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 			scopedLog.Error(err, "unable to read noah latest bucket map config", "error", err.Error())
 		}
 
-		err = GetAuthorizeConf(ctx, authorizeIni)
-		if err != nil {
-			scopedLog.Error(err, "unable to aurhorize config", "error", err.Error())
+		err = GetNoahLimitsConf(ctx, limitsIni)
 
-		}
+		err = GetNoahOuputsConf(ctx, outputsIni)
+
+	}
+
+	err = GetAuthorizeConf(ctx, authorizeIni)
+	if err != nil {
+		scopedLog.Error(err, "unable to aurhorize config", "error", err.Error())
+
 	}
 
 	return err
 }
 
 func ApplyConfigMapChanges(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject,
-	indexerIni *ini.File, serverIni *ini.File, authorizeIni *ini.File) (*corev1.ConfigMap, bool, error) {
+	indexerIni *ini.File, serverIni *ini.File, authorizeIni *ini.File, limitsIni *ini.File, outputsIni *ini.File) (*corev1.ConfigMap, bool, error) {
 
 	var configMapDataChanged bool
 	var crKind string
@@ -746,6 +751,20 @@ func ApplyConfigMapChanges(ctx context.Context, client splcommon.ControllerClien
 		return nil, configMapDataChanged, fmt.Errorf("writing authorize config buffer failed")
 	}
 	mapSplunkConfDetails["authorize.conf"] = ibuf.String()
+
+	var obuf bytes.Buffer
+	_, err = outputsIni.WriteTo(&obuf)
+	if err != nil {
+		return nil, configMapDataChanged, fmt.Errorf("writing output config buffer failed")
+	}
+	mapSplunkConfDetails["outputs.conf"] = obuf.String()
+
+	var lbuf bytes.Buffer
+	_, err = limitsIni.WriteTo(&lbuf)
+	if err != nil {
+		return nil, configMapDataChanged, fmt.Errorf("writing limits config buffer failed")
+	}
+	mapSplunkConfDetails["limits.conf"] = lbuf.String()
 
 	// Create smartstore config consisting indexes.conf
 	configMapName := GetSplunkSmartstoreConfigMapName(cr.GetName(), crKind)

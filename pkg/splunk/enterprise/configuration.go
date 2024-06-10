@@ -939,6 +939,8 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 					{Key: "indexes.conf", Path: "indexes.conf", Mode: &configMapVolDefaultMode},
 					{Key: "server.conf", Path: "server.conf", Mode: &configMapVolDefaultMode},
 					{Key: "authorize.conf", Path: "authorize.conf", Mode: &configMapVolDefaultMode},
+					{Key: "limits.conf", Path: "limits.conf", Mode: &configMapVolDefaultMode},
+					{Key: "outputs.conf", Path: "outputs.conf", Mode: &configMapVolDefaultMode},
 					{Key: configToken, Path: configToken, Mode: &configMapVolDefaultMode},
 				},
 			},
@@ -2097,6 +2099,11 @@ func GetServerConfigEntries(ctx context.Context, cacheManagerConf *enterpriseApi
 		serverCfg.Section("cachemanager").Key("max_concurrent_uploads").SetValue(maxConcurrentUploads)
 	}
 
+	if cacheManagerConf.MaxConcurrentUploads != 0 {
+		localDeleteSummaryMetadataTtl := fmt.Sprintf(`%d`, cacheManagerConf.LocalDeleteSummaryMetadataTtl)
+		serverCfg.Section("cachemanager").Key("local_delete_summary_metadata_ttl").SetValue(localDeleteSummaryMetadataTtl)
+	}
+
 	if emptyStanza == serverConfIni {
 		return ""
 	}
@@ -2105,6 +2112,19 @@ func GetServerConfigEntries(ctx context.Context, cacheManagerConf *enterpriseApi
 `, serverConfIni)
 
 	return serverConfIni
+}
+
+// GetNoahGeneralConfiguration prepares the server.conf entries, and returns as a string
+func GetNoahGeneralConfiguration(ctx context.Context, serverCfg *ini.File) error {
+
+	//reqLogger := log.FromContext(ctx)
+	//scopedLog := reqLogger.WithName("GetNoahServerConfiguration")
+
+	serverCfg.Section("general").Key("allowRemoteLogin").SetValue("always")
+	serverCfg.Section("general").Key("remoteStorageRecreateIndexesInStandalone").SetValue("150")
+	serverCfg.Section("general").Key("recreate_bucket_fetch_manifest_batch_size").SetValue("1000")
+
+	return nil
 }
 
 // GetNoahServerConfiguration prepares the server.conf entries, and returns as a string
@@ -2244,6 +2264,27 @@ func GetAuthorizeConf(ctx context.Context, aurhorizeCfg *ini.File) error {
 	return nil
 }
 
+// GetNoahLimitsConf prepares the server.conf entries, and returns as a string
+func GetNoahLimitsConf(ctx context.Context, limitsCfg *ini.File) error {
+	limitsCfg.NewSection("search")
+	limitsCfg.Section("search").Key("fetch_remote_search_log").SetValue("disabled")
+	limitsCfg.Section("search").Key("always_include_indexedfield_lispy").SetValue("true")
+
+	limitsCfg.NewSection("search_optimization::replace_stats_cmds_with_tstats")
+	limitsCfg.Section("search_optimization::replace_stats_cmds_with_tstats").Key("enabled").SetValue("true")
+	return nil
+}
+
+// GetNoahOuputsConf prepares the server.conf entries, and returns as a string
+func GetNoahOuputsConf(ctx context.Context, outputsCfg *ini.File) error {
+	outputsCfg.NewSection("indexer_discovery:test")
+	outputsCfg.NewSection("tcpout:test")
+	outputsCfg.Section("tcpout:test").Key("indexerDiscovery").SetValue("test")
+	outputsCfg.NewSection("tcpout")
+	outputsCfg.Section("tcpout").Key("defaultGroup").SetValue("test")
+	return nil
+}
+
 // GetSmartstoreIndexesDefaults fills the indexes.conf default stanza in INI format
 func GetSmartstoreIndexesDefaults(ctx context.Context, defaults enterpriseApi.IndexConfDefaultsSpec, indexesCfg *ini.File) string {
 
@@ -2259,9 +2300,46 @@ func GetSmartstoreIndexesDefaults(ctx context.Context, defaults enterpriseApi.In
 	indexesCfg.Section("default").Key("coldPath").SetValue(coldPathvalue)
 	indexesCfg.Section("default").Key("thawedPath").SetValue(thawedPathvalue)
 
+	if defaults.LastChanceIndex != "" {
+		key := defaults.LastChanceIndex
+		indexesCfg.Section("default").Key("lastChanceIndex").SetValue(defaults.LastChanceIndex)
+
+		db := fmt.Sprintf("$SPLUNK_DB/%s/db", key)
+		colddb := fmt.Sprintf("$SPLUNK_DB/%s/colddb", key)
+		thaweddb := fmt.Sprintf("$SPLUNK_DB/%s/thaweddb", key)
+		indexesCfg.Section(key).Key("lastChanceIndex").SetValue(db)
+		indexesCfg.Section(key).Key("lastChanceIndex").SetValue(colddb)
+		indexesCfg.Section(key).Key("lastChanceIndex").SetValue(thaweddb)
+	}
+
+	if defaults.BucketMerging {
+		indexesCfg.Section("default").Key("bucketMerging").SetValue("true")
+	}
+
+	if defaults.TsidxWritingLevel != 0 {
+		value := fmt.Sprintf("%d", defaults.TsidxWritingLevel)
+		indexesCfg.Section("default").Key("tsidxWritingLevel").SetValue(value)
+	}
+	if defaults.FrozenTimePeriodInSecs != 0 {
+		value := fmt.Sprintf("%d", defaults.FrozenTimePeriodInSecs)
+		indexesCfg.Section("default").Key("frozenTimePeriodInSecs").SetValue(value)
+	}
+	if defaults.MaxHotBuckets != 0 {
+		value := fmt.Sprintf("%d", defaults.MaxHotBuckets)
+		indexesCfg.Section("default").Key("maxHotBuckets").SetValue(value)
+	}
+	
+	if defaults.MaxDataSize != 0 {
+		value := fmt.Sprintf("%d", defaults.MaxDataSize)
+		indexesCfg.Section("default").Key("maxDataSize").SetValue(value)
+	}
+
+	if defaults.MinHotIdleSecsBeforeForceRoll != "" {
+		indexesCfg.Section("default").Key("minHotIdleSecsBeforeForceRoll").SetValue(defaults.MinHotIdleSecsBeforeForceRoll)
+	}
+
 	// Do not change any of the following Sprintf formats(Intentionally indented)
 	if defaults.VolName != "" {
-		//if defaults.VolName != "" && defaults.RemotePath != "" {
 		value := fmt.Sprintf("volume:%s/%s", defaults.VolName, remotePath)
 		indexesCfg.Section("default").Key("remotePath").SetValue(value)
 	}
@@ -2271,9 +2349,21 @@ func GetSmartstoreIndexesDefaults(ctx context.Context, defaults enterpriseApi.In
 		indexesCfg.Section("default").Key("maxGlobalDataSizeMB").SetValue(value)
 	}
 
-	if defaults.MaxGlobalRawDataSizeMB != 0 {
-		value := fmt.Sprintf("%d", defaults.MaxGlobalRawDataSizeMB)
-		indexesCfg.Section("default").Key("maxGlobalRawDataSizeMB").SetValue(value)
+	if defaults.EnableOnlineBucketRepair {
+		indexesCfg.Section("default").Key("enableOnlineBucketRepair").SetValue("true")
+	}
+
+	if defaults.JournalCompression != "" {
+		indexesCfg.Section("default").Key("journalCompression").SetValue(defaults.JournalCompression)
+	}
+
+	if defaults.MaxHotSpanSecs != 0 {
+		value := fmt.Sprintf("%d", defaults.MaxHotSpanSecs)
+		indexesCfg.Section("default").Key("maxHotSpanSecs").SetValue(value)
+	}
+
+	if defaults.HotBucketStreaming.ReportStatus {
+		indexesCfg.Section("default").Key("hotBucketStreaming.reportStatus").SetValue("true")
 	}
 
 	if defaults.HotBucketStreaming.ReportStatus {

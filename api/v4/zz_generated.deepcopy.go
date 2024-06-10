@@ -1076,6 +1076,11 @@ func (in *SearchHeadClusterMemberStatus) DeepCopy() *SearchHeadClusterMemberStat
 func (in *SearchHeadClusterSpec) DeepCopyInto(out *SearchHeadClusterSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+	if in.AuxilaryClusterManagerRefs != nil {
+		in, out := &in.AuxilaryClusterManagerRefs, &out.AuxilaryClusterManagerRefs
+		*out = make([]v1.ObjectReference, len(*in))
+		copy(*out, *in)
+	}
 	in.AppFrameworkConfig.DeepCopyInto(&out.AppFrameworkConfig)
 }
 

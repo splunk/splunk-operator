@@ -1,0 +1,48 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  name: forworder
+spec:
+  extraEnv:
+    - name: SPLUNK_STANDALONE_URL
+      value: splunk-vividx-standalone-service.test.svc.cluster.local
+    - name: SPLUNK_ADD 
+      value: tcp 1514
+  #image: splunk/universalforwarder:latest
+  serviceTemplate:
+    spec:
+      type: LoadBalancer
+  readinessInitialDelaySeconds: 100
+  readinessProbe:
+    timeoutSeconds: 5
+    periodSeconds:  5
+    failureThreshold: 3
+  livenessInitialDelaySeconds: 300
+  livenessProbe:
+    timeoutSeconds: 30
+    periodSeconds:  30
+    failureThreshold:  3
+  appRepo: 
+    appSources:
+    - location: appframework
+      name: apps
+      scope: local
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      scope: local
+      volumeName: volume_app_repo
+    volumes:
+    - endpoint: https://s3-us-west-2.amazonaws.com
+      name: volume_app_repo
+      path: noahappframework
+      provider: aws
+      region: us-west-2
+      secretRef: s3-secret
+      storageType: s3
+  defaults: |-
+    splunk:
+        set_search_peers: false  

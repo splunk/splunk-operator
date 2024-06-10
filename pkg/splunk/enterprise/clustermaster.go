@@ -76,11 +76,13 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		indexerIni, err := ini.Load([]byte(""))
 		serverIni, err := ini.Load([]byte(""))
 		authorizeIni, err := ini.Load([]byte(""))
+		limitsIni, _ := ini.Load([]byte(""))
+		outputsIni, _ := ini.Load([]byte(""))
 		err = ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore, indexerIni, serverIni)
 		if err != nil {
 			return result, err
 		}
-		_, configMapDataChanged, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
+		_, configMapDataChanged, err := ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
 		if err != nil {
 			return result, err
 		} else if configMapDataChanged {

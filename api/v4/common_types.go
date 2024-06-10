@@ -346,6 +346,8 @@ type CacheManagerSpec struct {
 
 	// Maximum number of buckets that can be uploaded to remote storage in parallel
 	MaxConcurrentUploads uint `json:"maxConcurrentUploads,omitempty"`
+
+	LocalDeleteSummaryMetadataTtl uint `json:"localDeleteSummaryMetadataTtl,omitempty"`
 }
 
 // IndexConfDefaultsSpec defines Splunk indexes.conf global/defaults
@@ -403,6 +405,26 @@ type IndexAndGlobalCommonSpec struct {
 
 	// MaxGlobalDataSizeMB defines the maximum amount of space for warm and cold buckets of an index
 	MaxGlobalDataSizeMB uint `json:"maxGlobalDataSizeMB,omitempty"`
+
+	LastChanceIndex string `json:"lastChanceIndex,omitempty"`
+
+	BucketMerging bool `json:"bucketMerging,omitempty"`
+
+	TsidxWritingLevel uint `json:"tsidxWritingLevel,omitempty"`
+
+	FrozenTimePeriodInSecs uint `json:"frozenTimePeriodInSecs,omitempty"`
+
+	MaxHotBuckets uint `json:"maxHotBuckets,omitempty"`
+	
+	MaxDataSize uint `json:"maxDataSize,omitempty"`
+
+	MinHotIdleSecsBeforeForceRoll string `json:"minHotIdleSecsBeforeForceRoll,omitempty"`
+
+	EnableOnlineBucketRepair bool `json:"enableOnlineBucketRepair,omitempty"`
+
+	JournalCompression string `json:"journalCompression,omitempty"`
+
+	MaxHotSpanSecs uint `json:"maxHotSpanSecs,omitempty"`
 
 	// MaxGlobalDataSizeMB defines the maximum amount of cumulative space for warm and cold buckets of an index
 	MaxGlobalRawDataSizeMB uint `json:"maxGlobalRawDataSizeMB,omitempty"`

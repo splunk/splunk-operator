@@ -22,14 +22,14 @@ spec:
     periodSeconds:  30
     failureThreshold:  3
   smartstore:
-    #cacheManager:
-    #  evictionPadding: 1024
-    #  evictionPolicy: lru
-    #  hotlistBloomFilterRecencyHours: 360
-    #  hotlistRecencySecs: 86400
-    #  maxCacheSize: 0
-    #  maxConcurrentDownloads: 8
-    #  maxConcurrentUploads: 8
+    cacheManager:
+      evictionPadding: 1024
+      evictionPolicy: lru
+      hotlistBloomFilterRecencyHours: 360
+      hotlistRecencySecs: 86400
+      maxCacheSize: 0
+      maxConcurrentDownloads: 8
+      maxConcurrentUploads: 8
     indexes:
     - name: main
       remotePath: $_index_name
@@ -45,22 +45,32 @@ spec:
       region: us-west-2
     defaults:
       volumeName: noahappframework
+      frozenTimePeriodInSecs: 0
+      maxDataSize: 750
+      maxHotBuckets:  3
+      minHotIdleSecsBeforeForceRoll: auto
+      lastChanceIndex: lastchance
+      bucketMerging: false
+      tsidxWritingLevel: 1
+      enableOnlineBucketRepair: false
+      journalCompression: zstd
+      maxHotSpanSecs: 86400
       hotBucketStreaming:
-        reportStatus: True
-        sendSlices: True
-        deleteHotsAfterRestart: True
+        reportStatus: true
+        sendSlices: true
+        deleteHotsAfterRestart: true
       metric:
-        stubOutRawdataJournal: False
+        stubOutRawdataJournal: false
   noahSpec:
+    searchHead: false
     noahService:
       uri:  http://afe190b14a50f491db1d4710f62d3412-d8a927b5641e21a8.elb.us-west-2.amazonaws.com:8443
       heartbeatPeriod: 3
       heartbeatAsPercentageOfLease: 25
       tenant: test3
       remoteBundle: s3://noahappframework/test3/smartstore/
-      usePeers: false
       pass4SymmKeyMinLength: 10
-      reportIndexDeletion: True
+      reportIndexDeletion: true
       cacheBucketTimeout: 3
     noahClient: 
       timeoutConnect: 12

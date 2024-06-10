@@ -82,8 +82,10 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		indexerIni, err := ini.Load([]byte(""))
 		serverIni, err := ini.Load([]byte(""))
 		authorizeIni, err := ini.Load([]byte(""))
+		limitsIni, _ := ini.Load([]byte(""))
+		outputsIni, _ := ini.Load([]byte(""))
 		if cr.Spec.NoahSpec.NoahService.Uri != "" {
-			err = ApplyNoahConfiguration(ctx, client, cr, &cr.Spec.CommonSplunkSpec, indexerIni, serverIni, authorizeIni)
+			err = ApplyNoahConfiguration(ctx, client, cr, &cr.Spec.CommonSplunkSpec, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
 			if err != nil {
 				return result, err
 			}
@@ -94,7 +96,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		if err != nil {
 			return result, err
 		}
-		_, _, err = ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni)
+		_, _, err = ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
 
 		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
