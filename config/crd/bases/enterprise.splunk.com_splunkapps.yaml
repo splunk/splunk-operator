@@ -112,6 +112,8 @@ spec:
                       type: string
                   type: object
                 type: array
+              version:
+                type: string
             type: object
           status:
             description: SplunkAppStatus defines the observed state of SplunkApp

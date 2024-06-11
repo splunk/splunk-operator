@@ -28,6 +28,7 @@ import (
 type SplunkAppSpec struct {
 	AppName     string       `json:"appName"`
 	ConfigFiles []ConfigFile `json:"configFiles"`
+	Version     string       `json:"version"`
 }
 
 // ConfigFile represents a Splunk configuration file

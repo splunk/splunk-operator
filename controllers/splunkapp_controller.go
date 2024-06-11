@@ -20,8 +20,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,8 +71,9 @@ func (r *SplunkAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Error reading the object - requeue the request.
 		return ctrl.Result{}, err
 	}
-
-	baseDir := filepath.Join("/tmp", splunkApp.Name)
+	// /opt/splunk/appframework/downloadedApps/test/ClusterMaster/
+	path := fmt.Sprintf("/opt/splunk/appframework/downloadedApps/%s/<todo>/%s", splunkApp.Namespace /*splunkRoleType,*/, splunkApp.Name)
+	baseDir := filepath.Join(path, splunkApp.Spec.AppName)
 	os.RemoveAll(baseDir) // Clean up any previous data
 	err = os.MkdirAll(baseDir, os.ModePerm)
 	if err != nil {
@@ -103,17 +104,19 @@ func (r *SplunkAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		filePath := filepath.Join(relativeDir, configFile.ConfigFileName)
-		err = ioutil.WriteFile(filePath, []byte(configMap.Data[configFile.ConfigFileName]), os.ModePerm)
+		err = os.WriteFile(filePath, []byte(configMap.Data[configFile.ConfigFileName]), os.ModePerm)
 		if err != nil {
 			reqLogger.Error(err, "Failed to write config file", "File", filePath)
 			return ctrl.Result{}, err
 		}
 	}
+	filePath := filepath.Join(baseDir, "version")
+	err = os.WriteFile(filePath, []byte(splunkApp.Spec.Version), os.ModePerm)
 
-	tarGzPath := baseDir + ".tar.gz"
+	tarGzPath := baseDir + splunkApp.Spec.AppName + ".tar.gz"
 	err = createTarGz(baseDir, tarGzPath)
 	if err != nil {
-		reqLogger.Error(err, "Failed to create tar.gz file")
+		reqLogger.Error(err, "Failed to create tar.gz file", "filename", tarGzPath)
 		return ctrl.Result{}, err
 	}
 
