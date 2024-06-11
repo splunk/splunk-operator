@@ -54,14 +54,15 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
+	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err := validateClusterMasterSpec(ctx, client, cr)
+	err = validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateClusterMasterSpec", fmt.Sprintf("validate clustermaster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate clustermaster spec")

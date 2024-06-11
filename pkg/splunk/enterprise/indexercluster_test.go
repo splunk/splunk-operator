@@ -107,7 +107,7 @@ func TestApplyIndexerClusterOld(t *testing.T) {
 		Namespace: "test",
 	}
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = nil
-	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+	ApplyIndexerCluster(ctx, c, &idxCr)
 
 	// Set CM Ref, but with CM
 	cMasterCr := enterpriseApiV3.ClusterMaster{
@@ -124,7 +124,7 @@ func TestApplyIndexerClusterOld(t *testing.T) {
 		Name:      "test",
 		Namespace: "test",
 	}
-	_, err = ApplyIndexerCluster(ctx, c, &idxCr)
+	ApplyIndexerCluster(ctx, c, &idxCr)
 
 	cMasterCr.Status.Phase = enterpriseApi.PhaseReady
 	_, err = ApplyIndexerCluster(ctx, c, &idxCr)

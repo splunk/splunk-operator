@@ -51,18 +51,18 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "SearchHeadCluster"
 
+	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err := validateSearchHeadClusterSpec(ctx, client, cr)
+	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
-		cr.Status.Message = err.Error()
 		return result, err
 	}
 

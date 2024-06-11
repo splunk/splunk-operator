@@ -55,18 +55,19 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
+
+	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err := validateMonitoringConsoleSpec(ctx, client, cr)
+	err = validateMonitoringConsoleSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleSpec", fmt.Sprintf("validate monitoringconsole spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate monitoring console spec")
-		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -258,7 +259,7 @@ func ApplyMonitoringConsoleEnvConfigMap(ctx context.Context, client splcommon.Co
 	}
 
 	// if err is not resource not found then return the err
-	if err != nil && !k8serrors.IsNotFound(err) {
+	if !k8serrors.IsNotFound(err) {
 		return nil, err
 	}
 

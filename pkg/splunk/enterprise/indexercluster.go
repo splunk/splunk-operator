@@ -58,18 +58,18 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "IndexerCluster"
 
+	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err := validateIndexerClusterSpec(ctx, client, cr)
+	err = validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateIndexerClusterSpec", fmt.Sprintf("validate indexercluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate indexercluster spec")
-		cr.Status.Message = err.Error()
 		return result, err
 	}
 
@@ -337,7 +337,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIndexer)

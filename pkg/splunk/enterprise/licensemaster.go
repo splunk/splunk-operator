@@ -48,14 +48,15 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	scopedLog := reqLogger.WithName("ApplyLicenseMaster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
+	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err := validateLicenseMasterSpec(ctx, client, cr)
+	err = validateLicenseMasterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateLicenseMasterSpec", fmt.Sprintf("validate licensemaster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate license master spec")

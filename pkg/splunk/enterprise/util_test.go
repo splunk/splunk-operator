@@ -2598,7 +2598,7 @@ func TestUpdateCRStatus(t *testing.T) {
 	}
 
 	// When the CR is not even existing, error handling will keep retrying to update the CR, but fails at the end.
-	updateCRStatus(ctx, c, standalone)
+	updateCRStatus(ctx, c, standalone, nil)
 
 	// Creating a standalone, and updating the CR will cover the happy path
 	// simulate create standalone instance before reconcilation
@@ -2613,7 +2613,7 @@ func TestUpdateCRStatus(t *testing.T) {
 		t.Errorf("Apply standalone failed.")
 	}
 	standalone.Status.ReadyReplicas = 3
-	updateCRStatus(ctx, c, standalone)
+	updateCRStatus(ctx, c, standalone, nil)
 }
 
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
@@ -2653,7 +2653,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("standalone CR creation failed.")
 	}
 
-	receivedCR, err := fetchCurrentCRWithStatusUpdate(ctx, c, &stdln)
+	receivedCR, err := fetchCurrentCRWithStatusUpdate(ctx, c, &stdln, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "Standalone" {
@@ -2663,7 +2663,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	// When the CR is not available, should return and Error
 	invalidCR := stdln
 	invalidCR.ObjectMeta.Name = "unknownCR"
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &invalidCR)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &invalidCR, nil)
 	if err == nil {
 		t.Errorf("When CR is not available, should return an error")
 	} else if !strings.Contains(err.Error(), "\"unknownCR\" not found") {
@@ -2698,7 +2698,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("LicenseMaster CR creation failed. error: %v", err)
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &lmCR)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &lmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "LicenseMaster" {
@@ -2732,7 +2732,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("MonitoringConsole CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &mcCR)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &mcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "MonitoringConsole" {
@@ -2766,7 +2766,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("ClusterMaster CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &cmCR)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &cmCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "ClusterMaster" {
@@ -2802,7 +2802,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("IndexerCluster CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &idxcCR)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &idxcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IndexerCluster" {
@@ -2838,11 +2838,22 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("SearchHeadCluster CR creation failed.")
 	}
 
-	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR)
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, nil)
 	if err != nil {
 		t.Errorf("Expected a valid CR without error, but got the error %v", err)
 	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
 		t.Errorf("Failed to fetch the CR")
+	}
+
+	// SearchHeadCluster test update of status message
+	err = errors.New("testerror")
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &shcCR, &err)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "SearchHeadCluster" {
+		t.Errorf("Failed to fetch the CR")
+	} else if receivedCR.(*enterpriseApi.SearchHeadCluster).Status.Message != "testerror" {
+		t.Errorf("Failed to update error message")
 	}
 }
 
@@ -3171,8 +3182,8 @@ func TestGetCurrentImage(t *testing.T) {
 	client := builder.Build()
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
-	err := client.Create(ctx, &current)
-	_, err = ApplyClusterManager(ctx, client, &current)
+	client.Create(ctx, &current)
+	_, err := ApplyClusterManager(ctx, client, &current)
 	if err != nil {
 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
 	}

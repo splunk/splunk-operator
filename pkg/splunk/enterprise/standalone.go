@@ -51,18 +51,18 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "Standalone"
 
+	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
 
 	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
+	defer updateCRStatus(ctx, client, cr, &err)
 
 	// validate and updates defaults for CR
-	err := validateStandaloneSpec(ctx, client, cr)
+	err = validateStandaloneSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateStandaloneSpec", fmt.Sprintf("validate standalone spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate standalone spec")
-		cr.Status.Message = err.Error()
 		return result, err
 	}
 
