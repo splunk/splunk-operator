@@ -39,6 +39,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/controllers"
 	debug "github.com/splunk/splunk-operator/controllers/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -55,6 +56,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(scheme))
+	utilruntime.Must(enterprisev4.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }
@@ -177,6 +179,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
+		os.Exit(1)
+	}
+	if err = (&controllers.SplunkAppReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SplunkApp")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
