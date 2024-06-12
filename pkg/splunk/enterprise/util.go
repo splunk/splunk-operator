@@ -2145,7 +2145,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 Update error
-		if crError != nil {
+		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.Standalone).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
@@ -2168,7 +2168,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 Update error
-		if crError != nil {
+		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.LicenseManager).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.LicenseManager).Status.DeepCopyInto(&latestLmCR.Status)
@@ -2182,7 +2182,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 Update error
-		if crError != nil {
+		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
@@ -2196,7 +2196,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 Update error
-		if crError != nil {
+		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.IndexerCluster).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
@@ -2219,7 +2219,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 Update error
-		if crError != nil {
+		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.ClusterManager).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.ClusterManager).Status.DeepCopyInto(&latestCmCR.Status)
@@ -2233,7 +2233,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 Update error
-		if crError != nil {
+		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.MonitoringConsole).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)

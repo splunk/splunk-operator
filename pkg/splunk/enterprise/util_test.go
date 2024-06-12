@@ -2613,7 +2613,7 @@ func TestUpdateCRStatus(t *testing.T) {
 		t.Errorf("Apply standalone failed.")
 	}
 	standalone.Status.ReadyReplicas = 3
-	updateCRStatus(ctx, c, standalone, nil)
+	updateCRStatus(ctx, c, standalone, &err)
 }
 
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
