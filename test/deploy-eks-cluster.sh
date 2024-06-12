@@ -20,6 +20,11 @@ if [[ -z "${EKS_CLUSTER_K8_VERSION}" ]]; then
   export EKS_CLUSTER_K8_VERSION="1.26"
 fi
 
+echo "EKS_INSTANCE_TYPE not set. Chaning to env.sh value"
+export EKS_CLUSTER_INSTANCE_TYPE="c6g.4xlarge"
+
+
+
 function deleteCluster() {
   echo "Cleanup remaining PVC on the EKS Cluster ${TEST_CLUSTER_NAME}"
   tools/cleanup.sh
@@ -57,7 +62,7 @@ function createCluster() {
 
   found=$(eksctl get cluster --name "${TEST_CLUSTER_NAME}" -v 0)
   if [ -z "${found}" ]; then
-    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=m5.2xlarge --version=${EKS_CLUSTER_K8_VERSION}
+    eksctl create cluster --name=${TEST_CLUSTER_NAME} --nodes=${CLUSTER_WORKERS} --vpc-public-subnets=${EKS_VPC_PUBLIC_SUBNET_STRING} --vpc-private-subnets=${EKS_VPC_PRIVATE_SUBNET_STRING} --instance-types=${EKS_CLUSTER_INSTANCE_TYPE} --version=${EKS_CLUSTER_K8_VERSION}
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
@@ -90,8 +95,9 @@ function createCluster() {
     rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
     aws iam create-role --role-name ${rolename} --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
     aws iam attach-role-policy  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy  --role-name ${rolename}
-    kubectl annotate serviceaccount -n $namespace $service_account eks.amazonaws.com/role-arn=arn:aws:iam::$account_id:role/${rolename}
-    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::$account_id:role/${rolename} --force
+    kubectl annotate serviceaccount -n ${namespace} ${service_account} eks.amazonaws.com/role-arn=arn:aws:iam::${account_id}:role/${rolename}
+    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
+    eksctl utils write-kubeconfig --cluster=${TEST_CLUSTER_NAME}
     eksctl utils update-cluster-logging --cluster ${TEST_CLUSTER_NAME}
   else
     echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"

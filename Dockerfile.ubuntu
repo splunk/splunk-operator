@@ -27,18 +27,19 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager m
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM --platform=${BUILDPLATFORM:-linux/amd64} public.ecr.aws/amazonlinux/amazonlinux:2023
+FROM --platform=${BUILDPLATFORM:-linux/amd64} ubuntu:23.10
 
 ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
 
-RUN yum -y install shadow-utils
-RUN useradd -ms /bin/bash nonroot -u 1001
-RUN yum update -y krb5-libs && yum clean all
-RUN yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical
-RUN yum -y update-minimal --security --sec-severity=Moderate
-RUN yum -y update-minimal --security --sec-severity=Low
+RUN apt-get update -y
+RUN apt-get install -y sudo
+# RUN sudo apt-get install -y libvshadow-utils
+RUN sudo useradd -ms /bin/bash nonroot -u 1001
+# RUN sudo apt-get install -y krb5-user
+RUN sudo apt install -y unattended-upgrades
+RUN sudo unattended-upgrade -d
 
 LABEL name="splunk" \
       maintainer="support@splunk.com" \

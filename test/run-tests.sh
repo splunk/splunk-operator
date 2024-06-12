@@ -5,54 +5,13 @@ topdir=${scriptdir}/..
 
 source ${scriptdir}/env.sh
 
-PRIVATE_SPLUNK_OPERATOR_IMAGE=${SPLUNK_OPERATOR_IMAGE}
-PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${SPLUNK_ENTERPRISE_IMAGE}
+PRIVATE_SPLUNK_OPERATOR_IMAGE=${SPLUNK_OPERATOR_IMAGE_GRAVITON}
+PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${SPLUNK_ENTERPRISE_IMAGE_GRAVITON}
 
 rc=$(which go)
 if [ -z "$rc" ]; then
   echo "go is not installed or in the PATH. Exiting..."
   exit 1
-fi
-
-# if we are using private registry, we need to pull, tag and push images to it
-if [ -n "${PRIVATE_REGISTRY}" ]; then
-  echo "Using private registry at ${PRIVATE_REGISTRY}"
-
-  PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
-  PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
-  echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
-  # Don't pull splunk operator if exists locally since we maybe building it locally
-  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then
-    docker pull ${SPLUNK_OPERATOR_IMAGE}
-    if [ $? -ne 0 ]; then
-     echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
-     exit 1
-    fi
-  fi
-
-  docker tag ${SPLUNK_OPERATOR_IMAGE} ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-  docker push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}. Exiting..."
-    exit 1
-  fi
-
-  # Always attempt to pull splunk enterprise image
-  docker pull ${SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
-  fi
-  docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
-  fi
-
-  # Output
-  echo "Docker images"
-  docker images
 fi
 
 if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
@@ -71,7 +30,11 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
   bin/kustomize build config/crd | kubectl create -f -
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
-  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
+  echo "Installing enterprise splunk image from ${SPLUNK_ENTERPRISE_IMAGE_GRAVITON}..."
+  make deploy IMAGE_TAG_BASE=docker.io/splunk/splunk-operator IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
+  sleep 30; kubectl describe pod -n splunk-operator
+  echo "Displaying the value of SPLUNK_ENTERPRISE_IMAGE_GRAVITON"
+  sleep 15; echo ${SPLUNK_ENTERPRISE_IMAGE_GRAVITON} > ~/tmp_aj; cat ~/tmp_aj;
 fi
 
 if [ $? -ne 0 ]; then
