@@ -1012,6 +1012,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	privileged := false
+	roFs := true
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
@@ -1022,6 +1023,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
+			ReadOnlyRootFilesystem:   &roFs,
 			AllowPrivilegeEscalation: &[]bool{false}[0],
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{
