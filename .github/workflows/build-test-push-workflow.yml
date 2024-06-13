@@ -101,6 +101,20 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
     steps:
+    - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2.5.0
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v1
     - name: Pull Splunk Operator Image Locally
       run: |
         docker pull ${{ env.IMAGE_NAME }}
