@@ -94,7 +94,7 @@ jobs:
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@0.20.0
       with:
-        image-ref: 'docker.io/splunk/splunk-operator:2.5.2'
+        image-ref: "${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
         format: 'table'
         exit-code: '1'
         ignore-unfixed: true
