@@ -99,7 +99,7 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-      IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:$GITHUB_SHA
+      IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
     steps:
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@0.20.0
