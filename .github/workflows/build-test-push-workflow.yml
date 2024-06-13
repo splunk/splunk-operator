@@ -90,7 +90,7 @@ jobs:
     - name: Push Splunk Operator Image to ECR
       run: |
         echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
   trivy-vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
@@ -101,6 +101,9 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
     steps:
+    - name: Pull Splunk Operator Image Locally
+      run: |
+        docker pull ${{ env.IMAGE_NAME }}
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@0.20.0
       with:
