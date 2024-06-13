@@ -122,16 +122,16 @@ jobs:
       uses: aquasecurity/trivy-action@0.20.0
       with:
         image-ref: '${{ env.IMAGE_NAME }}'
-        format: 'sarif'
+        format: 'table'
         exit-code: '1'
         ignore-unfixed: true
         vuln-type: 'os,library'
         severity: 'CRITICAL,HIGH'
-        output: 'trivy-results.sarif'
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: 'trivy-results.sarif'
+        #output: 'trivy-results.sarif'
+    #- name: Upload Trivy scan results to GitHub Security tab
+    #  uses: github/codeql-action/upload-sarif@v2
+    #  with:
+    #    sarif_file: 'trivy-results.sarif'
   vulnerability-scan:
     runs-on: ubuntu-latest
     needs: build-operator-image
