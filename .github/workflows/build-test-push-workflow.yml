@@ -91,7 +91,7 @@ jobs:
       run: |
         echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
         make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
-  trivy-vulnerability-scan:
+  vulnerability-scan:
     permissions:
       actions: read
       contents: read
@@ -134,43 +134,6 @@ jobs:
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: 'trivy-results.sarif'
-  vulnerability-scan:
-    runs-on: ubuntu-latest
-    needs: build-operator-image
-    env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-      S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-    steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2.5.0
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Pull Splunk Operator Image Locally
-      run: |
-        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Setup clair scanner
-      run: make setup_clair_scanner
-    - name: Scan container image
-      run: make run_clair_scan IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Stop clair scanner
-      run: make stop_clair_scanner
-    - name: Save scan results as artifacts
-      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
-      with:
-        name: clair-scanner-logs
-        path: clair-scanner-logs
   smoke-tests:
     needs: vulnerability-scan
     strategy:
