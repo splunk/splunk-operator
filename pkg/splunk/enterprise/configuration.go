@@ -2328,7 +2328,7 @@ func GetSmartstoreIndexesDefaults(ctx context.Context, defaults enterpriseApi.In
 		value := fmt.Sprintf("%d", defaults.MaxHotBuckets)
 		indexesCfg.Section("default").Key("maxHotBuckets").SetValue(value)
 	}
-	
+
 	if defaults.MaxDataSize != 0 {
 		value := fmt.Sprintf("%d", defaults.MaxDataSize)
 		indexesCfg.Section("default").Key("maxDataSize").SetValue(value)

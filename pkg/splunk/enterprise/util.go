@@ -680,8 +680,22 @@ func ApplyNoahConfiguration(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	if commonSpec.NoahSpec.NoahService.AdvertisedAddr == "" && !commonSpec.NoahSpec.SearchHead {
-		fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
-		commonSpec.NoahSpec.NoahService.AdvertisedAddr = fmt.Sprintf("https://%s:8089", fqdnName)
+		namespacedName := types.NamespacedName{ Name: GetSplunkServiceName(instanceID, cr.GetName(), false), Namespace: cr.GetNamespace()}
+		latestService := &corev1.Service{}
+		err = client.Get(ctx, namespacedName, latestService)
+		if err != nil {
+			scopedLog.Error(err, "service not found for the CR", "error", err.Error())
+			return err
+		}
+		if len(latestService.Status.LoadBalancer.Ingress) > 0 &&  latestService.Status.LoadBalancer.Ingress[0].Hostname != "" {
+			//fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(instanceID, cr.GetName(), false))
+			commonSpec.NoahSpec.NoahService.AdvertisedAddr = fmt.Sprintf("https://%s:8089", latestService.Status.LoadBalancer.Ingress[0].Hostname)
+			scopedLog.Info("splunk external URL for Noah is set to ", "url", commonSpec.NoahSpec.NoahService.AdvertisedAddr)
+		} else {
+			err = fmt.Errorf("load balancer is not set for service, unable to setup noah configuration")
+			scopedLog.Error(err, "failed to setup advertised address")
+			return err
+		}
 	}
 	if commonSpec.NoahSpec.NoahService.Tenant == "" {
 		commonSpec.NoahSpec.NoahService.Tenant = cr.GetNamespace()
