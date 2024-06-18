@@ -415,7 +415,7 @@ type IndexAndGlobalCommonSpec struct {
 	FrozenTimePeriodInSecs uint `json:"frozenTimePeriodInSecs,omitempty"`
 
 	MaxHotBuckets uint `json:"maxHotBuckets,omitempty"`
-	
+
 	MaxDataSize uint `json:"maxDataSize,omitempty"`
 
 	MinHotIdleSecsBeforeForceRoll string `json:"minHotIdleSecsBeforeForceRoll,omitempty"`

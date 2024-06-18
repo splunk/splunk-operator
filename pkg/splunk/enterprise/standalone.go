@@ -70,36 +70,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 
-	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
-		!reflect.DeepEqual(cr.Status.NoahStatus, cr.Spec.NoahSpec) ||
-		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
 
-		if err != nil {
-			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
-			return result, err
-		}
-
-		indexerIni, err := ini.Load([]byte(""))
-		serverIni, err := ini.Load([]byte(""))
-		authorizeIni, err := ini.Load([]byte(""))
-		limitsIni, _ := ini.Load([]byte(""))
-		outputsIni, _ := ini.Load([]byte(""))
-		if cr.Spec.NoahSpec.NoahService.Uri != "" {
-			err = ApplyNoahConfiguration(ctx, client, cr, &cr.Spec.CommonSplunkSpec, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
-			if err != nil {
-				return result, err
-			}
-			deepcopy.Copy(&cr.Status.NoahStatus, cr.Spec.NoahSpec)
-		}
-
-		err = ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore, indexerIni, serverIni)
-		if err != nil {
-			return result, err
-		}
-		_, _, err = ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
-
-		cr.Status.SmartStore = cr.Spec.SmartStore
-	}
 
 	// If the app framework is configured then do following things -
 	// 1. Initialize the S3Clients based on providers
@@ -166,6 +137,37 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update regular service failed %s", err.Error()))
 		return result, err
+	}
+
+	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
+		!reflect.DeepEqual(cr.Status.NoahStatus, cr.Spec.NoahSpec) ||
+		AreRemoteVolumeKeysChanged(ctx, client, cr, SplunkStandalone, &cr.Spec.SmartStore, cr.Status.ResourceRevMap, &err) {
+
+		if err != nil {
+			eventPublisher.Warning(ctx, "AreRemoteVolumeKeysChanged", fmt.Sprintf("check remote volume key change failed %s", err.Error()))
+			return result, err
+		}
+
+		indexerIni, err := ini.Load([]byte(""))
+		serverIni, err := ini.Load([]byte(""))
+		authorizeIni, err := ini.Load([]byte(""))
+		limitsIni, _ := ini.Load([]byte(""))
+		outputsIni, _ := ini.Load([]byte(""))
+		if cr.Spec.NoahSpec.NoahService.Uri != "" {
+			err = ApplyNoahConfiguration(ctx, client, cr, &cr.Spec.CommonSplunkSpec, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
+			if err != nil {
+				return result, err
+			}
+			deepcopy.Copy(&cr.Status.NoahStatus, cr.Spec.NoahSpec)
+		}
+
+		err = ApplySmartstoreConfigMap(ctx, client, cr, &cr.Spec.SmartStore, indexerIni, serverIni)
+		if err != nil {
+			return result, err
+		}
+		_, _, err = ApplyConfigMapChanges(ctx, client, cr, indexerIni, serverIni, authorizeIni, limitsIni, outputsIni)
+
+		cr.Status.SmartStore = cr.Spec.SmartStore
 	}
 
 	// If we are using appFramework and are scaling up, we should re-populate the
