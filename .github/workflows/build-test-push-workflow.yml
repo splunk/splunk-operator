@@ -90,8 +90,12 @@ jobs:
     - name: Push Splunk Operator Image to ECR
       run: |
         echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
   vulnerability-scan:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
@@ -99,6 +103,7 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
     steps:
     - uses: actions/checkout@v2
     - name: Dotenv Action
@@ -116,18 +121,20 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Pull Splunk Operator Image Locally
       run: |
-        docker pull ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Setup clair scanner
-      run: make setup_clair_scanner
-    - name: Scan container image
-      run: make run_clair_scan IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Stop clair scanner
-      run: make stop_clair_scanner
-    - name: Save scan results as artifacts
-      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2
+        docker pull ${{ env.IMAGE_NAME }}
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
       with:
-        name: clair-scanner-logs
-        path: clair-scanner-logs
+        image-ref: '${{ env.IMAGE_NAME }}'
+        format: sarif
+        #exit-code: 1
+        severity: 'CRITICAL'
+        ignore-unfixed: true
+        output: 'trivy-results.sarif'
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
   smoke-tests:
     needs: vulnerability-scan
     strategy:
