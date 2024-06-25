@@ -758,6 +758,7 @@ In this phase, the AppFramework installs the application on the splunkd binary r
 Here is an example of a Standalone with a successful Application install: 
 
 ```
+bash# kubectl get stdaln -o yaml | grep -i appSrcDeployStatus -A 33
       appSrcDeployStatus:
         dummy:
           appDeploymentInfo:
@@ -809,6 +810,7 @@ Below is a description of the bundle push statuses:
 Here is an example of a SHC with a successful Application install using Bundle push: 
 
 ```
+bash# kubectl get shc -o yaml | grep -i appSrcDeployStatus -A 33
       appSrcDeployStatus:
         dummy:
           appDeploymentInfo:

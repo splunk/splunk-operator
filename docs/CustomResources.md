@@ -354,6 +354,11 @@ The Splunk Enterprise CRDs with the Splunk Operator have a field `cr.Status.mess
 Here is an example of a Standalone with a message indicating an invalid CR config:
 
 ```
+bash% kubectl get stdaln
+NAME   PHASE   DESIRED   READY   AGE   MESSAGE
+ido    Error   0         0       26s   invalid Volume Name for App Source: custom. volume: csh, doesn't exist
+
+bash# kubectl get stdaln -o yaml | grep -i message -A 5 -B 5
       appsStatusMaxConcurrentAppDownloads: 5
       bundlePushStatus: {}
       isDeploymentInProgress: false
