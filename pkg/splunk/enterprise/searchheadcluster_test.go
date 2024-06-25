@@ -533,13 +533,13 @@ func TestApplyShcSecret(t *testing.T) {
 	mgr.cr.Status.NamespaceSecretResourceVersion = "0"
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
 	if err == nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+		t.Errorf("Couldn't apply shc secret")
 	}
 
 	mockPodExecReturnContexts[0].Err = nil
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
 	if err == nil {
-		t.Errorf("Couldn't apply shc secret %s", err.Error())
+		t.Errorf("Couldn't apply shc secret")
 	}
 
 	mgr.cr.Status.ShcSecretChanged[0] = false

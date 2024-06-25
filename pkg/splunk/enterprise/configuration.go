@@ -1113,7 +1113,7 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		// Always use defaultProbe Exec. At this time customer supported scripts are not supported.
 		derivedProbe.Exec = defaultProbe.Exec
 		return &derivedProbe
-	} else if configuredProbe == nil && configuredDelay != 0 {
+	} else if configuredDelay != 0 {
 		var derivedProbe = *defaultProbe
 		derivedProbe.InitialDelaySeconds = configuredDelay
 		return &derivedProbe

@@ -54,14 +54,22 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
+	var err error
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr, &err)
+
 	// validate and updates defaults for CR
-	err := validateClusterMasterSpec(ctx, client, cr)
+	err = validateClusterMasterSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateClusterMasterSpec", fmt.Sprintf("validate clustermaster spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate clustermaster spec")
 		return result, err
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), splcommon.ClusterManager)
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
@@ -90,9 +98,6 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if err != nil {
 		return result, err
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
