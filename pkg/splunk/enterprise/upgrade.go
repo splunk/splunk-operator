@@ -283,7 +283,7 @@ IndexerCluster:
 				return false, err
 			}
 			// get sorted current indexer site list
-			sortedList, err := getIndexerClusterSortedSiteList(ctx, c, spec.ClusterManagerRef, indexerList)
+			sortedList, _ := getIndexerClusterSortedSiteList(ctx, c, spec.ClusterManagerRef, indexerList)
 
 			preIdx := enterpriseApi.IndexerCluster{}
 
