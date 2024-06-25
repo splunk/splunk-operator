@@ -710,13 +710,13 @@ In contrast to "Managed Identities", Azure allows the "shared access keys" confi
 
 ## App Framework Troubleshooting
 
-The AppFramework feature stores data about the installation of the application in Splunk Enterprise Custom Resources' Status fields. 
+The AppFramework feature stores data about the installation of applications in Splunk Enterprise Custom Resources' Status subresource.
 
 The field `cr.status.AppDeploymentContext.AppsSrcDeployStatus` stores the AppFramework deployment statuses of all Application sources listed in the CR spec. Further, each Application under every Application source has detailed deployment information in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo`.
 
 ### App Framework Phase Information
 
-The process of installing an application is divided into multiple sequential phases. Each Application has its `current` phase information stored in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo.PhaseInfo`. 
+The process of installing an application is divided into multiple sequential phases. Each Application has its `current` phase information stored in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo.PhaseInfo`.
 
 Here is a detailed chronological view of the list of phases.
 
