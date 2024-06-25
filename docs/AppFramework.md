@@ -716,7 +716,7 @@ The field `cr.status.AppDeploymentContext.AppsSrcDeployStatus` stores the AppFra
 
 ### App Framework Phase Information
 
-The process of installing an application is divided into multiple sequential phases. Each Application has its current phase information stored in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo.PhaseInfo`. 
+The process of installing an application is divided into multiple sequential phases. Each Application has its `current` phase information stored in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo.PhaseInfo`. 
 
 Here is a detailed chronological view of the list of phases.
 
