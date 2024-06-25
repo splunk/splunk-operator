@@ -347,6 +347,27 @@ __CPU Throttling__
 
 Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
 
+### Troubleshooting
+
+The Splunk Enterprise CRDs with the Splunk Operator have a field `cr.Status.message` which provides a detailed view of the CR's current status.
+
+Here is an example of a Standalone with a message indicating an invalid CR config:
+
+```
+      appsStatusMaxConcurrentAppDownloads: 5
+      bundlePushStatus: {}
+      isDeploymentInProgress: false
+      lastAppInfoCheckTime: 0
+      version: 0
+    message: 'invalid Volume Name for App Source: custom. volume: csh, doesn''t exist'
+    phase: Error
+    readyReplicas: 0
+    replicas: 0
+    resourceRevMap: {}
+    selector: ""
+```
+
+
 __POD Eviction - OOM__
 
 As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.
