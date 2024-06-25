@@ -755,8 +755,39 @@ In this phase, the AppFramework installs the application on the splunkd binary r
 | 398 | Copied App Package is missing on Splunk Enterprise pod PVC |
 | 399 | App Package is not copied after multiple retries |
 
-Here is an example of a Standalone with a successful Application install: 
+Below is an example of a Standalone with a successful Application install.
 
+Standalone CR spec:
+
+```
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: test
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 100
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: local
+    appSources:
+    - name: dummy
+      location: dummy/
+      volumeName: volume_app_repo_us
+    volumes:
+    - name: volume_app_repo_us
+      storageType: s3
+      provider: aws
+      path: test/cspl_1250_apps/
+      endpoint: https://s3-us-west-2.amazonaws.com
+      region: us-west-2
+      secretRef: s3-secret
+```
+
+Standalone CR Status:
 ```
 bash# kubectl get stdaln -o yaml | grep -i appSrcDeployStatus -A 33
       appSrcDeployStatus:
@@ -807,8 +838,38 @@ Below is a description of the bundle push statuses:
 | 2 | Bundle Push is in progress |
 | 3 | Bundle Push is complete |
 
-Here is an example of a SHC with a successful Application install using Bundle push: 
+Below is an example of a SHC with a successful Application install using Bundle push.
 
+SHC CR spec:
+```
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 100
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+    - name: dummy
+      location: dummy/
+      volumeName: volume_app_repo_us
+    volumes:
+    - name: volume_app_repo_us
+      storageType: s3
+      provider: aws
+      path: test/cspl_1250_apps/
+      endpoint: https://s3-us-west-2.amazonaws.com
+      region: us-west-2
+      secretRef: s3-secret
+```
+
+SHC CR status:
 ```
 bash# kubectl get shc -o yaml | grep -i appSrcDeployStatus -A 33
       appSrcDeployStatus:
