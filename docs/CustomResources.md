@@ -347,6 +347,105 @@ __CPU Throttling__
 
 Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
 
+### Troubleshooting
+
+#### CR Status Message
+The Splunk Enterprise CRDs with the Splunk Operator have a field `cr.Status.message` which provides a detailed view of the CR's current status.
+
+Here is an example of a Standalone with a message indicating an invalid CR config:
+
+```
+bash% kubectl get stdaln
+NAME   PHASE   DESIRED   READY   AGE   MESSAGE
+ido    Error   0         0       26s   invalid Volume Name for App Source: custom. volume: csh, doesn't exist
+
+bash# kubectl get stdaln -o yaml | grep -i message -A 5 -B 5
+      appsStatusMaxConcurrentAppDownloads: 5
+      bundlePushStatus: {}
+      isDeploymentInProgress: false
+      lastAppInfoCheckTime: 0
+      version: 0
+    message: 'invalid Volume Name for App Source: custom. volume: csh, doesn''t exist'
+    phase: Error
+    readyReplicas: 0
+    replicas: 0
+    resourceRevMap: {}
+    selector: ""
+```
+#### Pause Annotations
+The Splunk Operator controller reconciles every Splunk Enterprise CR. However, there might be circumstances wherein the influence of the Splunk Operator is not desired and needs to be paused. Every Splunk Enterprise CR has its own pause annotation associated with it, which when configured ensures that the Splunk Operator controller reconcile is paused for it. Below is a table listing the pause annotations:
+
+| Customer Resource Definition | Annotation |
+| ----------- | --------- |
+| clustermaster.enterprise.splunk.com | "clustermaster.enterprise.splunk.com/paused" |
+| clustermanager.enterprise.splunk.com | "clustermanager.enterprise.splunk.com/paused" |
+| indexercluster.enterprise.splunk.com | "indexercluster.enterprise.splunk.com/paused" |
+| licensemaster.enterprise.splunk.com | "licensemaster.enterprise.splunk.com/paused" |
+| monitoringconsole.enterprise.splunk.com | "monitoringconsole.enterprise.splunk.com/paused" |
+| searchheadcluster.enterprise.splunk.com | "searchheadcluster.enterprise.splunk.com/paused" |
+| standalone.enterprise.splunk.com | "standalone.enterprise.splunk.com/paused" |
+
+`Note: Removal of the annotation resets the default behavior`
+
+Here is an example of a standalone with the pause annotation set. In this state, the Splunk Operator requeues the reconcillation without performing any reconcile operations unless the annotatation is removed.
+
+```
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: test-only-debug
+  namespace: splunk-operator
+  annotations:
+    standalone.enterprise.splunk.com/paused: "true"
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+```
+
+#### Container Logs
+The Splunk Enterprise CRDs deploy Splunkd in Kubernetes pods running [docker-splunk](https://github.com/splunk/docker-splunk) container images. Adding a couple of environment variables to the CR spec as follows produces `detailed container logs`:
+
+```
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: test-only
+  namespace: splunk-operator
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  extraEnv:
+  - name: DEBUG
+    value: "true"
+  - name: ANSIBLE_EXTRA_FLAGS
+    value: "-vvvv
+```
+
+From the standalone above, here is a snippet from the detailed contianer log:
+```
+TASK [splunk_common : Ensure license path] *************************************
+task path: /opt/ansible/roles/splunk_common/tasks/licenses/add_license.yml:15
+ok: [localhost] => {
+    "changed": false,
+    "invocation": {
+        "module_args": {
+            "checksum_algorithm": "sha1",
+            "follow": false,
+            "get_attributes": true,
+            "get_checksum": true,
+            "get_md5": false,
+            "get_mime": true,
+            "path": "splunk.lic"
+        }
+    },
+    "stat": {
+        "exists": false
+    }
+}
+```
+
 __POD Eviction - OOM__
 
 As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.
