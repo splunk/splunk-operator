@@ -87,7 +87,7 @@ jobs:
     - name: Login to Redhat registry
       uses: docker/login-action@v3
       with:
-        registry: <registry-name>.azurecr.io
+        registry: registry.redhat.io
         username: ${{ secrets.REDHAT_REGISTRY_ID }}
         password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
     - name: Make Splunk Operator Image
