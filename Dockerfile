@@ -22,8 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM registry.access.redhat.com/ubi8/ubi:8.10
-
+FROM registry.redhat.io/ubi8/ubi@sha256:0a95276776dc776fc42ebaa0ce79aa0b3ac72ab762df1d262beef7b092c2b23e
 ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
