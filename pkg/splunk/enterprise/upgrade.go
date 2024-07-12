@@ -160,40 +160,6 @@ MonitoringConsole:
 		}
 		return true, nil
 	} else {
-
-		// check if a MonitoringConsole is attached to the instance
-		monitoringConsoleRef := spec.MonitoringConsoleRef
-		if monitoringConsoleRef.Name == "" {
-			goto SearchHeadCluster
-		}
-
-		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: monitoringConsoleRef.Name}
-		monitoringConsole := &enterpriseApi.MonitoringConsole{}
-
-		// get the monitoring console referred in custom resource
-		err := c.Get(ctx, namespacedName, monitoringConsole)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				goto SearchHeadCluster
-			}
-			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Monitoring Console. Reason %v", err))
-			scopedLog.Error(err, "Unable to get Monitoring Console")
-			return false, err
-		}
-
-		mcImage, err := getCurrentImage(ctx, c, monitoringConsole, SplunkMonitoringConsole)
-		if err != nil {
-			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not get the Monitoring Console Image. Reason %v", err))
-			scopedLog.Error(err, "Unable to get Monitoring Console current image")
-			return false, err
-		}
-
-		// check if an image upgrade is happening and whether MC has finished updating yet, return false to stop
-		// further reconcile operations on custom resource until MC is ready
-		if monitoringConsole.Status.Phase != enterpriseApi.PhaseReady || mcImage != spec.Image {
-			return false, nil
-		}
-
 		goto SearchHeadCluster
 	}
 SearchHeadCluster:
