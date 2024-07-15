@@ -103,5 +103,5 @@ jobs:
       run: |
         cosign verify --yes --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
       env:
-        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
 
