@@ -98,4 +98,10 @@ jobs:
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+    
+    - name: Verify Splunk Operator image with a key
+      run: |
+        cosign verify --yes --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
 
