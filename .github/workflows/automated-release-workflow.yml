@@ -20,6 +20,9 @@ jobs:
       pull-requests: write
     if: github.ref == 'refs/heads/main'
     steps:
+    - name: Set up cosign
+      uses: sigstore/cosign-installer@main
+
     - name: Checkout code
       uses: actions/checkout@v2
 
