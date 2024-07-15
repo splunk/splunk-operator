@@ -116,6 +116,8 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
     steps:
+    - name: Set up cosign
+      uses: sigstore/cosign-installer@main
     - uses: actions/checkout@v2
     - name: Dotenv Action
       id: dotenv
@@ -133,6 +135,12 @@ jobs:
     - name: Pull Splunk Operator Image Locally
       run: |
         docker pull ${{ env.IMAGE_NAME }}
+    - name: Verify Signed Splunk Operator image 
+      run: |
+        cosign sign --yes --key env://COSIGN_PUBLIC_KEY  ${{ env.IMAGE_NAME }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:

@@ -88,3 +88,11 @@ jobs:
     - name: Push Release Image
       run: |
         docker push splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+    
+    - name: Sign Splunk Operator image with a key
+      run: |
+        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+
