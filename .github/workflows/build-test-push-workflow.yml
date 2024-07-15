@@ -137,7 +137,7 @@ jobs:
         docker pull ${{ env.IMAGE_NAME }}
     - name: Verify Signed Splunk Operator image 
       run: |
-        cosign verify --yes --key env://COSIGN_PUBLIC_KEY  ${{ env.IMAGE_NAME }}
+        cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ env.IMAGE_NAME }}
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
     - name: Run Trivy vulnerability scanner

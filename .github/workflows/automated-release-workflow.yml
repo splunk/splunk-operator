@@ -101,7 +101,7 @@ jobs:
     
     - name: Verify Splunk Operator image with a key
       run: |
-        cosign verify --yes --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+        cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
 
