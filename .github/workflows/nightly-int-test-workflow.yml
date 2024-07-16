@@ -207,6 +207,8 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: edge
     steps:
+    - name: Set up cosign
+      uses: sigstore/cosign-installer@main
     - uses: actions/checkout@v2
       with:
           ref: develop
@@ -236,3 +238,15 @@ jobs:
         password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
     - name: Push Splunk Operator Image to Docker Hub
       run: docker push ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.TAG }}
+    - name: Sign Splunk Operator image with a key
+      run: |
+        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+    - name: Verify Signed Splunk Operator image 
+      run: |
+        cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
+      env:
+        COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+ 
