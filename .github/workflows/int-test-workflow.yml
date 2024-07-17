@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - cspl-2500
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
