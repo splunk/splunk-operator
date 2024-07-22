@@ -11,6 +11,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -81,7 +82,8 @@ LicenseManager:
 		// if license manager status is ready and CR spec and current license manager image are not same
 		// then return with error
 		if licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != spec.Image {
-			return false, fmt.Errorf("license manager is not ready or license manager current image is different than CR image")
+			message := fmt.Sprintf("license manager %s is not ready current image %s is different CR Spec %s and phase is %s", licenseManager.Name, lmImage, spec.Image, licenseManager.Status.Phase)
+			return false, fmt.Errorf(message)
 		}
 		goto ClusterManager
 	}
@@ -112,7 +114,7 @@ ClusterManager:
 		clusterManagerRef := spec.ClusterManagerRef
 		if clusterManagerRef.Name == "" {
 			// if ref is not defined go to monitoring console step
-			goto MonitoringConsole
+			goto SearchHeadCluster
 		}
 
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: clusterManagerRef.Name}
@@ -123,7 +125,7 @@ ClusterManager:
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Cluster Manager. Reason %v", err))
 			scopedLog.Error(err, "Unable to get clusterManager")
-			goto MonitoringConsole
+			goto SearchHeadCluster
 		}
 
 		/// get the cluster manager image referred in custom resource
@@ -137,29 +139,9 @@ ClusterManager:
 		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
 		// further reconcile operations on custom resource until CM is ready
 		if clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != spec.Image {
-			return false, nil
+			message := fmt.Sprintf("cluster manager %s is not ready or current image %s is different than CR Spec %s with phase %s", clusterManager.Name, cmImage, spec.Image, clusterManager.Status.Phase)
+			return false, fmt.Errorf(message)
 		}
-		goto MonitoringConsole
-	}
-MonitoringConsole:
-	if cr.GroupVersionKind().Kind == "MonitoringConsole" {
-
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetName()),
-		}
-
-		// check if the stateful set is created at this instance
-		statefulSet := &appsv1.StatefulSet{}
-		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return true, nil
-			}
-			return false, nil
-		}
-		return true, nil
-	} else {
 		goto SearchHeadCluster
 	}
 SearchHeadCluster:
@@ -216,13 +198,14 @@ SearchHeadCluster:
 		if err != nil {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
 			scopedLog.Error(err, "Unable to get SearchHeadCluster current image")
-			return false, err
+			return false, fmt.Errorf(err.Error())
 		}
 
 		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
 		// further reconcile operations on IDX until SHC is ready
 		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
-			return false, nil
+			message := fmt.Sprintf("search head cluster %s is not ready or searc head cluster current image is %s different than CR image %s with phase %s", searchHeadClusterInstance.Name, shcImage, spec.Image, searchHeadClusterInstance.Status.Phase)
+			return false, fmt.Errorf(message)
 		}
 		goto IndexerCluster
 	}
@@ -266,13 +249,85 @@ IndexerCluster:
 				// check if previous indexer have completed before starting next one
 				image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
 				if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != spec.Image {
-					return false, nil
+					message := fmt.Sprintf("indexer %s is not ready or indexer %s current image is different than CR image %s and phase is %s", preIdx.Name, image, spec.Image, preIdx.Status.Phase)
+					return false, fmt.Errorf(message)
 				}
 			}
 
 		}
-		return true, nil
+		goto MonitoringConsole
 	} else {
+		goto MonitoringConsole
+	}
+MonitoringConsole:
+	if cr.GroupVersionKind().Kind == "MonitoringConsole" {
+
+		// cluster manager
+		clusterManagerList := &enterpriseApi.ClusterManagerList{}
+		listOpts := []runtime.ListOption{
+			runtime.InNamespace(cr.GetNamespace()),
+		}
+
+		// get the monitoring console referred in custom resource
+		err := c.List(ctx, clusterManagerList, listOpts...)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Cluster Manager. Reason %v", err))
+			scopedLog.Error(err, "Unable to get Monitoring Console")
+			return false, err
+		}
+
+		for _, item := range clusterManagerList.Items {
+			if item.Spec.MonitoringConsoleRef.Name == cr.GetName() {
+				if item.Status.Phase != enterpriseApi.PhaseReady  {
+					message := fmt.Sprintf("cluster manager %s is not ready ", item.Name)
+					return false, fmt.Errorf(message)
+				}
+			}
+		}
+
+		// serach head cluster
+		serachHeadClusterList := &enterpriseApi.SearchHeadClusterList{}
+		listOpts = []runtime.ListOption{
+			runtime.InNamespace(cr.GetNamespace()),
+		}
+
+		// get the monitoring console referred in custom resource
+		err = c.List(ctx, serachHeadClusterList, listOpts...)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Search Head Cluster. Reason %v", err))
+			scopedLog.Error(err, "Unable to get Search Head Cluster")
+			return false, err
+		}
+		for _, item := range serachHeadClusterList.Items {
+			if item.Spec.MonitoringConsoleRef.Name == cr.GetName() {
+				if item.Status.Phase != enterpriseApi.PhaseReady  {
+					message := fmt.Sprintf("search head cluster  %s is not ready ", item.Name)
+					return false, fmt.Errorf(message)
+				}
+			}
+		}
+
+		// standalone
+		standaloneList := &enterpriseApi.StandaloneList{}
+		listOpts = []runtime.ListOption{
+			runtime.InNamespace(cr.GetNamespace()),
+		}
+
+		// get the monitoring console referred in custom resource
+		err = c.List(ctx, standaloneList, listOpts...)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("could not find the standalone. Reason %v", err))
+			scopedLog.Error(err, "unable to get standalone")
+			return false, err
+		}
+		for _, item := range standaloneList.Items {
+			if item.Spec.MonitoringConsoleRef.Name == cr.GetName() {
+				if item.Status.Phase != enterpriseApi.PhaseReady || spec.Image != item.Spec.Image {
+					message := fmt.Sprintf("standalone  %s is not ready" , item.Name)
+					return false, fmt.Errorf(message)
+				}
+			}
+		}
 		goto EndLabel
 	}
 EndLabel:
