@@ -5,7 +5,7 @@ on:
       - develop
       - main
       - feature**
-      - release***
+      - release**
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
