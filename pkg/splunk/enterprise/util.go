@@ -2145,6 +2145,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.Standalone).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.Standalone).Status.Message = (*crError).Error()
 		}
@@ -2168,6 +2169,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.LicenseManager).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.LicenseManager).Status.Message = (*crError).Error()
 		}
@@ -2182,6 +2184,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = (*crError).Error()
 		}
@@ -2196,6 +2199,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.IndexerCluster).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.IndexerCluster).Status.Message = (*crError).Error()
 		}
@@ -2219,6 +2223,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.ClusterManager).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.ClusterManager).Status.Message = (*crError).Error()
 		}
@@ -2233,6 +2238,7 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 
 		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.MonitoringConsole).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
 			origCR.(*enterpriseApi.MonitoringConsole).Status.Message = (*crError).Error()
 		}
