@@ -79,6 +79,7 @@ func CheckMCPodReady(ns string) bool {
 func GetConfiguredPeers(ns string, mcName string) []string {
 	podName := fmt.Sprintf(MonitoringConsolePod, mcName)
 	var peerList []string
+	var output []byte
 	if len(podName) > 0 {
 		peerFile := "/opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf"
 		output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", peerFile).Output()
@@ -100,7 +101,7 @@ func GetConfiguredPeers(ns string, mcName string) []string {
 			}
 		}
 	}
-	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList)
+	logf.Log.Info("Peer List found on MC Pod", "MC POD", podName, "Configured Peers", peerList, "splunk_monitoring_console_assets.conf output", output)
 	return peerList
 }
 
