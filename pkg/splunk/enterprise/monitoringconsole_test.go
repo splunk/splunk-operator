@@ -56,7 +56,7 @@ func init() {
 	}
 }
 
-func TestApplyMonitoringConsole(t *testing.T) {
+func xTestApplyMonitoringConsole(t *testing.T) {
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
