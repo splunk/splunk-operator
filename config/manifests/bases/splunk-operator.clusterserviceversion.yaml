@@ -276,4 +276,3 @@ spec:
     url: www.splunk.com
   replaces: splunk-operator.v2.5.1
   version: 2.5.2
-

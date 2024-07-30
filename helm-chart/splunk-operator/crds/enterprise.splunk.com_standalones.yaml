@@ -4401,6 +4401,10 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
     name: v4
     schema:
       openAPIV3Schema:
@@ -8593,6 +8597,9 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
+              message:
+                description: Auxillary message describing CR status
+                type: string
               phase:
                 description: current phase of the standalone instances
                 enum:

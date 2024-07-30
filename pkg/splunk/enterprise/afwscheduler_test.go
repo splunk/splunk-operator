@@ -228,12 +228,10 @@ func TestCreateFanOutWorker(t *testing.T) {
 	}
 
 	fanOutWorker := createFanOutWorker(worker, 0)
-
 	if fanOutWorker == nil {
 		t.Errorf("Unable to create a fanout worker")
-	}
 
-	if fanOutWorker.fanOut {
+	} else if fanOutWorker.fanOut {
 		t.Errorf("FanOut flag should be false on the new worker")
 	}
 
@@ -792,8 +790,6 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	}
 
 	// Just make the lint conversion checks happy
-	//var client splcommon.ControllerClient = getConvertedClient(c)
-
 	capacity := 1
 	var workerList []*PipelineWorker = make([]*PipelineWorker, capacity)
 	for i := range workerList {
@@ -1948,7 +1944,6 @@ func TestExtractClusterScopedAppOnPod(t *testing.T) {
 	// Just make the lint conversion checks happy
 	var client splcommon.ControllerClient = getConvertedClient(c)
 
-	//var client splcommon.ControllerClient
 	worker := &PipelineWorker{
 		appSrcName:    "appSrc1",
 		afwConfig:     &cr.Spec.AppFrameworkConfig,
@@ -2076,7 +2071,6 @@ func TestRunPodCopyWorker(t *testing.T) {
 	var client splcommon.ControllerClient = getConvertedClient(c)
 	var waiter sync.WaitGroup
 
-	//var client splcommon.ControllerClient
 	worker := &PipelineWorker{
 		cr:            &cr,
 		targetPodName: "splunk-stack1-clustermanager-0",
@@ -2937,7 +2931,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	waiter.Add(1)
 	err := localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect missingApp pkg: err: %s", err.Error())
+		t.Errorf("Failed to detect missingApp pkg")
 	}
 
 	// Test2: checkIfFileExistsOnPod passes but get installed app name returns error
@@ -2946,7 +2940,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect that steps to get installed app failed: err: %s", err.Error())
+		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
 	// Test3: get installed app name passes but getting installed app name failed
@@ -2955,7 +2949,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect not able to get installed app name: err: %s", err.Error())
+		t.Errorf("Failed to detect not able to get installed app name: err")
 	}
 
 	// Test4: get installed app command passes but installing app fails
@@ -4348,5 +4342,5 @@ func TestAddTelAppCManager(t *testing.T) {
 		},
 	}
 	// Negative testing
-	err = addTelApp(ctx, mockPodExecClient, 2, &crNew)
+	addTelApp(ctx, mockPodExecClient, 2, &crNew)
 }

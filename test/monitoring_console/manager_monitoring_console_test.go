@@ -474,6 +474,10 @@ var _ = Describe("Monitoring Console test", func() {
 			// Check Search Head Pods in Monitoring Console Config Map
 			shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), defaultSHReplicas, false, 0)
 			testenv.VerifyPodsInMCConfigMap(ctx, deployment, testcaseEnvInst, shPods, "SPLUNK_SEARCH_HEAD_URL", mcName, true)
+
+			// Add a sleep here in case MC pod restarts to add peers
+			time.Sleep(300 * time.Second)
+
 			// Check Monitoring console Pod is configured with all search head
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)
 
@@ -650,6 +654,9 @@ var _ = Describe("Monitoring Console test", func() {
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+
+			// Adding a sleep, in case MC restarts to update peers list
+			time.Sleep(300 * time.Second)
 
 			// Check Monitoring console Pod is configured with all search head
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, shPods, mcName, true, false)

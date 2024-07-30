@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/wk8/go-ordered-map/v2"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -833,10 +833,12 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
 	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
-		RunAsUser:    &runAsUser,
-		FSGroup:      &fsGroup,
-		RunAsNonRoot: &runAsNonRoot,
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
 	}
 
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
@@ -1111,7 +1113,7 @@ func getProbeWithConfigUpdates(defaultProbe *corev1.Probe, configuredProbe *ente
 		// Always use defaultProbe Exec. At this time customer supported scripts are not supported.
 		derivedProbe.Exec = defaultProbe.Exec
 		return &derivedProbe
-	} else if configuredProbe == nil && configuredDelay != 0 {
+	} else if configuredDelay != 0 {
 		var derivedProbe = *defaultProbe
 		derivedProbe.InitialDelaySeconds = configuredDelay
 		return &derivedProbe
@@ -1423,10 +1425,9 @@ func validateSplunkAppSources(appFramework *enterpriseApi.AppFrameworkSpec, loca
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopeLocal] = make(map[string]bool)
 	duplicateAppSourceStorageChecker[enterpriseApi.ScopePremiumApps] = make(map[string]bool)
 
-	if !localOrPremScope {
-		duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
-		duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
-	}
+	// CSPL-2574 - Assign just in case invalid scope is passed through!
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopeCluster] = make(map[string]bool)
+	duplicateAppSourceStorageChecker[enterpriseApi.ScopeClusterWithPreConfig] = make(map[string]bool)
 
 	duplicateAppSourceNameChecker := make(map[string]bool)
 

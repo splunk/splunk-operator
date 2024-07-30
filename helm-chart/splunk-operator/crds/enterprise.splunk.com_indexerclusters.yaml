@@ -3826,6 +3826,10 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
     name: v4
     schema:
       openAPIV3Schema:
@@ -7514,6 +7518,9 @@ spec:
               maintenance_mode:
                 description: Indicates if the cluster is in maintenance mode.
                 type: boolean
+              message:
+                description: Auxillary message describing CR status
+                type: string
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret
                 type: string
