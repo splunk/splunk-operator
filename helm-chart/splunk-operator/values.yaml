@@ -32,7 +32,7 @@ splunkOperator:
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
   image:
-    repository: docker.io/splunk/splunk-operator:2.5.2
+    repository: docker.io/splunk/splunk-operator:2.6.0
     pullPolicy: IfNotPresent
 
   # Set image pull secrets to pull image from a private registry
