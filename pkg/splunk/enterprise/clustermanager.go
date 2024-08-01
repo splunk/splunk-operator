@@ -55,14 +55,22 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
+	var err error
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr, &err)
+
 	// validate and updates defaults for CR
-	err := validateClusterManagerSpec(ctx, client, cr)
+	err = validateClusterManagerSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateClusterManagerSpec", fmt.Sprintf("validate clustermanager spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate clustermanager spec")
 		return result, err
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-%s", cr.GetName(), "cluster-manager")
 
 	if !reflect.DeepEqual(cr.Status.SmartStore, cr.Spec.SmartStore) ||
@@ -91,9 +99,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	if err != nil {
 		return result, err
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)

@@ -4256,6 +4256,10 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
     name: v4
     schema:
       openAPIV3Schema:
@@ -8405,6 +8409,9 @@ spec:
                       type: string
                   type: object
                 type: array
+              message:
+                description: Auxillary message describing CR status
+                type: string
               minPeersJoined:
                 description: true if the minimum number of search head cluster members
                   have joined

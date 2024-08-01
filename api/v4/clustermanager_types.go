@@ -67,6 +67,9 @@ type ClusterManagerStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Auxillary message describing CR status
+	Message string `json:"message"`
 }
 
 // BundlePushInfo Indicates if bundle push required
@@ -87,6 +90,7 @@ type BundlePushInfo struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of indexer peers"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready indexer peers"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of cluster manager"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
 type ClusterManager struct {
 	metav1.TypeMeta   `json:",inline"`

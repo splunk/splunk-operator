@@ -256,9 +256,9 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 		},
 	}
 
-	var client splcommon.ControllerClient
+	client := spltest.NewMockClient()
 
-	_, err := ApplyClusterManager(context.Background(), client, &cr)
+	_, err := ApplyClusterManager(context.TODO(), client, &cr)
 	if err == nil {
 		t.Errorf("ApplyClusterManager should fail on invalid smartstore config")
 	}
@@ -288,7 +288,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 		},
 	}
 
-	var client splcommon.ControllerClient
+	client := spltest.NewMockClient()
 
 	_, err := ApplyStandalone(context.Background(), client, &cr)
 	if err == nil {

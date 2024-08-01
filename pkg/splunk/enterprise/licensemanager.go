@@ -48,9 +48,17 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "LicenseManager"
 
+	var err error
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr, &err)
+
 	// validate and updates defaults for CR
-	err := validateLicenseManagerSpec(ctx, client, cr)
+	err = validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate licensemanager spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
 	}
@@ -72,12 +80,6 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 	}
-
-	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)

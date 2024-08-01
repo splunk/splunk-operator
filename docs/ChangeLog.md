@@ -1,5 +1,33 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.6.0 (2024-07-25)
+
+* This is the 2.6.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* CSPL-2721 - Modified Splunk Enterprise deployments upgrade path to speed up the process, updated ubi base image.
+
+* CSPL-2662 - Added troubleshooting documentation.
+
+* CSPL-2626 - Fixed bug in phase initialization, new CR status field, updated aws-sdk-go.
+
+* CSPL-2710: Replace clair with trivy for security scanning.
+
+* CSPL_2598: Fix app package name extraction logic.
+
+* CSPL_2574: Fix bug in appFramework validation.
+
+* CSPL_2532: Change fsGroupChangePolicy to `OnRootMismatch` for Splunk Enterprise and Splunk operator.
+
+### Supported Splunk Version
+>| Splunk Version|
+>| --- |
+>| 9.2.2 |
+
+### Supported Kubernetes Version
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
+
 ## 2.5.2 (2024-02-28)
 
 CSPL-2535 security context for init container not set (#1290)

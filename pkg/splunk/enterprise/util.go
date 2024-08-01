@@ -658,7 +658,7 @@ var resetSymbolicLinks = func(ctx context.Context, client splcommon.ControllerCl
 	if crKind == "ClusterManager" || crKind == "ClusterMaster" {
 		command = setSymbolicLinkCmanager
 	} else {
-		return fmt.Errorf("Invalid CR kind to reset symbolic links")
+		return fmt.Errorf("invalid CR kind to reset symbolic links")
 	}
 
 	// Run the commands on Splunk pods
@@ -2081,14 +2081,14 @@ func isAppFrameworkMigrationNeeded(afwStatusContext *enterpriseApi.AppDeployment
 	return afwStatusContext != nil && afwStatusContext.Version < currentAfwVersion && len(afwStatusContext.AppsSrcDeployStatus) > 0
 }
 
-// updateCRStatus fetches the latest CR, and on top of that, updates latest status
-func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject) {
+// updateCRStatus fetches the latest CR, and on top of that, updates latest status including error messages as well
+func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject, crError *error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateCRStatus").WithValues("original cr version", origCR.GetResourceVersion())
 
 	var tryCnt int
 	for tryCnt = 0; tryCnt < maxRetryCountForCRStatusUpdate; tryCnt++ {
-		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR)
+		latestCR, err := fetchCurrentCRWithStatusUpdate(ctx, client, origCR, crError)
 		if err != nil {
 			if origCR.GetDeletionTimestamp() == nil {
 				scopedLog.Error(err, "Unable to Read the latest CR from the K8s")
@@ -2096,7 +2096,6 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 			continue
 		}
-
 		scopedLog.Info("Trying to update", "count", tryCnt)
 		curCRVersion := latestCR.GetResourceVersion()
 		err = client.Status().Update(ctx, latestCR)
@@ -2113,7 +2112,7 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 			// So, always make sure that the cache is reflecting the latest CR, before the next event
 			// waiting in the Q triggers the next reconcile
 			for chkCnt := 0; chkCnt < maxRetryCountForCRStatusUpdate; chkCnt++ {
-				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR)
+				crAfterUpdate, err := fetchCurrentCRWithStatusUpdate(ctx, client, latestCR, crError)
 				if err == nil && updatedCRVersion == crAfterUpdate.GetResourceVersion() {
 					scopedLog.Info("Cache is reflecting the latest CR", "updated CR version", updatedCRVersion)
 					// Latest CR is reflecting in the cache
@@ -2136,7 +2135,9 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 }
 
 // fetchCurrentCRWithStatusUpdate returns a CR (fresh Read) with latest status copied
-func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject) (splcommon.MetaObject, error) {
+// Use this API to update the CR status message with an error if any. This aviods multiple
+// hops of CR specific logic to determine CR type.
+func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.ControllerClient, origCR splcommon.MetaObject, crError *error) (splcommon.MetaObject, error) {
 	namespacedName := types.NamespacedName{Name: origCR.GetName(), Namespace: origCR.GetNamespace()}
 
 	var err error
@@ -2146,6 +2147,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		err = client.Get(ctx, namespacedName, latestStdlnCR)
 		if err != nil {
 			return nil, err
+		}
+
+		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.Standalone).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.Standalone).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
 		return latestStdlnCR, nil
@@ -2165,6 +2172,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
+
+		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.LicenseManager).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.LicenseManager).Status.Message = (*crError).Error()
+		}
 		origCR.(*enterpriseApi.LicenseManager).Status.DeepCopyInto(&latestLmCR.Status)
 		return latestLmCR, nil
 
@@ -2174,6 +2187,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
+
+		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.SearchHeadCluster).Status.Message = (*crError).Error()
+		}
 		origCR.(*enterpriseApi.SearchHeadCluster).Status.DeepCopyInto(&latestShcCR.Status)
 		return latestShcCR, nil
 
@@ -2182,6 +2201,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		err = client.Get(ctx, namespacedName, latestIdxcCR)
 		if err != nil {
 			return nil, err
+		}
+
+		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.IndexerCluster).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.IndexerCluster).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.IndexerCluster).Status.DeepCopyInto(&latestIdxcCR.Status)
 		return latestIdxcCR, nil
@@ -2201,6 +2226,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		if err != nil {
 			return nil, err
 		}
+
+		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.ClusterManager).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.ClusterManager).Status.Message = (*crError).Error()
+		}
 		origCR.(*enterpriseApi.ClusterManager).Status.DeepCopyInto(&latestCmCR.Status)
 		return latestCmCR, nil
 
@@ -2209,6 +2240,12 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		err = client.Get(ctx, namespacedName, latestMcCR)
 		if err != nil {
 			return nil, err
+		}
+
+		// CSPL-2626 - Update error
+		origCR.(*enterpriseApi.MonitoringConsole).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.MonitoringConsole).Status.Message = (*crError).Error()
 		}
 		origCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
 		return latestMcCR, nil
@@ -2314,7 +2351,7 @@ func getCurrentImage(ctx context.Context, c splcommon.ControllerClient, cr splco
 	if len(statefulSet.Spec.Template.Spec.Containers) > 0 {
 		return statefulSet.Spec.Template.Spec.Containers[0].Image, nil
 	}
-	return "", fmt.Errorf("Unable to get image from statefulset of type %s.", instanceType.ToString())
+	return "", fmt.Errorf("unable to get image from statefulset of type %s", instanceType.ToString())
 }
 
 // changeAnnotations updates the splunk/image-tag field to trigger the reconcile loop, and returns error if something is wrong
