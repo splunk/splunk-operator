@@ -3,6 +3,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -259,14 +260,16 @@ MonitoringConsole:
 			runtime.InNamespace(cr.GetNamespace()),
 		}
 
+		// get the list of cluster managers
 		clusterManagerList := &enterpriseApi.ClusterManagerList{}
-		// get the list cluster manager which have mc reference
 		err := c.List(ctx, clusterManagerList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Cluster Manager list. Reason %v", err))
 			scopedLog.Error(err, "Unable to get clusterManager list")
 			return false, err
 		}
+
+		// Run through list, if it has the MC reference, bail out if it is NOT ready
 		for _, cm := range clusterManagerList.Items {
 			if cm.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if cm.Status.Phase != enterpriseApi.PhaseReady {
@@ -276,8 +279,8 @@ MonitoringConsole:
 			}
 		}
 
+		// get the list of search head clusters
 		searchHeadClusterList := &enterpriseApi.SearchHeadClusterList{}
-		// get the list search head which have mc reference
 		err = c.List(ctx, searchHeadClusterList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Search Head Cluster list. Reason %v", err))
@@ -285,6 +288,7 @@ MonitoringConsole:
 			return false, err
 		}
 
+		// Run through list, if it has the MC reference, bail out if it is NOT ready
 		for _, shc := range searchHeadClusterList.Items {
 			if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if shc.Status.Phase != enterpriseApi.PhaseReady {
@@ -293,8 +297,9 @@ MonitoringConsole:
 				}
 			}
 		}
+
+		// get the list of indexer clusters
 		indexerClusterList := &enterpriseApi.IndexerClusterList{}
-		// get the list indexer which have mc reference
 		err = c.List(ctx, indexerClusterList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Indexer list. Reason %v", err))
@@ -302,6 +307,7 @@ MonitoringConsole:
 			return false, err
 		}
 
+		// Run through list, if it has the MC reference, bail out if it is NOT ready
 		for _, idx := range indexerClusterList.Items {
 			if idx.Name == cr.GetName() {
 				if idx.Status.Phase != enterpriseApi.PhaseReady {
@@ -310,14 +316,17 @@ MonitoringConsole:
 				}
 			}
 		}
+
+		// get the list of standalones
 		standaloneList := &enterpriseApi.IndexerClusterList{}
-		// get the list standalone which have mc reference
 		err = c.List(ctx, standaloneList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Standalone list. Reason %v", err))
 			scopedLog.Error(err, "Unable to get standalone list")
 			return false, err
 		}
+
+		// Run through list, if it has the MC reference, bail out if it is NOT ready
 		for _, stdln := range standaloneList.Items {
 			if stdln.Name == cr.GetName() {
 				if stdln.Status.Phase != enterpriseApi.PhaseReady {
