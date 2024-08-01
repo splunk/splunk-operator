@@ -251,7 +251,7 @@ IndexerCluster:
 
 		}
 		goto MonitoringConsole
-	} 
+	}
 MonitoringConsole:
 	if cr.GroupVersionKind().Kind == "MonitoringConsole" {
 

@@ -298,7 +298,6 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplyIndexerClusterManager should not have returned error; err=%v", err)
 	}
 
-
 	// Monitoring console is ready now, now this should crete statefulset but statefulset is not in ready phase
 	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
@@ -432,7 +431,6 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("mc is not in ready state")
 	}
 
-	
 	// ------- Step2 starts here -----
 	// Update
 	// standalone
