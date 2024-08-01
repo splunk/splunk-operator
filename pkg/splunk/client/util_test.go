@@ -17,9 +17,10 @@ package client
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"reflect"
 	"testing"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -66,22 +67,22 @@ func TestCheckIfVolumeExists(t *testing.T) {
 func TestNewMockAWSS3Client(t *testing.T) {
 	ctx := context.TODO()
 	// Test 1. Test the valid case
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
 
-	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
 	}
 
 	// Test 2. Test the invalid case by returning nil client
-	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return nil
 	}
-	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAWSS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err == nil {
 		t.Errorf("NewMockAWSS3Client should have returned an error since we passed nil client in init function.")
@@ -91,22 +92,22 @@ func TestNewMockAWSS3Client(t *testing.T) {
 func TestNewMockAWMinioClient(t *testing.T) {
 	ctx := context.TODO()
 	// Test 1. Test the valid case
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := spltest.MockMinioS3Client{}
 		return cl
 	}
 
-	_, err := NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAWSS3Client should have returned a Mock AWS client.")
 	}
 
 	// Test 2. Test the invalid case by returning nil client
-	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return nil
 	}
-	_, err = NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockMinioS3Client(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err == nil {
 		t.Errorf("NewMockMinioS3Client should have returned an error since we passed nil client in init function.")
@@ -116,22 +117,22 @@ func TestNewMockAWMinioClient(t *testing.T) {
 func TestNewMockAzureBlobClient(t *testing.T) {
 	ctx := context.TODO()
 	// Test 1. Test the valid case
-	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		cl := &spltest.MockHTTPClient{}
 		return cl
 	}
 
-	_, err := NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err := NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err != nil {
 		t.Errorf("NewMockAzureBlobClient should have returned a Mock AWS client.")
 	}
 
 	// Test 2. Test the invalid case by returning nil client
-	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return nil
 	}
-	_, err = NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", initFn)
+	_, err = NewMockAzureBlobClient(ctx, "sample_bucket", "abcd", "1234", "admin/", "admin", "us-west-2", "htts://s3.us-west-2.amazonaws.com", false, initFn)
 
 	if err == nil {
 		t.Errorf("NewMockAzureBlobClient should have returned an error since we passed nil client in init function.")

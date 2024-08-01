@@ -105,7 +105,7 @@ func TestGetRemoteStorageClient(t *testing.T) {
 		},
 	}
 
-	fn := func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	fn := func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return nil
 	}
 
@@ -116,7 +116,7 @@ func TestGetRemoteStorageClient(t *testing.T) {
 	// Cover no secret key, empty GetInitFunc case
 	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)
 
-	fn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	fn = func(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
 		return spltest.MockAWSS3Client{}
 	}
 	GetRemoteStorageClient(ctx, c, &cm, &cm.Spec.AppFrameworkConfig, &cm.Spec.AppFrameworkConfig.VolList[0], "location", fn)

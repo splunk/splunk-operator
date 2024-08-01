@@ -1021,6 +1021,10 @@ spec:
                             reside. Used for aws, if provided. Not used for minio
                             and azure.
                           type: string
+                        s3PathUrl:
+                          description: Type of URL for S3 endpoints. Configure true
+                            for path sytle URL. False by default(Host style) https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
+                          type: boolean
                         secretRef:
                           description: Secret object name
                           type: string
@@ -3968,6 +3972,11 @@ spec:
                                 apps reside. Used for aws, if provided. Not used for
                                 minio and azure.
                               type: string
+                            s3PathUrl:
+                              description: Type of URL for S3 endpoints. Configure
+                                true for path sytle URL. False by default(Host style)
+                                https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
+                              type: boolean
                             secretRef:
                               description: Secret object name
                               type: string
