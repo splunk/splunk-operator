@@ -142,18 +142,18 @@ kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
 image: splunk/splunk:9.1.3
 imagePullPolicy: IfNotPresent
 ```
-## Splunk Enterprise Cluster upgrade example
+## Splunk Enterprise Cluster upgrade
 
-This is an example of the process followed by the Splunk Operator if the operator version is upgraded and a later Splunk Enterprise Docker image is available:
-​
+The Splunk Operator mostly adheres to the upgrade path steps delineated in the Splunk documentation.  All pods of the custom resources are deleted and redeployed sequentially. In cases where multi-zone Indexer clusters are utilized, they undergo redeployment zone by zone. Each pod upgrade is meticulously verified to ensure a successful process, with thorough checks conducted to confirm that everything is functioning as expected. If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first.
 
-1. Initiation of a new Splunk Operator pod will lead to the termination of the existing operator pod.
-2. All existing License Manager, Standalone, Monitoring Console, Cluster Manager, Search Head, ClusterManager, and Indexer pods will undergo termination for subsequent redeployment with upgraded specifications.
-3. The Splunk Operator adheres to the upgrade path steps delineated in the Splunk documentation. Pod termination and redeployment occur in a specific order based on the recommended upgrade path.
-4. Standalone or License manager will be the first to be redeployed
-5. Next ClusterManager pod will be redeployed, next the Monitoring Console pod undergoes termination and redeployment.
-6. Subsequently, the Search Head cluster pods connected to it are terminated and redeployed.
-7. Afterwards, all pods in the Indexer cluster are redeployed sequentially. In cases where multi-zone Indexer clusters are utilized, they undergo redeployment zone by zone.
-8. Each pod upgrade is meticulously verified to ensure a successful process, with thorough checks conducted to confirm that everything is functioning as expected.
+This is an example of the process followed by the Splunk Operator if the operator version is upgraded and a later Splunk Enterprise Docker image is available. Pod termination and redeployment occur in the below mentioned order based on the recommended upgrade path:
 
-* Note: If there are multiple pods per Custom Resource, the pods are terminated and re-deployed in a descending order with the highest numbered pod going first
+1. Splunk Operator deployment pod
+2. Standalone
+3. License manager
+4. ClusterManager
+5. Search Head cluster
+6. Indexer Cluster
+7. Monitoring Console
+
+Note: The order above assumes that the custom resources are linked via references. If there are Custom resources without references they will be deleted/redeployed indepedentlty of the order.
