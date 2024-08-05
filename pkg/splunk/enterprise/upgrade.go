@@ -303,7 +303,7 @@ MonitoringConsole:
 		err = c.List(ctx, indexerClusterList, listOpts...)
 		if err != nil && err.Error() != "NotFound" {
 			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not find the Indexer list. Reason %v", err))
-			scopedLog.Error(err, "Unable to get indexer list")
+			scopedLog.Error(err, "Unable to get indexer cluster list")
 			return false, err
 		}
 
