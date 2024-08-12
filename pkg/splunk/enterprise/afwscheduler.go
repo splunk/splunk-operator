@@ -182,14 +182,14 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 	// Handle non SHC scenarios(Standalone, CM, LM)
 	if crKind != "SearchHeadCluster" {
 		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, telAppConfString, appNameExt)
+		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, appNameExt, telAppConfString, appNameExt, telAppDefMetaConfString, appNameExt)
 
 		// App reload
 		command2 = telAppReloadString
 
 	} else {
 		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt)
+		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt, telAppDefMetaConfString, shcAppsLocationOnDeployer, appNameExt)
 
 		// Bundle push
 		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
