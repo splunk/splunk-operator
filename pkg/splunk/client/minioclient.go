@@ -17,6 +17,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -116,6 +117,10 @@ func InitMinioClientSession(ctx context.Context, appS3Endpoint string, accessKey
 		Dial: (&net.Dialer{
 			Timeout: appFrameworkHttpclientTimeout * time.Second,
 		}).Dial,
+		DisableCompression: true,
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 
 	options := &minio.Options{
