@@ -583,7 +583,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
