@@ -51,9 +51,18 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "SearchHeadCluster"
 
+	var err error
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr, &err)
+
 	// validate and updates defaults for CR
-	err := validateSearchHeadClusterSpec(ctx, client, cr)
+	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
 		return result, err
 	}
 
@@ -76,7 +85,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// updates status after function completes
-	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-search-head", cr.GetName())
@@ -92,9 +100,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if cr.Status.AdminPasswordChangedSecrets == nil {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	}
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr)
 
 	// create or update general config resources
 	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)

@@ -226,10 +226,6 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 	c := spltest.NewMockClient()
 	c.ListObj = &pvclist
 	var err error
-	if err != nil {
-		return
-	}
-
 	deleted, err := delete(cr, c)
 	if deleted != wantDeleted || err != nil {
 		t.Errorf("splctrl.CheckForDeletion() returned %t, %v; want %t, nil", deleted, err, wantDeleted)

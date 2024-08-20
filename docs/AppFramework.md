@@ -542,7 +542,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.5.2"
+        image: "docker.io/splunk/splunk-operator:2.6.0"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging
@@ -707,3 +707,203 @@ Azure Blob Authorization Recommendations:
 Azure allows "Managed Identities" assignment at the "storage accounts" level as well as at specific buckets levels. A managed identity that is assigned read permissions at a storage account level will have read access for all the buckets within that storage account. As a good security practice, you should assign the managed identity to only the specific buckets and not to the whole storage account.
 
 In contrast to "Managed Identities", Azure allows the "shared access keys" configurable only at the storage accounts level. When using the "secretRef" configuration in the CRD, the underlying secret key will allow both read and write access to the storage account (and all the buckets within it). So, based on your security needs, you may want to consider using "Managed Identities" instead of secrets. Also note that there isn't an automated way of rotating the secret key, so in case you are using these keys, please rotate them at regular intervals of times such as 90 days interval.
+
+## App Framework Troubleshooting
+
+The AppFramework feature stores data about the installation of applications in Splunk Enterprise Custom Resources' Status subresource.
+
+The field `cr.status.AppDeploymentContext.AppsSrcDeployStatus` stores the AppFramework deployment statuses of all Application sources listed in the CR spec. Further, each Application under every Application source has detailed deployment information in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo`.
+
+### App Framework Phase Information
+
+The process of installing an application is divided into multiple sequential phases. Each Application has its `current` phase information stored in the field `cr.status.AppDeploymentContext.AppsSrcDeployStatus.AppDeploymentInfo.PhaseInfo`.
+
+Here is a detailed chronological view of the list of phases.
+
+#### Phase 1 - App package download
+
+In this phase, the AppFramework authenticates with the storage provider to download the app/s onto the `Splunk Operator pod PVC`. Below is a description of the statuses during this phase:
+
+| Status Code | Description |
+| ------------ | --------- |
+| 101 | App Package is pending download |
+| 102 | App Package download is in progress |
+| 103 | App Package download is complete |
+| 199 | App Package is not downloaded after multiple retries |
+
+#### Phase 2 - App package copy
+
+In this phase, the AppFramework copies the application to the Splunk Enterprise pod PVCs'. Below is a description of the statuses during this phase:
+
+| Status Code | Description |
+| ------------| --------- |
+| 201 | App Package is pending copy |
+| 202 | App Package copy is in progress |
+| 203 | App Package copy is complete |
+| 298 | Downloaded App Package is missing on Operator pod PVC |
+| 299 | App Package is not copied after multiple retries |
+
+#### Phase 3 - App package install
+
+In this phase, the AppFramework installs the application on the splunkd binary running inside of the Splunk Enterprise pods. Below is a description of the statuses during this phase:
+
+| Status Code | Description |
+| ----------- | --------- |
+| 301 | App Package is pending install |
+| 302 | App Package install is in progress |
+| 303 | App Package install is complete |
+| 398 | Copied App Package is missing on Splunk Enterprise pod PVC |
+| 399 | App Package is not copied after multiple retries |
+
+Below is an example of a Standalone with a successful Application install.
+
+Standalone CR spec:
+
+```
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: test
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 100
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: local
+    appSources:
+    - name: dummy
+      location: dummy/
+      volumeName: volume_app_repo_us
+    volumes:
+    - name: volume_app_repo_us
+      storageType: s3
+      provider: aws
+      path: test/cspl_1250_apps/
+      endpoint: https://s3-us-west-2.amazonaws.com
+      region: us-west-2
+      secretRef: s3-secret
+```
+
+Standalone CR Status:
+```
+bash# kubectl get stdaln -o yaml | grep -i appSrcDeployStatus -A 33
+      appSrcDeployStatus:
+        dummy:
+          appDeploymentInfo:
+          - appName: a.tgz
+            appPackageTopFolder: testapp
+            auxPhaseInfo:
+            - phase: install
+              status: 303
+            deployStatus: 3
+            isUpdate: false
+            objectHash: ab78...89
+            phaseInfo:
+              phase: install
+              status: 303
+            repoState: 1
+          - appName: b.tgz
+            appPackageTopFolder: newapp
+            auxPhaseInfo:
+            - phase: install
+              status: 303
+            deployStatus: 3
+            isUpdate: false
+            objectHash: 8745a....876
+            phaseInfo:
+              phase: install
+              status: 303
+            repoState: 1
+      appsRepoStatusPollIntervalSeconds: 100
+      appsStatusMaxConcurrentAppDownloads: 5
+      bundlePushStatus: {}
+      isDeploymentInProgress: false
+      lastAppInfoCheckTime: 1719277376
+      version: 1
+```
+
+### App Framework Bundle Push Status
+
+The AppFramework uses a bundle push to install applications in clustered environments such as IndexerCluster as well as SeachHeadCluster. The status of the bundle push is stored in the field `cr.status.AppDeploymentContext.BundlePushStatus.BundlePushStage`. 
+
+Below is a description of the bundle push statuses:
+
+| Status Code | Description |
+| ----------- | --------- |
+| 0 | Bundle push is uninitialized, to be scheduled |
+| 1 | Bundle Push is pending, waiting for all the apps to be copied to the Pod |
+| 2 | Bundle Push is in progress |
+| 3 | Bundle Push is complete |
+
+Below is an example of a SHC with a successful Application install using Bundle push.
+
+SHC CR spec:
+```
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 100
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+    - name: dummy
+      location: dummy/
+      volumeName: volume_app_repo_us
+    volumes:
+    - name: volume_app_repo_us
+      storageType: s3
+      provider: aws
+      path: test/cspl_1250_apps/
+      endpoint: https://s3-us-west-2.amazonaws.com
+      region: us-west-2
+      secretRef: s3-secret
+```
+
+SHC CR status:
+```
+bash# kubectl get shc -o yaml | grep -i appSrcDeployStatus -A 33
+      appSrcDeployStatus:
+        dummy:
+          appDeploymentInfo:
+          - appName: a.tgz
+            appPackageTopFolder: "testapp"
+            deployStatus: 1
+            isUpdate: false
+            objectHash: 67ab7....876
+            phaseInfo:
+              phase: install
+              status: 303
+            repoState: 1
+          - appName: b.tgz
+            appPackageTopFolder: "newapp"
+            deployStatus: 1
+            isUpdate: false
+            objectHash: 876abc....987
+            phaseInfo:
+              phase: install
+              status: 303
+            repoState: 1
+      appsRepoStatusPollIntervalSeconds: 100
+      appsStatusMaxConcurrentAppDownloads: 5
+      bundlePushStatus:
+        bundlePushStage: 3
+      isDeploymentInProgress: false
+      lastAppInfoCheckTime: 1719281420
+      version: 1
+    captain: splunk-shc-search-head-0
+    captainReady: true
+    deployerPhase: Ready
+    initialized: true
+    maintenanceMode: true
+    members:
+```
