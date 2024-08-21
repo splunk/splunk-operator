@@ -85,7 +85,7 @@ jobs:
         find: "version: ${{ github.event.inputs.old_operator_version }}"
         replace: "version: ${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
-        include: "Chart.yaml"
+        include: "helm-chart/splunk-operator/**.yaml"
 
     - name: Update Helm App Version
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -94,7 +94,7 @@ jobs:
         find: "appVersion: ${{ github.event.inputs.old_operator_version }}"
         replace: "appVersion: ${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
-        include: "Chart.yaml"
+        include: "helm-chart/splunk-enterprise/**.yaml"
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
