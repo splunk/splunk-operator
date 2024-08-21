@@ -73,6 +73,7 @@ jobs:
         replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
         include: "values.yaml"
+        regex: false
 
     - name: Update Helm Version
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -82,6 +83,7 @@ jobs:
         replace: "version: ${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
         include: "Chart.yaml"
+        regex: false
 
     - name: Update Helm App Version
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -91,6 +93,7 @@ jobs:
         replace: "appVersion: ${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
         include: "Chart.yaml"
+        regex: false
 
     - name: Display chart.yaml
       run: |
@@ -136,6 +139,7 @@ jobs:
     - name: Display SplunkOperatorUpgrade.md
       run: |
         cat docs/SplunkOperatorUpgrade.md
+        cat docs/Install.md
 
     - name: Update Splunk Operator Release URL in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
