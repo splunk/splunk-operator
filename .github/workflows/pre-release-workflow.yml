@@ -31,10 +31,6 @@ jobs:
       contents: write
       pull-requests: write
     runs-on: ubuntu-latest
-    if:
-      contains('
-        refs/heads/develop
-        ', github.ref)
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
