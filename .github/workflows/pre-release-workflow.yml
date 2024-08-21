@@ -79,8 +79,8 @@ jobs:
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@v3
       with:
-        find: "\"${{ github.event.inputs.old_operator_version }}\""
-        replace: "\"${{ github.event.inputs.new_operator_version }}\""
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
         include: "helm-chart/splunk-operator/**.yaml"
         #regex: false
@@ -89,8 +89,8 @@ jobs:
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@v3
       with:
-        find: "\"${{ github.event.inputs.old_operator_version }}\""
-        replace: "\"${{ github.event.inputs.new_operator_version }}\""
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
         include: "helm-chart/splunk-enterprise/**.yaml"
         #regex: false
