@@ -95,7 +95,7 @@ jobs:
     - name: Display chart.yaml
       run: |
         cat helm-chart/splunk-operator/Chart.yaml
-        cat helm-chart/splunk-enterprise/Chart.yaml 
+        cat helm-chart/splunk-enterprise/Chart.yaml
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
@@ -132,6 +132,10 @@ jobs:
         replace: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
         include: "**.md"
+
+    - name: Display SplunkOperatorUpgrade.md
+      run: |
+        cat docs/SplunkOperatorUpgrade.md
 
     - name: Update Splunk Operator Release URL in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
