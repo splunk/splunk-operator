@@ -1,5 +1,25 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.6.1 (2024-08-27)
+
+* This is the 2.6.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* CSPL-2655 - Add default.meta in the telemetry addressing vulnerability
+
+* CSPL-2652 - Add TLS config to minio client
+
+* CSPL-2721 - Update MC upgrade path
+
+### Supported Splunk Version
+>| Splunk Version|
+>| --- |
+>| 9.3.0 |
+
+### Supported Kubernetes Version
+>| Kubernetes Version|
+>| --- |
+>| 1.25+ |
+
 ## 2.6.0 (2024-07-25)
 
 * This is the 2.6.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
