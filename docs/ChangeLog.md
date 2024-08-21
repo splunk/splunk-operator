@@ -10,6 +10,8 @@
 
 * CSPL-2721 - Update MC upgrade path
 
+* CSPL-2747 - Upgrade go, go-restful versions to address vulnerabilities
+
 ### Supported Splunk Version
 >| Splunk Version|
 >| --- |
