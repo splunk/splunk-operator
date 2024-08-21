@@ -82,7 +82,7 @@ jobs:
         find: "\"${{ github.event.inputs.old_operator_version }}\""
         replace: "\"${{ github.event.inputs.new_operator_version }}\""
         exclude: "ChangeLog.md"
-        include: "Chart.yaml"
+        include: "helm-chart/splunk-operator/**.yaml"
         #regex: false
 
     - name: Update Helm App Version
@@ -92,7 +92,7 @@ jobs:
         find: "\"${{ github.event.inputs.old_operator_version }}\""
         replace: "\"${{ github.event.inputs.new_operator_version }}\""
         exclude: "ChangeLog.md"
-        include: "Chart.yaml"
+        include: "helm-chart/splunk-enterprise/**.yaml"
         #regex: false
 
     - name: Display chart.yaml
