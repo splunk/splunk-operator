@@ -79,21 +79,21 @@ jobs:
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@v3
       with:
-        find: "${{ github.event.inputs.old_operator_version }}"
-        replace: "${{ github.event.inputs.new_operator_version }}"
+        find: "\"${{ github.event.inputs.old_operator_version }}\""
+        replace: "\"${{ github.event.inputs.new_operator_version }}\""
         exclude: "ChangeLog.md"
         include: "Chart.yaml"
-        regex: false
+        #regex: false
 
     - name: Update Helm App Version
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@v3
       with:
-        find: "${{ github.event.inputs.old_operator_version }}"
-        replace: "${{ github.event.inputs.new_operator_version }}"
+        find: "\"${{ github.event.inputs.old_operator_version }}\""
+        replace: "\"${{ github.event.inputs.new_operator_version }}\""
         exclude: "ChangeLog.md"
         include: "Chart.yaml"
-        regex: false
+        #regex: false
 
     - name: Display chart.yaml
       run: |
