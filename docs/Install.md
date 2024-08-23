@@ -44,7 +44,7 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
 
 ## Install operator to watch single namespace with restrictive permission
 
-In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/2.6.1/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace
+In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/2.6.1/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace.
 
 ```
 wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.6.1/splunk-operator-namespace.yaml
