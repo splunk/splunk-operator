@@ -203,9 +203,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-	if err != nil || !continueReconcile {
-		return result, err
+	supported, err := CheckSplunkLevel2Config(ctx, client)
+	if err != nil && supported {
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	// check if version upgrade is set
@@ -455,9 +458,12 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-	if err != nil || !continueReconcile {
-		return result, err
+	supported, err := CheckSplunkLevel2Config(ctx, client)
+	if err != nil && supported {
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	// check if version upgrade is set
