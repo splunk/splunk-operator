@@ -309,7 +309,8 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
 		if err != nil {
-			return scopedLog.Error(err, "couldn't retrieve shc_secret from secret data")
+			scopedLog.Error(err, "couldn't retrieve shc_secret from secret data")
+			return err
 		}
 
 		// set the targetPodName here
@@ -320,7 +321,8 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Retrieve admin password from Pod
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
-			return scopedLog.Error(err, "couldn't retrieve admin password from secret data")
+			scopedLog.Error(err, "couldn't retrieve admin password from secret data")
+			return err
 		}
 
 		// If shc secret is different from namespace scoped secret change it
@@ -416,7 +418,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
 			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
 			if err != nil {
-				return scopedLog.Error(err, "could not read secret %s, reason - %v", podSecretName, err)
+				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}
 			podSecret.Data["password"] = []byte(nsAdminSecret)
 			_, err = splctrl.ApplySecret(ctx, mgr.c, podSecret)
