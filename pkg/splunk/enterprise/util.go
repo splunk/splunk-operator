@@ -2368,3 +2368,42 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	err := c.Update(ctx, cr)
 	return err
 }
+
+// CheckSplunkLevel2Config checks the "splunk-operator-config" ConfigMap in the namespace
+// specified by the "OPERATOR_NAME" environment variable. It returns true if the key
+// "SPLUNK_LEVEL_2" is not set to "false" or if there is an error fetching the ConfigMap.
+func CheckSplunkLevel2Config(ctx context.Context, c client.Client) (bool, error) {
+	// Define the ConfigMap object
+	var configMap corev1.ConfigMap
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("CheckSplunkLevel2Config").WithValues()
+
+	// Read the namespace from the environment variable "OPERATOR_NAME"
+    namespace := os.Getenv("OPERATOR_NAMESPACE")
+    if namespace == "" {
+        return true, fmt.Errorf("environment variable OPERATOR_NAME is not set")
+    }
+
+	// Attempt to get the ConfigMap named "splunk-operator-config" in the provided namespace
+	err := c.Get(ctx, types.NamespacedName{Name: "splunk-operator-config", Namespace: namespace}, &configMap)
+	if err != nil {
+		// Log the error and return true, as per requirements
+		scopedLog.Error(err, "Failed to fetch ConfigMap")
+		return true, err
+	}
+
+	// Extract data from the ConfigMap
+	configData := configMap.Data
+
+	// Check for the key "SPLUNK_LEVEL_2"
+	if value, exists := configData["SPLUNK_LEVEL_2"]; exists {
+		// If the value is "false", return false
+		if value == "false" {
+			return false, nil
+		}
+	}
+
+	// For any other condition, return true
+	return true, nil
+}
