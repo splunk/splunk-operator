@@ -107,4 +107,4 @@ Once the migration is completed the operator will restart Indexer pods to update
 1) Your deployment must meet Replication Factor(RF) and Search Factor(SF) minimums for IndexerCluster and SearchHeadCluster.
 2) This script is only supported in the 2.1.0 Operator version. Make sure you upgrade the operator and have the new CRDs installed before running the script.
 3) The new Manager CRs need to be deployed in the same Node as the current CRs. Make sure the Node is not reaching any capacity limitation and can handle new pods.
-4) JQ is required to run this script. Installation guide can be found here:  https://stedolan.github.io/jq/download/
+4) JQ is required to run this script. Installation guide can be found here:  https://stedolan.github.io/jq/download/.
