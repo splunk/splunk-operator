@@ -19,14 +19,19 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
+
+	//promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	rayv1 "github.com/splunk/splunk-operator/controllers/ray/v1"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -92,6 +97,13 @@ func (r *GenAIDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		reqLogger.Error(err, "Failed to reconcile VectorDb StatefulSet")
 		return ctrl.Result{}, err
 	}
+
+	// Reconcile PrometheusRule if Prometheus Operator is installed
+	/*if err := r.reconcilePrometheusRule(ctx, genAIDeployment); err != nil {
+		reqLogger.Error(err, "Failed to reconcile PrometheusRule")
+		return ctrl.Result{}, err
+	}
+	*/
 
 	// Update Status
 	if err := r.updateGenAIDeploymentStatus(ctx, genAIDeployment); err != nil {
@@ -174,7 +186,6 @@ func (r *GenAIDeploymentReconciler) updateRayCluster(ctx context.Context, existi
 	if !isRayWorkerGroupEqual(existingCluster.Spec.WorkerGroupSpecs, genAIDeployment.Spec.RayService.WorkerGroup) {
 		for i := range existingCluster.Spec.WorkerGroupSpecs {
 			existingCluster.Spec.WorkerGroupSpecs[i].Template.Spec.Containers[0].Resources = genAIDeployment.Spec.RayService.WorkerGroup.Resources
-			existingCluster.Spec.WorkerGroupSpecs[i].RayStartParams["num-cpus"] = genAIDeployment.Spec.RayService.WorkerGroup.NumCpus
 		}
 	}
 
@@ -193,10 +204,9 @@ func (r *GenAIDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *GenAIDeploymentReconciler) reconcileSaisServiceDeployment(ctx context.Context, genAIDeployment *enterpriseApi.GenAIDeployment) error {
-	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("updateRayClusterStatus")
+	log := log.FromContext(ctx)
 
-	// Define the desired Deployment object
+	// Define the desired Deployment object for the SaisService
 	desiredDeployment := r.constructSaisServiceDeployment(genAIDeployment)
 
 	// Check if the Deployment already exists
@@ -208,19 +218,113 @@ func (r *GenAIDeploymentReconciler) reconcileSaisServiceDeployment(ctx context.C
 		}
 
 		// Create the Deployment if it does not exist
-		reqLogger.Info("Creating new Deployment", "Deployment.Namespace", desiredDeployment.Namespace, "Deployment.Name", desiredDeployment.Name)
+		log.Info("Creating new SaisService Deployment", "Deployment.Namespace", desiredDeployment.Namespace, "Deployment.Name", desiredDeployment.Name)
 		if err := r.Create(ctx, desiredDeployment); err != nil {
-			return fmt.Errorf("failed to create new Deployment: %w", err)
+			return fmt.Errorf("failed to create new SaisService Deployment: %w", err)
 		}
 	} else {
 		// Update the existing Deployment if necessary
-		if !isEqual(desiredDeployment, existingDeployment) {
-			reqLogger.Info("Updating existing Deployment", "Deployment.Namespace", existingDeployment.Namespace, "Deployment.Name", existingDeployment.Name)
+		if !isSaisServiceDeploymentEqual(desiredDeployment, existingDeployment) {
+			log.Info("Updating existing SaisService Deployment", "Deployment.Namespace", existingDeployment.Namespace, "Deployment.Name", existingDeployment.Name)
 			existingDeployment.Spec = desiredDeployment.Spec
 			if err := r.Update(ctx, existingDeployment); err != nil {
-				return fmt.Errorf("failed to update Deployment: %w", err)
+				return fmt.Errorf("failed to update SaisService Deployment: %w", err)
 			}
 		}
+	}
+
+	// Reconcile SaisService Service
+	if err := r.reconcileSaisService(ctx, genAIDeployment); err != nil {
+		log.Error(err, "Failed to reconcile SaisService")
+		return err
+	}
+
+	return nil
+}
+
+func isSaisServiceDeploymentEqual(desiredDeployment, existingDeployment *appsv1.Deployment) bool {
+	// Compare Replicas
+	if *desiredDeployment.Spec.Replicas != *existingDeployment.Spec.Replicas {
+		return false
+	}
+
+	// Compare Image
+	if desiredDeployment.Spec.Template.Spec.Containers[0].Image != existingDeployment.Spec.Template.Spec.Containers[0].Image {
+		return false
+	}
+
+	// Compare Resources
+	if !equalResourceRequirements(desiredDeployment.Spec.Template.Spec.Containers[0].Resources, existingDeployment.Spec.Template.Spec.Containers[0].Resources) {
+		return false
+	}
+
+	// Compare Environment Variables
+	if !reflect.DeepEqual(desiredDeployment.Spec.Template.Spec.Containers[0].Env, existingDeployment.Spec.Template.Spec.Containers[0].Env) {
+		return false
+	}
+
+	// Compare Node Selector
+	if !reflect.DeepEqual(desiredDeployment.Spec.Template.Spec.NodeSelector, existingDeployment.Spec.Template.Spec.NodeSelector) {
+		return false
+	}
+
+	// Compare Affinity Rules
+	if !reflect.DeepEqual(desiredDeployment.Spec.Template.Spec.Affinity, existingDeployment.Spec.Template.Spec.Affinity) {
+		return false
+	}
+
+	// Compare Tolerations
+	if !reflect.DeepEqual(desiredDeployment.Spec.Template.Spec.Tolerations, existingDeployment.Spec.Template.Spec.Tolerations) {
+		return false
+	}
+
+	// Compare Topology Spread Constraints
+	if !reflect.DeepEqual(desiredDeployment.Spec.Template.Spec.TopologySpreadConstraints, existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) {
+		return false
+	}
+
+	// If all checks pass, the desired and existing deployments are considered equal
+	return true
+}
+
+func (r *GenAIDeploymentReconciler) reconcileSaisService(ctx context.Context, genAIDeployment *enterpriseApi.GenAIDeployment) error {
+	log := log.FromContext(ctx)
+
+	// Define the desired Service object for the SaisService
+	desiredService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-sais-service", genAIDeployment.Name),
+			Namespace: genAIDeployment.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"app":        "sais-service",
+				"deployment": genAIDeployment.Name,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Port:       8080, // Example port for SaisService, replace with actual port if different
+					TargetPort: intstr.FromInt(8080),
+				},
+			},
+		},
+	}
+
+	// Check if the Service already exists
+	existingService := &corev1.Service{}
+	err := r.Get(ctx, client.ObjectKey{Name: desiredService.Name, Namespace: desiredService.Namespace}, existingService)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+
+		// Create the Service if it does not exist
+		log.Info("Creating new SaisService Service", "Service.Namespace", desiredService.Namespace, "Service.Name", desiredService.Name)
+		if err := r.Create(ctx, desiredService); err != nil {
+			return fmt.Errorf("failed to create new SaisService Service: %w", err)
+		}
+	} else {
+		log.Info("SaisService Service already exists", "Service.Namespace", existingService.Namespace, "Service.Name", existingService.Name)
 	}
 
 	return nil
@@ -230,6 +334,22 @@ func (r *GenAIDeploymentReconciler) constructSaisServiceDeployment(genAIDeployme
 	labels := map[string]string{
 		"app":        "sais-service",
 		"deployment": genAIDeployment.Name,
+	}
+
+	// Define node selector and tolerations for GPU support
+	nodeSelector := map[string]string{}
+	tolerations := []corev1.Toleration{}
+
+	if genAIDeployment.Spec.RequireGPU {
+		// Assuming nodes with GPU support are labeled as "kubernetes.io/gpu: true"
+		nodeSelector["kubernetes.io/gpu"] = "true"
+
+		// Add a toleration for GPU nodes if needed
+		tolerations = append(tolerations, corev1.Toleration{
+			Key:      "nvidia.com/gpu",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		})
 	}
 
 	deployment := &appsv1.Deployment{
@@ -247,11 +367,32 @@ func (r *GenAIDeploymentReconciler) constructSaisServiceDeployment(genAIDeployme
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector: nodeSelector,
+					Tolerations:  tolerations,
 					Containers: []corev1.Container{
 						{
-							Name:      "sais-service-container",
-							Image:     genAIDeployment.Spec.SaisService.Image,
-							Resources: genAIDeployment.Spec.SaisService.Resources,
+							Name:  "sais-container",
+							Image: genAIDeployment.Spec.SaisService.Image,
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("500m"),
+									corev1.ResourceMemory: resource.MustParse("1Gi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1"),
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
+								},
+							},
+							Env: []corev1.EnvVar{
+								{Name: "IAC_URL", Value: "auth.playground.scs.splunk.com"},
+								{Name: "API_GATEWAY_URL", Value: "api.playground.scs.splunk.com"},
+								{Name: "PLATFORM_URL", Value: "ml-platform-cyclops.dev.svc.splunk8s.io"},
+								{Name: "TELEMETRY_URL", Value: "https://telemetry-splkmobile.kube-bridger"},
+								{Name: "TELEMETRY_ENV", Value: "local"},
+								{Name: "TELEMETRY_REGION", Value: "region-iad10"},
+								{Name: "ENABLE_AUTHZ", Value: "false"},
+								{Name: "AUTH_PROVIDER", Value: "scp"},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      genAIDeployment.Spec.SaisService.Volume.Name,
@@ -260,12 +401,8 @@ func (r *GenAIDeploymentReconciler) constructSaisServiceDeployment(genAIDeployme
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
-						genAIDeployment.Spec.SaisService.Volume,
-					},
-					SchedulerName: genAIDeployment.Spec.SaisService.SchedulerName,
-					Affinity:      &genAIDeployment.Spec.SaisService.Affinity,
-					Tolerations:   genAIDeployment.Spec.SaisService.Tolerations,
+					Affinity:                  &genAIDeployment.Spec.SaisService.Affinity,
+					TopologySpreadConstraints: genAIDeployment.Spec.SaisService.TopologySpreadConstraints,
 				},
 			},
 		},
@@ -318,6 +455,56 @@ func (r *GenAIDeploymentReconciler) reconcileVectorDbStatefulSet(ctx context.Con
 				return fmt.Errorf("failed to update VectorDb StatefulSet: %w", err)
 			}
 		}
+	}
+
+	// Reconcile VectorDb Service
+	if err := r.reconcileVectorDbService(ctx, genAIDeployment); err != nil {
+		log.Error(err, "Failed to reconcile VectorDb Service")
+		return err
+	}
+
+	return nil
+}
+
+func (r *GenAIDeploymentReconciler) reconcileVectorDbService(ctx context.Context, genAIDeployment *enterpriseApi.GenAIDeployment) error {
+	log := log.FromContext(ctx)
+
+	// Define the desired Service object for the VectorDb service
+	desiredService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-vectordb-service", genAIDeployment.Name),
+			Namespace: genAIDeployment.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"app":        "vectordb-service",
+				"deployment": genAIDeployment.Name,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Port:       5432, //
+					TargetPort: intstr.FromInt(5432),
+				},
+			},
+			ClusterIP: corev1.ClusterIPNone, // StatefulSet requires ClusterIP=None for headless service
+		},
+	}
+
+	// Check if the Service already exists
+	existingService := &corev1.Service{}
+	err := r.Get(ctx, client.ObjectKey{Name: desiredService.Name, Namespace: desiredService.Namespace}, existingService)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+
+		// Create the Service if it does not exist
+		log.Info("Creating new VectorDb Service", "Service.Namespace", desiredService.Namespace, "Service.Name", desiredService.Name)
+		if err := r.Create(ctx, desiredService); err != nil {
+			return fmt.Errorf("failed to create new VectorDb Service: %w", err)
+		}
+	} else {
+		log.Info("VectorDb Service already exists", "Service.Namespace", existingService.Namespace, "Service.Name", existingService.Name)
 	}
 
 	return nil
@@ -482,10 +669,6 @@ func isRayWorkerGroupEqual(existingWorkers []rayv1.WorkerGroupSpec, desiredWorke
 		if !equalResourceRequirements(worker.Template.Spec.Containers[0].Resources, desiredWorker.Resources) {
 			return false
 		}
-		// Compare RayStartParams
-		if worker.RayStartParams["num-cpus"] != desiredWorker.NumCpus {
-			return false
-		}
 	}
 	return true
 }
@@ -583,3 +766,75 @@ func getStatefulSetStatus(statefulSet *appsv1.StatefulSet) (string, string) {
 	condition := statefulSet.Status.Conditions[len(statefulSet.Status.Conditions)-1]
 	return string(condition.Type), condition.Message
 }
+
+/*
+func (r *GenAIDeploymentReconciler) reconcilePrometheusRule(ctx context.Context, genAIDeployment *enterpriseApi.GenAIDeployment) error {
+	log := log.FromContext(ctx)
+
+	// Check if Prometheus Operator is enabled
+	if !genAIDeployment.Spec.PrometheusOperator {
+		log.Info("Prometheus Operator is not installed. Skipping PrometheusRule creation.")
+		return nil
+	}
+
+	// Fetch the ConfigMap containing Prometheus rules
+	configMap := &corev1.ConfigMap{}
+	err := r.Get(ctx, client.ObjectKey{Name: genAIDeployment.Spec.PrometheusRuleConfig, Namespace: genAIDeployment.Namespace}, configMap)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to get Prometheus rules ConfigMap: %w", err)
+		}
+		log.Info("ConfigMap for Prometheus rules not found, skipping reconciliation.")
+		return nil
+	}
+
+	// Extract rules from the ConfigMap
+	ruleData, ok := configMap.Data["prometheus_rules.yaml"]
+	if !ok {
+		log.Info("No Prometheus rules found in ConfigMap, skipping reconciliation.")
+		return nil
+	}
+
+	// Parse the Prometheus rules from the ConfigMap data
+	var ruleSpec promv1.PrometheusRuleSpec
+	err = yaml.Unmarshal([]byte(ruleData), &ruleSpec)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal Prometheus rules from ConfigMap: %w", err)
+	}
+
+	// Define the desired PrometheusRule object
+	desiredRule := &promv1.PrometheusRule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-prometheus-rule", genAIDeployment.Name),
+			Namespace: genAIDeployment.Namespace,
+		},
+		Spec: ruleSpec,
+	}
+
+	// Check if the PrometheusRule already exists
+	existingRule := &promv1.PrometheusRule{}
+	err = r.Get(ctx, client.ObjectKey{Name: desiredRule.Name, Namespace: desiredRule.Namespace}, existingRule)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+
+		// Create the PrometheusRule if it does not exist
+		log.Info("Creating new PrometheusRule", "PrometheusRule.Namespace", desiredRule.Namespace, "PrometheusRule.Name", desiredRule.Name)
+		if err := r.Create(ctx, desiredRule); err != nil {
+			return fmt.Errorf("failed to create new PrometheusRule: %w", err)
+		}
+	} else {
+		// Update the existing PrometheusRule if necessary
+		if !reflect.DeepEqual(desiredRule.Spec, existingRule.Spec) {
+			log.Info("Updating existing PrometheusRule", "PrometheusRule.Namespace", existingRule.Namespace, "PrometheusRule.Name", existingRule.Name)
+			existingRule.Spec = desiredRule.Spec
+			if err := r.Update(ctx, existingRule); err != nil {
+				return fmt.Errorf("failed to update PrometheusRule: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+*/

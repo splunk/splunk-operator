@@ -39,6 +39,41 @@ spec:
           spec:
             description: GenAIDeploymentSpec defines the desired state of GenAIDeployment
             properties:
+              bucket:
+                description: VolumeSpec defines remote volume config
+                properties:
+                  endpoint:
+                    description: Remote volume URI
+                    type: string
+                  name:
+                    description: Remote volume name
+                    type: string
+                  path:
+                    description: Remote volume path
+                    type: string
+                  provider:
+                    description: 'App Package Remote Store provider. Supported values:
+                      aws, minio, azure.'
+                    type: string
+                  region:
+                    description: Region of the remote storage volume where apps reside.
+                      Used for aws, if provided. Not used for minio and azure.
+                    type: string
+                  secretRef:
+                    description: Secret object name
+                    type: string
+                  storageType:
+                    description: 'Remote Storage type. Supported values: s3, blob.
+                      s3 works with aws or minio providers, whereas blob works with
+                      azure provider.'
+                    type: string
+                type: object
+              gpuResource:
+                type: string
+              prometheusOperator:
+                type: boolean
+              prometheusRuleConfig:
+                type: string
               rayService:
                 description: RayServiceSpec defines the Ray service configuration
                 properties:
@@ -111,8 +146,6 @@ spec:
                     type: string
                   workerGroup:
                     properties:
-                      numCpus:
-                        type: string
                       replicas:
                         format: int32
                         type: integer
@@ -174,35 +207,8 @@ spec:
                         type: object
                     type: object
                 type: object
-              s3Bucket:
-                description: VolumeSpec defines remote volume config
-                properties:
-                  endpoint:
-                    description: Remote volume URI
-                    type: string
-                  name:
-                    description: Remote volume name
-                    type: string
-                  path:
-                    description: Remote volume path
-                    type: string
-                  provider:
-                    description: 'App Package Remote Store provider. Supported values:
-                      aws, minio, azure.'
-                    type: string
-                  region:
-                    description: Region of the remote storage volume where apps reside.
-                      Used for aws, if provided. Not used for minio and azure.
-                    type: string
-                  secretRef:
-                    description: Secret object name
-                    type: string
-                  storageType:
-                    description: 'Remote Storage type. Supported values: s3, blob.
-                      s3 works with aws or minio providers, whereas blob works with
-                      azure provider.'
-                    type: string
-                type: object
+              requireGPU:
+                type: boolean
               saisService:
                 description: SaisServiceSpec defines the configuration for a single
                   SaisService deployment
@@ -3357,9 +3363,6 @@ spec:
                     - name
                     type: object
                 type: object
-              scale:
-                format: int32
-                type: integer
               serviceAccount:
                 type: string
               vectordbService:

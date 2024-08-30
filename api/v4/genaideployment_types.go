@@ -23,11 +23,15 @@ import (
 
 // GenAIDeploymentSpec defines the desired state of GenAIDeployment
 type GenAIDeploymentSpec struct {
-	SaisService     SaisServiceSpec `json:"saisService"`               // Configuration for SaisService
-	Bucket        VolumeSpec      `json:"bucket"`                  // S3 bucket or other remote storage configuration
-	ServiceAccount  string          `json:"serviceAccount,omitempty"`  // Service Account for IRSA authentication
-	RayService      RayServiceSpec  `json:"rayService,omitempty"`      // Ray service configuration with RayServiceSpec
-	VectorDbService VectorDbSpec    `json:"vectordbService,omitempty"` // VectorDB service configuration
+	SaisService          SaisServiceSpec `json:"saisService"`                    // Configuration for SaisService
+	Bucket               VolumeSpec      `json:"bucket"`                         // S3 bucket or other remote storage configuration
+	ServiceAccount       string          `json:"serviceAccount,omitempty"`       // Service Account for IRSA authentication
+	RayService           RayServiceSpec  `json:"rayService,omitempty"`           // Ray service configuration with RayServiceSpec
+	VectorDbService      VectorDbSpec    `json:"vectordbService,omitempty"`      // VectorDB service configuration
+	PrometheusOperator   bool            `json:"prometheusOperator"`             // Indicates if Prometheus Operator is installed
+	PrometheusRuleConfig string          `json:"prometheusRuleConfig,omitempty"` // Name of the ConfigMap containing Prometheus rules
+	RequireGPU           bool            `json:"requireGPU,omitempty"`           // Indicates if GPU support is required for the workload
+	GPUResource          string          `json:"gpuResource,omitempty"`          // Specific GPU resource type (e.g., "nvidia.com/gpu")
 }
 
 // SaisServiceSpec defines the configuration for a single SaisService deployment
@@ -44,6 +48,7 @@ type SaisServiceSpec struct {
 }
 
 type HeadGroup struct {
+	Resources corev1.ResourceRequirements `json:"resources"` // Resource requirements for the container (CPU, Memory)
 	NumCpus   string                      `json:"numCpus,omitempty"`
 }
 
