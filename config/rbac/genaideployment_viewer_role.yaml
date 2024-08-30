@@ -1,0 +1,27 @@
+# permissions for end users to view genaideployments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: genaideployment-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: splunk-operator
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: genaideployment-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - genaideployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - genaideployments/status
+  verbs:
+  - get
