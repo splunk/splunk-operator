@@ -93,6 +93,18 @@ func (r *GenAIDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	// Update Status
+	if err := r.updateGenAIDeploymentStatus(ctx, genAIDeployment); err != nil {
+		reqLogger.Error(err, "Failed to update GenAIDeployment status")
+		return ctrl.Result{}, err
+	}
+
+	// Update Status
+	if err := r.updateGenAIDeploymentStatus(ctx, genAIDeployment); err != nil {
+		reqLogger.Error(err, "Failed to update GenAIDeployment status")
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -123,7 +135,7 @@ func (r *GenAIDeploymentReconciler) constructRayCluster(ctx context.Context, gen
 			WorkerGroupSpecs: []rayv1.WorkerGroupSpec{
 				{
 					GroupName: "ray-worker",
-					Replicas:  &genAIDeployment.Spec.RayService.Replicas,
+					Replicas:  &genAIDeployment.Spec.RayService.WorkerGroup.Replicas,
 					Template: corev1.PodTemplateSpec{
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
@@ -158,8 +170,24 @@ func (r *GenAIDeploymentReconciler) updateRayClusterStatus(ctx context.Context, 
 }
 
 func (r *GenAIDeploymentReconciler) updateRayCluster(ctx context.Context, existingCluster *rayv1.RayCluster, genAIDeployment *enterpriseApi.GenAIDeployment) *rayv1.RayCluster {
-	// Update RayCluster spec if necessary
-	// ...
+	// Check and update the HeadGroupSpec
+	if !isRayHeadGroupEqual(existingCluster.Spec.HeadGroupSpec, genAIDeployment.Spec.RayService.HeadGroup) {
+		existingCluster.Spec.HeadGroupSpec.Template.Spec.Containers[0].Resources = genAIDeployment.Spec.RayService.HeadGroup.Resources
+		existingCluster.Spec.HeadGroupSpec.RayStartParams["num-cpus"] = genAIDeployment.Spec.RayService.HeadGroup.NumCpus
+	}
+
+	// Check and update the WorkerGroupSpec
+	if !isRayWorkerGroupEqual(existingCluster.Spec.WorkerGroupSpecs, genAIDeployment.Spec.RayService.WorkerGroup) {
+		for i := range existingCluster.Spec.WorkerGroupSpecs {
+			existingCluster.Spec.WorkerGroupSpecs[i].Template.Spec.Containers[0].Resources = genAIDeployment.Spec.RayService.WorkerGroup.Resources
+			existingCluster.Spec.WorkerGroupSpecs[i].RayStartParams["num-cpus"] = genAIDeployment.Spec.RayService.WorkerGroup.NumCpus
+		}
+	}
+
+	// Update general configurations if they have changed
+	existingCluster.Spec.RayVersion = genAIDeployment.Spec.RayService.Image
+	existingCluster.Spec.WorkerGroupSpecs[0].Replicas = &genAIDeployment.Spec.RayService.WorkerGroup.Replicas
+
 	return existingCluster
 }
 
@@ -171,7 +199,8 @@ func (r *GenAIDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *GenAIDeploymentReconciler) reconcileSaisServiceDeployment(ctx context.Context, genAIDeployment *enterpriseApi.GenAIDeployment) error {
-	log := log.FromContext(ctx)
+	reqLogger := log.FromContext(ctx)
+	reqLogger = reqLogger.WithValues("updateRayClusterStatus")
 
 	// Define the desired Deployment object
 	desiredDeployment := r.constructSaisServiceDeployment(genAIDeployment)
@@ -185,14 +214,14 @@ func (r *GenAIDeploymentReconciler) reconcileSaisServiceDeployment(ctx context.C
 		}
 
 		// Create the Deployment if it does not exist
-		log.Info("Creating new Deployment", "Deployment.Namespace", desiredDeployment.Namespace, "Deployment.Name", desiredDeployment.Name)
+		reqLogger.Info("Creating new Deployment", "Deployment.Namespace", desiredDeployment.Namespace, "Deployment.Name", desiredDeployment.Name)
 		if err := r.Create(ctx, desiredDeployment); err != nil {
 			return fmt.Errorf("failed to create new Deployment: %w", err)
 		}
 	} else {
 		// Update the existing Deployment if necessary
 		if !isEqual(desiredDeployment, existingDeployment) {
-			log.Info("Updating existing Deployment", "Deployment.Namespace", existingDeployment.Namespace, "Deployment.Name", existingDeployment.Name)
+			reqLogger.Info("Updating existing Deployment", "Deployment.Namespace", existingDeployment.Namespace, "Deployment.Name", existingDeployment.Name)
 			existingDeployment.Spec = desiredDeployment.Spec
 			if err := r.Update(ctx, existingDeployment); err != nil {
 				return fmt.Errorf("failed to update Deployment: %w", err)
@@ -341,4 +370,138 @@ func (r *GenAIDeploymentReconciler) constructVectorDbDeployment(genAIDeployment 
 	// Set the owner reference to enable garbage collection
 	ctrl.SetControllerReference(genAIDeployment, deployment, r.Scheme)
 	return deployment
+}
+
+func (r *GenAIDeploymentReconciler) updateGenAIDeploymentStatus(ctx context.Context, genAIDeployment *enterpriseApi.GenAIDeployment) error {
+	log := log.FromContext(ctx)
+
+	// Fetch the SaisService Deployment status
+	saisServiceDeployment := &appsv1.Deployment{}
+	err := r.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("%s-sais-service", genAIDeployment.Name), Namespace: genAIDeployment.Namespace}, saisServiceDeployment)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		// If the Deployment is not found, update the status to reflect this
+		genAIDeployment.Status.SaisServiceStatus = enterpriseApi.SaisServiceStatus{
+			Name:     fmt.Sprintf("%s-sais-service", genAIDeployment.Name),
+			Replicas: 0,
+			Status:   "NotFound",
+			Message:  "SaisService Deployment not found",
+		}
+	} else {
+		// Update the status based on the Deployment's current state
+		status, message := getDeploymentStatus(saisServiceDeployment)
+		genAIDeployment.Status.SaisServiceStatus = enterpriseApi.SaisServiceStatus{
+			Name:     saisServiceDeployment.Name,
+			Replicas: saisServiceDeployment.Status.ReadyReplicas,
+			Status:   status,
+			Message:  message,
+		}
+	}
+
+	// Fetch the VectorDb Deployment status (as before)
+	vectorDbDeployment := &appsv1.Deployment{}
+	err = r.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("%s-vectordb-service", genAIDeployment.Name), Namespace: genAIDeployment.Namespace}, vectorDbDeployment)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		// If the Deployment is not found, update the status to reflect this
+		genAIDeployment.Status.VectorDbStatus = enterpriseApi.VectorDbStatus{
+			Enabled: genAIDeployment.Spec.VectorDbService.Enabled,
+			Status:  "NotFound",
+			Message: "VectorDb Deployment not found",
+		}
+	} else {
+		// Update the status based on the Deployment's current state
+		status, message := getDeploymentStatus(vectorDbDeployment)
+		genAIDeployment.Status.VectorDbStatus = enterpriseApi.VectorDbStatus{
+			Enabled: genAIDeployment.Spec.VectorDbService.Enabled,
+			Status:  status,
+			Message: message,
+		}
+	}
+
+	// Fetch the RayCluster status
+	rayCluster := &rayv1.RayCluster{}
+	err = r.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("%s-ray-cluster", genAIDeployment.Name), Namespace: genAIDeployment.Namespace}, rayCluster)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		genAIDeployment.Status.RayClusterStatus = enterpriseApi.RayClusterStatus{
+			ClusterName: fmt.Sprintf("%s-ray-cluster", genAIDeployment.Name),
+			State:       "NotFound",
+			Conditions:  []metav1.Condition{},
+		}
+	} else {
+		// Update RayCluster status with its current conditions
+		genAIDeployment.Status.RayClusterStatus = enterpriseApi.RayClusterStatus{
+			ClusterName: rayCluster.Name,
+			State:       getRayClusterState(rayCluster),
+			Conditions:  rayCluster.Status.Conditions,
+		}
+	}
+
+	// Update the GenAIDeployment status
+	if err := r.Status().Update(ctx, genAIDeployment); err != nil {
+		log.Error(err, "Failed to update GenAIDeployment status")
+		return err
+	}
+
+	return nil
+}
+
+func getDeploymentStatus(deployment *appsv1.Deployment) (string, string) {
+	if len(deployment.Status.Conditions) == 0 {
+		return "Unknown", "No conditions reported"
+	}
+	condition := deployment.Status.Conditions[len(deployment.Status.Conditions)-1]
+	return string(condition.Type), condition.Message
+}
+
+func getRayClusterState(rayCluster *rayv1.RayCluster) string {
+	if len(rayCluster.Status.Conditions) == 0 {
+		return "Unknown"
+	}
+	// Return the state based on the latest condition
+	latestCondition := rayCluster.Status.Conditions[len(rayCluster.Status.Conditions)-1]
+	if latestCondition.Status == metav1.ConditionTrue {
+		return string(latestCondition.Type)
+	}
+	return "NotReady"
+}
+
+func isRayHeadGroupEqual(existingHead rayv1.HeadGroupSpec, desiredHead enterpriseApi.HeadGroup) bool {
+	// Compare resources
+	if !equalResourceRequirements(existingHead.Template.Spec.Containers[0].Resources, desiredHead.Resources) {
+		return false
+	}
+	// Compare RayStartParams
+	if existingHead.RayStartParams["num-cpus"] != desiredHead.NumCpus {
+		return false
+	}
+	return true
+}
+
+func isRayWorkerGroupEqual(existingWorkers []rayv1.WorkerGroupSpec, desiredWorker enterpriseApi.WorkerGroup) bool {
+	for _, worker := range existingWorkers {
+		// Compare resources
+		if !equalResourceRequirements(worker.Template.Spec.Containers[0].Resources, desiredWorker.Resources) {
+			return false
+		}
+		// Compare RayStartParams
+		if worker.RayStartParams["num-cpus"] != desiredWorker.NumCpus {
+			return false
+		}
+	}
+	return true
+}
+
+func equalResourceRequirements(a, b corev1.ResourceRequirements) bool {
+	return a.Limits.Cpu().Equal(*b.Limits.Cpu()) &&
+		a.Limits.Memory().Equal(*b.Limits.Memory()) &&
+		a.Requests.Cpu().Equal(*b.Requests.Cpu()) &&
+		a.Requests.Memory().Equal(*b.Requests.Memory())
 }

@@ -52,20 +52,16 @@ type HeadGroup struct {
 type WorkerGroup struct {
 	Resources corev1.ResourceRequirements `json:"resources"` // Resource requirements for the container (CPU, Memory)
 	NumCpus   string                      `json:"numCpus,omitempty"`
+	Replicas  int32                       `json:"replicas,omitempty"`
 }
 
 // RayServiceSpec defines the Ray service configuration
 type RayServiceSpec struct {
-	Enabled                   bool                              `json:"enabled"`          // Whether RayService is enabled
-	Config                    string                            `json:"config,omitempty"` // Additional RayService configuration
-	Image                     string                            `json:"image,omitempty"`
-	HeadGroup                 HeadGroup                         `json:"headGroup,omitempty"`
-	WorkerGroup               WorkerGroup                       `json:"workerGroup,omitempty"`
-	Replicas                  int32                             `json:"replicas,omitempty"`
-	Affinity                  corev1.Affinity                   `json:"affinity"`                            // Kubernetes Affinity rules that control how pods are assigned to particular nodes.
-	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`               // Pod's tolerations for Kubernetes node's taint
-	ServiceTemplate           corev1.Service                    `json:"serviceTemplate"`                     // ServiceTemplate is a template used to create Kubernetes services
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"` // TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+	Enabled     bool        `json:"enabled"`          // Whether RayService is enabled
+	Config      string      `json:"config,omitempty"` // Additional RayService configuration
+	Image       string      `json:"image,omitempty"`
+	HeadGroup   HeadGroup   `json:"headGroup,omitempty"`
+	WorkerGroup WorkerGroup `json:"workerGroup,omitempty"`
 }
 
 // VectorDbSpec defines the VectorDB service configuration
