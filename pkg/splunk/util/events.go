@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package util
 
 import (
 	"context"
@@ -33,7 +33,7 @@ type K8EventPublisher struct {
 }
 
 // private function to get new k8s event publisher
-func newK8EventPublisher(client splcommon.ControllerClient, instance interface{}) (*K8EventPublisher, error) {
+func NewK8EventPublisher(client splcommon.ControllerClient, instance interface{}) (*K8EventPublisher, error) {
 	eventPublisher := &K8EventPublisher{
 		client:   client,
 		instance: instance,
@@ -69,6 +69,8 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	case *enterpriseApi.MonitoringConsole:
 		event = v.NewEvent(eventType, reason, message)
 	case *enterpriseApi.SearchHeadCluster:
+		event = v.NewEvent(eventType, reason, message)
+	case *enterpriseApi.GenAIDeployment:
 		event = v.NewEvent(eventType, reason, message)
 	default:
 		return

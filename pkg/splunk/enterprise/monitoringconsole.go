@@ -49,7 +49,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "MonitoringConsole"
 
 	if cr.Status.ResourceRevMap == nil {
@@ -373,7 +373,7 @@ func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []cor
 func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
 	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {

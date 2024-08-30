@@ -1,11 +1,12 @@
 splunk-operator:
-  enabled: true
+  enabled: false
   operator:
     serviceAccountName: "splunk-enterprise-serviceaccount-staging"
   splunkOperator:
     clusterWideAccess: false
     persistentVolumeClaim:
       storageClassName: gp2
+
 sva:
   c3:
     enabled: true
@@ -32,9 +33,8 @@ clusterManager:
       storageType: s3
       provider: aws
       path: helm-test-c3-with-apps-testnew
-      endpoint: www.amazon.com
+      endpoint: https://s3-us-west-2.amazonaws.com
       region: us-west-2
-      secretRef: s3-secret
   smartstore:
     defaults:
       volumeName: helm-test-c3-with-apps-smartstore-testnew
@@ -48,8 +48,7 @@ clusterManager:
     volumes:
     - name: helm-test-c3-with-apps-smartstore-testnew
       path: helm-test-c3-with-apps-smartstore-testnew/smartstore
-      endpoint: www.amazon.com
-      secretRef: s3-secret
+      endpoint: https://s3-us-west-2.amazonaws.com
       region: us-west-2
     cacheManager:
       hotlistBloomFilterRecencyHours: 360 # 15 days - splunk defaults - (can be lowered to 5 days)
@@ -66,14 +65,13 @@ searchHeadCluster:
       volumeName: volume_app_repo
       scope: local
     appSources:
-    - name: apps
-      location: appframework
-      scope: cluster
+      - name: apps
+        location: appframework
+        scope: cluster
     volumes:
-    - name: volume_app_repo
-      storageType: s3
-      provider: aws
-      path: helm-test-c3-with-apps-testnew
-      endpoint: www.amazon.com
-      region: us-west-2
-      secretRef: s3-secret
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: helm-test-c3-with-apps-test
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2

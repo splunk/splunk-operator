@@ -1,0 +1,169 @@
+---
+# Source: splunk-enterprise/templates/enterprise_v4_clustermanager.yaml
+apiVersion:  enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+  namespace: test
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  serviceAccount: test-splunk-sok-controller-manager
+  appRepo: 
+    appSources:
+    - location: appframework
+      name: apps
+      scope: cluster
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      scope: local
+      volumeName: volume_app_repo
+    volumes:
+    - endpoint: https://s3-us-west-2.amazonaws.com
+      name: volume_app_repo
+      path: helm-test-c3-with-apps-testnew
+      provider: aws
+      region: us-west-2
+      storageType: s3
+  smartstore:
+    cacheManager:
+      evictionPadding: 1024
+      evictionPolicy: lru
+      hotlistBloomFilterRecencyHours: 360
+      hotlistRecencySecs: 86400
+      maxCacheSize: 0
+      maxConcurrentDownloads: 8
+      maxConcurrentUploads: 8
+    defaults:
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    indexes:
+    - name: main
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    - name: cloudwatch
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    volumes:
+    - endpoint: https://s3-us-west-2.amazonaws.com
+      name: helm-test-c3-with-apps-smartstore-testnew
+      path: helm-test-c3-with-apps-smartstore-testnew/smartstore
+      region: us-west-2
+  livenessInitialDelaySeconds: 300
+  readinessInitialDelaySeconds: 10
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+---
+# Source: splunk-enterprise/templates/enterprise_v4_indexercluster.yaml
+apiVersion: v1
+kind: List
+items:
+- apiVersion:  enterprise.splunk.com/v4
+  kind: IndexerCluster
+  metadata:
+    name: idxc
+    namespace: test
+    finalizers:
+    - enterprise.splunk.com/delete-pvc
+  spec:
+    serviceAccount: test-splunk-sok-controller-manager
+    replicas: 4
+    clusterManagerRef:
+      name: cm
+    livenessInitialDelaySeconds: 3000
+    readinessInitialDelaySeconds: 100
+    etcVolumeStorageConfig:
+      ephemeralStorage: false
+      storageCapacity: 10Gi
+    varVolumeStorageConfig:
+      ephemeralStorage: false
+      storageCapacity: 100Gi
+---
+# Source: splunk-enterprise/templates/enterprise_v4_searchheadcluster.yaml
+apiVersion: v1
+kind: List
+items:
+- apiVersion:  enterprise.splunk.com/v4
+  kind: SearchHeadCluster
+  metadata:
+    name: shc
+    namespace: test
+    finalizers:
+    - enterprise.splunk.com/delete-pvc
+  spec:
+    serviceAccount: test-splunk-sok-controller-manager
+    replicas: 3
+    appRepo: 
+      appSources:
+      - location: appframework
+        name: apps
+        scope: cluster
+      appsRepoPollIntervalSeconds: 60
+      defaults:
+        scope: local
+        volumeName: volume_app_repo
+      volumes:
+      - endpoint: https://s3-us-west-2.amazonaws.com
+        name: volume_app_repo
+        path: helm-test-c3-with-apps-testnew
+        provider: aws
+        region: us-west-2
+        storageType: s3
+    clusterManagerRef:
+      name: cm
+    livenessInitialDelaySeconds: 300
+    readinessInitialDelaySeconds: 10
+    etcVolumeStorageConfig:
+      ephemeralStorage: false
+      storageCapacity: 10Gi
+    varVolumeStorageConfig:
+      ephemeralStorage: false
+      storageCapacity: 100Gi
+
+
+---
+# Source: splunk-enterprise/templates/enterprise_v4_clustermanager.yaml
+apiVersion:  enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: cstdln
+  namespace: test
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  #image: vivekrsplunk/splunk:9.1.20
+  serviceAccount: test-splunk-sok-controller-manager
+  smartstore:
+    cacheManager:
+      evictionPadding: 1024
+      evictionPolicy: lru
+      hotlistBloomFilterRecencyHours: 360
+      hotlistRecencySecs: 86400
+      maxCacheSize: 0
+      maxConcurrentDownloads: 8
+      maxConcurrentUploads: 8
+    defaults:
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    indexes:
+    - name: main
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    - name: cloudwatch
+      remotePath: $_index_name
+      volumeName: helm-test-c3-with-apps-smartstore-testnew
+    volumes:
+    - endpoint: https://s3-us-west-2.amazonaws.com
+      name: helm-test-c3-with-apps-smartstore-testnew
+      path: helm-test-c3-with-apps-smartstore-testnew/stdln
+      region: us-west-2
+  livenessInitialDelaySeconds: 300
+  readinessInitialDelaySeconds: 10
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi

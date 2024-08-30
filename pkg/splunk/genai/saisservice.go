@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,13 +27,15 @@ type SaisServiceReconciler interface {
 type saisServiceReconcilerImpl struct {
 	client.Client
 	genAIDeployment *enterpriseApi.GenAIDeployment
+	eventRecorder   *splutil.K8EventPublisher
 }
 
 // NewSaisServiceReconciler creates a new instance of SaisServiceReconciler.
-func NewSaisServiceReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment) SaisServiceReconciler {
+func NewSaisServiceReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment, eventRecorder *splutil.K8EventPublisher) SaisServiceReconciler {
 	return &saisServiceReconcilerImpl{
 		Client:          c,
 		genAIDeployment: genAIDeployment,
+		eventRecorder:   eventRecorder,
 	}
 }
 
@@ -75,6 +78,9 @@ func (r *saisServiceReconcilerImpl) Reconcile(ctx context.Context) (enterpriseAp
 		return status, err
 	}
 
+	// Write to event recorder
+	r.eventRecorder.Warning(ctx, "Reconciliation", "SaisService reconciliation completed successfully")
+
 	// If all reconciliations succeed, update the status to Running
 	status.Status = "Running"
 	status.Message = "SaisService is running successfully"
@@ -90,6 +96,9 @@ func (r *saisServiceReconcilerImpl) ReconcileServiceAccount(ctx context.Context)
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.genAIDeployment.Spec.ServiceAccount,
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 	}
 
@@ -101,6 +110,7 @@ func (r *saisServiceReconcilerImpl) ReconcileServiceAccount(ctx context.Context)
 		}
 
 		if err := r.Create(ctx, serviceAccount); err != nil {
+			r.eventRecorder.Warning(ctx, "ReconciliationError", fmt.Sprintf("Failed to create ServiceAccount: %v", err))
 			return fmt.Errorf("failed to create ServiceAccount: %w", err)
 		}
 	}
@@ -112,6 +122,9 @@ func (r *saisServiceReconcilerImpl) ReconcileSecret(ctx context.Context) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sais-service-secret",
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Data: map[string][]byte{
 			"authKey": []byte("your-secret-auth-key"),
@@ -126,7 +139,14 @@ func (r *saisServiceReconcilerImpl) ReconcileSecret(ctx context.Context) error {
 		}
 
 		if err := r.Create(ctx, secret); err != nil {
+			r.eventRecorder.Warning(ctx, "ReconciliationError", fmt.Sprintf("Failed to create Secret: %v", err))
 			return fmt.Errorf("failed to create Secret: %w", err)
+		}
+	} else if !reflect.DeepEqual(secret.Data, existingSecret.Data) {
+		existingSecret.Data = secret.Data
+		if err := r.Update(ctx, existingSecret); err != nil {
+			r.eventRecorder.Warning(ctx, "ReconciliationError", fmt.Sprintf("Failed to update Secret: %v", err))
+			return fmt.Errorf("failed to update Secret: %w", err)
 		}
 	}
 	return nil
@@ -137,6 +157,9 @@ func (r *saisServiceReconcilerImpl) ReconcileConfigMap(ctx context.Context) erro
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sais-service-config",
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Data: map[string]string{
 			"configKey": "configValue",
@@ -151,7 +174,14 @@ func (r *saisServiceReconcilerImpl) ReconcileConfigMap(ctx context.Context) erro
 		}
 
 		if err := r.Create(ctx, configMap); err != nil {
+			r.eventRecorder.Warning(ctx, "ReconciliationError", fmt.Sprintf("Failed to create ConfigMap: %v", err))
 			return fmt.Errorf("failed to create ConfigMap: %w", err)
+		}
+	} else if !reflect.DeepEqual(configMap.Data, existingConfigMap.Data) {
+		existingConfigMap.Data = configMap.Data
+		if err := r.Update(ctx, existingConfigMap); err != nil {
+			r.eventRecorder.Warning(ctx, "ReconciliationError", fmt.Sprintf("Failed to update ConfigMap: %v", err))
+			return fmt.Errorf("failed to update ConfigMap: %w", err)
 		}
 	}
 	return nil
@@ -183,6 +213,9 @@ func (r *saisServiceReconcilerImpl) ReconcileDeployment(ctx context.Context) err
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-sais-service", r.genAIDeployment.Name),
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &r.genAIDeployment.Spec.SaisService.Replicas,
@@ -250,6 +283,9 @@ func (r *saisServiceReconcilerImpl) ReconcileService(ctx context.Context) error 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-sais-service", r.genAIDeployment.Name),
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{

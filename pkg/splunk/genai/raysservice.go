@@ -7,6 +7,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	rayv1 "github.com/splunk/splunk-operator/controllers/ray/v1"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,13 +27,15 @@ type RayServiceReconciler interface {
 type rayServiceReconcilerImpl struct {
 	client.Client
 	genAIDeployment *enterpriseApi.GenAIDeployment
+	eventRecorder   *splutil.K8EventPublisher
 }
 
 // NewRayServiceReconciler creates a new instance of RayServiceReconciler.
-func NewRayServiceReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment) RayServiceReconciler {
+func NewRayServiceReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment, eventRecorder *splutil.K8EventPublisher) RayServiceReconciler {
 	return &rayServiceReconcilerImpl{
 		Client:          c,
 		genAIDeployment: genAIDeployment,
+		eventRecorder:   eventRecorder,
 	}
 }
 
@@ -46,6 +49,9 @@ func (r *rayServiceReconcilerImpl) ReconcileRayCluster(ctx context.Context) erro
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-ray-cluster", r.genAIDeployment.Name),
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Spec: rayv1.RayClusterSpec{
 			HeadGroupSpec: rayv1.HeadGroupSpec{
@@ -115,6 +121,9 @@ func (r *rayServiceReconcilerImpl) ReconcileConfigMap(ctx context.Context) error
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ray-service-config",
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Data: map[string]string{
 			"rayConfigKey": "rayConfigValue",
@@ -140,6 +149,9 @@ func (r *rayServiceReconcilerImpl) ReconcileSecret(ctx context.Context) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ray-service-secret",
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Data: map[string][]byte{
 			"authKey": []byte("your-secret-auth-key"),
@@ -165,6 +177,9 @@ func (r *rayServiceReconcilerImpl) ReconcileService(ctx context.Context) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-ray-service", r.genAIDeployment.Name),
 			Namespace: r.genAIDeployment.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{

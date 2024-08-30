@@ -47,7 +47,7 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterMaster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "ClusterMaster"
 
 	if cr.Status.ResourceRevMap == nil {
@@ -296,7 +296,7 @@ func getClusterMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfMastersmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -334,7 +334,7 @@ func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient,
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
-	//eventPublisher, _ := newK8EventPublisher(c, cr)
+	//eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 
 	currentEpoch := time.Now().Unix()
 	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
@@ -377,7 +377,7 @@ func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient,
 func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)

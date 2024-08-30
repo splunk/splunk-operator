@@ -8,6 +8,7 @@ import (
 	//monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1" // Import Prometheus operator API
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	//"gopkg.in/yaml.v2"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,13 +25,15 @@ type PrometheusRuleReconciler interface {
 type prometheusRuleReconcilerImpl struct {
 	client.Client
 	genAIDeployment *enterpriseApi.GenAIDeployment
+	eventRecorder   *splutil.K8EventPublisher
 }
 
 // NewPrometheusRuleReconciler creates a new instance of PrometheusRuleReconciler.
-func NewPrometheusRuleReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment) PrometheusRuleReconciler {
+func NewPrometheusRuleReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment, eventRecorder *splutil.K8EventPublisher) PrometheusRuleReconciler {
 	return &prometheusRuleReconcilerImpl{
 		Client:          c,
 		genAIDeployment: genAIDeployment,
+		eventRecorder:   eventRecorder,
 	}
 }
 

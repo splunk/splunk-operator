@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,13 +27,15 @@ type VectorDbReconciler interface {
 type vectorDbReconcilerImpl struct {
 	client.Client
 	genAIDeployment *enterpriseApi.GenAIDeployment
+	eventRecorder   *splutil.K8EventPublisher
 }
 
 // NewVectorDbReconciler creates a new instance of VectorDbReconciler.
-func NewVectorDbReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment) VectorDbReconciler {
+func NewVectorDbReconciler(c client.Client, genAIDeployment *enterpriseApi.GenAIDeployment, eventRecorder *splutil.K8EventPublisher) VectorDbReconciler {
 	return &vectorDbReconcilerImpl{
 		Client:          c,
 		genAIDeployment: genAIDeployment,
+		eventRecorder:   eventRecorder,
 	}
 }
 
@@ -78,7 +81,9 @@ func (r *vectorDbReconcilerImpl) ReconcileSecret(ctx context.Context) error {
 	// Get the SecretRef from the VectorDbService spec
 	secretName := r.genAIDeployment.Spec.VectorDbService.SecretRef
 	if secretName.Name == "" {
-		return fmt.Errorf("SecretRef is not specified in the VectorDbService spec")
+		err := fmt.Errorf("SecretRef is not specified in the VectorDbService spec")
+		r.eventRecorder.Warning(ctx, "MissingSecretRef", err.Error())
+		return err
 	}
 
 	// Fetch the existing Secret using the SecretRef
@@ -86,17 +91,22 @@ func (r *vectorDbReconcilerImpl) ReconcileSecret(ctx context.Context) error {
 	err := r.Get(ctx, client.ObjectKey{Name: secretName.Name, Namespace: r.genAIDeployment.Namespace}, existingSecret)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
+			r.eventRecorder.Warning(ctx, "GetSecretFailed", fmt.Sprintf("Failed to get existing Secret %s: %v", secretName, err))
 			return fmt.Errorf("failed to get existing Secret: %w", err)
 		}
 		// Secret does not exist, return an error indicating it is required
-		return fmt.Errorf("Secret '%s' referenced by SecretRef does not exist", secretName)
+		err := fmt.Errorf("secret '%s' referenced by SecretRef does not exist", secretName)
+		r.eventRecorder.Warning(ctx, "SecretNotFound", err.Error())
+		return err
 	}
 
 	// Ensure that the Secret has the expected data keys
 	requiredKeys := []string{"username", "password"}
 	for _, key := range requiredKeys {
 		if _, exists := existingSecret.Data[key]; !exists {
-			return fmt.Errorf("Secret '%s' is missing required key: %s", secretName, key)
+			err := fmt.Errorf("secret '%s' is missing required key: %s", secretName, key)
+			r.eventRecorder.Warning(ctx, "SecretInvalid", err.Error())
+			return err
 		}
 	}
 
@@ -105,8 +115,10 @@ func (r *vectorDbReconcilerImpl) ReconcileSecret(ctx context.Context) error {
 	if !isOwnerReferenceSet(existingSecret.OwnerReferences, ownerRef) {
 		existingSecret.OwnerReferences = append(existingSecret.OwnerReferences, *ownerRef)
 		if err := r.Update(ctx, existingSecret); err != nil {
+			r.eventRecorder.Warning(ctx, "UpdateSecretFailed", fmt.Sprintf("Failed to update Secret with OwnerReference: %v", err))
 			return fmt.Errorf("failed to update Secret with OwnerReference: %w", err)
 		}
+		r.eventRecorder.Normal(ctx, "UpdatedSecret", fmt.Sprintf("Successfully updated Secret %s with OwnerReference", secretName))
 	}
 
 	return nil
@@ -130,6 +142,9 @@ func (r *vectorDbReconcilerImpl) ReconcileConfigMap(ctx context.Context) error {
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       "weaviate",
 				"app.kubernetes.io/managed-by": "Helm",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
 			},
 		},
 		Data: map[string]string{
@@ -159,9 +174,10 @@ debug: false
 
 		// Create the ConfigMap if it does not exist
 		if err := r.Create(ctx, desiredConfigMap); err != nil {
+			r.eventRecorder.Warning(ctx, "CreateConfigMapFailed", fmt.Sprintf("Failed to create ConfigMap: %v", err))
 			return fmt.Errorf("failed to create ConfigMap: %w", err)
 		}
-		return nil
+		r.eventRecorder.Normal(ctx, "CreatedConfigMap", fmt.Sprintf("Successfully created ConfigMap %s", desiredConfigMap.Name))
 	}
 
 	// Compare the existing ConfigMap data with the desired data
@@ -171,8 +187,10 @@ debug: false
 
 		// Update the ConfigMap in the cluster
 		if err := r.Update(ctx, existingConfigMap); err != nil {
+			r.eventRecorder.Warning(ctx, "UpdateConfigMapFailed", fmt.Sprintf("Failed to update ConfigMap: %v", err))
 			return fmt.Errorf("failed to update ConfigMap: %w", err)
 		}
+		r.eventRecorder.Normal(ctx, "UpdatedConfigMap", fmt.Sprintf("Successfully updated ConfigMap %s", existingConfigMap.Name))
 	}
 
 	return nil
@@ -191,6 +209,9 @@ func (r *vectorDbReconcilerImpl) ReconcileStatefulSet(ctx context.Context) error
 			Labels: map[string]string{
 				"app.kubernetes.io/name":       "weaviate",
 				"app.kubernetes.io/managed-by": "Helm",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(r.genAIDeployment, enterpriseApi.GroupVersion.WithKind("GenAIDeployment")),
 			},
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -249,6 +270,7 @@ func (r *vectorDbReconcilerImpl) ReconcileStatefulSet(ctx context.Context) error
 		}
 
 		if err := r.Create(ctx, statefulSet); err != nil {
+			r.eventRecorder.Warning(ctx, "CreateStatefulSetFailed", fmt.Errorf("failed to create StatefulSet: %w", err).Error())
 			return fmt.Errorf("failed to create StatefulSet: %w", err)
 		}
 	} else if !reflect.DeepEqual(statefulSet.Spec, existingStatefulSet.Spec) {
@@ -257,6 +279,7 @@ func (r *vectorDbReconcilerImpl) ReconcileStatefulSet(ctx context.Context) error
 			return fmt.Errorf("failed to update StatefulSet: %w", err)
 		}
 	}
+	r.eventRecorder.Normal(ctx, "ReconcileStatefulSet", "Successfully reconciled StatefulSet")
 	return nil
 }
 
@@ -359,9 +382,13 @@ func (r *vectorDbReconcilerImpl) ReconcileServices(ctx context.Context) error {
 			if err := r.Create(ctx, service); err != nil {
 				return fmt.Errorf("failed to create Service %s: %w", service.Name, err)
 			}
+			r.eventRecorder.Normal(ctx, "CreatedService", fmt.Sprintf("Successfully created Service %s", service.Name))
+		} else {
+			// If the service exists, do nothing
 		}
-		// If the service exists, do nothing
 	}
+
+	r.eventRecorder.Normal(ctx, "ReconcileServices", "Successfully reconciled Services")
 
 	return nil
 }

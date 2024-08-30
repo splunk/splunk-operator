@@ -7,6 +7,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,7 +37,7 @@ var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager
 func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, mgr *indexerClusterPodManager) (bool, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 	kind := cr.GroupVersionKind().Kind
 	scopedLog.Info("kind is set to ", "kind", kind)
 	// start from standalone first

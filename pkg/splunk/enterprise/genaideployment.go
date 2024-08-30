@@ -23,6 +23,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	genai "github.com/splunk/splunk-operator/pkg/splunk/genai"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	//"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,10 +48,16 @@ func ApplyGenAIDeployment(ctx context.Context, client splcommon.ControllerClient
 func (r *GenAIDeploymentReconciler) Reconcile(ctx context.Context, cr *enterpriseApi.GenAIDeployment) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
+	// Initialize event recorder using the manager
+	eventPublisher, _ := splutil.NewK8EventPublisher(r.Client, cr)
+
 	// Initialize reconcilers for each service
-	saisReconciler := genai.NewSaisServiceReconciler(r.Client, cr)
-	vectorDbReconciler := genai.NewVectorDbReconciler(r.Client, cr)
-	rayReconciler := genai.NewRayServiceReconciler(r.Client, cr)
+	saisReconciler := genai.NewSaisServiceReconciler(r.Client, cr, eventPublisher)
+	vectorDbReconciler := genai.NewVectorDbReconciler(r.Client, cr, eventPublisher)
+	rayReconciler := genai.NewRayServiceReconciler(r.Client, cr, eventPublisher)
+	prometheusRules := genai.NewPrometheusRuleReconciler(r.Client, cr, eventPublisher)
+
+	// Reconcile PrometheusRules
 
 	// Reconcile SaisService
 	saisStatus, err := saisReconciler.Reconcile(ctx)
@@ -75,6 +82,8 @@ func (r *GenAIDeploymentReconciler) Reconcile(ctx context.Context, cr *enterpris
 		return ctrl.Result{}, err
 	}
 	cr.Status.RayClusterStatus = rayStatus
+
+	prometheusRules.Reconcile(ctx)
 
 	// Update the status of GenAIDeployment in Kubernetes
 	if err := r.Status().Update(ctx, cr); err != nil {

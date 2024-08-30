@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package util
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func TestClusterManagerEventPublisher(t *testing.T) {
 	c := builder.Build()
 
 	cm := enterpriseApi.ClusterManager{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := NewK8EventPublisher(c, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -57,7 +57,7 @@ func TestIndexerClusterEventPublisher(t *testing.T) {
 	c := builder.Build()
 
 	cm := enterpriseApi.IndexerCluster{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := NewK8EventPublisher(c, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -72,7 +72,7 @@ func TestMonitoringConsoleEventPublisher(t *testing.T) {
 	c := builder.Build()
 
 	cm := enterpriseApi.MonitoringConsole{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := NewK8EventPublisher(c, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -87,7 +87,7 @@ func TestSearchHeadClusterEventPublisher(t *testing.T) {
 	c := builder.Build()
 
 	cm := enterpriseApi.SearchHeadCluster{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := NewK8EventPublisher(c, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -102,7 +102,7 @@ func TestStandaloneEventPublisher(t *testing.T) {
 	c := builder.Build()
 
 	cm := enterpriseApi.Standalone{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := NewK8EventPublisher(c, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -130,7 +130,7 @@ func TestLicenseManagerEventPublisher(t *testing.T) {
 	c := builder.Build()
 
 	lmanager := enterpriseApi.LicenseManager{}
-	k8sevent, err := newK8EventPublisher(c, &lmanager)
+	k8sevent, err := NewK8EventPublisher(c, &lmanager)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}

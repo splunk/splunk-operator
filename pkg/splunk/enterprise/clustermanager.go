@@ -49,7 +49,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "ClusterManager"
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
@@ -310,7 +310,7 @@ func getClusterManagerStatefulSet(ctx context.Context, client splcommon.Controll
 func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -348,7 +348,7 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
-	//eventPublisher, _ := newK8EventPublisher(c, cr)
+	//eventPublisher, _ := NewK8EventPublisher(c, cr)
 
 	currentEpoch := time.Now().Unix()
 	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
@@ -391,7 +391,7 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.ClusterManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushManagerApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
@@ -460,7 +460,7 @@ var VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.Cluste
 func changeClusterManagerAnnotations(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.LicenseManager) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(c, cr)
 
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
 	if len(cr.Spec.ClusterManagerRef.Name) > 0 {

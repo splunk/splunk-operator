@@ -25,10 +25,9 @@ import (
 	"strings"
 	"time"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
 	"github.com/go-logr/logr"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
@@ -55,7 +54,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "IndexerCluster"
 
 	var err error
@@ -312,7 +311,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerCluster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "IndexerCluster"
 
 	// validate and updates defaults for CR

@@ -48,7 +48,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "SearchHeadCluster"
 
 	var err error

@@ -48,7 +48,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher, _ := splutil.NewK8EventPublisher(client, cr)
 	cr.Kind = "Standalone"
 
 	var err error
