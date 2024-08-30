@@ -21,6 +21,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// GenAIDeploymentPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// an immediate requeue)
+	GenAIDeploymentPausedAnnotation = "genaideployment.enterprise.splunk.com/paused"
+)
+
 // GenAIDeploymentSpec defines the desired state of GenAIDeployment
 type GenAIDeploymentSpec struct {
 	SaisService          SaisServiceSpec `json:"saisService"`                    // Configuration for SaisService
@@ -70,6 +76,7 @@ type RayServiceSpec struct {
 type VectorDbSpec struct {
 	Image                     string                            `json:"image"`                               // Container image for the service
 	Enabled                   bool                              `json:"enabled"`                             // Whether VectorDBService is enabled
+	SecretRef                 corev1.LocalObjectReference       `json:"secretRef"`                           // Reference to a user-provided secret
 	Config                    string                            `json:"config,omitempty"`                    // Additional VectorDB configuration
 	Resources                 corev1.ResourceRequirements       `json:"resources"`                           // Resource requirements for the container (CPU, Memory)
 	Storage                   StorageClassSpec                  `json:"storage"`                             // Storage configuration for persistent or ephemeral storage
@@ -108,6 +115,7 @@ type RayClusterStatus struct {
 	ClusterName string             `json:"clusterName"`          // Name of the RayCluster
 	State       string             `json:"state"`                // Current state of the RayCluster (e.g., "Running", "Failed")
 	Conditions  []metav1.Condition `json:"conditions,omitempty"` // Conditions describing the state of the RayCluster
+	Message     string             `json:"message"`              // Additional information about the RayCluster status
 }
 
 //+kubebuilder:object:root=true
