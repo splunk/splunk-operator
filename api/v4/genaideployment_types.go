@@ -24,10 +24,9 @@ import (
 // GenAIDeploymentSpec defines the desired state of GenAIDeployment
 type GenAIDeploymentSpec struct {
 	SaisService     SaisServiceSpec `json:"saisService"`               // Configuration for SaisService
-	S3Bucket        VolumeSpec      `json:"s3Bucket"`                  // S3 bucket or other remote storage configuration
-	Scale           int32           `json:"scale"`                     // Number of replicas for scaling
+	Bucket        VolumeSpec      `json:"bucket"`                  // S3 bucket or other remote storage configuration
 	ServiceAccount  string          `json:"serviceAccount,omitempty"`  // Service Account for IRSA authentication
-	RayService      RayServiceSpec  `json:"rayService,omitempty"`      // Ray service configuration with embedded RayClusterSpec
+	RayService      RayServiceSpec  `json:"rayService,omitempty"`      // Ray service configuration with RayServiceSpec
 	VectorDbService VectorDbSpec    `json:"vectordbService,omitempty"` // VectorDB service configuration
 }
 
@@ -45,13 +44,11 @@ type SaisServiceSpec struct {
 }
 
 type HeadGroup struct {
-	Resources corev1.ResourceRequirements `json:"resources"` // Resource requirements for the container (CPU, Memory)
 	NumCpus   string                      `json:"numCpus,omitempty"`
 }
 
 type WorkerGroup struct {
 	Resources corev1.ResourceRequirements `json:"resources"` // Resource requirements for the container (CPU, Memory)
-	NumCpus   string                      `json:"numCpus,omitempty"`
 	Replicas  int32                       `json:"replicas,omitempty"`
 }
 
@@ -70,7 +67,7 @@ type VectorDbSpec struct {
 	Enabled                   bool                              `json:"enabled"`                             // Whether VectorDBService is enabled
 	Config                    string                            `json:"config,omitempty"`                    // Additional VectorDB configuration
 	Resources                 corev1.ResourceRequirements       `json:"resources"`                           // Resource requirements for the container (CPU, Memory)
-	Volume                    corev1.Volume                     `json:"volume,omitempty"`                    // Volume specifications using corev1.Volume
+	Storage                   StorageClassSpec                  `json:"storage"`                             // Storage configuration for persistent or ephemeral storage
 	Replicas                  int32                             `json:"replicas"`                            // Number of replicas for the service
 	Affinity                  corev1.Affinity                   `json:"affinity"`                            // Kubernetes Affinity rules that control how pods are assigned to particular nodes.
 	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`               // Pod's tolerations for Kubernetes node's taint

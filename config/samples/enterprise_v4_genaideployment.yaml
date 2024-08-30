@@ -10,3 +10,49 @@ metadata:
   name: genaideployment-sample
 spec:
   # TODO(user): Add fields here
+  serviceAccount: test-controller-manager
+  saisService:
+    image: 
+    resources:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+    replicas: 2
+  bucket:
+    endpoint: https://s3-us-west-2.amazonaws.com
+    name: volume_app_repo
+    path: helm-test-c3-with-apps-testnew
+    provider: aws
+    region: us-west-2
+    storageType: s3
+  rayService:
+    enabled: true
+    image: 
+    headGroup:
+      numCpus: 4
+    workerGroup:
+      replicas: 2
+      resources:
+        limits:
+          cpu: "4"
+          memory: 8Gi
+        requests:
+          cpu: 100m
+          memory: 512Mi
+  vectordbService:
+    image:
+    enabled: true
+    resources:
+      limits:
+        cpu: "4"
+        memory: 8Gi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+    storage:
+      storageClassName: "gp2"
+      storageCapacity: 10Gi
+    replicas: 3
