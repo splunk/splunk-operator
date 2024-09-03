@@ -10,7 +10,7 @@ Utilizing the App Framework requires one of the following remote storage provide
 
 ### Prerequisites common to both remote storage providers
 * The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket or Azure blob container.
-* Splunk apps and add-ons in a .tgz or .spl archive format.
+* Splunk apps and add-ons in a .tgz or .spl archive format
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. See [Add a persistent storage volume to the Operator pod](#add-a-persistent-storage-volume-to-the-operator-pod).
 
