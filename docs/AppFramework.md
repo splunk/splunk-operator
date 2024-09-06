@@ -6,7 +6,7 @@ The Splunk Operator provides support for Splunk app and add-on deployment using 
 
 Utilizing the App Framework requires one of the following remote storage providers:
    * An Amazon S3 or S3-API-compliant remote object storage location
-   * Azure blob storage
+   * Azure blob storage.
 
 ### Prerequisites common to both remote storage providers
 * The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket or Azure blob container.
