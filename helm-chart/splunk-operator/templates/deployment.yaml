@@ -88,6 +88,8 @@ spec:
             value: {{ include "splunk-operator.operator.fullname" . }}
           - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
             value: "{{ .Values.image.repository }}"
+          - name: CLUSTER_DOMAIN
+            value: {{ .Values.splunkOperator.clusterDomain | default "cluster.local" }}
           ports:
             {{- range .Values.splunkOperator.service.ports }}
             - containerPort: {{ .port }}
