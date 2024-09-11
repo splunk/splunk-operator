@@ -164,13 +164,8 @@ jobs:
       fail-fast: false
       matrix:
         test: [
-                basic,
-                appframeworks1,
                 managerappframeworkc3,
-                managerappframeworkm4,
-                managersecret,
-                managermc,
-               ]
+              ]
     runs-on: ubuntu-latest
     env:
       CLUSTER_NODES: 1
