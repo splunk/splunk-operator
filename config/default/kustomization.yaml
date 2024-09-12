@@ -124,7 +124,7 @@ patches:
       - name: WATCH_NAMESPACE
         value: WATCH_NAMESPACE_VALUE
       - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        value: docker.io/splunk/splunk:9.3.0
+        value: docker.io/splunk/splunk:9.2.2
       - name: OPERATOR_NAME
         value: splunk-operator
       - name: POD_NAME
