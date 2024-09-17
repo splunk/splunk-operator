@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/joho/godotenv"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -53,9 +54,45 @@ var (
 // TestBasic is the main entry point
 func TestBasic(t *testing.T) {
 
+	// Find and load the .env file from the current directory upwards
+	if err := loadEnvFile(); err != nil {
+		panic("Error loading .env file: " + err.Error())
+	}
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Running "+testSuiteName)
+}
+
+//func TestMain(m *testing.M) {
+// Run the tests
+//    os.Exit(m.Run())
+//}
+
+// loadEnvFile traverses up the directory tree to find a .env file
+func loadEnvFile() error {
+	// Get the current working directory
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	// Traverse up the directory tree
+	for {
+		// Check if .env file exists in the current directory
+		envFile := filepath.Join(dir, ".env")
+		if _, err := os.Stat(envFile); err == nil {
+			// .env file found, load it
+			return godotenv.Load(envFile)
+		}
+
+		// Move up to the parent directory
+		parentDir := filepath.Dir(dir)
+		if parentDir == dir {
+			// Reached the root directory
+			return nil
+		}
+		dir = parentDir
+	}
 }
 
 var _ = BeforeSuite(func() {
