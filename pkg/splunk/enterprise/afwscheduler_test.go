@@ -4128,7 +4128,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Define mock podexec context
 	podExecCommands := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmaster", telAppConfString, "cmaster"),
+		fmt.Sprintf(createTelAppNonShcString, "cmaster", "cmaster", telAppConfString, "cmaster", telAppDefMetaConfString, "cmaster"),
 		telAppReloadString,
 	}
 
@@ -4152,7 +4152,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test shc
 	podExecCommands = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
 		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
 	}
 
@@ -4168,7 +4168,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test non-shc error 1
 	podExecCommandsError := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmerror", telAppConfString, "cmerror"),
+		fmt.Sprintf(createTelAppNonShcString, "cmerror", "cmerror", telAppConfString, "cmerror", telAppDefMetaConfString, "cmerror"),
 	}
 
 	mockPodExecReturnContextsError := []*spltest.MockPodExecReturnContext{
@@ -4187,7 +4187,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test non-shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppNonShcString, "cm", telAppConfString, "cm"),
+		fmt.Sprintf(createTelAppNonShcString, "cm", "cm", telAppConfString, "cm", telAppDefMetaConfString, "cm"),
 	}
 	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4199,7 +4199,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test shc error 1
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shcerror"),
 	}
 
 	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
@@ -4212,7 +4212,7 @@ func TestAddTelAppCMaster(t *testing.T) {
 
 	// Test shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
 	}
 	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4241,7 +4241,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Define mock podexec context
 	podExecCommands := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmanager", telAppConfString, "cmanager"),
+		fmt.Sprintf(createTelAppNonShcString, "cmanager", "cmanager", telAppConfString, "cmanager", telAppDefMetaConfString, "cmanager"),
 		telAppReloadString,
 	}
 
@@ -4265,7 +4265,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test shc
 	podExecCommands = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
 		fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(shcCr.GetNamespace(), SplunkSearchHead, shcCr.GetName(), 0, false), "/tmp/status.txt"),
 	}
 
@@ -4281,7 +4281,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test non-shc error 1
 	podExecCommandsError := []string{
-		fmt.Sprintf(createTelAppNonShcString, "cmerror", telAppConfString, "cmerror"),
+		fmt.Sprintf(createTelAppNonShcString, "cmerror", "cmerror", telAppConfString, "cmerror", telAppDefMetaConfString, "cmerror"),
 	}
 
 	mockPodExecReturnContextsError := []*spltest.MockPodExecReturnContext{
@@ -4300,7 +4300,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test non-shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppNonShcString, "cm", telAppConfString, "cm"),
+		fmt.Sprintf(createTelAppNonShcString, "cm", "cm", telAppConfString, "cm", telAppDefMetaConfString, "cm"),
 	}
 	var mockPodExecClientError2 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cmCr}
 	mockPodExecClientError2.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)
@@ -4312,7 +4312,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test shc error 1
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shcerror", shcAppsLocationOnDeployer, "shcerror", telAppConfString, shcAppsLocationOnDeployer, "shcerror", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shcerror"),
 	}
 
 	var mockPodExecClientError3 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
@@ -4325,7 +4325,7 @@ func TestAddTelAppCManager(t *testing.T) {
 
 	// Test shc error 2
 	podExecCommandsError = []string{
-		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc"),
+		fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, "shc", shcAppsLocationOnDeployer, "shc", telAppConfString, shcAppsLocationOnDeployer, "shc", telAppDefMetaConfString, shcAppsLocationOnDeployer, "shc"),
 	}
 	var mockPodExecClientError4 *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: shcCr}
 	mockPodExecClientError4.AddMockPodExecReturnContexts(ctx, podExecCommandsError, mockPodExecReturnContextsError...)

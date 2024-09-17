@@ -71,7 +71,7 @@ jobs:
 
     - name: Update Operator Image name in Helm
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "splunk-operator:${{ github.event.inputs.old_operator_version }}"
         replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
@@ -80,25 +80,25 @@ jobs:
 
     - name: Update Helm Version
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
-        find: "version: ${{ github.event.inputs.old_operator_version }}"
-        replace: "version: ${{ github.event.inputs.new_operator_version }}"
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
-        include: "Chart.yaml"
+        include: "helm-chart/splunk-operator/**.yaml"
 
     - name: Update Helm App Version
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
-        find: "appVersion: ${{ github.event.inputs.old_operator_version }}"
-        replace: "appVersion: ${{ github.event.inputs.new_operator_version }}"
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
         exclude: "ChangeLog.md"
-        include: "Chart.yaml"
+        include: "helm-chart/splunk-enterprise/**.yaml"
 
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "splunk-operator:${{ github.event.inputs.old_operator_version }}"
         replace: "splunk-operator:${{ github.event.inputs.new_operator_version }}"
@@ -107,7 +107,7 @@ jobs:
 
     - name: Update Splunk Operator Install URL in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "/download/${{ github.event.inputs.old_operator_version }}/splunk-operator"
         replace: "/download/${{ github.event.inputs.new_operator_version }}/splunk-operator"
@@ -116,7 +116,7 @@ jobs:
 
     - name: Update Splunk Operator VERSION in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "${{ github.event.inputs.old_operator_version }} or later"
         replace: "${{ github.event.inputs.new_operator_version }} or later"
@@ -125,7 +125,7 @@ jobs:
 
     - name: Update Splunk Operator upgrade string in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.old_operator_version }}"
         replace: "Steps to upgrade from version greater than 1.0.5 to ${{ github.event.inputs.new_operator_version }}"
@@ -134,7 +134,7 @@ jobs:
 
     - name: Update Splunk Operator Release URL in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "https://github.com/splunk/splunk-operator/releases/download/${{ github.event.inputs.old_operator_version }}/splunk-operator-install.yaml"
         replace: "https://github.com/splunk/splunk-operator/releases/download/${{ github.event.inputs.new_operator_version }}/splunk-operator-install.yaml"
@@ -143,14 +143,14 @@ jobs:
 
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
         include: "**operator.yaml"
 
     - name: Update Splunk Enterprise Release Image in .env file
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
@@ -158,7 +158,7 @@ jobs:
 
     - name: Update Splunk Enterprise Image in helm
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }}"
         replace: "${{ github.event.inputs.new_enterprise_version }}"
@@ -166,7 +166,7 @@ jobs:
 
     - name: Update Splunk Enterprise image in DOCS
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@f485fdc3f67a6d87ae6e3d11e41f648c26d7aee3
+      uses: jacobtomlinson/gha-find-replace@v3
       with:
         find: "${{ github.event.inputs.old_enterprise_version }} or later"
         replace: "${{ github.event.inputs.new_enterprise_version }} or later"
