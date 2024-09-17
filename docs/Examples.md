@@ -402,11 +402,11 @@ As these examples demonstrate, the Splunk Operator makes it easy to create and m
 To remove the resources created from this example, run:
 
 ```
-kubectl delete -n splunk-opertaor standalone single
-kubectl delete -n splunk-opertaor shc example
-kubectl delete -n splunk-opertaor idc example
-kubectl delete -n splunk-opertaor mc example-mc
-kubectl delete -n splunk-opertaor clustermanager cm
+kubectl delete -n splunk-operator standalone single
+kubectl delete -n splunk-operator shc example
+kubectl delete -n splunk-operator idc example
+kubectl delete -n splunk-operator mc example-mc
+kubectl delete -n splunk-operator clustermanager cm
 ```
 
 ## SmartStore Index Management
