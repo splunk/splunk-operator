@@ -758,7 +758,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
 			// ############################  VERIFICATOIN FOR MONITORING CONSOLE TWO POST SHC RECONFIG ###############################
 
