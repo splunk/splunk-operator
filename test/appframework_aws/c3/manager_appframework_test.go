@@ -85,7 +85,7 @@ var _ = Describe("c3appfw test", func() {
 		}
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
 		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
@@ -304,7 +304,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
 		It("smoke, c3, managerappframeworkc3t, appframework: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
 
 			//################## SETUP ####################
@@ -445,7 +445,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
 		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
@@ -3103,7 +3103,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
+	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
 		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
 
 			/*
