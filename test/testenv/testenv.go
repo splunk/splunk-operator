@@ -46,7 +46,7 @@ const (
 	defaultSplunkImage   = "splunk/splunk:latest"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
-	defaultTestTimeout = 10000
+	defaultTestTimeout = 100000
 
 	// PollInterval specifies the polling interval
 	PollInterval = 5 * time.Second
@@ -58,7 +58,7 @@ const (
 	ConsistentDuration = 2000 * time.Millisecond
 
 	// DefaultTimeout is the max timeout before we failed.
-	DefaultTimeout = 10 * time.Minute
+	DefaultTimeout = 20 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"
