@@ -16,15 +16,16 @@ package client
 
 import (
 	"context"
-	"crypto/tls"
+	//"crypto/tls"
 	"encoding/json"
 	"io"
-	"net/http"
+	//"net/http"
 	"os"
 
 	//"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -58,12 +59,12 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (*storage.Client,
 	scopedLog := reqLogger.WithName("InitGCSClient")
 
 	// Enforcing minimum version TLS1.2
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
-	}
-	tr.ForceAttemptHTTP2 = true
+	//tr := &http.Transport{
+	//	TLSClientConfig: &tls.Config{
+	//		MinVersion: tls.VersionTLS12,
+	//	},
+	//}
+	//tr.ForceAttemptHTTP2 = true
 	//httpClient := &http.Client{
 	//	Transport: tr,
 	//	Timeout:   appFrameworkHttpclientTimeout * time.Second,
@@ -133,14 +134,20 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 		Delimiter: "/",
 	}
 
+	startAfterFound := gcsClient.StartAfter == "" // If StartAfter is empty, skip this check
 	it := gcsClient.Client.Bucket(gcsClient.BucketName).Objects(ctx, query)
 	//var objects []*storage.ObjectAttrs
 	var objects []RemoteObject
+	maxKeys := 4000 // Limit the number of objects manually
 
-	for {
+	for count := 0; count < maxKeys; {
 		obj, err := it.Next()
-		if err != nil {
+		if err != iterator.Done {
 			break
+		}
+		if err != nil {
+			scopedLog.Error(err, "Error fetching object from GCS", "GCS Bucket", gcsClient.BucketName)
+			return remoteDataClientResponse, err
 		}
 		// Map GCS object attributes to RemoteObject
 		remoteObj := RemoteObject{
@@ -150,7 +157,16 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 			Size:         &obj.Size,
 			StorageClass: &obj.StorageClass,
 		}
+		// Implement "StartAfter" logic to skip objects until the desired one is found
+		if !startAfterFound {
+			if obj.Name == gcsClient.StartAfter {
+				startAfterFound = true // Start adding objects after this point
+			}
+			continue
+		}
+
 		objects = append(objects, remoteObj)
+		count++
 	}
 	
 	tmp, err := json.Marshal(objects)
