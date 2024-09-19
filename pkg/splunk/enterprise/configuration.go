@@ -1655,14 +1655,14 @@ func isValidStorageType(storage string) bool {
 
 // isValidProvider checks if the provider specified is valid and supported
 func isValidProvider(provider string) bool {
-	return provider != "" && (provider == "aws" || provider == "minio" || provider == "azure")
+	return provider != "" && (provider == "aws" || provider == "minio" || provider == "azure" || provider == "gcloud")
 }
 
 // Valid provider for s3 are aws and minio
 // Valid provider for blob is azure
 func isValidProviderForStorageType(storageType string, provider string) bool {
 	return ((storageType == "s3" && (provider == "aws" || provider == "minio")) ||
-		(storageType == "blob" && provider == "azure"))
+		(storageType == "blob" && (provider == "azure" || provider == "gcloud")))
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec

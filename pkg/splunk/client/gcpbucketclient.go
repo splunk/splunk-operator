@@ -21,9 +21,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"time"
+
+	//"time"
 
 	"cloud.google.com/go/storage"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -62,12 +64,25 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (*storage.Client,
 		},
 	}
 	tr.ForceAttemptHTTP2 = true
-	httpClient := &http.Client{
-		Transport: tr,
-		Timeout:   appFrameworkHttpclientTimeout * time.Second,
-	}
+	//httpClient := &http.Client{
+	//	Transport: tr,
+	//	Timeout:   appFrameworkHttpclientTimeout * time.Second,
+	//}
 
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(gcpCredentials), option.WithHTTPClient(httpClient))
+	var client *storage.Client
+	var err error
+	if len(gcpCredentials) == 0 {
+		client, err = storage.NewClient(ctx)
+	} else  {
+		//client, err = storage.NewClient(ctx, option.WithCredentialsFile(gcpCredentials), option.WithHTTPClient(httpClient))
+		var creds google.Credentials
+		err = json.Unmarshal([]byte(gcpCredentials), &creds)
+		if err != nil {
+			scopedLog.Error(err, "secret key.json value is not json parsable")
+			return nil, err
+		}
+		client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
+	}
 	if err != nil {
 		scopedLog.Error(err, "Failed to initialize a GCS client.")
 		return nil, err
@@ -77,16 +92,22 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (*storage.Client,
 	return client, nil
 }
 
+// InitAWSClientWrapper is a wrapper around InitClientSession
+func InitGcloudClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+	client, _ := InitGCSClient(ctx, secretAccessKey)
+	return client
+}
+
 // NewGCSClient returns a GCS client
 func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
-	client, err := InitGCSClient(ctx, gcpCredentials)
+	client, err := InitGCSClient(ctx, secretAccessKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return &GCSClient{
 		BucketName:     bucketName,
-		GCPCredentials: gcpCredentials,
+		GCPCredentials: secretAccessKey,
 		Prefix:         prefix,
 		StartAfter:     startAfter,
 		Client:         client,
@@ -95,8 +116,8 @@ func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string,
 
 // RegisterGCSClient will add the corresponding function pointer to the map
 func RegisterGCSClient() {
-	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewGCSClient}
-	RemoteDataClientsMap["gcs"] = wrapperObject
+	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewGCSClient, GetInitFunc: InitGcloudClientWrapper}
+	RemoteDataClientsMap["gcloud"] = wrapperObject
 }
 
 // GetAppsList get the list of apps from remote storage
@@ -113,20 +134,25 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 	}
 
 	it := gcsClient.Client.Bucket(gcsClient.BucketName).Objects(ctx, query)
-	var objects []*storage.ObjectAttrs
+	//var objects []*storage.ObjectAttrs
+	var objects []RemoteObject
 
 	for {
 		obj, err := it.Next()
 		if err != nil {
 			break
 		}
-		if err != nil {
-			scopedLog.Error(err, "Unable to list items in bucket", "GCS Bucket", gcsClient.BucketName)
-			return remoteDataClientResponse, err
+		// Map GCS object attributes to RemoteObject
+		remoteObj := RemoteObject{
+			Etag:         &obj.Etag,
+			Key:          &obj.Name,
+			LastModified: &obj.Updated,
+			Size:         &obj.Size,
+			StorageClass: &obj.StorageClass,
 		}
-		objects = append(objects, obj)
+		objects = append(objects, remoteObj)
 	}
-
+	
 	tmp, err := json.Marshal(objects)
 	if err != nil {
 		scopedLog.Error(err, "Failed to marshal GCS response", "GCS Bucket", gcsClient.BucketName)

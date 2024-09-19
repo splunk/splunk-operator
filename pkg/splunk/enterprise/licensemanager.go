@@ -46,6 +46,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyLicenseManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	type contextKey string
+	const eventPublisherKey contextKey = "eventPublisher"
+	ctx = context.WithValue(ctx, eventPublisherKey, eventPublisher)
 	cr.Kind = "LicenseManager"
 
 	var err error

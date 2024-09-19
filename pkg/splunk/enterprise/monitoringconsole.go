@@ -50,6 +50,9 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	type contextKey string
+	const eventPublisherKey contextKey = "eventPublisher"
+	ctx = context.WithValue(ctx, eventPublisherKey, eventPublisher)
 	cr.Kind = "MonitoringConsole"
 
 	if cr.Status.ResourceRevMap == nil {

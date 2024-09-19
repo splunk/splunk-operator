@@ -49,6 +49,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	type contextKey string
+	const eventPublisherKey contextKey = "eventPublisher"
+	ctx = context.WithValue(ctx, eventPublisherKey, eventPublisher)
 	cr.Kind = "Standalone"
 
 	var err error
