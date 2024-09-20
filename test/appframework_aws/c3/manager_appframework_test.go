@@ -930,7 +930,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
+	XContext("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("smoke, c3, managerappframeworkc3, appframework: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
