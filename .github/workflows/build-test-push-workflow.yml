@@ -164,7 +164,7 @@ jobs:
       fail-fast: false
       matrix:
         test: [
-                #basic,
+                #basic#,
                 #appframeworks1,
                 managerappframeworkc3,
                 #managerappframeworkm4,
