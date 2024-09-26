@@ -328,7 +328,7 @@ var _ = Describe("c3appfw test", func() {
 			}
 
 			// Upload V1 apps to S3 for Monitoring Console
-			oldImage := "splunk/splunk:9.0.5"
+			oldImage := "Refer to RELATED_SPLUNK_IMAGE_ENTERPRISE"
 			newImage := "splunk/splunk:latest"
 
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
