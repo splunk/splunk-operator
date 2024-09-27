@@ -273,7 +273,7 @@ var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
 func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
@@ -314,7 +314,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
 		if err != nil {
-			eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("couldn't retrieve shc_secret from secret data %s", err.Error()))
+			//eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("couldn't retrieve shc_secret from secret data %s", err.Error()))
 			return fmt.Errorf("couldn't retrieve shc_secret from secret data")
 		}
 
@@ -326,13 +326,13 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Retrieve admin password from Pod
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
-			eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("couldn't retrieve admin password from secret data %s", err.Error()))
+			//eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("couldn't retrieve admin password from secret data %s", err.Error()))
 			return fmt.Errorf("couldn't retrieve admin password from secret data")
 		}
 
 		// If shc secret is different from namespace scoped secret change it
 		if shcSecret != nsShcSecret {
-			eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("shcSecret different from namespace scoped secret, changing shc secret for pod %s", shPodName))
+			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("shcSecret different from namespace scoped secret, changing shc secret for pod %s", shPodName))
 			scopedLog.Info("shcSecret different from namespace scoped secret, changing shc secret")
 			// If shc secret already changed, ignore
 			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
@@ -357,7 +357,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Restarted Splunk for pod %s", shPodName))
+			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Restarted Splunk for pod %s", shPodName))
 			scopedLog.Info("Restarted Splunk")
 
 			// Set the shc_secret changed flag to true
@@ -385,7 +385,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("admin password changed on the splunk instance of pod %s", shPodName))
+			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("admin password changed on the splunk instance of pod %s", shPodName))
 			scopedLog.Info("admin password changed on the splunk instance of pod")
 
 			// Get client for Pod and restart splunk instance on pod
@@ -394,7 +394,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Restarted Splunk for pod %s", shPodName))
+			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Restarted Splunk for pod %s", shPodName))
 			scopedLog.Info("Restarted Splunk")
 
 			// Set the adminSecretChanged changed flag to true
@@ -411,7 +411,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				return err
 			}
 			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
-			eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Secret mounted on pod %s added to map", shPodName))
+			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Secret mounted on pod %s added to map", shPodName))
 			scopedLog.Info("Secret mounted on pod(to be changed) added to map")
 		}
 	}
@@ -428,7 +428,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
 			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
 			if err != nil {
-				eventPublisher.Warning(ctx, "GetSecretByName", fmt.Sprintf("could not read secret %s, reason - %v", podSecretName, err))
+				//eventPublisher.Warning(ctx, "GetSecretByName", fmt.Sprintf("could not read secret %s, reason - %v", podSecretName, err))
 				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}
 			podSecret.Data["password"] = []byte(nsAdminSecret)
@@ -436,7 +436,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("admin password changed on the secret mounted on pod %s", podSecretName))
+			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("admin password changed on the secret mounted on pod %s", podSecretName))
 			scopedLog.Info("admin password changed on the secret mounted on pod")
 		}
 	}
@@ -447,7 +447,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
 func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
@@ -471,7 +471,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		eventPublisher.Normal(ctx, "Update", fmt.Sprintf("Search head cluster is not ready %s", err))
+		//eventPublisher.Normal(ctx, "Update", fmt.Sprintf("Search head cluster is not ready %s", err))
 		mgr.log.Info("Search head cluster is not ready", "reason ", err)
 		return enterpriseApi.PhasePending, nil
 	}
