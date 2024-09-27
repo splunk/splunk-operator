@@ -65,28 +65,38 @@ func TestAzureBlobClient_GetAppsList(t *testing.T) {
 	// Create a runtime pager for simulating paginated blob listing
 	runtimePager := runtime.NewPager(runtime.PagingHandler[azblob.ListBlobsFlatResponse]{
 		More: func(resp azblob.ListBlobsFlatResponse) bool {
-			return resp.Segment != nil && len(resp.Segment.BlobItems) > 0
+			// If resp is zero value (before first fetch), we have more pages
+			if resp.Segment == nil && resp.NextMarker == nil {
+				return true
+			}
+			// If NextMarker is not empty, we have more pages
+			if resp.NextMarker != nil && *resp.NextMarker != "" {
+				return true
+			}
+			// No more pages
+			return false
 		},
 		Fetcher: func(ctx context.Context, cur *azblob.ListBlobsFlatResponse) (azblob.ListBlobsFlatResponse, error) {
 			if cur == nil {
 				// Simulate the first page of blobs
 				return azblob.ListBlobsFlatResponse{
-					ListBlobsFlatSegmentResponse: azblob.ListBlobsFlatSegmentResponse{
+					ListBlobsFlatSegmentResponse: container.ListBlobsFlatSegmentResponse{
 						ContainerName:   to.Ptr("test-container"),
 						ServiceEndpoint: to.Ptr("https://test.blob.core.windows.net/"),
-						Marker:          to.Ptr(""),
 						MaxResults:      to.Ptr(int32(1)),
-						NextMarker:      to.Ptr(""),
-						Prefix:          to.Ptr(""),
-						//Segment  : nil,
 						Segment: &container.BlobFlatListSegment{
 							BlobItems: []*container.BlobItem{
 								{
 									Name:       to.Ptr("blob1"),
-									Properties: &container.BlobProperties{ETag: to.Ptr(azcore.ETag("etag1")), LastModified: to.Ptr(time.Now()), ContentLength: to.Ptr(int64(100))},
+									Properties: &container.BlobProperties{
+										ETag: to.Ptr(azcore.ETag("etag1")), 
+										LastModified: to.Ptr(time.Now()), 
+										ContentLength: to.Ptr(int64(100)),
+									},
 								},
 							},
 						},
+						NextMarker : nil,
 					},
 				}, nil
 			}
