@@ -1,4 +1,5 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2022 Splunk Inc.
+// All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,7 +33,7 @@ var _ RemoteDataClient = &GCSClient{}
 
 // GCSClientInterface defines the interface for GCS client operations
 type GCSClientInterface interface {
-	Bucket(bucketName string) *storage.BucketHandle
+	Bucket(bucketName string) BucketHandleInterface
 }
 
 // GCSClientWrapper wraps the actual GCS client to implement the interface
@@ -41,13 +42,14 @@ type GCSClientWrapper struct {
 }
 
 // Bucket is a wrapper around the actual GCS Bucket method
-func (g *GCSClientWrapper) Bucket(bucketName string) *storage.BucketHandle {
-	return g.Client.Bucket(bucketName)
+func (g *GCSClientWrapper) Bucket(bucketName string) BucketHandleInterface {
+	return &RealBucketHandleWrapper{BucketHandle: g.Client.Bucket(bucketName)}
 }
 
 // BucketHandleInterface is an interface for wrapping both real and mock bucket handles
 type BucketHandleInterface interface {
-	Objects(ctx context.Context, query *storage.Query) *storage.ObjectIterator
+	Objects(ctx context.Context, query *storage.Query) ObjectIteratorInterface
+	Object(name string) ObjectHandleInterface
 }
 
 // RealBucketHandleWrapper wraps the real *storage.BucketHandle and implements BucketHandleInterface
@@ -56,8 +58,43 @@ type RealBucketHandleWrapper struct {
 }
 
 // Objects delegates to the real *storage.BucketHandle's Objects method
-func (r *RealBucketHandleWrapper) Objects(ctx context.Context, query *storage.Query) *storage.ObjectIterator {
-	return r.BucketHandle.Objects(ctx, query)
+func (r *RealBucketHandleWrapper) Objects(ctx context.Context, query *storage.Query) ObjectIteratorInterface {
+	return &RealObjectIteratorWrapper{Iterator: r.BucketHandle.Objects(ctx, query)}
+}
+
+// Object delegates to the real *storage.BucketHandle's Object method
+func (r *RealBucketHandleWrapper) Object(name string) ObjectHandleInterface {
+	return &RealObjectHandleWrapper{ObjectHandle: r.BucketHandle.Object(name)}
+}
+
+// ObjectIteratorInterface defines the interface for object iterators
+type ObjectIteratorInterface interface {
+	Next() (*storage.ObjectAttrs, error)
+}
+
+// RealObjectIteratorWrapper wraps the real *storage.ObjectIterator and implements ObjectIteratorInterface
+type RealObjectIteratorWrapper struct {
+	Iterator *storage.ObjectIterator
+}
+
+// Next delegates to the real *storage.ObjectIterator's Next method
+func (r *RealObjectIteratorWrapper) Next() (*storage.ObjectAttrs, error) {
+	return r.Iterator.Next()
+}
+
+// ObjectHandleInterface defines the interface for object handles
+type ObjectHandleInterface interface {
+	NewReader(ctx context.Context) (io.ReadCloser, error)
+}
+
+// RealObjectHandleWrapper wraps the real *storage.ObjectHandle and implements ObjectHandleInterface
+type RealObjectHandleWrapper struct {
+	ObjectHandle *storage.ObjectHandle
+}
+
+// NewReader delegates to the real *storage.ObjectHandle's NewReader method
+func (r *RealObjectHandleWrapper) NewReader(ctx context.Context) (io.ReadCloser, error) {
+	return r.ObjectHandle.NewReader(ctx)
 }
 
 // GCSClient is a client to implement GCS specific APIs
@@ -67,7 +104,7 @@ type GCSClient struct {
 	Prefix         string
 	StartAfter     string
 	Client         GCSClientInterface
-	BucketHandle   BucketHandleInterface // Use the new interface here
+	BucketHandle   BucketHandleInterface
 }
 
 // InitGCSClient initializes and returns a GCS client implementing GCSClientInterface
@@ -80,7 +117,7 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterfa
 
 	if len(gcpCredentials) == 0 {
 		client, err = storage.NewClient(ctx)
-	} else if len(gcpCredentials) > 0 {
+	} else {
 		var creds google.Credentials
 		err = json.Unmarshal([]byte(gcpCredentials), &creds)
 		if err != nil {
@@ -112,10 +149,7 @@ func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string,
 		return nil, err
 	}
 
-	realBucketHandle := client.Bucket(bucketName)
-	bucketHandleWrapper := &RealBucketHandleWrapper{
-		BucketHandle: realBucketHandle,
-	}
+	bucketHandle := client.Bucket(bucketName)
 
 	return &GCSClient{
 		BucketName:     bucketName,
@@ -123,7 +157,7 @@ func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string,
 		Prefix:         prefix,
 		StartAfter:     startAfter,
 		Client:         client,
-		BucketHandle:   bucketHandleWrapper,
+		BucketHandle:   bucketHandle,
 	}, nil
 }
 
@@ -133,7 +167,6 @@ func RegisterGCSClient() {
 	RemoteDataClientsMap["gcloud"] = wrapperObject
 }
 
-// GetAppsList gets the list of apps from remote storage
 // GetAppsList gets the list of apps from remote storage
 func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	reqLogger := log.FromContext(ctx)
@@ -147,14 +180,14 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 		Delimiter: "/",
 	}
 
-	startAfterFound := gcsClient.StartAfter == ""    // If StartAfter is empty, skip this check
-	it := gcsClient.BucketHandle.Objects(ctx, query) // Use BucketHandleInterface here
+	startAfterFound := gcsClient.StartAfter == "" // If StartAfter is empty, skip this check
+	it := gcsClient.BucketHandle.Objects(ctx, query)
 
-	var objects []RemoteObject
+	var objects []*RemoteObject
 	maxKeys := 4000 // Limit the number of objects manually
 
 	for count := 0; count < maxKeys; {
-		obj, err := it.Next()
+		objAttrs, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
@@ -163,38 +196,28 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 			return remoteDataClientResponse, err
 		}
 
-		// Map GCS object attributes to RemoteObject
-		remoteObj := RemoteObject{
-			Etag:         &obj.Etag,
-			Key:          &obj.Name,
-			LastModified: &obj.Updated,
-			Size:         &obj.Size,
-			StorageClass: &obj.StorageClass,
-		}
-
 		// Implement "StartAfter" logic to skip objects until the desired one is found
 		if !startAfterFound {
-			if obj.Name == gcsClient.StartAfter {
+			if objAttrs.Name == gcsClient.StartAfter {
 				startAfterFound = true // Start adding objects after this point
 			}
 			continue
+		}
+
+		// Map GCS object attributes to RemoteObject
+		remoteObj := &RemoteObject{
+			Etag:         &objAttrs.Etag,
+			Key:          &objAttrs.Name,
+			LastModified: &objAttrs.Updated,
+			Size:         &objAttrs.Size,
+			StorageClass: &objAttrs.StorageClass,
 		}
 
 		objects = append(objects, remoteObj)
 		count++
 	}
 
-	tmp, err := json.Marshal(objects)
-	if err != nil {
-		scopedLog.Error(err, "Failed to marshal GCS response", "GCS Bucket", gcsClient.BucketName)
-		return remoteDataClientResponse, err
-	}
-
-	err = json.Unmarshal(tmp, &(remoteDataClientResponse.Objects))
-	if err != nil {
-		scopedLog.Error(err, "Failed to unmarshal GCS response", "GCS Bucket", gcsClient.BucketName)
-		return remoteDataClientResponse, err
-	}
+	remoteDataClientResponse.Objects = objects
 
 	return remoteDataClientResponse, nil
 }
@@ -212,11 +235,11 @@ func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest Rem
 	}
 	defer file.Close()
 
-	obj := gcsClient.Client.Bucket(gcsClient.BucketName).Object(downloadRequest.RemoteFile)
-	reader, err := obj.NewReader(ctx)
+	objHandle := gcsClient.BucketHandle.Object(downloadRequest.RemoteFile)
+	reader, err := objHandle.NewReader(ctx)
 	if err != nil {
 		scopedLog.Error(err, "Unable to download item", "RemoteFile", downloadRequest.RemoteFile)
-		os.Remove(downloadRequest.RemoteFile)
+		os.Remove(downloadRequest.LocalFile)
 		return false, err
 	}
 	defer reader.Close()

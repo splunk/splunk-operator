@@ -39,10 +39,37 @@ type AzureBlobClient struct {
 	ContainerClient    ContainerClientInterface // Use the interface here
 }
 
+// Define an interface for BlobClient
+type BlobClientInterface interface {
+	DownloadStream(ctx context.Context, options *azblob.DownloadStreamOptions) (azblob.DownloadStreamResponse, error)
+}
+
 // Define an interface that matches the methods you need from the container client
 type ContainerClientInterface interface {
 	NewListBlobsFlatPager(options *azblob.ListBlobsFlatOptions) *runtime.Pager[azblob.ListBlobsFlatResponse]
-	NewBlobClient(blobName string) *blob.Client
+	NewBlobClient(blobName string) BlobClientInterface
+}
+
+// Wrap the actual blob.Client to implement BlobClientInterface
+type BlobClientWrapper struct {
+	*blob.Client
+}
+
+func (b *BlobClientWrapper) DownloadStream(ctx context.Context, options *azblob.DownloadStreamOptions) (azblob.DownloadStreamResponse, error) {
+	return b.Client.DownloadStream(ctx, options)
+}
+
+// Wrap the actual container.Client to implement ContainerClientInterface
+type ContainerClientWrapper struct {
+	*container.Client
+}
+
+func (c *ContainerClientWrapper) NewListBlobsFlatPager(options *azblob.ListBlobsFlatOptions) *runtime.Pager[azblob.ListBlobsFlatResponse] {
+	return c.Client.NewListBlobsFlatPager(options)
+}
+
+func (c *ContainerClientWrapper) NewBlobClient(blobName string) BlobClientInterface {
+	return &BlobClientWrapper{c.Client.NewBlobClient(blobName)}
 }
 
 // NewAzureBlobClient initializes and returns an AzureBlob client using Azure SDK
@@ -53,7 +80,16 @@ func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountNa
 	scopedLog.Info("Creating AzureBlobClient using Azure SDK")
 
 	// Create the blob service client
-	serviceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccountName)
+	var serviceURL string
+	if endpoint != "" {
+		serviceURL = endpoint
+	} else if region != "" {
+		// Adjust the service URL based on the region
+		serviceURL = fmt.Sprintf("https://%s.blob.%s.core.windows.net/", storageAccountName, region)
+	} else {
+		serviceURL = fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccountName)
+	}
+
 	credential, err := azblob.NewSharedKeyCredential(storageAccountName, secretAccessKey)
 	if err != nil {
 		scopedLog.Error(err, "Failed to create SharedKeyCredential")
@@ -66,6 +102,7 @@ func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountNa
 		scopedLog.Error(err, "Failed to create ContainerClient")
 		return nil, err
 	}
+	containerClientWrapper := &ContainerClientWrapper{containerClient}
 
 	return &AzureBlobClient{
 		BucketName:         bucketName,
@@ -74,7 +111,7 @@ func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountNa
 		Prefix:             prefix,
 		StartAfter:         startAfter,
 		Endpoint:           endpoint,
-		ContainerClient:    containerClient, // Assign the real client here
+		ContainerClient:    containerClientWrapper, // Assign the real client here
 	}, nil
 }
 
@@ -88,6 +125,11 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	// Set prefix and other options if needed
 	options := container.ListBlobsFlatOptions{
 		Prefix: &client.Prefix,
+	}
+
+	// Set the Marker if StartAfter is provided
+	if client.StartAfter != "" {
+		options.Marker = &client.StartAfter
 	}
 
 	// Use ListBlobsFlatPager to paginate through the blobs in the container

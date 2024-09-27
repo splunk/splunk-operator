@@ -47,9 +47,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyLicenseMaster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
-	type contextKey string
-	const eventPublisherKey contextKey = "eventPublisher"
-	ctx = context.WithValue(ctx, eventPublisherKey, eventPublisher)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	var err error
 	// Initialize phase

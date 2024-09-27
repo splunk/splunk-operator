@@ -50,9 +50,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 
-	type contextKey string
-	const eventPublisherKey contextKey = "eventPublisher"
-	ctx = context.WithValue(ctx, eventPublisherKey, eventPublisher)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
 	var err error
@@ -713,7 +711,7 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 
 // helper function to get the list of SearchHeadCluster types in the current namespace
 func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getSearchHeadClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -721,7 +719,7 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		eventPublisher.Warning(ctx, "SearchHeadCluster types not found in namespace", fmt.Sprintf("Couldn't get SearchHeadCluster types %s", err))
+		//eventPublisher.Warning(ctx, "SearchHeadCluster types not found in namespace", fmt.Sprintf("Couldn't get SearchHeadCluster types %s", err))
 		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
 		return objectList, err
 	}

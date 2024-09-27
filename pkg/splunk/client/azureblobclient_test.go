@@ -43,9 +43,9 @@ func (m *MockContainerClient) NewListBlobsFlatPager(options *azblob.ListBlobsFla
 	return args.Get(0).(*runtime.Pager[azblob.ListBlobsFlatResponse])
 }
 
-func (m *MockContainerClient) NewBlobClient(blobName string) *blob.Client {
+func (m *MockContainerClient) NewBlobClient(blobName string) BlobClientInterface {
 	args := m.Called(blobName)
-	return args.Get(0).(*blob.Client)
+	return args.Get(0).(BlobClientInterface)
 }
 
 // MockBlobClient is a mock for the Azure BlobClient
@@ -87,16 +87,16 @@ func TestAzureBlobClient_GetAppsList(t *testing.T) {
 						Segment: &container.BlobFlatListSegment{
 							BlobItems: []*container.BlobItem{
 								{
-									Name:       to.Ptr("blob1"),
+									Name: to.Ptr("blob1"),
 									Properties: &container.BlobProperties{
-										ETag: to.Ptr(azcore.ETag("etag1")), 
-										LastModified: to.Ptr(time.Now()), 
+										ETag:          to.Ptr(azcore.ETag("etag1")),
+										LastModified:  to.Ptr(time.Now()),
 										ContentLength: to.Ptr(int64(100)),
 									},
 								},
 							},
 						},
-						NextMarker : nil,
+						NextMarker: nil,
 					},
 				}, nil
 			}

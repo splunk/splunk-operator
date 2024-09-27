@@ -17,6 +17,8 @@ package common
 
 import "fmt"
 
+type contextKey string
+
 const (
 	// namespace scoped secret name
 	namespaceScopedSecretNameTemplateStr = "splunk-%s-secret"
@@ -113,6 +115,8 @@ const (
 // AppDownloadVolume is the mount volume on the operator pod to temporarily download apps
 // sgontla: ToDo: being a constant will be a blocker for the UT to pass. relaxing a bit. Find a better alternative
 var AppDownloadVolume string = "/opt/splunk/appframework/"
+
+var EventPublisherKey contextKey = "eventPublisher"
 
 // GetVersionedSecretName returns a versioned secret name
 func GetVersionedSecretName(versionedSecretIdentifier string, version string) string {

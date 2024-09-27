@@ -56,9 +56,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
-	type contextKey string
-	const eventPublisherKey contextKey = "eventPublisher"
-	ctx = context.WithValue(ctx, eventPublisherKey, eventPublisher)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
 	var err error
