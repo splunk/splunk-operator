@@ -16,17 +16,13 @@ package client
 
 import (
 	"context"
-	//"crypto/tls"
 	"encoding/json"
 	"io"
-	//"net/http"
 	"os"
 
-	//"time"
-
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/iterator"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -34,14 +30,34 @@ import (
 // blank assignment to verify that GCSClient implements RemoteDataClient
 var _ RemoteDataClient = &GCSClient{}
 
-// SplunkGCSClient is an interface to GCS client
-type SplunkGCSClient interface {
-	ListObjects(ctx context.Context, query *storage.Query) *storage.ObjectIterator
+// GCSClientInterface defines the interface for GCS client operations
+type GCSClientInterface interface {
+	Bucket(bucketName string) *storage.BucketHandle
 }
 
-// SplunkGCSDownloadClient is used to download the apps from remote storage
-type SplunkGCSDownloadClient interface {
-	Download(ctx context.Context, w io.WriterAt, obj *storage.ObjectHandle) error
+// GCSClientWrapper wraps the actual GCS client to implement the interface
+type GCSClientWrapper struct {
+	Client *storage.Client
+}
+
+// Bucket is a wrapper around the actual GCS Bucket method
+func (g *GCSClientWrapper) Bucket(bucketName string) *storage.BucketHandle {
+	return g.Client.Bucket(bucketName)
+}
+
+// BucketHandleInterface is an interface for wrapping both real and mock bucket handles
+type BucketHandleInterface interface {
+	Objects(ctx context.Context, query *storage.Query) *storage.ObjectIterator
+}
+
+// RealBucketHandleWrapper wraps the real *storage.BucketHandle and implements BucketHandleInterface
+type RealBucketHandleWrapper struct {
+	BucketHandle *storage.BucketHandle
+}
+
+// Objects delegates to the real *storage.BucketHandle's Objects method
+func (r *RealBucketHandleWrapper) Objects(ctx context.Context, query *storage.Query) *storage.ObjectIterator {
+	return r.BucketHandle.Objects(ctx, query)
 }
 
 // GCSClient is a client to implement GCS specific APIs
@@ -50,50 +66,40 @@ type GCSClient struct {
 	GCPCredentials string
 	Prefix         string
 	StartAfter     string
-	Client         *storage.Client
+	Client         GCSClientInterface
+	BucketHandle   BucketHandleInterface // Use the new interface here
 }
 
-// InitGCSClient initializes and returns a GCS client
-func InitGCSClient(ctx context.Context, gcpCredentials string) (*storage.Client, error) {
+// InitGCSClient initializes and returns a GCS client implementing GCSClientInterface
+func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterface, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("InitGCSClient")
 
-	// Enforcing minimum version TLS1.2
-	//tr := &http.Transport{
-	//	TLSClientConfig: &tls.Config{
-	//		MinVersion: tls.VersionTLS12,
-	//	},
-	//}
-	//tr.ForceAttemptHTTP2 = true
-	//httpClient := &http.Client{
-	//	Transport: tr,
-	//	Timeout:   appFrameworkHttpclientTimeout * time.Second,
-	//}
-
 	var client *storage.Client
 	var err error
+
 	if len(gcpCredentials) == 0 {
 		client, err = storage.NewClient(ctx)
-	} else  {
-		//client, err = storage.NewClient(ctx, option.WithCredentialsFile(gcpCredentials), option.WithHTTPClient(httpClient))
+	} else if len(gcpCredentials) > 0 {
 		var creds google.Credentials
 		err = json.Unmarshal([]byte(gcpCredentials), &creds)
 		if err != nil {
-			scopedLog.Error(err, "secret key.json value is not json parsable")
+			scopedLog.Error(err, "Secret key.json value is not parsable")
 			return nil, err
 		}
 		client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
 	}
+
 	if err != nil {
 		scopedLog.Error(err, "Failed to initialize a GCS client.")
 		return nil, err
 	}
 
 	scopedLog.Info("GCS Client initialization successful.")
-	return client, nil
+	return &GCSClientWrapper{Client: client}, nil
 }
 
-// InitAWSClientWrapper is a wrapper around InitClientSession
+// InitGcloudClientWrapper is a wrapper around InitGCSClient
 func InitGcloudClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 	client, _ := InitGCSClient(ctx, secretAccessKey)
 	return client
@@ -106,12 +112,18 @@ func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string,
 		return nil, err
 	}
 
+	realBucketHandle := client.Bucket(bucketName)
+	bucketHandleWrapper := &RealBucketHandleWrapper{
+		BucketHandle: realBucketHandle,
+	}
+
 	return &GCSClient{
 		BucketName:     bucketName,
 		GCPCredentials: secretAccessKey,
 		Prefix:         prefix,
 		StartAfter:     startAfter,
 		Client:         client,
+		BucketHandle:   bucketHandleWrapper,
 	}, nil
 }
 
@@ -121,7 +133,8 @@ func RegisterGCSClient() {
 	RemoteDataClientsMap["gcloud"] = wrapperObject
 }
 
-// GetAppsList get the list of apps from remote storage
+// GetAppsList gets the list of apps from remote storage
+// GetAppsList gets the list of apps from remote storage
 func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("GetAppsList")
@@ -134,21 +147,22 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 		Delimiter: "/",
 	}
 
-	startAfterFound := gcsClient.StartAfter == "" // If StartAfter is empty, skip this check
-	it := gcsClient.Client.Bucket(gcsClient.BucketName).Objects(ctx, query)
-	//var objects []*storage.ObjectAttrs
+	startAfterFound := gcsClient.StartAfter == ""    // If StartAfter is empty, skip this check
+	it := gcsClient.BucketHandle.Objects(ctx, query) // Use BucketHandleInterface here
+
 	var objects []RemoteObject
 	maxKeys := 4000 // Limit the number of objects manually
 
 	for count := 0; count < maxKeys; {
 		obj, err := it.Next()
-		if err != iterator.Done {
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
 			scopedLog.Error(err, "Error fetching object from GCS", "GCS Bucket", gcsClient.BucketName)
 			return remoteDataClientResponse, err
 		}
+
 		// Map GCS object attributes to RemoteObject
 		remoteObj := RemoteObject{
 			Etag:         &obj.Etag,
@@ -157,6 +171,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 			Size:         &obj.Size,
 			StorageClass: &obj.StorageClass,
 		}
+
 		// Implement "StartAfter" logic to skip objects until the desired one is found
 		if !startAfterFound {
 			if obj.Name == gcsClient.StartAfter {
@@ -168,7 +183,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 		objects = append(objects, remoteObj)
 		count++
 	}
-	
+
 	tmp, err := json.Marshal(objects)
 	if err != nil {
 		scopedLog.Error(err, "Failed to marshal GCS response", "GCS Bucket", gcsClient.BucketName)
@@ -184,7 +199,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 	return remoteDataClientResponse, nil
 }
 
-// DownloadApp downloads the app from remote storage to local file system
+// DownloadApp downloads the app from remote storage to the local file system
 func (gcsClient *GCSClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", downloadRequest.RemoteFile, "localFile",
