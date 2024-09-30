@@ -111,7 +111,7 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2024-07-31T16:34:59Z"
+    createdAt: "2024-08-21T21:13:21Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
@@ -808,14 +808,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: splunk/splunk:9.2.2
+                  value: docker.io/splunk/splunk:9.3.0
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:2.6.0
+                image: docker.io/splunk/splunk-operator:2.6.1
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -928,7 +928,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: splunk/splunk:9.2.2
+  - image: docker.io/splunk/splunk:9.3.0
     name: splunk-enterprise
   replaces: splunk-operator.v2.5.2
   version: 2.6.0
