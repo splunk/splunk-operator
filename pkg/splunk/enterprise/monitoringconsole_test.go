@@ -72,7 +72,6 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
@@ -82,19 +81,15 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
-
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
-
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
-
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
@@ -107,11 +102,18 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		client.InNamespace("test"),
 		client.MatchingLabels(labels),
 	}
-	listmockCall := []spltest.MockFuncCall{
-		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[10]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0]}}
+	listOpts2 := []client.ListOption{
+		client.InNamespace("test"),
+	}
+
+	listmockCall := []spltest.MockFuncCall{
+		{ListOpts: listOpts},
+		{ListOpts: listOpts2},
+	}
+
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[10]}, "List": {listmockCall[0], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1]}}
 
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{

@@ -298,29 +298,6 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("ApplyIndexerClusterManager should not have returned error; err=%v", err)
 	}
 
-	// mointoring console statefulset is created here
-	_, err = ApplyMonitoringConsole(ctx, client, &mc)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
-	}
-	// create pods for cluster manager
-	createPods(t, ctx, client, "monitoring-console", fmt.Sprintf("splunk-%s-monitoring-console-0", lm.Name), lm.Namespace, lm.Spec.Image)
-	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-monitoring-console", lm.Name), lm.Namespace)
-	// mointoring console statefulset is created here
-	_, err = ApplyMonitoringConsole(ctx, client, &mc)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
-	}
-
-	err = client.Get(ctx, namespacedName, &mc)
-	if err != nil {
-		t.Errorf("get should not have returned error; err=%v", err)
-	}
-
-	if mc.Status.Phase != enterpriseApi.PhaseReady {
-		t.Errorf("mc is not in ready state")
-	}
-
 	// Monitoring console is ready now, now this should crete statefulset but statefulset is not in ready phase
 	shc.Status.TelAppInstalled = true
 	_, err = ApplySearchHeadCluster(ctx, client, &shc)
@@ -429,6 +406,29 @@ func TestUpgradePathValidation(t *testing.T) {
 	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
 		return extraEnv, err
+	}
+
+	// mointoring console statefulset is created here
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+	// create pods for cluster manager
+	createPods(t, ctx, client, "monitoring-console", fmt.Sprintf("splunk-%s-monitoring-console-0", lm.Name), lm.Namespace, lm.Spec.Image)
+	updateStatefulSetsInTest(t, ctx, client, 1, fmt.Sprintf("splunk-%s-monitoring-console", lm.Name), lm.Namespace)
+	// mointoring console statefulset is created here
+	_, err = ApplyMonitoringConsole(ctx, client, &mc)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
+	}
+
+	err = client.Get(ctx, namespacedName, &mc)
+	if err != nil {
+		t.Errorf("get should not have returned error; err=%v", err)
+	}
+
+	if mc.Status.Phase != enterpriseApi.PhaseReady {
+		t.Errorf("mc is not in ready state")
 	}
 
 	// ------- Step2 starts here -----
