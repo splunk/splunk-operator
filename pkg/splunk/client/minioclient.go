@@ -51,12 +51,12 @@ type MinioClient struct {
 }
 
 // NewMinioClient returns an Minio client
-func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+func NewMinioClient(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, pathStyleUrl bool, fn GetInitFunc) (RemoteDataClient, error) {
 
 	var s3SplunkClient SplunkMinioClient
 	var err error
 
-	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey)
+	cl := fn(ctx, endpoint, accessKeyID, secretAccessKey, false)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an Minio S3 client")
 		return nil, err
@@ -82,7 +82,7 @@ func RegisterMinioClient() {
 }
 
 // InitMinioClientWrapper is a wrapper around InitMinioClientSession
-func InitMinioClientWrapper(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string) interface{} {
+func InitMinioClientWrapper(ctx context.Context, appS3Endpoint string, accessKeyID string, secretAccessKey string, pathStyleUrl bool) interface{} {
 	return InitMinioClientSession(ctx, appS3Endpoint, accessKeyID, secretAccessKey)
 }
 

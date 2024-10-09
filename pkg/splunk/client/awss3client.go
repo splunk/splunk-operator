@@ -32,7 +32,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	log "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // blank assignment to verify that AWSS3Client implements RemoteDataClient
@@ -76,12 +76,12 @@ func GetRegion(ctx context.Context, endpoint string, region *string) error {
 }
 
 // InitAWSClientWrapper is a wrapper around InitClientSession
-func InitAWSClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-	return InitAWSClientSession(ctx, region, accessKeyID, secretAccessKey)
+func InitAWSClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string, pathStyleUrl bool) interface{} {
+	return InitAWSClientSession(ctx, region, accessKeyID, secretAccessKey, pathStyleUrl)
 }
 
 // InitAWSClientSession initializes and returns a client session object
-func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
+func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, secretAccessKey string, pathStyleUrl bool) SplunkAWSS3Client {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("InitAWSClientSession")
 
@@ -112,10 +112,13 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 	endpoint = regEndSl[1]
 
 	config := &aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(3),
-		HTTPClient: &httpClient,
+		Region:           aws.String(region),
+		MaxRetries:       aws.Int(3),
+		HTTPClient:       &httpClient,
+		S3ForcePathStyle: aws.Bool(pathStyleUrl),
 	}
+
+	scopedLog.Info("Setting up AWS SDK client", "regionWithEndpoint", regionWithEndpoint, "pathStyleUrl", pathStyleUrl)
 
 	if accessKeyID != "" && secretAccessKey != "" {
 		config.WithCredentials(credentials.NewStaticCredentials(
@@ -146,7 +149,7 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 }
 
 // NewAWSS3Client returns an AWS S3 client
-func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
+func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, pathStyleUrl bool, fn GetInitFunc) (RemoteDataClient, error) {
 	var s3SplunkClient SplunkAWSS3Client
 	var err error
 
@@ -160,8 +163,7 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 	}
 
 	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
-
-	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey)
+	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey, pathStyleUrl)
 	if cl == nil {
 		err = fmt.Errorf("failed to create an AWS S3 client")
 		return nil, err
@@ -171,6 +173,7 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 	if !ok {
 		return nil, fmt.Errorf("unable to get s3 client")
 	}
+
 	downloader := s3manager.NewDownloaderWithClient(cl.(*s3.S3))
 
 	return &AWSS3Client{
