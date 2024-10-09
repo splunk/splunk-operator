@@ -808,7 +808,7 @@ var _ = Describe("Monitoring Console test", func() {
 		})
 	})
 
-	XContext("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
+	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
 		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
 			/*
 				Test Steps
