@@ -212,6 +212,48 @@ NAME          REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS   
 idc-example   IndexerCluster/example   16%/50%   5         10        5          15m
 ```
 
+#### Specifying pod disruption budgets(PDB) for Splunk Enterprise Deployments
+You can also create [Pod Disruption Budgets](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/#pod-disruption-budgets) to help you run highly available applications even during disruptions. For example we can target a PDB at a standalone which ensures atleast three standalone pods are present inspite of [disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/):
+
+```yaml
+cat <<EOF | kubectl apply -f -
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: demo
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 3
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: stdaln-pdb
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: splunk-demo-standalone
+EOF
+```
+
+```
+$ kubectl describe pdb stdaln-pdb
+Name:           stdaln-pdb
+Namespace:      splunk-operator
+Min available:  3
+Selector:       app.kubernetes.io/instance=splunk-demo-standalone
+Status:
+    Allowed disruptions:  0
+    Current:              3
+    Desired:              3
+    Total:                3
+Events:                   <none>
+```
+**Note**: We are targeting the standalone using the labels uniquely created by Splunk Operator for the Standalone CR instance. A similar 
+procedure can be used for other Splunk Enterprise CRs.
+
 #### Create a search head for your index cluster
 To create a standalone search head that is preconfigured to search your indexer cluster, add the `clusterManagerRef` parameter:
 
