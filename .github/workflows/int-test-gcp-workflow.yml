@@ -1,0 +1,270 @@
+name: Integration Test on GCP Workflow
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - google-object-storage-support
+
+jobs:
+  build-operator-image:
+    runs-on: ubuntu-latest
+    env:
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}  # Updated for Artifact Registry
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Load Environment Variables
+        id: dotenv
+        uses: falti/dotenv-action@v4.0.0
+        with:
+          path: .env  # Adjust the path if your dotenv file is located elsewhere
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2.5.0
+
+      - name: Install Operator SDK
+        run: |
+          ARCH=$(case $(uname -m) in
+            x86_64) echo -n amd64 ;;
+            aarch64) echo -n arm64 ;;
+            *) echo -n $(uname -m) ;;
+          esac)
+          OS=$(uname | awk '{print tolower($0)}')
+          OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+          curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+          chmod +x operator-sdk_${OS}_${ARCH}
+          sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          echo ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }} | docker login -u _json_key --password-stdin https://${{ secrets.GCP_ARTIFACT_REGISTRY }}
+
+      - name: Build Splunk Operator Image
+        run: |
+          make docker-build IMG=${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+
+      - name: Push Splunk Operator Image to Artifact Registry
+        run: |
+          echo "Uploading Image to Artifact Registry :: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
+          make docker-push IMG=${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+
+  setup-gke-cluster:
+    runs-on: ubuntu-latest
+    needs: build-operator-image
+    if: always()  # Ensures this job runs regardless of build-operator-image success or failure
+    env:
+      CLUSTER_WORKERS: 5
+      TEST_CLUSTER_PLATFORM: gcp
+      CLUSTER_PROVIDER: gcp
+      ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      CLUSTER_NAME: gke-${{ github.run_id }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.GCP_REGION }}
+      GCP_ZONE: ${{ secrets.GCP_ZONE }}
+      GCP_NETWORK: default  # Adjust if using a custom network
+      GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Load Environment Variables
+        id: dotenv
+        uses: falti/dotenv-action@v4.0.0
+        with:
+          path: .env
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set GCP Project
+        run: |
+          gcloud config set project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Create GKE Cluster
+        run: |
+          gcloud container clusters create ${{ env.CLUSTER_NAME }} \
+            --zone ${{ env.GCP_ZONE }} \
+            --num-nodes ${{ env.CLUSTER_WORKERS }} \
+            --machine-type e2-standard-4 \
+            --enable-ip-alias \
+            --network ${{ env.GCP_NETWORK }} \
+            --subnetwork ${{ env.GCP_SUBNETWORK }} \
+            --scopes "https://www.googleapis.com/auth/cloud-platform"
+
+      - name: Get Kubernetes Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Allow Pulling from Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+
+  int-tests-appframeworkgcp:
+    runs-on: ubuntu-latest
+    needs: setup-gke-cluster
+    env:
+      CLUSTER_NODES: 2
+      CLUSTER_WORKERS: 5
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      TEST_FOCUS: gcp_sanity
+      TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
+      TEST_CLUSTER_PLATFORM: gcp
+      CLUSTER_PROVIDER: gcp
+      ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      CLUSTER_NAME: gke-${{ github.run_id }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ secrets.GCP_REGION }}
+      GCP_ZONE: ${{ secrets.GCP_ZONE }}
+      GCP_NETWORK: default
+      GCP_SUBNETWORK: default
+      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      CLUSTER_WIDE: "true"
+      GCP_SERVICE_ACCOUNT_ENABLED: "false"
+    steps:
+      - name: Set Test Cluster Name
+        run: |
+          echo "TEST_CLUSTER_NAME=gke-${{ github.run_id }}" >> $GITHUB_ENV
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Load Environment Variables
+        id: dotenv
+        uses: falti/dotenv-action@v4.0.0
+        with:
+          path: .env
+
+      - name: Change Splunk Enterprise Image on Main Branches
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set GCP Project
+        run: |
+          gcloud config set project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Install Kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
+
+      - name: Install Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'  # Specify the Python version if needed
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+      - name: Install Go Lint
+        run: |
+          go version
+          go install golang.org/x/lint/golint@latest
+
+      - name: Install Ginkgo
+        run: |
+          make setup/ginkgo
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2.5.0
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          echo ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }} | docker login -u _json_key --password-stdin https://${{ env.REGISTRY_REPOSITORY }}
+
+      - name: Pull Splunk Enterprise Image
+        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+
+      - name: Pull Splunk Operator Image Locally
+        run: |
+          docker pull ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker tag ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
+
+      - name: Tag and Push Splunk Enterprise Image to Artifact Registry
+        run: |
+          docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+          docker push ${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
+
+      - name: Get Kubernetes Credentials
+        run: |
+          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
+
+      - name: Install Metrics Server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+      - name: Install Kubernetes Dashboard
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+
+      - name: Setup Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Run Integration Tests
+        run: |
+          make int-test
+
+      - name: Collect Test Logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p /tmp/pod_logs
+          find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
+
+      - name: Archive Pod Logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: splunk-pods-logs-artifacts-appframeworkgcp
+          path: /tmp/pod_logs/**
+
+      - name: Cleanup Test Case Artifacts
+        if: ${{ always() }}
+        run: |
+          tools/cleanup.sh
+          make cleanup
+          make clean
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [int-tests-appframeworkgcp]
+    if: always()  # Ensures this job runs regardless of previous job outcomes
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Delete GKE Cluster
+        run: |
+          gcloud container clusters delete gke-${{ github.run_id }} --zone ${{ secrets.GCP_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} --quiet
