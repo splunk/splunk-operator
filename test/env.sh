@@ -2,15 +2,15 @@
 
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
 : "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
-: "${CLUSTER_PROVIDER:=kind}"
-: "${CLUSTER_NAME:=integration-test-cluster-eks}"
+: "${CLUSTER_PROVIDER:=eks}"
+: "${CLUSTER_NAME:=smoke-test-cicd-cluster-eks}"
 : "${NUM_WORKERS:=3}"
 : "${NUM_NODES:=2}"
 : "${COMMIT_HASH:=}"
 # AWS specific variables
-: "${ECR_REGISTRY:=}"
-: "${VPC_PUBLIC_SUBNET_STRING:=}"
-: "${VPC_PRIVATE_SUBNET_STRING:=}"
+: "${ECR_REGISTRY:=http://667741767953.dkr.ecr.us-west-2.amazonaws.com/integration-test/}"
+: "${VPC_PUBLIC_SUBNET_STRING:=subnet-06aef8e454c0e5542,subnet-0a183703673334cb4,subnet-0439b4f08a984ae52}"
+: "${VPC_PRIVATE_SUBNET_STRING:=subnet-0f4af6d2f36fbe73f,subnet-0f81e66593dfb8dd8,subnet-024d4edaabe647586}"
 : "${EKS_CLUSTER_K8_VERSION:=1.26}"
 # Below env variables required to run license master test cases
 : "${ENTERPRISE_LICENSE_S3_PATH:=}"
