@@ -1,8 +1,7 @@
 module github.com/splunk/splunk-operator
 
-go 1.22
+go 1.23
 
-toolchain go1.22.6
 
 require (
 	cloud.google.com/go/storage v1.10.0
