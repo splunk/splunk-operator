@@ -89,6 +89,28 @@ type AzureBlobClient struct {
 
 // NewAzureBlobClient initializes and returns an AzureBlobClient.
 // It supports both Shared Key and Azure AD authentication based on provided credentials.
+// NewAzureBlobClient initializes a new AzureBlobClient with the provided parameters.
+// It supports both Shared Key and Azure AD authentication methods.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - bucketName: The name of the Azure Blob container.
+//   - storageAccountName: The name of the Azure Storage account.
+//   - secretAccessKey: The shared key for authentication (optional; leave empty to use Azure AD).
+//   - prefix: The prefix for blob listing (optional).
+//   - startAfter: The marker for blob listing (optional).
+//   - region: The Azure region (e.g., "eastus").
+//   - endpoint: A custom endpoint (optional).
+//   - initFunc: An initialization function to be executed (optional).
+//
+// Returns:
+//   - RemoteDataClient: An interface representing the remote data client.
+//   - error: An error object if the initialization fails.
+//
+// The function logs the initialization process and selects the appropriate
+// authentication method based on the presence of the secretAccessKey. If the
+// secretAccessKey is provided, Shared Key authentication is used; otherwise,
+// Azure AD authentication is used.
 func NewAzureBlobClient(
 	ctx context.Context,
 	bucketName string, // Azure Blob container name
