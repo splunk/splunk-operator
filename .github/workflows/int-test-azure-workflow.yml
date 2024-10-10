@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - google-object-storage-support
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
