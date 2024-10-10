@@ -219,7 +219,7 @@ jobs:
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
       - name: Archive Pod Logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4.4.0
         with:
           name: "splunk-pods-logs--artifacts-appframeworkazure"
           path: "/tmp/pod_logs/**"

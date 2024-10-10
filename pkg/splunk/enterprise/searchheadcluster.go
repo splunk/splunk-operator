@@ -314,8 +314,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Retrieve shc_secret password from Pod
 		shcSecret, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "shc_secret")
 		if err != nil {
-			//eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("couldn't retrieve shc_secret from secret data %s", err.Error()))
-			return fmt.Errorf("couldn't retrieve shc_secret from secret data")
+			return fmt.Errorf("couldn't retrieve shc_secret from secret data, error: %s", err.Error())
 		}
 
 		// set the targetPodName here
@@ -326,8 +325,7 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		// Retrieve admin password from Pod
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, shPodName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
-			//eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("couldn't retrieve admin password from secret data %s", err.Error()))
-			return fmt.Errorf("couldn't retrieve admin password from secret data")
+			return fmt.Errorf("couldn't retrieve admin password from secret data, error: %s", err.Error())
 		}
 
 		// If shc secret is different from namespace scoped secret change it
