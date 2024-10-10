@@ -600,8 +600,10 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
+	errMsg := fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") + ", error: invalid secret data"
+
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "shc_secret") {
+	if err.Error() != errMsg {
 		t.Errorf("Couldn't recognize missing shc_secret %s", err.Error())
 	}
 
@@ -621,8 +623,9 @@ func TestApplyShcSecret(t *testing.T) {
 		t.Errorf("Couldn't update resource")
 	}
 
+	errMsg = fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") + ", error: invalid secret data"
 	err = ApplyShcSecret(ctx, mgr, 1, mockPodExecClient)
-	if err.Error() != fmt.Sprintf(splcommon.SecretTokenNotRetrievable, "admin password") {
+	if err.Error() != errMsg {
 		t.Errorf("Couldn't recognize missing admin password %s", err.Error())
 	}
 
