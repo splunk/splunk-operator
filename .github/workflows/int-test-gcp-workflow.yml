@@ -78,7 +78,7 @@ jobs:
       TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_NAME: gke-${{ github.run_id }}
+      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
@@ -137,7 +137,7 @@ jobs:
       TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_NAME: gke-${{ github.run_id }}
+      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
@@ -267,6 +267,8 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     needs: [int-tests-appframeworkgcp]
+    env:
+      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}
     if: always()  # Ensures this job runs regardless of previous job outcomes
     steps:
       - name: Authenticate to GCP
@@ -276,4 +278,4 @@ jobs:
 
       - name: Delete GKE Cluster
         run: |
-          gcloud container clusters delete gke-${{ github.run_id }} --zone ${{ secrets.GCP_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} --quiet
+          gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ secrets.GCP_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} --quiet
