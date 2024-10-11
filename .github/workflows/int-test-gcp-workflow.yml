@@ -20,7 +20,7 @@ jobs:
 
       - name: Load Environment Variables
         id: dotenv
-        uses: falti/dotenv-action@v4.0.0
+        uses: cicirello/dotenv-action@v2
         with:
           path: .env  # Adjust the path if your dotenv file is located elsewhere
 

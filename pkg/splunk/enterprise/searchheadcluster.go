@@ -480,7 +480,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 
 	// start by quarantining the pod
 	result, err := mgr.PrepareRecycle(ctx, n)
@@ -490,7 +490,7 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 	// pod is quarantined; decommission it
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-	eventPublisher.Normal(ctx, "PrepareScaleDown", fmt.Sprintf("Removing member from search head cluster %s", memberName))
+	//eventPublisher.Normal(ctx, "PrepareScaleDown", fmt.Sprintf("Removing member from search head cluster %s", memberName))
 	mgr.log.Info("Removing member from search head cluster", "memberName", memberName)
 	c := mgr.getClient(ctx, n)
 	err = c.RemoveSearchHeadClusterMember()
@@ -504,14 +504,14 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 // PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
 		// Detain search head
-		eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Detaining search head cluster member %s", memberName))
+		//eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Detaining search head cluster member %s", memberName))
 		mgr.log.Info("Detaining search head cluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
@@ -520,7 +520,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 			// During the Recycle, our reconcile loop is entered multiple times. If the Pod is already down,
 			// there is a chance of readiness probe failing, in which case, even the podExec will not be successful.
 			// So, just log the message, and ignore the error.
-			eventPublisher.Normal(ctx, "SetProbeLevel", fmt.Sprintf("Setting Probe level failed. Probably, the Pod is already down %s", err.Error()))
+			//eventPublisher.Normal(ctx, "SetProbeLevel", fmt.Sprintf("Setting Probe level failed. Probably, the Pod is already down %s", err.Error()))
 			mgr.log.Info("Setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
 		}
 
@@ -530,10 +530,10 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		// Wait until active searches have drained
 		searchesComplete := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount+mgr.cr.Status.Members[n].ActiveRealtimeSearchCount == 0
 		if searchesComplete {
-			eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Detention complete %s", memberName))
+			//eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Detention complete %s", memberName))
 			mgr.log.Info("Detention complete", "memberName", memberName)
 		} else {
-			eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Waiting for active searches to complete %s", memberName))
+			//eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Waiting for active searches to complete %s", memberName))
 			mgr.log.Info("Waiting for active searches to complete", "memberName", memberName)
 		}
 		return searchesComplete, nil
@@ -549,7 +549,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 
 // FinishRecycle for searchHeadClusterPodManager completes recycle event for search head pod; it returns true when complete
 func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Members[n].Status {
@@ -559,7 +559,7 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 	case "ManualDetention":
 		// release from detention
-		eventPublisher.Normal(ctx, "FinishRecycle", fmt.Sprintf("Releasing search head cluster member from detention %s", memberName))
+		//eventPublisher.Normal(ctx, "FinishRecycle", fmt.Sprintf("Releasing search head cluster member from detention %s", memberName))
 		mgr.log.Info("Releasing search head cluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
@@ -571,7 +571,7 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 // getClient for searchHeadClusterPodManager returns a SplunkClient for the member n
 func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("searchHeadClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
@@ -585,7 +585,7 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("Couldn't retrieve the admin password from Pod %s", memberName))
+		//eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("Couldn't retrieve the admin password from Pod %s", memberName))
 		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
@@ -606,7 +606,7 @@ var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterP
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
-	eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
+	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	// populate members status using REST API to get search head cluster member info
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
@@ -627,7 +627,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
 		} else {
-			eventPublisher.Warning(ctx, "GetSearchHeadClusterMemberInfo", fmt.Sprintf("Unable to retrieve search head cluster member info %s", err))
+			//eventPublisher.Warning(ctx, "GetSearchHeadClusterMemberInfo", fmt.Sprintf("Unable to retrieve search head cluster member info %s", err))
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
 		}
 
@@ -642,7 +642,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
 			} else {
-				eventPublisher.Warning(ctx, "GetSearchHeadCaptainInfo", fmt.Sprintf("Unable to retrieve captain info %s", err))
+				//eventPublisher.Warning(ctx, "GetSearchHeadCaptainInfo", fmt.Sprintf("Unable to retrieve captain info %s", err))
 				mgr.cr.Status.CaptainReady = false
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
 			}
