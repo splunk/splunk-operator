@@ -159,6 +159,9 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 		if vol.Provider == "azure" {
 			accessKeyID = string(remoteDataClientSecret.Data["azure_sa_name"])
 			secretAccessKey = string(remoteDataClientSecret.Data["azure_sa_secret_key"])
+		} else if vol.Provider == "gcloud" {
+			accessKeyID = "key.json"
+			secretAccessKey = string(remoteDataClientSecret.Data[accessKeyID])
 		} else {
 			accessKeyID = string(remoteDataClientSecret.Data["s3_access_key"])
 			secretAccessKey = string(remoteDataClientSecret.Data["s3_secret_key"])

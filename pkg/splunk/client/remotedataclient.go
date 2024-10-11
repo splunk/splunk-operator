@@ -122,6 +122,8 @@ func RegisterRemoteDataClient(ctx context.Context, provider string) {
 		RegisterMinioClient()
 	case "azure":
 		RegisterAzureBlobClient()
+	case "gcloud":
+		RegisterGCSClient()
 	default:
 		scopedLog.Error(nil, "Invalid provider specified", "provider", provider)
 	}
