@@ -376,6 +376,14 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 		} else {
 			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
 		}
+	case "gcp":
+		managedID := os.Getenv("AZURE_MANAGED_ID_ENABLED")
+		if managedID == "false" {
+			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzure(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "blob")}
+		} else {
+			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetGCPEndpoint(), "gcp", "blob")}
+		}
+
 	default:
 		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' ")
 	}

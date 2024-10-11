@@ -11,19 +11,22 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.s
-package azures1appfw
+package gcps1appfw
 
 import (
 	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -32,7 +35,7 @@ var _ = Describe("s1appfw test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var azTestDir string
+	var s3TestDir string
 	var uploadedApps []string
 	var appSourceName string
 	var appSourceVolumeName string
@@ -47,7 +50,7 @@ var _ = Describe("s1appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
-		azTestDir = "s1appfw-" + testenv.RandomDNSName(4)
+		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
@@ -59,11 +62,9 @@ var _ = Describe("s1appfw test", func() {
 		if deployment != nil {
 			deployment.Teardown()
 		}
-
-		// Delete files uploaded to Azure
+		// Delete files uploaded to S3
 		if !testcaseEnvInst.SkipTeardown {
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 		}
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
@@ -78,14 +79,14 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframeworkazure, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to Azure for Monitoring Console
+			   * Upload V1 apps to S3 for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			   * Upload V1 apps to Azure for Standalone
+			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ V1 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
@@ -98,7 +99,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############ UPGRADE V2 APPS ###########
-			   * Upload V2 apps to Azure App Source
+			   * Upload V2 apps to S3 App Source
 			   ############ V2 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE  ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -112,28 +113,24 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR MONITORING CONSOLE ####################
 
-			// Upload V1 apps to Azure for Monitoring Console
+			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 
-			azTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Maximum apps to be downloaded in parallel
-			maxConcurrentAppDownloads := 5
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			appFrameworkSpecMC.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -150,16 +147,18 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to Azure for Standalone
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
-			azTestDir = "s1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			// Upload V1 apps to S3 for Standalone
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
+
+			// Maximum apps to be downloaded in parallel
+			maxConcurrentAppDownloads := 5
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -188,6 +187,15 @@ var _ = Describe("s1appfw test", func() {
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+
 			// ############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
@@ -198,22 +206,22 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############## UPGRADE APPS #################
 
-			// Delete apps on Azure
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
-
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
+
+			// Upload V2 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -242,64 +250,65 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
-			################## SETUP ####################
-			* Upload V2 apps to Azure for Monitoring Console
-			* Create app source for Monitoring Console
-			* Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			* Upload V2 apps to Azure for Standalone
-			* Create app source for Standalone
-			* Prepare and deploy Standalone with app framework and wait for the pod to be ready
-			############ INITIAL VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled  and version by running splunk cmd
-			############# DOWNGRADE APPS ################
-			* Upload V1 apps on Azure
-			* Wait for Monitoring Console and Standalone pods to be ready
-			########## DOWNGRADE VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled  and version by running splunk cmd
+			   ################## SETUP ####################
+			   * Upload V2 apps to S3 for Monitoring Console
+			   * Create app source for Monitoring Console
+			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
+			   * Upload V2 apps to S3 for Standalone
+			   * Create app source for Standalone
+			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
+			   ############ INITIAL VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
+			   ############# DOWNGRADE APPS ################
+			   * Upload V1 apps on S3
+			   * Wait for Monitoring Console and Standalone pods to be ready
+			   ########## DOWNGRADE VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
 			*/
 
 			//################## SETUP ####################
-			// Upload V2 apps to Azure
+			// Upload V2 apps to S3
 			appVersion := "V2"
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			appFileList := testenv.GetAppFileList(appListV2)
-			azTestDir = "azures1appfw-" + testenv.RandomDNSName(4)
+			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
 
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -317,7 +326,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -354,26 +363,25 @@ var _ = Describe("s1appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############# DOWNGRADE APPS ################
-			// Delete apps on Azure
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			// Upload V1 apps to Azure for Standalone and Monitoring Console
+			// Upload V1 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV1)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -405,73 +413,71 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+		It("s1, smoke, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
-			################## SETUP ####################
-			* Upload apps on Azure
-			* Create 2 app sources for Monitoring Console and Standalone
-			* Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			* Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
-			########## INITIAL VERIFICATION #############
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled  and version by running splunk cmd
-			############### SCALING UP ##################
-			* Scale up Standalone
-			* Wait for Monitoring Console and  Standalone to be ready
-			########### SCALING UP VERIFICATION #########
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled  and version by running splunk cmd
-			############## SCALING DOWN #################
-			* Scale down Standalone
-			* Wait for Monitoring Console and Standalone to be ready
-			########### SCALING DOWN VERIFICATION #######
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled  and version by running splunk cmd
+			   ################## SETUP ####################
+			   * Upload apps on S3
+			   * Create 2 app sources for Monitoring Console and Standalone
+			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
+			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
+			   ########## INITIAL VERIFICATION #############
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
+			   ############### SCALING UP ##################
+			   * Scale up Standalone
+			   * Wait for Monitoring Console and  Standalone to be ready
+			   ########### SCALING UP VERIFICATION #########
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
+			   ############## SCALING DOWN #################
+			   * Scale down Standalone
+			   * Wait for Monitoring Console and Standalone to be ready
+			   ########### SCALING DOWN VERIFICATION #######
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled  and version by running splunk cmd
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to Azure for Standalone and Monitoring Console
+			// Upload V1 apps to S3 for Standalone and Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -485,18 +491,17 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload apps to Azure for Standalone
-			azTestDir := "azures1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
+			// Upload apps to S3 for Standalone
+			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -524,6 +529,12 @@ var _ = Describe("s1appfw test", func() {
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
@@ -532,6 +543,10 @@ var _ = Describe("s1appfw test", func() {
 			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			//Delete configMap Object
+			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to delete ConfigMao", "ConfigMap name", ConfigMapName)
 
 			//############### SCALING UP ##################
 			// Scale up Standalone instance
@@ -557,6 +572,14 @@ var _ = Describe("s1appfw test", func() {
 
 			//########### SCALING UP VERIFICATION #########
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 
 			//############## SCALING DOWN #################
 			// Scale down Standalone instance
@@ -585,58 +608,57 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
+		It("s1, integration, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
 
 			/* Test Steps
-			################## SETUP ####################
-			* Upload apps on Azure
-			* Create app source for Standalone
-			* Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
-			########## INITIAL VERIFICATION #############
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled and version by running splunk cmd
-			############### SCALING UP ##################
-			* Scale up Standalone
-			* Wait for Standalone to be ready
-			############### UPGRADE APPS ################
-			* Upload V2 apps to Azure App Source
-			###### SCALING UP/UPGRADE VERIFICATIONS #####
-			* Verify Apps Downloaded in App Deployment Info
-			* Verify Apps Copied in App Deployment Info
-			* Verify App Package is deleted from Operator Pod
-			* Verify Apps Installed in App Deployment Info
-			* Verify App Package is deleted from Splunk Pod
-			* Verify App Directory in under splunk path
-			* Verify no pod resets triggered due to app install
-			* Verify App enabled and version by running splunk cmd
+			   ################## SETUP ####################
+			   * Upload apps on S3
+			   * Create app source for Standalone
+			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
+			   ########## INITIAL VERIFICATION #############
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled and version by running splunk cmd
+			   ############### SCALING UP ##################
+			   * Scale up Standalone
+			   * Wait for Standalone to be ready
+			   ############### UPGRADE APPS ################
+			   * Upload V2 apps to S3 App Source
+			   ###### SCALING UP/UPGRADE VERIFICATIONS #####
+			   * Verify Apps Downloaded in App Deployment Info
+			   * Verify Apps Copied in App Deployment Info
+			   * Verify App Package is deleted from Operator Pod
+			   * Verify Apps Installed in App Deployment Info
+			   * Verify App Package is deleted from Splunk Pod
+			   * Verify App Directory in under splunk path
+			   * Verify no pod resets triggered due to app install
+			   * Verify App enabled and version by running splunk cmd
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to Azure for Standalone
+			// Upload V1 apps to S3 for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload apps to Azure for Standalone
-			azTestDir := "azures1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
+			// Upload apps to S3 for Standalone
+			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -685,19 +707,18 @@ var _ = Describe("s1appfw test", func() {
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// ############## UPGRADE APPS #################
-			// Delete apps on Azure
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to Azure for Standalone and Monitoring Console
+			// Upload V2 apps to S3 for Standalone and Monitoring Console
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -721,37 +742,35 @@ var _ = Describe("s1appfw test", func() {
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework: can deploy a Standalone and have ES app installed", func() {
+		It("s1, integration, appframeworks1, appframework: can deploy a Standalone and have ES app installed", func() {
 
 			/* Test Steps
-			################## SETUP ####################
-			* Upload ES app to Azure
-			* Create App Source for Standalone
-			* Prepare and deploy Standalone and wait for the pod to be ready
-			################## VERIFICATION #############
-			* Verify ES app is installed on Standalone
+			   ################## SETUP ####################
+			   * Upload ES app to S3
+			   * Create App Source for Standalone
+			   * Prepare and deploy Standalone and wait for the pod to be ready
+			   ################## VERIFICATION #############
+			   * Verify ES app is installed on Standalone
 			*/
 
 			//################## SETUP ####################
 
-			// Download ES App from Azure
-			testcaseEnvInst.Log.Info("Download ES app from Azure")
+			// Download ES App from S3
+			testcaseEnvInst.Log.Info("Download ES app from S3")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
-
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
-			// Upload ES app to Azure
-			testcaseEnvInst.Log.Info("Upload ES app on Azure")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), "Unable to upload ES app to Azure test directory")
+			// Upload ES app to S3
+			testcaseEnvInst.Log.Info("Upload ES app on S3")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
 				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
@@ -773,6 +792,9 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone with App framework")
 
+			// Ensure Standalone goes to Ready phase
+			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
+
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
@@ -785,21 +807,21 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############## UPGRADE APPS #################
 
-			// Delete apps on Azure
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			uploadedApps = nil
 
-			// Download ES App from Azure
-			containerName = "/" + AzureDataContainer + "/" + AzureAppDirV2
-			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
+			// Download ES App from S3
+			testcaseEnvInst.Log.Info("Download updated ES app from S3")
+			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
 			// Upload V2 apps to S3 for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s ES app to Azure for Standalone", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s ES app to Azure test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s Es app to S3 for Standalone and Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s Es app to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -821,12 +843,12 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Create app source for Standalone
-			   * Add more apps than usual on Azure for this test
+			   * Add more apps than usual on S3 for this test
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############### VERIFICATION ################
 			   * Verify Apps Downloaded in App Deployment Info
@@ -845,22 +867,21 @@ var _ = Describe("s1appfw test", func() {
 			appFileList := testenv.GetAppFileList(appList)
 			appVersion := "V1"
 
-			// Download apps from Azure
-			testcaseEnvInst.Log.Info("Download bigger amount of apps from Azure for this test")
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			// Download apps from S3
+			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
-			// Upload apps to Azure
-			testcaseEnvInst.Log.Info("Upload bigger amount of apps to Azure for this test")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
+			// Upload apps to S3
+			testcaseEnvInst.Log.Info("Upload bigger amount of apps to S3 for this test")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -891,11 +912,11 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, smoke, appframeworkazures1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+		It("s1, smoke, appframeworks1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to Azure for Monitoring Console
+			   * Upload V1 apps to S3 for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Create app source for Standalone
@@ -910,7 +931,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled and version by running splunk cmd
 			     ############ UPGRADE V2 APPS ###########
-			   * Upload V2 apps to Azure App Source
+			   * Upload V2 apps to S3 App Source
 			   ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			   * Verify Apps are not updated
 			   ############ ENABLE MANUAL POLL ############
@@ -928,23 +949,23 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
-			// Upload V1 apps to Azure for Monitoring Console
+			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -960,14 +981,14 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V1 apps to Azure
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory", appVersion))
+			// Upload V1 apps to S3
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 0)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 0)
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1003,21 +1024,20 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### UPGRADE APPS ################
 
-			//Delete apps on Azure for new Apps
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			//Delete apps on S3 for new Apps
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			//Upload new Versioned Apps to Azure
+			//Upload new Versioned Apps to S3
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1070,11 +1090,11 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Add more apps than usual on Azure for this test
+			   * Add more apps than usual on S3 for this test
 			   * Split the App list into 2 segments with a common apps and uncommon apps for each Standalone
 			   * Create app source for 2 Standalones
 			   * Prepare and deploy Standalones with app framework and wait for the pod to be ready
@@ -1095,31 +1115,30 @@ var _ = Describe("s1appfw test", func() {
 			appList2 := append(appListV1, testenv.RestartNeededApps[:len(testenv.RestartNeededApps)/2]...)
 			appVersion := "V1"
 
-			// Download apps from Azure
-			testcaseEnvInst.Log.Info("Download the extra apps from Azure for this test")
+			// Download apps from S3
+			testcaseEnvInst.Log.Info("Download the extra apps from S3 for this test")
 			appFileList := testenv.GetAppFileList(testenv.RestartNeededApps)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
-			// Upload apps to Azure for first Standalone
-			testcaseEnvInst.Log.Info("Upload apps to Azure for 1st Standalone")
+			// Upload apps to S3 for first Standalone
+			testcaseEnvInst.Log.Info("Upload apps to S3 for 1st Standalone")
 			appFileListStandalone1 := testenv.GetAppFileList(appList1)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileListStandalone1)
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileListStandalone1, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload apps to Azure for second Standalone
-			testcaseEnvInst.Log.Info("Upload apps to Azure for 2nd Standalone")
-			azTestDirStandalone2 := "azures1appfw-2-" + testenv.RandomDNSName(4)
+			// Upload apps to S3 for second Standalone
+			testcaseEnvInst.Log.Info("Upload apps to S3 for 2nd Standalone")
+			s3TestDirStandalone2 := "s1appfw-2-" + testenv.RandomDNSName(4)
 			appFileListStandalone2 := testenv.GetAppFileList(appList2)
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirStandalone2, appFileListStandalone2)
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirStandalone2, appFileListStandalone2, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1133,7 +1152,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework Spec
 			appSourceNameStandalone2 := "appframework-2-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameStandalone2 := "appframework-test-volume-2-" + testenv.RandomDNSName(3)
-			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, azTestDirStandalone2, 60)
+			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1161,6 +1180,7 @@ var _ = Describe("s1appfw test", func() {
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			//############### VERIFICATION ################
+
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList1, CrAppFileList: appFileListStandalone1}
 			standalone2Pod := []string{fmt.Sprintf(testenv.StandalonePod, standalone2Name, 0)}
@@ -1171,42 +1191,41 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can add new apps to app source while install is in progress and have all apps installed", func() {
+		It("integration, s1, appframeworks1, appframework: can add new apps to app source while install is in progress and have all apps installed", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload V1 apps to Azure for Monitoring Console
+				* Upload V1 apps to S3 for Monitoring Console
 			    * Create app source for Monitoring Console
 			   	* Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-				* Upload big-size app to Azure for Standalone
+				* Upload big-size app to S3 for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				############## VERIFICATIONS ################
 				* Verify App installation is in progress on Standalone
-				* Upload more apps from Azure during bigger app install
+				* Upload more apps from S3 during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR MONITORING CONSOLE ####################
-			// Upload V1 apps to Azure for Monitoring Console
+			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1223,24 +1242,23 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from Azure
+			// Download all test apps from S3
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err = testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to Azure for Standalone
+			// Upload big-size app to S3 for Standalone
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Standalone")
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1262,12 +1280,12 @@ var _ = Describe("s1appfw test", func() {
 			// Verify App installation is in progress on Standalone
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
-			// Upload more apps to Azure for Standalone
+			// Upload more apps to S3 for Standalone
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload more apps to Azure for Standalone")
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), "Unable to upload more apps to Azure test directory for Standalone")
+			testcaseEnvInst.Log.Info("Upload more apps to S3 for Standalone")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for Standalone to be in READY status
@@ -1285,40 +1303,38 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload big-size app to Azure for Standalone
+				* Upload big-size app to S3 for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				* While app install is in progress, restart the operator
 				############## VERIFICATIONS ################
 				* Verify App installation is in progress on Standalone
-				* Upload more apps from Azure during bigger app install
+				* Upload more apps from S3 during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from Azure
+			// Download all test apps from S3
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to Azure for Standalone
-			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
+			// Upload big-size app to S3 for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1334,8 +1350,28 @@ var _ = Describe("s1appfw test", func() {
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), spec)
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			if err != nil {
+				for i := 1; i < 10; i++ {
+					_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+					if err == nil {
+						continue
+					} else {
+						time.Sleep(1 * time.Second)
+					}
+				}
+			}
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+
 			// Verify App installation is in progress on Standalone
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgInstallPending)
+
+			//Delete configMap Object
+			err = testenv.DeleteConfigMap(testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to delete ConfigMao", "ConfigMap name", ConfigMapName)
 
 			// Delete Operator pod while Install in progress
 			testenv.DeleteOperatorPod(testcaseEnvInst)
@@ -1351,44 +1387,50 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
+
+			// ############ Verify livenessProbe and readinessProbe config object and scripts############
+			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for livenessProbe and readinessProbe", "ConfigMap name", ConfigMapName)
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload big-size app to Azure for Standalone
+				* Upload big-size app to S3 for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				* While app download is in progress, restart the operator
 				############## VERIFICATIONS ################
 				* Verify App download is in progress on Standalone
-				* Upload more apps from Azure during bigger app install
+				* Upload more apps from S3 during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from Azure
+			// Download all test apps from S3
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to Azure for Standalone
-			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-
-			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
+			// Upload big-size app to S3 for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1425,11 +1467,11 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install an app, then disable it by using a disabled version of the app and then remove it from app source", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to Azure for Standalone
+			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ VERIFICATION###########
@@ -1441,19 +1483,18 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App Directory in under splunk path
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
-			   ############ Upload Disabled App ###########
-			   * Download disabled app from Azure
-			   * Delete the app from Azure
+			   * Disable the app
+			   * Delete the app from S3
 			   * Check for repo state in App Deployment Info
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to Azure for Standalone
+			// Upload V1 apps to S3 for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1461,7 +1502,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1490,14 +1531,13 @@ var _ = Describe("s1appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// Verify repo state on App to be disabled to be 1 (i.e app present on Azure bucket)
+			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 1, appFileName[0])
 
 			// Disable the app
-			testcaseEnvInst.Log.Info("Download disabled version of apps from Azure for this test")
-			testenv.DisableAppsOnAzure(ctx, downloadDirV1, appFileName, azTestDir)
+			testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDir)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
@@ -1509,24 +1549,23 @@ var _ = Describe("s1appfw test", func() {
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, []string{standalonePodName}, testcaseEnvInst.GetName(), appName, "disabled", false)
 
-			// Delete the file from Azure
-			azFilepath := "/" + AzureContainer + "/" + filepath.Join(azTestDir, appFileName[0])
-			azureBlobClient := &testenv.AzureBlobClient{}
-			err = azureBlobClient.DeleteFileOnAzure(ctx, azFilepath, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on Azure test directory", appFileName[0]))
+			// Delete the file from S3
+			s3Filepath := filepath.Join(s3TestDir, appFileName[0])
+			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName[0]))
 
-			// Verify repo state is set to 2 (i.e app deleted from Azure bucket)
+			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 2, appFileName[0])
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect Azure credentials", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to Azure for Standalone
+			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ V1 APP VERIFICATION FOR STANDALONE###########
@@ -1542,7 +1581,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Create App framework volume with random credentials and apply to Spec
 			   * Check for changes in App phase to determine if next poll has been triggered
 			   ############ UPGRADE V2 APPS ###########
-			   * Upload V2 apps to Azure App Source
+			   * Upload V2 apps to S3 App Source
 			   * Check no apps are updated as auth key is incorrect
 			   ############  Modify secret key to correct one###########
 			   * Apply spec with correct credentails
@@ -1559,12 +1598,12 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to Azure for Standalone
+			// Upload V1 apps to S3 for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1572,7 +1611,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1590,9 +1629,10 @@ var _ = Describe("s1appfw test", func() {
 			secretref := standalone.Spec.AppFrameworkConfig.VolList[0].SecretRef
 			Expect(err).To(Succeed(), "Unable to deploy Standalone instance with App framework")
 
-			secretStruct, _ := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
+			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
+			Expect(err).To(Succeed(), "Unable to obtain secret object")
 			secretData := secretStruct.Data
-			modifiedSecretData := map[string][]byte{"azure_sa_name": []byte(testenv.RandomDNSName(5)), "azure_sa_secret_key": []byte(testenv.RandomDNSName(5))}
+			modifiedSecretData := map[string][]byte{"s3_access_key": []byte(testenv.RandomDNSName(5)), "s3_secret_key": []byte(testenv.RandomDNSName(5))}
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -1613,19 +1653,18 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// ############## UPGRADE APPS #################
-			// Delete apps on Azure
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on Azure", appVersion))
-			azureBlobClient := &testenv.AzureBlobClient{}
-			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			// Delete apps on S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to Azure for Standalone
+			// Upload V2 apps to S3 for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1659,17 +1698,17 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			################## SETUP ####################
-			* Upload app to Azure for Standalone
+			* Upload app to S3 for Standalone
 			* Create app source for Standalone
 			* Prepare and deploy Standalone
 			* While app download is completed, upload new versions of the apps
 			############## VERIFICATIONS ################
 			* Verify App download is in completed on Standalone
-			* Upload updated app to Azure as pervious app download is complete
+			* Upload updated app to S3 as pervious app download is complete
 			* Verify app is installed on Standalone
 			############## UPGRADE VERIFICATIONS ################
 			* Wait for next poll to trigger on Standalone
@@ -1677,23 +1716,22 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download test app from Azure
+			// Download test app from S3
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload apps to Azure for Standalone
-			testcaseEnvInst.Log.Info("Upload apps to Azure for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), "Unable to upload app to Azure test directory for Standalone")
+			// Upload apps to S3 for Standalone
+			testcaseEnvInst.Log.Info("Upload apps to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 120)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1712,20 +1750,14 @@ var _ = Describe("s1appfw test", func() {
 			// Verify App download is in progress on Standalone
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
 
-			// Upload V2 apps to Azure for Standalone
+			// Upload V2 apps to S3 for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s app to Azure for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s app to S3 for Standalone", appVersion))
 			appFileList = testenv.GetAppFileList([]string{appListV2[0]})
 
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s app to Azure test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s app to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Wait for Standalone to be in READY status
-			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Get Pod age to check for pod resets later
-			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			//######### VERIFICATIONS #############
 			appVersion = "V1"
@@ -1737,23 +1769,25 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
+			// Get Pod age to check for pod resets later
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+
 			//############ UPGRADE VERIFICATION ###########
 			appVersion = "V2"
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: []string{appListV2[0]}, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
-
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
+		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Create a file on operator to utilize over 1G of space
-			   * Upload file to Azure for standalone
+			   * Upload file to s3 for standalone
 			   * Create app source for Standalone with parallelDownload=15
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############### VERIFICATION ################
@@ -1773,12 +1807,17 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to create file on operator")
 			filePresentOnOperator = true
 
-			// Upload apps to Azure
+			// Download apps for test
 			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), "Unable to upload apps to Azure test directory")
+			appList := testenv.PVTestApps
+			appFileList := testenv.GetAppFileList(appList)
+			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			Expect(err).To(Succeed(), "Unable to download app files")
+
+			// Upload apps to S3
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirPVTestApps)
+			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1786,7 +1825,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1811,46 +1850,45 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### VERIFICATION ################
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appList, CrAppFileList: appFileList}
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
+		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload big-size app to Azure for Standalone
+				* Upload big-size app to S3 for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				* When app download is complete, delete apps from app directory
 				############## VERIFICATIONS ################
 				* Verify App installation is in progress on Standalone
-				* Upload more apps from Azure during bigger app install
+				* Upload more apps from S3 during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download big size apps from Azure
+			// Download big size apps from S3
 			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			containerName := "/" + AzureDataContainer + "/" + AzureAppDirV1
-			err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV1, containerName, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 
-			// Upload big-size app to Azure for Standalone
-			testcaseEnvInst.Log.Info("Upload big-size app to Azure for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to Azure test directory for Standalone")
+			// Upload big-size app to S3 for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1890,16 +1928,16 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1azure, appframeworkazures1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+		It("smoke, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to Azure for Monitoring Console
+			   * Upload V1 apps to S3 for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework
 			   * Check isDeploymentInProgress is set for Monitoring Console CR
 			   * Wait for the pod to be ready
-			   * Upload V1 apps to Azure for Standalone
+			   * Upload V1 apps to S3 for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework
 			   * Check isDeploymentInProgress is set for Monitoring Console CR
@@ -1908,24 +1946,24 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR MONITORING CONSOLE ####################
 
-			// Upload V1 apps to Azure for Monitoring Console
+			// Upload V1 apps to S3 for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
 
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
+			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
+						ImagePullPolicy: "IfNotPresent",
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1946,10 +1984,10 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to Azure for Standalone
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
+			// Upload V1 apps to S3 for Standalone
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1957,7 +1995,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, azTestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1988,4 +2026,5 @@ var _ = Describe("s1appfw test", func() {
 
 		})
 	})
+
 })
