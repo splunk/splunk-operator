@@ -1559,7 +1559,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, gcp_sanity: can deploy a M4, add new apps to app source while install is in progress and have all apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1830,7 +1830,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, gcp_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -1923,7 +1923,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, gcp_sanity: can deploy a M4 SVA with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2312,7 +2312,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, gcp_sanity: can deploy a M4 SVA with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
@@ -2432,7 +2432,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("m4azure, integration, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", func() {
+		It("m4azure, integration, managerappframeworkazurem4, appframeworkazure, gcp_sanity: can deploy a M4 SVA and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -2520,7 +2520,7 @@ var _ = Describe("m4appfw test", func() {
 	})
 
 	Context("Multisite Indexer Cluster with Search Head Cluster (M4) with App Framework", func() {
-		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, azure_sanity: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
+		It("integration, m4azure, managerappframeworkazurem4, appframeworkazure, gcp_sanity: can deploy a M4 SVA with App Framework enabled and delete apps from app directory when download is complete", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################

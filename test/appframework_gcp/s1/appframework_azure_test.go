@@ -78,7 +78,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1azure, appframeworkazures1, appframeworkazure, azure_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("integration, s1azure, appframeworkazures1, appframeworkazure, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -405,7 +405,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("s1azure, integration, appframeworkazures1, appframework, azure_sanity: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+		It("s1azure, integration, appframeworkazures1, appframework, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
 			################## SETUP ####################
