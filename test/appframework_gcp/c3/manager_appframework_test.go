@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.s
-package gcpc3appfw
+package c3gcpappfw
 
 import (
 	"context"
@@ -86,7 +86,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, gcpc3, gcpmanagerappframeworkc3, gcpappframework, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
+		It("smoke, c3gcp, managerappframeworkc3gcp, appframeworkgcp, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -305,7 +305,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
-		It("smoke, gcpc3, gcpmanagerappframeworkc3t, gcpappframework, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
+		It("smoke, c3gcp, managerappframeworkc3gcpt, appframeworkgcp, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
 
 			//################## SETUP ####################
 
@@ -446,7 +446,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) with App Framework", func() {
-		It("smoke, gcpc3, gcpmanagerappframeworkc3, gcpappframework, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
+		It("smoke, c3gcp, managerappframeworkc3gcp, appframeworkgcp, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -931,7 +931,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("smoke, gcpc3, gcpmanagerappframeworkc3, gcpappframework, gcp_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
+		It("smoke, c3gcp, managerappframeworkc3gcp, appframeworkgcp, gcp_sanity: can deploy a C3 SVA and have apps installed locally on Cluster Manager and Deployer", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -3104,7 +3104,7 @@ var _ = Describe("c3appfw test", func() {
 	})
 
 	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework", func() {
-		It("smoke, gcpc3, gcpmanagerappframeworkc3, gcpappframework, gcp_sanity: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
+		It("smoke, c3gcp, managerappframeworkc3gcp, appframeworkgcp, gcp_sanity: can deploy a C3 SVA with App Framework enabled and check isDeploymentInProgressFlag for CM and SHC CR's", func() {
 
 			/*
 			   Test Steps
