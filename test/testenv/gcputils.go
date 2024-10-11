@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -390,6 +391,15 @@ func untarFile(src, dest string) error {
 
 	for {
 		header, err := tarReader.Next()
+		if err != nil {
+			return err
+		}
+
+		// Sanitize the file path to prevent Zip Slip
+		targetPath := filepath.Join(dest, header.Name)
+		if !strings.HasPrefix(targetPath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid file path: %s", targetPath)
+		}
 
 		if err == io.EOF {
 			break // End of archive
@@ -398,7 +408,7 @@ func untarFile(src, dest string) error {
 			return err
 		}
 
-		targetPath := filepath.Join(dest, header.Name)
+		targetPath = filepath.Join(dest, header.Name)
 
 		switch header.Typeflag {
 		case tar.TypeDir:
