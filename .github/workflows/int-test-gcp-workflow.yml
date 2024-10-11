@@ -147,10 +147,17 @@ jobs:
       REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       CLUSTER_WIDE: "true"
       GCP_SERVICE_ACCOUNT_ENABLED: "false"
+      PRIVATE_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      GCP_STORAGE_ACCOUNT: ${{ secrets.GCP_STORAGE_ACCOUNT }}
+      GCP_STORAGE_ACCOUNT_KEY: ${{ secrets.GCP_STORAGE_ACCOUNT_KEY }}
+      GCP_TEST_CONTAINER: ${{ secrets.GCP_TEST_CONTAINER}}
+      GCP_INDEXES_CONTAINER: ${{ secrets.GCP_INDEXES_CONTAINER}}
+      ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
     steps:
       - name: Set Test Cluster Name
         run: |
-          echo "TEST_CLUSTER_NAME=gke-${{ github.run_id }}" >> $GITHUB_ENV
+          echo "TEST_CLUSTER_NAME=gke-integration-test-cluster-${{ github.run_id }}" >> $GITHUB_ENV
 
       - name: Checkout Code
         uses: actions/checkout@v2
