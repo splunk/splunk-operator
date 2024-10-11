@@ -189,7 +189,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-
+    
       - name: Install Go Lint
         run: |
           go version
@@ -227,6 +227,11 @@ jobs:
         run: |
           gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }}
 
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components update --quiet
+          gcloud components install gke-gcloud-auth-plugin --quiet
+  
       - name: Install Metrics Server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
