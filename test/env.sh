@@ -8,7 +8,7 @@
 : "${NUM_NODES:=2}"
 : "${COMMIT_HASH:=}"
 # AWS specific variables
-: "${ECR_REGISTRY:=http://667741767953.dkr.ecr.us-west-2.amazonaws.com/integration-test/}"
+: "${ECR_REGISTRY:=667741767953.dkr.ecr.us-west-2.amazonaws.com/integration-test/}"
 : "${EKS_VPC_PUBLIC_SUBNET_STRING:=subnet-06aef8e454c0e5542,subnet-0a183703673334cb4,subnet-0439b4f08a984ae52}"
 : "${EKS_VPC_PRIVATE_SUBNET_STRING:=subnet-0f4af6d2f36fbe73f,subnet-0f81e66593dfb8dd8,subnet-024d4edaabe647586}"
 : "${EKS_CLUSTER_K8_VERSION:=1.26}"
