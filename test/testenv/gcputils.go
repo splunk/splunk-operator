@@ -291,6 +291,7 @@ func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir
 	var uploadedFiles []string
 	for _, key := range appList {
 		logf.Log.Info("Uploading file to GCP", "File name", key)
+		logf.Log.Info("Using bucket", "Bucket", bucketName, "Path", gcpTestDir, "Upload Dir", uploadDir)
 		fileLocation := filepath.Join(uploadDir, key)
 		fileBody, err := os.Open(fileLocation)
 		if err != nil {
