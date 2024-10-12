@@ -99,10 +99,11 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
       
-      - name: Install Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
         with:
-          version: 'latest'  # Adjust version if needed
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'kubectl'
 
       - name: Set GCP Project
         run: |
@@ -172,6 +173,12 @@ jobs:
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
         with:
           path: .env
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'kubectl'
 
       - name: Change Splunk Enterprise Image on Main Branches
         if: github.ref == 'refs/heads/main'
