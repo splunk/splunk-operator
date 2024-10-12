@@ -148,6 +148,8 @@ func (testenv *TestCaseEnv) setup() error {
 		testenv.createIndexSecret()
 	case "azure":
 		testenv.createIndexSecretAzure()
+	case "gcp":
+		testenv.createIndexSecretGCP()
 	default:
 		testenv.Log.Info("Failed to create secret object")
 	}
@@ -518,6 +520,28 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete s3 index secret object")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+// CreateIndexSecret create secret object
+func (testenv *TestCaseEnv) createIndexSecretGCP() error {
+	secretName := testenv.s3IndexSecret
+	ns := testenv.namespace
+	data := map[string][]byte{"gcp_service_account_key": []byte(os.Getenv("GCP_SERVICE_ACCOUNT_KEY"))}
+	secret := newSecretSpec(ns, secretName, data)
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create GCP index secret object")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete GCP index secret object")
 			return err
 		}
 		return nil
