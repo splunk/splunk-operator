@@ -149,6 +149,7 @@ jobs:
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_NETWORK: default
       GCP_SUBNETWORK: default
+      TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       CLUSTER_WIDE: "true"
