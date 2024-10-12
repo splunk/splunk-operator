@@ -301,6 +301,12 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'kubectl'
+
       - name: Delete GKE Cluster
         run: |
           gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ secrets.GCP_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} --quiet
