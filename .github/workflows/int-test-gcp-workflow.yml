@@ -98,6 +98,11 @@ jobs:
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+      
+      - name: Install Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          version: 'latest'  # Adjust version if needed
 
       - name: Set GCP Project
         run: |
