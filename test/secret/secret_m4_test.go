@@ -79,6 +79,11 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 				Expect(err).To(Succeed(), "Unable to download license file from Azure")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "gcp":
+				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
+				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			default:
 				fmt.Printf("Unable to download license file")
 				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
