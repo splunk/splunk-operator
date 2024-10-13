@@ -377,15 +377,9 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
 		}
 	case "gcp":
-		managedID := os.Getenv("AZURE_MANAGED_ID_ENABLED")
-		if managedID == "false" {
-			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzure(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "blob")}
-		} else {
-			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetGCPEndpoint(), "gcp", "blob")}
-		}
-
+		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetS3Endpoint(), testenvInstance.GetIndexSecretName(), "gcp", "blob", GetDefaultS3Region())}
 	default:
-		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' ")
+		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
 	}
 
 	// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
