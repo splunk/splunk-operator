@@ -164,7 +164,7 @@ func NewGCSClient(ctx context.Context, bucketName string, gcpCredentials string,
 // RegisterGCSClient will add the corresponding function pointer to the map
 func RegisterGCSClient() {
 	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewGCSClient, GetInitFunc: InitGcloudClientWrapper}
-	RemoteDataClientsMap["gcloud"] = wrapperObject
+	RemoteDataClientsMap["gcp"] = wrapperObject
 }
 
 // GetAppsList gets the list of apps from remote storage
