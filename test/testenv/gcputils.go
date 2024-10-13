@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,9 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -51,12 +54,32 @@ type GCPClient struct {
 
 // NewGCPClient initializes and returns a GCPClient
 func NewGCPClient() (*GCPClient, error) {
+	var err error
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx)
-	if err != nil {
-		logf.Log.Error(err, "Failed to create GCP Storage client")
-		return nil, err
+	var client *storage.Client
+	gcpCredentials := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
+
+	if len(gcpCredentials) == 0 {
+		client, err = storage.NewClient(ctx)
+		if err != nil {
+			logf.Log.Error(err, "Failed to create GCP Storage client")
+			return nil, err
+		}
+
+	} else {
+		var creds google.Credentials
+		err = json.Unmarshal([]byte(gcpCredentials), &creds)
+		if err != nil {
+			logf.Log.Error(err, "Secret key.json value is not parsable")
+			return nil, err
+		}
+		client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
+		if err != nil {
+			logf.Log.Error(err, "Failed to create GCP Storage client")
+			return nil, err
+		}
 	}
+
 	return &GCPClient{
 		Client: client,
 		Ctx:    ctx,
