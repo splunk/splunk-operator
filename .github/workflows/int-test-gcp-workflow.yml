@@ -269,6 +269,7 @@ jobs:
 
       - name: Run Integration Tests
         run: |
+          export GCP_SERVICE_ACCOUNT_KEY=$(echo ${{ env.GCP_SERVICE_ACCOUNT_KEY }} | base64)
           make int-test
 
       - name: Collect Test Logs

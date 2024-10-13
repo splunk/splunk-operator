@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,7 +58,12 @@ func NewGCPClient() (*GCPClient, error) {
 	var err error
 	ctx := context.Background()
 	var client *storage.Client
-	gcpCredentials := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
+	encodedString := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
+	gcpCredentials, err := 	base64.StdEncoding.DecodeString(encodedString)
+	if err != nil {
+		logf.Log.Error(err, "Error decoding GCP service account key")
+		return nil, err
+	}
 
 	if len(gcpCredentials) == 0 {
 		client, err = storage.NewClient(ctx)
@@ -68,12 +74,15 @@ func NewGCPClient() (*GCPClient, error) {
 
 	} else {
 		var creds google.Credentials
+
 		err = json.Unmarshal([]byte(gcpCredentials), &creds)
 		if err != nil {
 			logf.Log.Error(err, "Secret key.json value is not parsable")
 			return nil, err
 		}
-		client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
+		//client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
+		//client, err = storage.NewClient(ctx, option.WithCredentialsFile("/Users/vivekr/Projects/splunk-operator/auth.json"))
+		client, err = storage.NewClient(ctx, option.WithCredentialsJSON([]byte(gcpCredentials)))
 		if err != nil {
 			logf.Log.Error(err, "Failed to create GCP Storage client")
 			return nil, err
