@@ -378,6 +378,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 		}
 	case "gcp":
 		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "blob", GetDefaultS3Region())}
+
 	default:
 		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
 	}
@@ -401,6 +402,8 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 
 	return appFrameworkSpec
 }
+
+
 
 // WaitforPhaseChange Wait for 2 mins or when phase change on is seen on a CR for any particular app
 func WaitforPhaseChange(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, crKind string, appSourceName string, appList []string) {

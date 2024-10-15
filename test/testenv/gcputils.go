@@ -73,13 +73,13 @@ func NewGCPClient() (*GCPClient, error) {
 		}
 
 	} else {
-		var creds google.Credentials
+		//var creds google.Credentials
 
-		err = json.Unmarshal([]byte(gcpCredentials), &creds)
-		if err != nil {
-			logf.Log.Error(err, "Secret key.json value is not parsable")
-			return nil, err
-		}
+		//err = json.Unmarshal([]byte(gcpCredentials), &creds)
+		//if err != nil {
+		//	logf.Log.Error(err, "Secret key.json value is not parsable")
+		//	return nil, err
+		//}
 		//client, err = storage.NewClient(ctx, option.WithCredentials(&creds))
 		//client, err = storage.NewClient(ctx, option.WithCredentialsFile("/Users/vivekr/Projects/splunk-operator/auth.json"))
 		client, err = storage.NewClient(ctx, option.WithCredentialsJSON([]byte(gcpCredentials)))
@@ -125,6 +125,54 @@ func CheckPrefixExistsOnGCP(prefix string) bool {
 		}
 	}
 	return false
+}
+
+// CreateBucketAndPathIfNotExist creates a bucket and path if they do not exist
+func CreateBucketAndPathIfNotExist(bucketName, path string) error {
+	client, err := NewGCPClient()
+	if err != nil {
+		return err
+	}
+	defer client.Client.Close()
+
+	ctx, cancel := context.WithTimeout(client.Ctx, time.Minute*5)
+	defer cancel()
+
+	// Check if the bucket exists
+	_, err = client.Client.Bucket(bucketName).Attrs(ctx)
+	if err == storage.ErrBucketNotExist {
+		// Create the bucket
+		err = client.Client.Bucket(bucketName).Create(ctx, gcpProjectID, nil)
+		if err != nil {
+			logf.Log.Error(err, "Failed to create bucket", "Bucket Name", bucketName)
+			return err
+		}
+		logf.Log.Info("Bucket created", "Bucket Name", bucketName)
+	} else if err != nil {
+		logf.Log.Error(err, "Error checking bucket attributes", "Bucket Name", bucketName)
+		return err
+	}
+
+	// Check if the path exists by trying to get its attributes
+	_, err = client.Client.Bucket(bucketName).Object(path).Attrs(ctx)
+	if err == storage.ErrObjectNotExist {
+		// Create a zero-length object to represent the path
+		wc := client.Client.Bucket(bucketName).Object(path).NewWriter(ctx)
+		if _, err := wc.Write([]byte{}); err != nil {
+			logf.Log.Error(err, "Failed to create path", "Path", path)
+			return err
+		}
+		if err := wc.Close(); err != nil {
+			logf.Log.Error(err, "Failed to finalize path creation", "Path", path)
+			return err
+		}
+		logf.Log.Info("Path created", "Path", path)
+	} else if err != nil {
+		logf.Log.Error(err, "Error checking path attributes", "Path", path)
+		return err
+	}
+
+	return nil
 }
 
 // DownloadLicenseFromGCPBucket downloads the license file from GCP
@@ -342,6 +390,8 @@ func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir
 	}
 	return uploadedFiles, nil
 }
+
+
 
 // DisableAppsToGCP untars apps, modifies their config files to disable them, re-tars, and uploads the disabled versions to GCP
 func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) ([]string, error) {
