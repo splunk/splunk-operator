@@ -59,7 +59,7 @@ func NewGCPClient() (*GCPClient, error) {
 	ctx := context.Background()
 	var client *storage.Client
 	encodedString := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
-	gcpCredentials, err := 	base64.StdEncoding.DecodeString(encodedString)
+	gcpCredentials, err := base64.StdEncoding.DecodeString(encodedString)
 	if err != nil {
 		logf.Log.Error(err, "Error decoding GCP service account key")
 		return nil, err
@@ -390,8 +390,6 @@ func UploadFilesToGCP(bucketName, gcpTestDir string, appList []string, uploadDir
 	}
 	return uploadedFiles, nil
 }
-
-
 
 // DisableAppsToGCP untars apps, modifies their config files to disable them, re-tars, and uploads the disabled versions to GCP
 func DisableAppsToGCP(downloadDir string, appFileList []string, gcpTestDir string) ([]string, error) {

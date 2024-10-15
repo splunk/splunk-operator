@@ -18,7 +18,6 @@ package client
 import (
 	"context"
 	"strings"
-	//"encoding/json"
 	"io"
 	"os"
 
@@ -119,12 +118,6 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterfa
 	if len(gcpCredentials) == 0 {
 		client, err = storage.NewClient(ctx)
 	} else {
-		//var creds google.Credentials
-		//err = json.Unmarshal([]byte(gcpCredentials), &creds)
-		//if err != nil {
-		//	scopedLog.Error(err, "Secret key.json value is not parsable")
-		//	return nil, err
-		//}
 		client, err = storage.NewClient(ctx, option.WithCredentialsJSON([]byte(gcpCredentials)))
 	}
 
@@ -132,19 +125,6 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterfa
 		scopedLog.Error(err, "Failed to initialize a GCS client.")
 		return nil, err
 	}
-	// Test if the client can access buckets
-	//buckets := client.Buckets(ctx, "")
-	//for {
-	//	bucketAttrs, err := buckets.Next()
-	//	if err == iterator.Done {
-	//		break
-	//	}
-	//	if err != nil {
-	//		scopedLog.Error(err, "Failed to list buckets.")
-	//		return nil, err
-	//	}
-	//	scopedLog.Info("Found bucket", "BucketName", bucketAttrs.Name)
-	//}
 
 	scopedLog.Info("GCS Client initialization successful.")
 	return &GCSClientWrapper{Client: client}, nil
@@ -200,6 +180,10 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 	var objects []*RemoteObject
 	maxKeys := 4000 // Limit the number of objects manually
 
+	if strings.HasSuffix(gcsClient.StartAfter, "/") {
+		startAfterFound  = true
+	}
+
 	for count := 0; count < maxKeys; {
 		objAttrs, err := it.Next()
 		if err == iterator.Done {
@@ -212,11 +196,10 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 
 		// Implement "StartAfter" logic to skip objects until the desired one is found
 		if !startAfterFound {
-			if strings.HasPrefix(objAttrs.Name, gcsClient.StartAfter) {
+			if objAttrs.Name == gcsClient.StartAfter {
 				startAfterFound = true // Start adding objects after this point
-			} else {
-				continue
-			}
+			} 
+		    continue
 		}
 
 		// Map GCS object attributes to RemoteObject
