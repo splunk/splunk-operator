@@ -7,9 +7,10 @@ The Splunk Operator provides support for Splunk app and add-on deployment using 
 Utilizing the App Framework requires one of the following remote storage providers:
    * An Amazon S3 or S3-API-compliant remote object storage location
    * Azure blob storage
+   * GCP Cloud Storage
 
 ### Prerequisites common to both remote storage providers
-* The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket or Azure blob container.
+* The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket , Azure blob container or GCP bucket.
 * Splunk apps and add-ons in a .tgz or .spl archive format.
 * Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 * A persistent storage volume and path for the Operator Pod. See [Add a persistent storage volume to the Operator pod](#add-a-persistent-storage-volume-to-the-operator-pod).
@@ -22,6 +23,10 @@ Utilizing the App Framework requires one of the following remote storage provide
 ### Prerequisites for Azure Blob remote object storage
 * The remote object storage credentials provided as a kubernetes secret.
 * OR, Use "Managed Indentity" role assigment to the Azure blob container. See [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+
+### Prerequisites for GCP bucket based remote object storage
+* Create role and role-binding for splunk-operator service account, to provide read-only access for S3 credentials.
+* The GCP servcie account key is provided as a kubernetes secret(key.json), or in workload identity is configured to service account.
 
 Splunk apps and add-ons deployed or installed outside of the App Framework are not managed, and are unsupported.
 
