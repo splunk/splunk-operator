@@ -13,6 +13,7 @@
   - [Secrets on Docker Splunk](#secrets-on-docker-splunk)
   - [SmartStore Access using AWS IAM Role for Service Account](#smartstore-access-using-aws-iam-role-for-service-account)
   - [Support for AWS IAM Role for Service Account in Splunk Operator Deployment](#support-for-aws-iam-role-for-service-account-in-splunk-operator-deployment)
+  - [Support for Hashicorp Vault](#support-for-hashicorp-vault-in-splunk-operator-deployment)
 
 ## Global kubernetes secret object
 A global kubernetes secret object acts as the source of secret tokens for a kubernetes namespace used by all Splunk Enterprise CR's. It's name follows the format `splunk-<namespace>-secret` where `<namespace`> represents the namespace we are operating in. The contents of this object are volume mounted on all the pods within a kubernetes namespace.
@@ -154,3 +155,6 @@ spec:
           claimName: splunk-operator-app-download
       ...
 ```
+
+## Support for Hashicorp Vault in Splunk Operator Deployment
+TODO
