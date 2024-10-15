@@ -768,14 +768,31 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
-	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
-	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
-		Secret: &corev1.SecretVolumeSource{
-			SecretName:  secretToMount,
-			DefaultMode: &secretVolDefaultMode,
-		},
-	})
+	// prepare defaults variable
+	splunkDefaults := "/mnt/splunk-secrets/default.yml"
+	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
+	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
+	}
+	if spec.DefaultsURL != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
+	}
+	if spec.Defaults != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
+	}
+
+	if spec.VaultIntegration.Enable {
+		InjectVaultSecret(ctx, client, podTemplateSpec, &spec.VaultIntegration)
+	} else {
+		// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+		secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  secretToMount,
+				DefaultMode: &secretVolDefaultMode,
+			},
+		})
+	}
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
@@ -844,19 +861,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
 	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec)
 	startupProbe := getStartupProbe(ctx, cr, instanceType, spec)
-
-	// prepare defaults variable
-	splunkDefaults := "/mnt/splunk-secrets/default.yml"
-	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
-	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
-		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
-	}
-	if spec.DefaultsURL != "" {
-		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
-	}
-	if spec.Defaults != "" {
-		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
-	}
 
 	// prepare container env variables
 	role := instanceType.ToRole()
@@ -2012,4 +2016,74 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
 	return err
+}
+
+// InjectVaultSecret represents a function that adds Vault injection annotations to the StatefulSet
+// Pods deployed by the Splunk Operator.
+func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, vaultSpec *enterpriseApi.VaultIntegration) error {
+	if !vaultSpec.Enable {
+		return nil
+	}
+
+	// Validate if role and secretPath are provided
+	if vaultSpec.Role == "" {
+		return fmt.Errorf("vault role is required when vault is enabled")
+	}
+	if vaultSpec.SecretPath == "" {
+		return fmt.Errorf("vault secretPath is required when vault is enabled")
+	}
+
+	secretPath := vaultSpec.SecretPath
+	vaultRole := vaultSpec.Role
+	secretKeyToEnv := map[string]string{
+		"hec_token":    "HEC_TOKEN",
+		"idxc_secret":  "IDXC_SECRET",
+		"pass4SymmKey": "PASS4_SYMMKEY",
+		"password":     "SPLUNK_PASSWORD",
+		"shc_secret":   "SHC_SECRET",
+	}
+
+	// Adding annotations for vault injection
+	annotations := map[string]string{
+		"vault.hashicorp.com/agent-inject":      "true",
+		"vault.hashicorp.com/agent-inject-path": "/mnt/splunk-secrets",
+		"vault.hashicorp.com/role":              vaultRole,
+	}
+
+	// Adding annotations to indicate specific secrets to be injected as separate files
+	// Adding annotation for default configuration file
+	annotations["vault.hashicorp.com/agent-inject-file-defaults"] = "default.yml"
+	annotations["vault.hashicorp.com/secret-volume-path-defaults"] = "/mnt/splunk-secrets"
+    annotations["vault.hashicorp.com/agent-inject-template-defaults"] = `
+splunk:
+    hec_disabled: 0
+    hec_enableSSL: 0
+    hec_token: "{{- with secret "secret/data/splunk/hec_token" -}}{{ .Data.data.value }}{{- end }}"
+    password: "{{- with secret "secret/data/splunk/password" -}}{{ .Data.data.value }}{{- end }}"
+    pass4SymmKey: "{{- with secret "secret/data/splunk/pass4SymmKey" -}}{{ .Data.data.value }}{{- end }}"
+    idxc:
+        secret: "{{- with secret "secret/data/splunk/idxc_secret" -}}{{ .Data.data.value }}{{- end }}"
+    shc:
+        secret: "{{- with secret "secret/data/splunk/shc_secret" -}}{{ .Data.data.value }}{{- end }}"
+`
+	for key := range secretKeyToEnv {
+		annotationKey := fmt.Sprintf("vault.hashicorp.com/agent-inject-secret-%s", key)
+		annotations[annotationKey] = fmt.Sprintf("%s/%s", secretPath, key)
+		annotationFile := fmt.Sprintf("vault.hashicorp.com/agent-inject-file-%s", key)
+		annotations[annotationFile] = key
+		annotationVolumeKey := fmt.Sprintf("vault.hashicorp.com/secret-volume-path-%s", key)
+		annotations[annotationVolumeKey] = fmt.Sprintf("/mnt/splunk-secrets/%s", key)
+	}
+
+	// Apply these annotations to the StatefulSet PodTemplateSpec without overwriting existing ones
+	if podTemplateSpec.ObjectMeta.Annotations == nil {
+		podTemplateSpec.ObjectMeta.Annotations = make(map[string]string)
+	}
+	for key, value := range annotations {
+		if existingValue, exists := podTemplateSpec.ObjectMeta.Annotations[key]; !exists || existingValue == "" {
+			podTemplateSpec.ObjectMeta.Annotations[key] = value
+		}
+	}
+
+	return nil
 }
