@@ -78,7 +78,7 @@ jobs:
       TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_NAME: gke-smoke-test-${{ github.run_id }}
+      CLUSTER_NAME: smoke-${{ matrix.test_focus | slice(-5, None) }}-${{ github.run_id }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
