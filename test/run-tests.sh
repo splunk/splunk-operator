@@ -181,9 +181,9 @@ case ${CLUSTER_PROVIDER} in
         fi
         ;;
     "gcp")
-        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+        if [[ -z "${GCP_ENTERPRISE_LICENSE_LOCATION}" ]]; then
           echo "License path not set. Changing to default"
-          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_LOCATION}"
+          export ENTERPRISE_LICENSE_LOCATION="${GCP_ENTERPRISE_LICENSE_LOCATION}"
         fi
 
         if [[ -z "${TEST_CONTAINER}" ]]; then
