@@ -50,9 +50,6 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      #- name: Configure Docker for Artifact Registry
-      #  run: |
-      #    echo ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }} | docker login -u _json_key --password-stdin https://${{ secrets.GCP_ARTIFACT_REGISTRY }}
       - name: Login to GCR
         uses: docker/login-action@v3
         with:
@@ -64,26 +61,49 @@ jobs:
         run: |
           make docker-buildx IMG=${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
 
-      #- name: Push Splunk Operator Image to Artifact Registry
-      #  run: |
-      #    echo "Uploading Image to Artifact Registry :: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-      #    make docker-push IMG=${{ secrets.GCP_ARTIFACT_REGISTRY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-
-  setup-gke-cluster:
+  create-cluster-and-run-tests:
+    strategy:
+      matrix:
+        test_focus: 
+          - "basic"
+          - "appframeworks1gcp"
+          - "managerappframeworkc3gcp"
+          - "managerappframeworkm4gcp"
+          - "managersecretgcp"
+          - "managermcgcp"
     runs-on: ubuntu-latest
     needs: build-operator-image
-    if: always()  # Ensures this job runs regardless of build-operator-image success or failure
     env:
       CLUSTER_WORKERS: 5
       TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}
+      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}-${{ matrix.test_focus }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
+      TEST_FOCUS: ${{ matrix.test_focus }}
+      CLUSTER_NODES: 2
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
+      TEST_TO_SKIP:  "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
+      TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
+      TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
+      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      CLUSTER_WIDE: "true"
+      GCP_SERVICE_ACCOUNT_ENABLED: "false"
+      PRIVATE_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      GCP_STORAGE_ACCOUNT: ${{ secrets.GCP_STORAGE_ACCOUNT }}
+      GCP_STORAGE_ACCOUNT_KEY: ${{ secrets.GCP_STORAGE_ACCOUNT_KEY }}
+      GCP_TEST_CONTAINER: ${{ secrets.GCP_TEST_CONTAINER}}
+      GCP_INDEXES_CONTAINER: ${{ secrets.GCP_INDEXES_CONTAINER}}
+      ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
+      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v2
@@ -128,54 +148,6 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ secrets.GCP_ARTIFACT_REGISTRY }}
 
-  int-tests-appframeworkgcp:
-    runs-on: ubuntu-latest
-    needs: setup-gke-cluster
-    env:
-      CLUSTER_NODES: 2
-      CLUSTER_WORKERS: 5
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
-      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
-      TEST_FOCUS: gcp_sanity
-      TEST_TO_SKIP:  "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
-      TEST_CLUSTER_PLATFORM: gcp
-      CLUSTER_PROVIDER: gcp
-      ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}
-      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ secrets.GCP_REGION }}
-      GCP_ZONE: ${{ secrets.GCP_ZONE }}
-      GCP_NETWORK: default
-      GCP_SUBNETWORK: default
-      TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
-      TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
-      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
-      REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_WIDE: "true"
-      GCP_SERVICE_ACCOUNT_ENABLED: "false"
-      PRIVATE_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      GCP_STORAGE_ACCOUNT: ${{ secrets.GCP_STORAGE_ACCOUNT }}
-      GCP_STORAGE_ACCOUNT_KEY: ${{ secrets.GCP_STORAGE_ACCOUNT_KEY }}
-      GCP_TEST_CONTAINER: ${{ secrets.GCP_TEST_CONTAINER}}
-      GCP_INDEXES_CONTAINER: ${{ secrets.GCP_INDEXES_CONTAINER}}
-      ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-    steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=gke-integration-test-cluster-${{ github.run_id }}" >> $GITHUB_ENV
-
-      - name: Checkout Code
-        uses: actions/checkout@v2
-
-      - name: Load Environment Variables
-        id: dotenv
-        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-        with:
-          path: .env
-      
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
@@ -282,34 +254,15 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: splunk-pods-logs-artifacts-appframeworkgcp
+          name: splunk-pods-logs-artifacts-${{ matrix.test_focus }}
           path: /tmp/pod_logs/**
-
       - name: Cleanup Test Case Artifacts
         if: ${{ always() }}
         run: |
           tools/cleanup.sh
           make cleanup
           make clean
-
-  cleanup:
-    runs-on: ubuntu-latest
-    needs: [int-tests-appframeworkgcp]
-    env:
-      CLUSTER_NAME: gke-integration-test-cluster-${{ github.run_id }}
-    if: always()  # Ensures this job runs regardless of previous job outcomes
-    steps:
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          install_components: 'kubectl'
-
       - name: Delete GKE Cluster
+        if: always()
         run: |
-          gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ secrets.GCP_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} --quiet
+          gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }} --quiet
