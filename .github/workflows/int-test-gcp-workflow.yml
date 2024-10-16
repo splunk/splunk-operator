@@ -78,7 +78,6 @@ jobs:
       TEST_CLUSTER_PLATFORM: gcp
       CLUSTER_PROVIDER: gcp
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
-      CLUSTER_NAME: smoke-${{ matrix.test_focus | slice(-5, None) }}-${{ github.run_id }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
@@ -105,6 +104,9 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
     steps:
+      - name: Set Test Cluster Name
+        run: |
+          echo "CLUSTER_NAME=gke-$(echo ${{ matrix.test }} | tail -c 5)-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Checkout Code
         uses: actions/checkout@v2
 
