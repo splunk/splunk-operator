@@ -737,6 +737,31 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
+// updateSplunkPodTemplateWithConfig updates the given PodTemplateSpec with the configuration
+// specified in the CommonSplunkSpec and other parameters.
+//
+// Parameters:
+// - ctx: The context for the operation.
+// - client: The controller client used for interacting with Kubernetes resources.
+// - podTemplateSpec: The PodTemplateSpec to be updated.
+// - cr: The custom resource object containing metadata.
+// - spec: The CommonSplunkSpec containing the configuration details.
+// - instanceType: The type of Splunk instance (e.g., Standalone, Indexer, etc.).
+// - extraEnv: Additional environment variables to be added to the containers.
+// - secretToMount: The name of the secret to be mounted.
+//
+// The function performs the following updates:
+// - Adds custom ports to Splunk containers based on the ServiceTemplate specification.
+// - Adds custom volumes and volume mounts to Splunk containers, excluding the Monitoring Console (MC).
+// - Prepares and sets the SPLUNK_DEFAULTS_URL environment variable based on various defaults URLs.
+// - Injects Vault secrets and adds a secret monitor sidecar container if Vault integration is enabled.
+// - Adds a secret volume to the PodTemplateSpec if Vault integration is not enabled.
+// - Adds a ConfigMap volume for inline defaults if specified.
+// - Updates the PodTemplateSpec annotations with the resource version of the ConfigMap to trigger pod recycling on changes.
+// - Adds a ConfigMap volume for SmartStore configuration if applicable and updates annotations for standalone instances.
+// - Sets the security context for the PodTemplateSpec.
+// - Prepares and sets various environment variables for the Splunk containers, including licensing and cluster manager URLs.
+// - Updates the containers in the PodTemplateSpec with the specified resources, probes, environment variables, and security context.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
 	reqLogger := log.FromContext(ctx)
@@ -782,7 +807,11 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	if spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template. This function takes the following parameters:
 		InjectVaultSecret(ctx, client, podTemplateSpec, &spec.VaultIntegration)
+		// Injects the secret monitor sidecar container into the PodTemplateSpec.
+		// This function is responsible for adding a sidecar container to the PodTemplateSpec that monitors the specified secret for changes.
+		AddSecretMonitorSidecarContainer(ctx, client, cr.GetNamespace(), podTemplateSpec)
 	} else {
 		// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 		secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
@@ -2016,74 +2045,4 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
 	return err
-}
-
-// InjectVaultSecret represents a function that adds Vault injection annotations to the StatefulSet
-// Pods deployed by the Splunk Operator.
-func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, vaultSpec *enterpriseApi.VaultIntegration) error {
-	if !vaultSpec.Enable {
-		return nil
-	}
-
-	// Validate if role and secretPath are provided
-	if vaultSpec.Role == "" {
-		return fmt.Errorf("vault role is required when vault is enabled")
-	}
-	if vaultSpec.SecretPath == "" {
-		return fmt.Errorf("vault secretPath is required when vault is enabled")
-	}
-
-	secretPath := vaultSpec.SecretPath
-	vaultRole := vaultSpec.Role
-	secretKeyToEnv := map[string]string{
-		"hec_token":    "HEC_TOKEN",
-		"idxc_secret":  "IDXC_SECRET",
-		"pass4SymmKey": "PASS4_SYMMKEY",
-		"password":     "SPLUNK_PASSWORD",
-		"shc_secret":   "SHC_SECRET",
-	}
-
-	// Adding annotations for vault injection
-	annotations := map[string]string{
-		"vault.hashicorp.com/agent-inject":      "true",
-		"vault.hashicorp.com/agent-inject-path": "/mnt/splunk-secrets",
-		"vault.hashicorp.com/role":              vaultRole,
-	}
-
-	// Adding annotations to indicate specific secrets to be injected as separate files
-	// Adding annotation for default configuration file
-	annotations["vault.hashicorp.com/agent-inject-file-defaults"] = "default.yml"
-	annotations["vault.hashicorp.com/secret-volume-path-defaults"] = "/mnt/splunk-secrets"
-    annotations["vault.hashicorp.com/agent-inject-template-defaults"] = `
-splunk:
-    hec_disabled: 0
-    hec_enableSSL: 0
-    hec_token: "{{- with secret "secret/data/splunk/hec_token" -}}{{ .Data.data.value }}{{- end }}"
-    password: "{{- with secret "secret/data/splunk/password" -}}{{ .Data.data.value }}{{- end }}"
-    pass4SymmKey: "{{- with secret "secret/data/splunk/pass4SymmKey" -}}{{ .Data.data.value }}{{- end }}"
-    idxc:
-        secret: "{{- with secret "secret/data/splunk/idxc_secret" -}}{{ .Data.data.value }}{{- end }}"
-    shc:
-        secret: "{{- with secret "secret/data/splunk/shc_secret" -}}{{ .Data.data.value }}{{- end }}"
-`
-	for key := range secretKeyToEnv {
-		annotationKey := fmt.Sprintf("vault.hashicorp.com/agent-inject-secret-%s", key)
-		annotations[annotationKey] = fmt.Sprintf("%s/%s", secretPath, key)
-		annotationFile := fmt.Sprintf("vault.hashicorp.com/agent-inject-file-%s", key)
-		annotations[annotationFile] = key
-		annotationVolumeKey := fmt.Sprintf("vault.hashicorp.com/secret-volume-path-%s", key)
-		annotations[annotationVolumeKey] = fmt.Sprintf("/mnt/splunk-secrets/%s", key)
-	}
-
-	// Apply these annotations to the StatefulSet PodTemplateSpec without overwriting existing ones
-	if podTemplateSpec.ObjectMeta.Annotations == nil {
-		podTemplateSpec.ObjectMeta.Annotations = make(map[string]string)
-	}
-	for key, value := range annotations {
-		if existingValue, exists := podTemplateSpec.ObjectMeta.Annotations[key]; !exists || existingValue == "" {
-			podTemplateSpec.ObjectMeta.Annotations[key] = value
-		}
-	}
-
-	return nil
 }
