@@ -44,7 +44,16 @@ liveness_probe_check_splunkd_process() {
   case "$state" in
   running|started)
       if [[ "" != "$SPLUNK_PROCESS_ID" ]]; then
-         exit 0
+        rsyncError=$(grep "Failed to execute runSync()" /opt/splunk/var/log/splunk/splunkd.log | tail -1)
+        if [[ "" != "$rsyncError" ]]; then
+            echo "Failed to execute runSync()"
+            echo "$rsyncError"
+            echo "going to recycle the pod."
+            exit 1
+        else
+            echo "No issues with STS service."
+        fi
+        exit 0
       fi
 
       # Goes to the the pod event
@@ -67,6 +76,15 @@ liveness_probe_default() {
     running|started)
         curl --max-time 30 --fail --insecure $HTTP_SCHEME://localhost:8089/
         if [[ $? == 0 ]]; then
+            rsyncError=$(grep "Failed to execute runSync()" /opt/splunk/var/log/splunk/splunkd.log | tail -1)
+            if [[ "" != "$rsyncError" ]]; then
+                echo "Failed to execute runSync()"
+                echo "$rsyncError"
+                echo "going to recycle the pod."
+                exit 1
+            else
+                echo "No issues with STS service."
+            fi
             exit 0
         fi
 
