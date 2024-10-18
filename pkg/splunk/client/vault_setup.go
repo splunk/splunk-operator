@@ -295,6 +295,7 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient client.Client, s
 		// Get the current version from the StatefulSet annotations
 		annotationKey := fmt.Sprintf("vault-secret-version-%s", key)
 		currentVersion := latestStatefulSet.Spec.Template.Annotations[annotationKey]
+		logger.Info("current version of statefulset","annotations", latestStatefulSet.Spec.Template.Annotations)
 
 		// If the version has changed, update the StatefulSet to trigger a rolling restart
 		if currentVersion != strconv.Itoa(int(version)) {
