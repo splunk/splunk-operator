@@ -578,6 +578,9 @@ type VaultIntegration struct {
 	// Enable vault support
 	Enable bool `json:"enable,omitempty"`
 
+	// Vault Address
+	Address string `json:"address"`
+
 	// Vault Role
 	Role string `json:"role"`
 
