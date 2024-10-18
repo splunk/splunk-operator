@@ -1759,7 +1759,7 @@ func TestValidateLivenessProbe(t *testing.T) {
 func TestInjectVaultSecret(t *testing.T) {
 	ctx := context.TODO()
 	client := spltest.NewMockClient()
-	podTemplateSpec := &corev1.PodTemplateSpec{
+	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{},
 	}
 
@@ -1769,9 +1769,9 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "",
 			SecretPath: "",
 		}
-		err := InjectVaultSecret(ctx, client, podTemplateSpec, vaultSpec)
+		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.NoError(t, err)
-		assert.Nil(t, podTemplateSpec.ObjectMeta.Annotations)
+		assert.Nil(t, statefulset.ObjectMeta.Annotations)
 	})
 
 	t.Run("Missing role when Vault is enabled", func(t *testing.T) {
@@ -1780,7 +1780,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "",
 			SecretPath: "secret/data/splunk",
 		}
-		err := InjectVaultSecret(ctx, client, podTemplateSpec, vaultSpec)
+		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.Error(t, err)
 		assert.EqualError(t, err, "vault role is required when vault is enabled")
 	})
@@ -1791,7 +1791,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "splunk-role",
 			SecretPath: "",
 		}
-		err := InjectVaultSecret(ctx, client, podTemplateSpec, vaultSpec)
+		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.Error(t, err)
 		assert.EqualError(t, err, "vault secretPath is required when vault is enabled")
 	})
@@ -1802,7 +1802,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "splunk-role",
 			SecretPath: "secret/data/splunk",
 		}
-		err := InjectVaultSecret(ctx, client, podTemplateSpec, vaultSpec)
+		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.NoError(t, err)
 
 		expectedAnnotations := map[string]string{
@@ -1844,7 +1844,7 @@ splunk:
 				//assert.True(t, compareYAMLStrings(value, podTemplateSpec.ObjectMeta.Annotations[key]))
 				continue
 			}
-			assert.Equal(t, value, podTemplateSpec.ObjectMeta.Annotations[key])
+			assert.Equal(t, value, statefulset.ObjectMeta.Annotations[key])
 		}
 	})
 }

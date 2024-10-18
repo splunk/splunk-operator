@@ -806,13 +806,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
 	}
 
-	if spec.VaultIntegration.Enable {
-		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template. This function takes the following parameters:
-		InjectVaultSecret(ctx, client, podTemplateSpec, &spec.VaultIntegration)
-		// Injects the secret monitor sidecar container into the PodTemplateSpec.
-		// This function is responsible for adding a sidecar container to the PodTemplateSpec that monitors the specified secret for changes.
-		AddSecretMonitorSidecarContainer(ctx, client, cr.GetNamespace(), podTemplateSpec)
-	} else {
+	if !spec.VaultIntegration.Enable {
 		// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 		secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
 		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
@@ -1070,6 +1064,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			},
 		}
 	}
+
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
