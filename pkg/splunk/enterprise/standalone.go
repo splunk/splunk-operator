@@ -209,12 +209,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	if cr.Spec.VaultIntegration.Enable {
 		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
 		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
-		passwordRefreshed, err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
 		if err != nil {
 			return result, err
-		}
-		if passwordRefreshed {
-			eventPublisher.Warning(ctx, "PasswordChange", "password is refreshed, restarting splunk statefulset")
 		}
 	}
 

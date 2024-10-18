@@ -36,19 +36,13 @@ import (
 	"os"
 	"strconv"
 
-	"time"
-
-	//vault "github.com/hashicorp/vault/api"
-	"math/rand"
 
 	"github.com/go-resty/resty/v2"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	appsv1 "k8s.io/api/apps/v1"
-	//corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	// Marshal the splunkConfig to JSON
 	"gopkg.in/yaml.v2"
@@ -58,10 +52,6 @@ var logger = log.Log.WithName("vault_setup")
 
 type SecretData struct {
 	Value string `json:"value,omitempty"`
-}
-
-type Data struct {
-	Data SecretData `json:"data,omitempty"`
 }
 
 // Metadata contains metadata information about a secret, such as creation time,
@@ -75,6 +65,10 @@ type Metadata struct {
 	Version        int         `json:"version,omitempty"`
 }
 
+type Data struct {
+	Data SecretData `json:"data,omitempty"`
+	Metadata      Metadata `json:"metadata,omitempty"`
+}
 // VaultResponse represents the structure of a response from a Vault request.
 // It includes details such as the request ID, lease ID, lease duration, and
 // whether the lease is renewable. It also contains nested Data and Metadata
@@ -85,7 +79,6 @@ type VaultResponse struct {
 	Renewable     bool     `json:"renewable,omitempty"`
 	LeaseDuration int      `json:"lease_duration,omitempty"`
 	Data          Data     `json:"data,omitempty"`
-	Metadata      Metadata `json:"metadata,omitempty"`
 }
 
 type VaultError struct {
@@ -208,23 +201,9 @@ func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, s
 //  2. Authenticates with Vault using the Kubernetes auth method.
 //  3. Iterates over specified keys to check if any secret version has changed in Vault.
 //  4. Updates the StatefulSet annotations to trigger a rolling restart if any secret version has changed.
-func CheckAndRestartStatefulSet(ctx context.Context, kubeClient client.Client, statefulSet *appsv1.StatefulSet, vaultIntegration *enterpriseApi.VaultIntegration) (bool, error) {
+func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, vaultIntegration *enterpriseApi.VaultIntegration) (error) {
 
 	logger.Info("CheckAndRestartStatefulSet called", "statefulSet", statefulSet.Name, "vaultIntegration", vaultIntegration)
-
-	// Get the latest version of the StatefulSet from the Kubernetes API
-	latestStatefulSet := &appsv1.StatefulSet{}
-	err := kubeClient.Get(ctx, client.ObjectKey{
-		Name:      statefulSet.Name,
-		Namespace: statefulSet.Namespace,
-	}, latestStatefulSet)
-
-	if errors.IsNotFound(err) {
-		latestStatefulSet = statefulSet
-	} else if err != nil {
-		logger.Error(err, "Failed to get the latest StatefulSet", "statefulSet", statefulSet.Name)
-		return false, fmt.Errorf("failed to get the latest StatefulSet: %v", err)
-	}
 
 	// Initialize Vault client
 	client := resty.New()
@@ -235,7 +214,7 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient client.Client, s
 	token, err := os.ReadFile(tokenFile)
 	if err != nil {
 		logger.Error(err, "Failed to read service account token")
-		return false, fmt.Errorf("failed to read service account token: %v", err)
+		return fmt.Errorf("failed to read service account token: %v", err)
 	}
 
 	// Authenticate with Vault using the Kubernetes auth method
@@ -250,11 +229,11 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient client.Client, s
 		Post(fmt.Sprintf("%s/v1/auth/kubernetes/login", vaultIntegration.Address))
 	if err != nil {
 		logger.Error(err, "Failed to authenticate with Vault")
-		return false, fmt.Errorf("failed to authenticate with Vault: %v", err)
+		return fmt.Errorf("failed to authenticate with Vault: %v", err)
 	}
 	if resp.StatusCode() != 200 {
 		logger.Error(fmt.Errorf("failed to authenticate with Vault"), "Vault authentication failed", "response", resp.String())
-		return false, fmt.Errorf("failed to authenticate with Vault: %v", resp.String())
+		return fmt.Errorf("failed to authenticate with Vault: %v", resp.String())
 	}
 
 	// Set the client token after successful authentication
@@ -265,7 +244,6 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient client.Client, s
 	keys := []string{"password", "hec_token", "idxc_secret", "pass4SymmKey", "shc_secret"}
 
 	// Iterate over each specified key and check if any version has changed
-	updated := false
 	for _, key := range keys {
 		// Construct the metadata path for each key
 		metadataPath := fmt.Sprintf("%s/%s", vaultIntegration.SecretPath, key)
@@ -283,38 +261,23 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient client.Client, s
 			Get(fmt.Sprintf("%s/v1/%s", vaultIntegration.Address, metadataPath))
 		if err != nil {
 			logger.Error(err, "Failed to read secret metadata from Vault", "metadataPath", metadataPath)
-			return false, fmt.Errorf("failed to read secret metadata from Vault: %v", err)
+			return fmt.Errorf("failed to read secret metadata from Vault: %v", err)
 		}
 		if resp.StatusCode() != 200 {
 			logger.Error(fmt.Errorf("failed to read secret metadata from Vault"), "Vault metadata read failed", "response", vaultError)
-			return false, fmt.Errorf("failed to read secret metadata from Vault: %v", vaultError)
+			return fmt.Errorf("failed to read secret metadata from Vault: %v", vaultError)
 		}
 
-		version := metadataResponse.Metadata.Version
+		version := metadataResponse.Data.Metadata.Version
 
 		// Get the current version from the StatefulSet annotations
 		annotationKey := fmt.Sprintf("vault-secret-version-%s", key)
-		currentVersion := latestStatefulSet.Spec.Template.Annotations[annotationKey]
-		logger.Info("current version of statefulset","annotations", latestStatefulSet.Spec.Template.Annotations)
 
-		// If the version has changed, update the StatefulSet to trigger a rolling restart
-		if currentVersion != strconv.Itoa(int(version)) {
-			if statefulSet.Spec.Template.Annotations == nil {
-				statefulSet.Spec.Template.Annotations = make(map[string]string)
-			}
-			statefulSet.Spec.Template.Annotations[annotationKey] = strconv.Itoa(int(version))
-			updated = true
-			logger.Info("Secret version changed", "key", key, "newVersion", version, "oldVersion", currentVersion)
+		if statefulSet.Spec.Template.Annotations == nil {
+			statefulSet.Spec.Template.Annotations = make(map[string]string)
 		}
+		statefulSet.Spec.Template.Annotations[annotationKey] = strconv.Itoa(int(version))
 	}
 
-	// If any secret version has changed, update the StatefulSet to trigger a rolling restart
-	if updated {
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-		statefulSet.Spec.Template.Annotations["checksum/config"] = fmt.Sprintf("%d", rng.Int())
-		logger.Info("StatefulSet updated to trigger rolling restart", "statefulSet", statefulSet.Name)
-		return true, nil
-	}
-
-	return false, nil
+	return nil
 }
