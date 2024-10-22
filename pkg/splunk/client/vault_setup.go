@@ -281,3 +281,72 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 
 	return nil
 }
+
+
+// GetSpecificSecretTokenFromVault retrieves a specific secret token's value from a Pod
+func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.ControllerClient, vaultIntegration *enterpriseApi.VaultIntegration, secretToken string) (string, error) {
+	logger.Info("CheckAndRestartStatefulSet called")
+
+	// Initialize Vault client
+	client := resty.New()
+	client.SetDebug(true) //FIXME TODO remove once code complete
+
+	// Read the Kubernetes service account token
+	tokenFile := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	token, err := os.ReadFile(tokenFile)
+	if err != nil {
+		logger.Error(err, "Failed to read service account token")
+		return "", fmt.Errorf("failed to read service account token: %v", err)
+	}
+
+	// Authenticate with Vault using the Kubernetes auth method
+	data := map[string]interface{}{
+		"role": vaultIntegration.Role,
+		"jwt":  string(token),
+	}
+	var authResponse map[string]interface{}
+	resp, err := client.R().
+		SetBody(data).
+		SetResult(&authResponse).
+		Post(fmt.Sprintf("%s/v1/auth/kubernetes/login", vaultIntegration.Address))
+	if err != nil {
+		logger.Error(err, "Failed to authenticate with Vault")
+		return "", fmt.Errorf("failed to authenticate with Vault: %v", err)
+	}
+	if resp.StatusCode() != 200 {
+		logger.Error(fmt.Errorf("failed to authenticate with Vault"), "Vault authentication failed", "response", resp.String())
+		return "", fmt.Errorf("failed to authenticate with Vault: %v", resp.String())
+	}
+
+	// Set the client token after successful authentication
+	tokenValue := authResponse["auth"].(map[string]interface{})["client_token"].(string)
+	logger.Info("Authenticated with Vault", "client_token", tokenValue)
+
+	key := secretToken
+	// Construct the metadata path for each key
+	metadataPath := fmt.Sprintf("%s/%s", vaultIntegration.SecretPath, key)
+	if vaultIntegration.SecretPath[len(vaultIntegration.SecretPath)-1] == '/' {
+		metadataPath = fmt.Sprintf("%smetadata/%s", vaultIntegration.SecretPath, key)
+	}
+	vaultError := &VaultError{}
+	// Read the secret metadata from Vault to get the version
+	var metadataResponse VaultResponse
+	resp, err = client.R().
+		SetHeader("X-Vault-Token", tokenValue).
+		SetResult(&metadataResponse).
+		SetError(vaultError).
+		ForceContentType("application/json").
+		Get(fmt.Sprintf("%s/v1/%s", vaultIntegration.Address, metadataPath))
+	if err != nil {
+		logger.Error(err, "Failed to read secret metadata from Vault", "metadataPath", metadataPath)
+		return "", fmt.Errorf("failed to read secret metadata from Vault: %v", err)
+	}
+	if resp.StatusCode() != 200 {
+		logger.Error(fmt.Errorf("failed to read secret metadata from Vault"), "Vault metadata read failed", "response", vaultError)
+		return "", fmt.Errorf("failed to read secret metadata from Vault: %v", vaultError)
+	}
+
+	password := metadataResponse.Data.Data.Value
+
+	return password, nil
+}
