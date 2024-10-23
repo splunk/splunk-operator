@@ -80,7 +80,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			case "gcp":
 				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				Expect(err).To(Succeed(), "Unable to download license file from GCP")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			default:
@@ -187,7 +187,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			case "gcp":
 				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
-				Expect(err).To(Succeed(), "Unable to download license file from S3")
+				Expect(err).To(Succeed(), "Unable to download license file from GCP")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			default:
