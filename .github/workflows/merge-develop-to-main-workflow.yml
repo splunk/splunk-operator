@@ -85,15 +85,15 @@ jobs:
 
     - name: Build Splunk Operator Image
       run: |
-        make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
+        make docker-buildx IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
 
     - name: Generate Release Artifacts
       run: |
         make generate-artifacts  IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} VERSION=${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=splunk/splunk:${{ github.event.inputs.enterprise_version }}
 
-    - name: Push release RC Versioned Image
+    - name: Pull release RC Versioned Image
       run: |
-        make docker-push IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
+        docker pull IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
 
     - name: Tag default Release Candidate Image and Push
       run: |
