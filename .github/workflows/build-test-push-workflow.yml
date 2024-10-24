@@ -168,7 +168,6 @@ jobs:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-      SPLUNK_OPERATOR_IMAGE: splunk/splunk-operator:$GITHUB_SHA
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
       # This regex matches any string not containing smoke keyword
@@ -239,6 +238,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
+      - name: Set Splunk Operator image
+        run: |
+            echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
