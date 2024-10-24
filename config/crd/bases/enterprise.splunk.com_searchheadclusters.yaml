@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: (devel)
   name: searchheadclusters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
@@ -2244,6 +2244,23 @@ spec:
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
+                    type: string
+                type: object
+              vaultIntegration:
+                description: Vault represents the Vault configuration for enabling
+                  secret injection.
+                properties:
+                  address:
+                    description: Vault Address
+                    type: string
+                  enable:
+                    description: Enable vault support
+                    type: boolean
+                  role:
+                    description: Vault Role
+                    type: string
+                  secretPath:
+                    description: Vault secret path
                     type: string
                 type: object
               volumes:
@@ -6450,6 +6467,23 @@ spec:
                   storageClassName:
                     description: Name of StorageClass to use for persistent volume
                       claims
+                    type: string
+                type: object
+              vaultIntegration:
+                description: Vault represents the Vault configuration for enabling
+                  secret injection.
+                properties:
+                  address:
+                    description: Vault Address
+                    type: string
+                  enable:
+                    description: Enable vault support
+                    type: boolean
+                  role:
+                    description: Vault Role
+                    type: string
+                  secretPath:
+                    description: Vault secret path
                     type: string
                 type: object
               volumes:
