@@ -92,8 +92,8 @@ jobs:
       TEST_TO_SKIP:  "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
-      GCP_ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
-      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
+      GCP_ENTERPRISE_LICENSE_LOCATION: "test_licenses/"
+      ENTERPRISE_LICENSE_LOCATION: "test_licenses/"
       REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       CLUSTER_WIDE: "true"
       GCP_SERVICE_ACCOUNT_ENABLED: "false"
