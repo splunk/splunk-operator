@@ -38,7 +38,7 @@ jobs:
         password: ${{ secrets.AZURE_ACR_DOCKER_PASSWORD }}
     - name: Make Splunk Operator Image
       run: |
-        make docker-build IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-buildx IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
     - name: Push Splunk Operator Image to the Container Registry
       run: |
         echo "Uploading Image to the Container Registry :: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
