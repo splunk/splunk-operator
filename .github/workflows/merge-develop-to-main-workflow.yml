@@ -85,7 +85,7 @@ jobs:
 
     - name: Build Splunk Operator Image
       run: |
-        make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
+        make docker-buildx IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
 
     - name: Generate Release Artifacts
       run: |
