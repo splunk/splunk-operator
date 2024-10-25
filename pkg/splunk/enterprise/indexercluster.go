@@ -820,6 +820,11 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
+	} else {
+		err = ApplyIdxcVaultSecret(ctx, mgr, desiredReplicas, podExecClient)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
 	}
 
 	// update CR status with IDXC information
@@ -926,7 +931,7 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
 		} 
 	} else {	
-	// Retrieve admin password from Pod
+		// Retrieve admin password from Pod
 		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
@@ -1073,6 +1078,93 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	// truncate any extra peers that we didn't check (leftover from scale down)
 	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
 		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
+	}
+
+	return nil
+}
+
+
+// ApplyIdxcVaultSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
+func ApplyIdxcVaultSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
+	var adminPwd string 
+	var version string 
+	var err error
+
+	adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
+	if err != nil {
+		mgr.log.Error(err, "Couldn't retrieve the admin password from vault")
+	} 
+	version, err = splclient.GetSpecificSecretTokenVersionFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
+	if err != nil {
+		mgr.log.Error(err, "Couldn't retrieve the admin password from vault")
+	} 
+
+	
+	// If namespace scoped secret revision is the same ignore
+	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
+		// First time, set resource version in CR
+		mgr.log.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
+		mgr.cr.Status.NamespaceSecretResourceVersion = version
+		return nil
+	} else if mgr.cr.Status.NamespaceSecretResourceVersion == version {
+		// If resource version hasn't changed don't return
+		return nil
+	}
+
+	mgr.log.Info("Namespaced scoped secret revision has changed")
+
+	// Retrieve idxc_secret password from secret data
+	nsIdxcSecret := adminPwd
+
+	// Loop over all indexer pods and get individual pod's idxc password
+	for i := int32(0); i <= replicas-1; i++ {
+		// Enable maintenance mode
+		if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
+			var managerIdxcName string
+			var cmPodName string
+			if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
+				managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+				cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+			} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+				managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+				cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
+			} else {
+				return errors.New("empty cluster manager reference")
+			}
+			podExecClient.SetTargetPodName(ctx, cmPodName)
+			err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
+			if err != nil {
+				return err
+			}
+			mgr.log.Info("Set CM in maintenance mode")
+		}
+
+		// Get client for indexer Pod
+		idxcClient := mgr.getClient(ctx, i)
+
+		// Change idxc secret key
+		err = idxcClient.SetIdxcSecret(nsIdxcSecret)
+		if err != nil {
+			return err
+		}
+		mgr.log.Info("Changed idxc secret")
+
+		// Restart splunk instance on pod
+		err = idxcClient.RestartSplunk()
+		if err != nil {
+			return err
+		}
+		mgr.log.Info("Restarted splunk")
+
+		// Keep a track of all the secrets on pods to change their idxc secret below
+		mgr.cr.Status.IdxcPasswordChangedSecrets[version] = true
+
+		// Set the idxc_secret changed flag to true
+		if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
+			mgr.cr.Status.IndexerSecretChanged[i] = true
+		} else {
+			mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
+		}
 	}
 
 	return nil
