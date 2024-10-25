@@ -17,9 +17,9 @@ package client
 
 import (
 	"context"
-	"strings"
 	"io"
 	"os"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	//"golang.org/x/oauth2/google"
@@ -181,7 +181,7 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 	maxKeys := 4000 // Limit the number of objects manually
 
 	if strings.HasSuffix(gcsClient.StartAfter, "/") {
-		startAfterFound  = true
+		startAfterFound = true
 	}
 
 	for count := 0; count < maxKeys; {
@@ -198,8 +198,8 @@ func (gcsClient *GCSClient) GetAppsList(ctx context.Context) (RemoteDataListResp
 		if !startAfterFound {
 			if objAttrs.Name == gcsClient.StartAfter {
 				startAfterFound = true // Start adding objects after this point
-			} 
-		    continue
+			}
+			continue
 		}
 
 		// Map GCS object attributes to RemoteObject
