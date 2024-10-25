@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -67,33 +68,52 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 
 // Do processes a Splunk REST API request and unmarshals response into obj, if not nil.
 func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj interface{}) error {
-	// send HTTP response and check status
+	client := resty.New()
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+	client.SetDebug(true) //FIXME TODO
+
+	// Set basic auth
 	request.SetBasicAuth(c.Username, c.Password)
-	response, err := c.Client.Do(request)
+
+	// Convert request.Header to map[string]string
+	headers := make(map[string]string)
+	for key, values := range request.Header {
+		for _, value := range values {
+			headers[key] = value
+		}
+	}
+	// Convert http.Request to resty.Request
+	restyRequest := client.R().
+		SetBasicAuth(c.Username, c.Password).
+		SetHeaders(headers).
+		SetBody(request.Body)
+
+	// Execute the request
+	response, err := restyRequest.Execute(request.Method, request.URL.String())
 	if err != nil {
 		return err
 	}
-	//default set flag to false and the check response code
+
+	// Check response status code
 	expectedStatusFlag := false
-	for i := 0; i < len(expectedStatus); i++ {
-		if expectedStatus[i] == response.StatusCode {
+	for _, status := range expectedStatus {
+		if response.StatusCode() == status {
 			expectedStatusFlag = true
 			break
 		}
 	}
 	if !expectedStatusFlag {
-		return fmt.Errorf("response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
-	}
-	if obj == nil {
-		return nil
+		return fmt.Errorf("response code=%d from %s; want %v", response.StatusCode(), request.URL, expectedStatus)
 	}
 
-	// unmarshall response if obj != nil
-	data, _ := io.ReadAll(response.Body)
-	if len(data) == 0 {
-		return fmt.Errorf("received empty response body from %s", request.URL)
+	// Unmarshal response if obj is not nil
+	if obj != nil {
+		if err := json.Unmarshal(response.Body(), obj); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %v", err)
+		}
 	}
-	return json.Unmarshal(data, obj)
+
+	return nil
 }
 
 // Get sends a REST API request and unmarshals response into obj, if not nil.

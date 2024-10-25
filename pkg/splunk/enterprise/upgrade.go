@@ -160,8 +160,8 @@ SearchHeadCluster:
 			return false, nil
 		}
 		return true, nil
-	} else {
 
+	} else {
 		// get the clusterManagerRef attached to the instance
 		clusterManagerRef := spec.ClusterManagerRef
 
@@ -217,7 +217,7 @@ IndexerCluster:
 		// check cluster info call using splunk rest api
 		clusterInfo, err := GetClusterInfoCall(ctx, mgr, false)
 		if err != nil {
-			return false, fmt.Errorf("could not get cluster info from cluster manager")
+			return false, fmt.Errorf("upgrade-path: could not get cluster info from cluster manager")
 		}
 		// check if cluster is multisite
 		if clusterInfo.MultiSite == "true" {
