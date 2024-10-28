@@ -233,7 +233,7 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	err = ReconcileCRSpecificConfigMap(ctx, client, cr)
 	if err != nil {
 		return nil, err
-	}	
+	}
 
 	return namespaceScopedSecret, nil
 }
@@ -243,7 +243,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReconcileCRSpecificConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	configMapName:= fmt.Sprintf("splunk-config-%s", cr.GetName())
+	configMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
