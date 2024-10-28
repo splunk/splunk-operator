@@ -37,6 +37,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -229,8 +230,59 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 			return nil, err
 		}
 	}
+	err = ReconcileCRSpecificConfigMap(ctx, client, cr)
+	if err != nil {
+		return nil, err
+	}	
 
 	return namespaceScopedSecret, nil
+}
+
+// ReconcileCRSpecificConfigMap reconciles CR Specific config map exists and contains the ManualUpdate field set to "on"
+func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ReconcileCRSpecificConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	configMapName:= fmt.Sprintf("splunk-config-%s", cr.GetName())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// Create a new config map if it doesn't exist
+			configMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: cr.GetNamespace(),
+				},
+				Data: map[string]string{
+					"ManualUpdate": "on",
+				},
+			}
+			err = client.Create(ctx, configMap)
+			if err != nil {
+				scopedLog.Error(err, "Failed to create config map")
+				return err
+			}
+			scopedLog.Info("Created new config map with ManualUpdate set to 'on'")
+			return nil
+		}
+		scopedLog.Error(err, "Failed to get config map")
+		return err
+	}
+
+	// Check if the ManualUpdate field exists
+	if _, exists := configMap.Data["ManualUpdate"]; !exists {
+		configMap.Data["ManualUpdate"] = "on"
+		err = client.Update(ctx, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Failed to update config map with ManualUpdate field")
+			return err
+		}
+		scopedLog.Info("Updated config map with ManualUpdate set to 'on'")
+	}
+
+	return nil
 }
 
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
