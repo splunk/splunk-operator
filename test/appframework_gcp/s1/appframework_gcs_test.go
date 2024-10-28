@@ -79,7 +79,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, s1, appframeworks1, appframework, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -249,8 +249,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, gcps1, appframeworkgcps1, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -412,8 +412,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, smoke, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("s1gcp, smokegcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled, install apps, scale up, install apps on new pod, scale down", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -607,8 +607,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("s1gcp, integrationgcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled, install apps, scale up, upgrade apps", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -741,8 +741,8 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	// ES App Installation not supported at the time. Will be added back at a later time.
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, integration, appframeworks1, appframework: can deploy a Standalone and have ES app installed", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("s1gcp, integrationgcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone and have ES app installed", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -842,8 +842,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled and install around 350MB of apps at once", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -911,8 +911,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("s1, smoke, appframeworks1, appframework: can deploy a standalone instance with App Framework enabled for manual poll", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("s1gcp, smokegcp, appframeworks1gcp, appframeworkgcp: can deploy a standalone instance with App Framework enabled for manual poll", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1089,8 +1089,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1190,8 +1190,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: can add new apps to app source while install is in progress and have all apps installed", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can add new apps to app source while install is in progress and have all apps installed", func() {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1302,8 +1302,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: Deploy a Standalone instance with App Framework enabled and reset operator pod while app install is in progress", func() {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1398,8 +1398,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: Deploy a Standalone instance with App Framework enabled and reset operator pod while app download is in progress", func() {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1466,8 +1466,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled, install an app then disable it and remove it from app source", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1560,8 +1560,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1697,8 +1697,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: Deploy a Standalone instance with App Framework enabled and update apps after app download is completed", func() {
 
 			/* Test Steps
 			################## SETUP ####################
@@ -1781,8 +1781,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance and install a bigger volume of apps than the operator PV disk space", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1856,8 +1856,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworks1, appframework: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: Deploy a Standalone instance with App Framework enabled and delete apps from app directory when app download is complete", func() {
 
 			/* Test Steps
 				################## SETUP ####################
@@ -1927,8 +1927,8 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	XContext("Standalone deployment (S1) with App Framework", func() {
-		It("smoke, gcps1, appframeworkgcps1, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+	Context("Standalone deployment (S1) with App Framework", func() {
+		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################

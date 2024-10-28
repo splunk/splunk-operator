@@ -25,8 +25,22 @@ Utilizing the App Framework requires one of the following remote storage provide
 * OR, Use "Managed Indentity" role assigment to the Azure blob container. See [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
 
 ### Prerequisites for GCP bucket based remote object storage
-* Create role and role-binding for splunk-operator service account, to provide read-only access for S3 credentials.
-* The GCP servcie account key is provided as a kubernetes secret(key.json), or in workload identity is configured to service account.
+To use GCP storage in the App Framework, follow these setup requirements:
+
+### Role & Role Binding for Access: 
+Create a role and role-binding for the splunk-operator service account. This allows read-only access to the GCP bucket to retrieve Splunk apps. Access should be limited to read-only for the security of data within the GCP bucket.
+
+### Credentials via Kubernetes Secret or Workload Identity: 
+Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
+
+* Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
+* Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
+
+Example for creating the secret 
+
+```shell
+kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json
+```
 
 Splunk apps and add-ons deployed or installed outside of the App Framework are not managed, and are unsupported.
 
@@ -52,7 +66,11 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
        * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
-
+   * GCP bucket:
+       * Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
+          * Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
+            * Example: `kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json`
+          * Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
 3. Create unique folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, the network and authentication Splunk Apps are split into different folders and named `networkApps` and `authApps`.
 
@@ -121,6 +139,36 @@ spec:
         path: bucket-app-framework/Standalone-us/
         endpoint: https://mystorageaccount.blob.core.windows.net
         secretRef: azureblob-secret
+```
+
+example using GCP blob: Standalone.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: networkApps
+        location: networkAppsLoc/
+      - name: authApps
+        location: authAppsLoc/
+    volumes:
+      - name: volume_app_repo
+        storageType: gcs
+        provider: gcp
+        path: bucket-app-framework/Standalone-us/
+        endpoint: https://storage.googleapis.com
+        secretRef: gcs-secret
 ```
 
 6. Apply the Custom Resource specification: `kubectl apply -f Standalone.yaml`
@@ -224,6 +272,38 @@ spec:
         endpoint: https://mystorageaccount.blob.core.windows.net
         secretRef: azureblob-secret
 ```
+
+Example using GCP Bucket: ClusterManager.yaml
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: networkApps
+        location: networkAppsLoc/
+      - name: clusterBase
+        location: clusterBaseLoc/
+      - name: adminApps
+        location: adminAppsLoc/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: gcs
+        provider: gcp
+        path: bucket-app-framework/idxcAndCmApps/
+        endpoint: https://storage.googleapis.com
+        secretRef: gcs-secret
+```
+
 6. Apply the Custom Resource specification: `kubectl apply -f ClusterManager.yaml`
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps` folder to the cluster manager instance for local use.
@@ -333,6 +413,40 @@ spec:
         endpoint: https://mystorageaccount.blob.core.windows.net
         secretRef: azureblob-secret
 ```
+
+Example using GCP bucket: SearchHeadCluster.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: networkApps
+        location: networkAppsLoc/
+      - name: clusterBase
+        location: clusterBaseLoc/
+      - name: adminApps
+        location: adminAppsLoc/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: gcs
+        provider: gcp
+        path: bucket-app-framework/idxcAndCmApps/
+        endpoint: https://storage.googleapis.com
+        secretRef: gcs-secret
+
+```
+
 6. Apply the Custom Resource specification: `kubectl apply -f SearchHeadCluster.yaml`
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys the apps from the `adminApps`  folder to the Deployer instance for local use.
