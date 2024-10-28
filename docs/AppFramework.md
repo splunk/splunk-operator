@@ -75,7 +75,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
    * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, the network and authentication Splunk Apps are split into different folders and named `networkApps` and `authApps`.
 
 4. Copy your Splunk App or Add-on archive files to the App Source.
-   * In this example, the Splunk Apps are located at `bucket-app-framework/Standalone-us/networkAppsLoc/` and `bucket-app-framework/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
+   * In this example, the Splunk Apps are located at `bucket-app-framework/Standalone-us/networkAppsLoc/` and `bucket-app-framework/Standalone-us/authAppsLoc/`, and are both accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and https://storage.googleapis.com for GCP bucket.
 
 5. Update the standalone CR specification and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will run the apps locally, set the `scope: local ` The Standalone, Monitoring Console and License Manager CRs always use a local scope.
@@ -196,13 +196,19 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
        * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
+   * GCP bucket:
+       * Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
+          * Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
+            * Example: `kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json`
+          * Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
    * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run locally on the cluster manager, and select apps that will be distributed to all cluster peers by the cluster manager.
    * The apps are split across three folders named `networkApps`, `clusterBase`, and `adminApps`. The apps placed into  `networkApps` and `clusterBase` are distributed to the cluster peers, but the apps in `adminApps` are for local use on the cluster manager instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
-   * In this example, the Splunk apps for the cluster peers are located at `bucket-app-framework/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
+   * In this example, the Splunk apps for the cluster peers are located at `bucket-app-framework/idxcAndCmApps/networkAppsLoc/`,  `bucket-app-framework/idxcAndCmApps/clusterBaseLoc/`, and the apps for the cluster manager are located at`bucket-app-framework/idxcAndCmApps/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and https://storage.googleapis.com for GCP bucket.
+
 
 5. Update the ClusterManager CR specification and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance. For CRs where the Splunk Enterprise instance will deploy the apps to cluster peers, set the `scope:  cluster`. The ClusterManager and SearchHeadCluster CRs support both cluster and local scopes.
@@ -333,6 +339,11 @@ This example describes the installation of apps on the Deployer and the Search H
        * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
+   * GCP bucket:
+       * Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
+          * Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
+            * Example: `kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json`
+          * Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
 
 
 3. Create unique folders on the remote storage volume to use as App Source locations.
@@ -340,7 +351,7 @@ This example describes the installation of apps on the Deployer and the Search H
    * The apps are split across three folders named `searchApps`, `machineLearningApps` and `adminApps`. The apps placed into `searchApps` and `machineLearningApps` are distributed to the search heads, but the apps in `adminApps` are for local use on the Deployer instance only.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
-   * In this example, the Splunk apps for the search heads are located at `bucket-app-framework/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework/shcLoc-us/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3 and https://mystorageaccount.blob.core.windows.net for azure blob.
+   * In this example, the Splunk apps for the search heads are located at `bucket-app-framework/shcLoc-us/searchAppsLoc/`,  `bucket-app-framework/shcLoc-us/machineLearningAppsLoc/`, and the apps for the Deployer are located at `bucket-app-framework/shcLoc-us/adminAppsLoc/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and and https://storage.googleapis.com for GCP bucket.
 
 5. Update the SearchHeadCluster CR specification, and append the volume, App Source configuration, and scope.
    * The scope determines where the apps and add-ons are placed into the Splunk Enterprise instance.
@@ -557,7 +568,7 @@ Here is a typical App framework configuration in a Custom Resource definition:
 
 * `name` uniquely identifies the remote storage volume name within a CR. This is used by the Operator to identify the local volume.
 * `storageType` describes the type of remote storage. Currently, `s3`, `blob` are the supported storage type.
-* `provider` describes the remote storage provider. Currently, `aws`, `minio` and `azure` are the supported providers. Use `s3` with `aws` or `minio` and use `blob` with `azure`.
+* `provider` describes the remote storage provider. Currently, `aws`, `minio` `gcp` and `azure` are the supported providers. Use `s3` with `aws` or `minio`, use `blob` with `azure` or `gcp`
 * `endpoint` describes the URI/URL of the remote storage endpoint that hosts the apps.
 * `secretRef` refers to the K8s secret object containing the static remote storage access key.  This parameter is not required if using IAM role based credentials.
 * `path` describes the path (including the folder) of one or more app sources on the remote store.
@@ -826,6 +837,73 @@ Azure Blob Authorization Recommendations:
 Azure allows "Managed Identities" assignment at the "storage accounts" level as well as at specific buckets levels. A managed identity that is assigned read permissions at a storage account level will have read access for all the buckets within that storage account. As a good security practice, you should assign the managed identity to only the specific buckets and not to the whole storage account.
 
 In contrast to "Managed Identities", Azure allows the "shared access keys" configurable only at the storage accounts level. When using the "secretRef" configuration in the CRD, the underlying secret key will allow both read and write access to the storage account (and all the buckets within it). So, based on your security needs, you may want to consider using "Managed Identities" instead of secrets. Also note that there isn't an automated way of rotating the secret key, so in case you are using these keys, please rotate them at regular intervals of times such as 90 days interval.
+
+## Setup GCP bucket access
+
+Here is a step-by-step guide for setting up both a Kubernetes Secret with a GCP service account JSON key file and using Workload Identity to securely access GCP storage from Splunk Operator pods.
+
+### Option 1: Using a Kubernetes Secret for GCP Access
+
+1. **Create a GCP Service Account**:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/).
+   - Navigate to **IAM & Admin > Service Accounts**.
+   - Click **Create Service Account**.
+   - Name the service account, e.g., `splunk-app-framework-sa`.
+   - Grant the service account the **Storage Object Viewer** role for the required bucket.
+
+2. **Download the Service Account Key**:
+   - In the **Service Accounts** page, find your service account and click **Actions > Manage Keys**.
+   - Click **Add Key > Create new key** and select JSON format.
+   - Download the key file (it will be named something like `my-service-account-key.json`).
+
+3. **Create a Kubernetes Secret**:
+   - Use the JSON key file to create a Kubernetes Secret.
+   - Run the following command in the namespace where Splunk Operator is installed:
+     ```bash
+     kubectl create secret generic gcs-secret --from-file=key.json=/path/to/my-service-account-key.json -n splunk-operator
+     ```
+   - This `gcs-secret` can now be referenced in the Splunk Operator’s Custom Resource Definition (CRD) to allow access to the GCP bucket.
+
+### Option 2: Using Workload Identity for GCP Access
+
+To eliminate the need for a JSON key file, use Workload Identity, which securely binds the Kubernetes service account to a GCP service account.
+
+1. **Enable Workload Identity on Your GKE Cluster**:
+   - Go to the **Google Cloud Console > Kubernetes Engine > Clusters**.
+   - Select your GKE cluster.
+   - Under **Security** settings, ensure **Workload Identity** is enabled.
+
+2. **Create a GCP Service Account and Assign Permissions**:
+   - Go to **IAM & Admin > Service Accounts** and create a new service account, e.g., `splunk-app-framework-sa`.
+   - Grant the service account **Storage Object Viewer** access to the GCP bucket.
+
+3. **Create a Kubernetes Service Account**:
+   - Run the following command to create a Kubernetes service account in the namespace where Splunk Operator is installed:
+     ```bash
+     kubectl create serviceaccount splunk-operator-sa -n splunk-operator
+     ```
+
+4. **Associate the GCP Service Account with the Kubernetes Service Account**:
+   - Use the following command to establish the binding:
+     ```bash
+     gcloud iam service-accounts add-iam-policy-binding splunk-app-framework-sa@<project-id>.iam.gserviceaccount.com \
+       --role roles/iam.workloadIdentityUser \
+       --member "serviceAccount:<project-id>.svc.id.goog[splunk-operator/splunk-operator-sa]"
+     ```
+   - Replace `<project-id>` and `splunk-operator` with your actual GCP project ID and the Kubernetes namespace.
+
+5. **Annotate the Kubernetes Service Account**:
+   - Run the following command to annotate the Kubernetes service account with the GCP service account:
+     ```bash
+     kubectl annotate serviceaccount splunk-operator-sa \
+       --namespace splunk-operator \
+       iam.gke.io/gcp-service-account=splunk-app-framework-sa@<project-id>.iam.gserviceaccount.com
+     ```
+
+6. **Update the Splunk Operator Custom Resource to Use the Service Account**:
+   - Ensure the CRD or deployment configuration specifies the service account `splunk-operator-sa`, allowing it to use Workload Identity.
+
+By following these steps, you can set up either a Kubernetes secret or Workload Identity for GCP access, enabling the Splunk Operator to securely retrieve apps and add-ons from a GCP bucket.
 
 ## App Framework Troubleshooting
 
