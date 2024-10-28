@@ -29,6 +29,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager m
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM --platform=${BUILDPLATFORM:-linux/amd64} ${TARGETOSIMAGE}
+
+ARG BUILDPLATFORM
+ARG TARGETOSIMAGE
+
 ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
