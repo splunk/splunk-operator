@@ -35,7 +35,7 @@ var _ = Describe("s1appfw test", func() {
 
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
-	var s3TestDir string
+	var gcsTestDir string
 	var uploadedApps []string
 	var appSourceName string
 	var appSourceVolumeName string
@@ -50,7 +50,7 @@ var _ = Describe("s1appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
-		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+		gcsTestDir = "s1appfw-" + testenv.RandomDNSName(4)
 		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
@@ -62,9 +62,9 @@ var _ = Describe("s1appfw test", func() {
 		if deployment != nil {
 			deployment.Teardown()
 		}
-		// Delete files uploaded to S3
+		// Delete files uploaded to GCS
 		if !testcaseEnvInst.SkipTeardown {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 		}
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
@@ -83,10 +83,10 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to gcs for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			   * Upload V1 apps to S3 for Standalone
+			   * Upload V1 apps to gcs for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ V1 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
@@ -99,7 +99,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############ UPGRADE V2 APPS ###########
-			   * Upload V2 apps to S3 App Source
+			   * Upload V2 apps to gcs App Source
 			   ############ V2 APP VERIFICATION FOR STANDALONE AND MONITORING CONSOLE  ###########
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -113,20 +113,20 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR MONITORING CONSOLE ####################
 
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to gcs for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Monitoring Console", appVersion))
 
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -147,10 +147,10 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to S3 for Standalone
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			// Upload V1 apps to gcs for Standalone
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -158,7 +158,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -206,22 +206,22 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############## UPGRADE APPS #################
 
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on gcs
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for Standalone and Monitoring Console
+			// Upload V2 apps to gcs for Standalone and Monitoring Console
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -254,10 +254,10 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V2 apps to S3 for Monitoring Console
+			   * Upload V2 apps to gcs for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			   * Upload V2 apps to S3 for Standalone
+			   * Upload V2 apps to gcs for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ INITIAL VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
@@ -270,7 +270,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   ############# DOWNGRADE APPS ################
-			   * Upload V1 apps on S3
+			   * Upload V1 apps on gcs
 			   * Wait for Monitoring Console and Standalone pods to be ready
 			   ########## DOWNGRADE VERIFICATION FOR STANDALONE AND MONITORING CONSOLE ###########
 			   * Verify Apps Downloaded in App Deployment Info
@@ -284,27 +284,27 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V2 apps to S3
+			// Upload V2 apps to gcs
 			appVersion := "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
 			appFileList := testenv.GetAppFileList(appListV2)
-			s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+			gcsTestDir = "s1appfw-" + testenv.RandomDNSName(4)
 
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Monitoring Console", appVersion))
+			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -326,7 +326,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -363,25 +363,25 @@ var _ = Describe("s1appfw test", func() {
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############# DOWNGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on gcs
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil
 
 			// get revision number of the resource
 			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			// Upload V1 apps to S3 for Standalone and Monitoring Console
+			// Upload V1 apps to gcs for Standalone and Monitoring Console
 			appVersion = "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV1)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -417,7 +417,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload apps on S3
+			   * Upload apps on gcs
 			   * Create 2 app sources for Monitoring Console and Standalone
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
 			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
@@ -457,23 +457,23 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Standalone and Monitoring Console
+			// Upload V1 apps to gcs for Standalone and Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
 
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -493,15 +493,15 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload apps to S3 for Standalone
-			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			// Upload apps to gcs for Standalone
+			gcsTestDir := "s1appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to gcs test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -612,7 +612,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload apps on S3
+			   * Upload apps on gcs
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone CRD with app framework and wait for the pod to be ready
 			   ########## INITIAL VERIFICATION #############
@@ -628,7 +628,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Scale up Standalone
 			   * Wait for Standalone to be ready
 			   ############### UPGRADE APPS ################
-			   * Upload V2 apps to S3 App Source
+			   * Upload V2 apps to gcs App Source
 			   ###### SCALING UP/UPGRADE VERIFICATIONS #####
 			   * Verify Apps Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -641,24 +641,24 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Standalone
+			// Upload V1 apps to gcs for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone", appVersion))
 
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload apps to S3 for Standalone
-			s3TestDir := "s1appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			// Upload apps to gcs for Standalone
+			gcsTestDir := "s1appfw-" + testenv.RandomDNSName(4)
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to gcs test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -707,18 +707,18 @@ var _ = Describe("s1appfw test", func() {
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// ############## UPGRADE APPS #################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on gcs
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for Standalone and Monitoring Console
+			// Upload V2 apps to gcs for Standalone and Monitoring Console
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone and Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to gcs for Standalone and Monitoring Console", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -746,7 +746,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload ES app to S3
+			   * Upload ES app to gcs
 			   * Create App Source for Standalone
 			   * Prepare and deploy Standalone and wait for the pod to be ready
 			   ################## VERIFICATION #############
@@ -755,22 +755,22 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
-			// Download ES App from S3
-			testcaseEnvInst.Log.Info("Download ES app from S3")
+			// Download ES App from gcs
+			testcaseEnvInst.Log.Info("Download ES app from gcs")
 			esApp := []string{"SplunkEnterpriseSecuritySuite"}
 			appFileList := testenv.GetAppFileList(esApp)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
-			// Upload ES app to S3
-			testcaseEnvInst.Log.Info("Upload ES app on S3")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload ES app to S3 test directory")
+			// Upload ES app to gcs
+			testcaseEnvInst.Log.Info("Upload ES app on gcs")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload ES app to gcs test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopePremiumApps, appSourceName, gcsTestDir, 60)
 			appFrameworkSpec.AppSources[0].PremiumAppsProps = enterpriseApi.PremiumAppsProps{
 				Type: enterpriseApi.PremiumAppsTypeEs,
 				EsDefaults: enterpriseApi.EsDefaults{
@@ -807,21 +807,21 @@ var _ = Describe("s1appfw test", func() {
 
 			// ############## UPGRADE APPS #################
 
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on gcs
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on gcs", appVersion))
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Download ES App from S3
-			testcaseEnvInst.Log.Info("Download updated ES app from S3")
-			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+			// Download ES App from gcs
+			testcaseEnvInst.Log.Info("Download updated ES app from gcs")
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV2, downloadDirV2, appFileList)
 			Expect(err).To(Succeed(), "Unable to download ES app")
 
-			// Upload V2 apps to S3 for Standalone
+			// Upload V2 apps to gcs for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s Es app to S3 for Standalone and Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s Es app to S3 test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s Es app to gcs for Standalone and Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s Es app to gcs test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -848,7 +848,7 @@ var _ = Describe("s1appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Create app source for Standalone
-			   * Add more apps than usual on S3 for this test
+			   * Add more apps than usual on gcs for this test
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############### VERIFICATION ################
 			   * Verify Apps Downloaded in App Deployment Info
@@ -867,21 +867,21 @@ var _ = Describe("s1appfw test", func() {
 			appFileList := testenv.GetAppFileList(appList)
 			appVersion := "V1"
 
-			// Download apps from S3
-			testcaseEnvInst.Log.Info("Download bigger amount of apps from S3 for this test")
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			// Download apps from gcs
+			testcaseEnvInst.Log.Info("Download bigger amount of apps from gcs for this test")
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
-			// Upload apps to S3
-			testcaseEnvInst.Log.Info("Upload bigger amount of apps to S3 for this test")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			// Upload apps to GCS
+			testcaseEnvInst.Log.Info("Upload bigger amount of apps to GCS for this test")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to GCS test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -916,7 +916,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to GCS for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
 			   * Create app source for Standalone
@@ -931,7 +931,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled and version by running splunk cmd
 			     ############ UPGRADE V2 APPS ###########
-			   * Upload V2 apps to S3 App Source
+			   * Upload V2 apps to GCS App Source
 			   ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			   * Verify Apps are not updated
 			   ############ ENABLE MANUAL POLL ############
@@ -949,19 +949,19 @@ var _ = Describe("s1appfw test", func() {
 
 			//################## SETUP ####################
 
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCS for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
+			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 0)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -981,14 +981,14 @@ var _ = Describe("s1appfw test", func() {
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V1 apps to S3
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
+			// Upload V1 apps to GCS
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 0)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 0)
 
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1024,20 +1024,20 @@ var _ = Describe("s1appfw test", func() {
 
 			//############### UPGRADE APPS ################
 
-			//Delete apps on S3 for new Apps
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			//Delete apps on GCS for new Apps
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil
 
-			//Upload new Versioned Apps to S3
+			//Upload new Versioned Apps to GCS
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1094,7 +1094,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Add more apps than usual on S3 for this test
+			   * Add more apps than usual on GCS for this test
 			   * Split the App list into 2 segments with a common apps and uncommon apps for each Standalone
 			   * Create app source for 2 Standalones
 			   * Prepare and deploy Standalones with app framework and wait for the pod to be ready
@@ -1115,30 +1115,30 @@ var _ = Describe("s1appfw test", func() {
 			appList2 := append(appListV1, testenv.RestartNeededApps[:len(testenv.RestartNeededApps)/2]...)
 			appVersion := "V1"
 
-			// Download apps from S3
-			testcaseEnvInst.Log.Info("Download the extra apps from S3 for this test")
+			// Download apps from GCS
+			testcaseEnvInst.Log.Info("Download the extra apps from GCS for this test")
 			appFileList := testenv.GetAppFileList(testenv.RestartNeededApps)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps files")
 
-			// Upload apps to S3 for first Standalone
-			testcaseEnvInst.Log.Info("Upload apps to S3 for 1st Standalone")
+			// Upload apps to GCS for first Standalone
+			testcaseEnvInst.Log.Info("Upload apps to GCS for 1st Standalone")
 			appFileListStandalone1 := testenv.GetAppFileList(appList1)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileListStandalone1, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileListStandalone1, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to GCS test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload apps to S3 for second Standalone
-			testcaseEnvInst.Log.Info("Upload apps to S3 for 2nd Standalone")
-			s3TestDirStandalone2 := "s1appfw-2-" + testenv.RandomDNSName(4)
+			// Upload apps to GCS for second Standalone
+			testcaseEnvInst.Log.Info("Upload apps to GCS for 2nd Standalone")
+			gcsTestDirStandalone2 := "s1appfw-2-" + testenv.RandomDNSName(4)
 			appFileListStandalone2 := testenv.GetAppFileList(appList2)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirStandalone2, appFileListStandalone2, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirStandalone2, appFileListStandalone2, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload apps to GCS test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1152,7 +1152,7 @@ var _ = Describe("s1appfw test", func() {
 			// Create App framework Spec
 			appSourceNameStandalone2 := "appframework-2-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appSourceVolumeNameStandalone2 := "appframework-test-volume-2-" + testenv.RandomDNSName(3)
-			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, s3TestDirStandalone2, 60)
+			appFrameworkSpecStandalone2 := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameStandalone2, enterpriseApi.ScopeLocal, appSourceNameStandalone2, gcsTestDirStandalone2, 60)
 			specStandalone2 := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1195,33 +1195,33 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload V1 apps to S3 for Monitoring Console
+				* Upload V1 apps to GCS for Monitoring Console
 			    * Create app source for Monitoring Console
 			   	* Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-				* Upload big-size app to S3 for Standalone
+				* Upload big-size app to GCS for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				############## VERIFICATIONS ################
 				* Verify App installation is in progress on Standalone
-				* Upload more apps from S3 during bigger app install
+				* Upload more apps from GCS during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR MONITORING CONSOLE ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCS for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
+			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1242,23 +1242,23 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from S3
+			// Download all test apps from GCS
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to S3 for Standalone
+			// Upload big-size app to GCS for Standalone
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			testcaseEnvInst.Log.Info("Upload big-size app to GCS for Standalone")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1280,12 +1280,12 @@ var _ = Describe("s1appfw test", func() {
 			// Verify App installation is in progress on Standalone
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
-			// Upload more apps to S3 for Standalone
+			// Upload more apps to GCS for Standalone
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Standalone")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Standalone")
+			testcaseEnvInst.Log.Info("Upload more apps to GCS for Standalone")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Wait for Standalone to be in READY status
@@ -1307,34 +1307,34 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload big-size app to S3 for Standalone
+				* Upload big-size app to GCS for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				* While app install is in progress, restart the operator
 				############## VERIFICATIONS ################
 				* Verify App installation is in progress on Standalone
-				* Upload more apps from S3 during bigger app install
+				* Upload more apps from GCS during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from S3
+			// Download all test apps from GCS
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to S3 for Standalone
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			// Upload big-size app to GCS for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to GCS for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1403,34 +1403,34 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload big-size app to S3 for Standalone
+				* Upload big-size app to GCS for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				* While app download is in progress, restart the operator
 				############## VERIFICATIONS ################
 				* Verify App download is in progress on Standalone
-				* Upload more apps from S3 during bigger app install
+				* Upload more apps from GCS during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download all test apps from S3
+			// Download all test apps from GCS
 			appVersion := "V1"
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to S3 for Standalone
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			// Upload big-size app to GCS for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to GCS for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1471,7 +1471,7 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Standalone
+			   * Upload V1 apps to GCS for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ VERIFICATION###########
@@ -1484,17 +1484,17 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify no pod resets triggered due to app install
 			   * Verify App enabled  and version by running splunk cmd
 			   * Disable the app
-			   * Delete the app from S3
+			   * Delete the app from GCS
 			   * Check for repo state in App Deployment Info
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to S3 for Standalone
+			// Upload V1 apps to GCS for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1502,7 +1502,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1531,13 +1531,13 @@ var _ = Describe("s1appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
+			// Verify repo state on App to be disabled to be 1 (i.e app present on GCS bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 1, appFileName[0])
 
 			// Disable the app
-			testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDir)
+			testenv.DisableAppsToGCP(downloadDirV1, appFileName, gcsTestDir)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileName)
@@ -1549,23 +1549,23 @@ var _ = Describe("s1appfw test", func() {
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, []string{standalonePodName}, testcaseEnvInst.GetName(), appName, "disabled", false)
 
-			// Delete the file from S3
-			s3Filepath := filepath.Join(s3TestDir, appFileName[0])
-			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName[0]))
+			// Delete the file from GCS
+			gcsFilepath := filepath.Join(gcsTestDir, appFileName[0])
+			err = testenv.DeleteFileOnGCP(testGCSBucket, gcsFilepath)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on GCS test directory", appFileName[0]))
 
-			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
+			// Verify repo state is set to 2 (i.e app deleted from GCS bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, standalone.Name, standalone.Kind, appSourceName, 2, appFileName[0])
 
 		})
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect S3 credentials", func() {
+		It("integrationgcp, s1gcp, appframeworks1gcp, appframeworkgcp: can deploy a Standalone instance with App Framework enabled, attempt to update using incorrect GCS credentials", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Standalone
+			   * Upload V1 apps to GCS for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############ V1 APP VERIFICATION FOR STANDALONE###########
@@ -1581,7 +1581,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Create App framework volume with random credentials and apply to Spec
 			   * Check for changes in App phase to determine if next poll has been triggered
 			   ############ UPGRADE V2 APPS ###########
-			   * Upload V2 apps to S3 App Source
+			   * Upload V2 apps to GCS App Source
 			   * Check no apps are updated as auth key is incorrect
 			   ############  Modify secret key to correct one###########
 			   * Apply spec with correct credentails
@@ -1598,12 +1598,12 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to S3 for Standalone
+			// Upload V1 apps to GCS for Standalone
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1611,7 +1611,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1632,7 +1632,7 @@ var _ = Describe("s1appfw test", func() {
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), secretref)
 			Expect(err).To(Succeed(), "Unable to obtain secret object")
 			secretData := secretStruct.Data
-			modifiedSecretData := map[string][]byte{"s3_access_key": []byte(testenv.RandomDNSName(5)), "s3_secret_key": []byte(testenv.RandomDNSName(5))}
+			modifiedSecretData := map[string][]byte{"gcs_access_key": []byte(testenv.RandomDNSName(5)), "gcs_secret_key": []byte(testenv.RandomDNSName(5))}
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
@@ -1653,18 +1653,18 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// ############## UPGRADE APPS #################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on 
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
+			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for Standalone
+			// Upload V2 apps to GCS for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
 			appFileList = testenv.GetAppFileList(appListV2)
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1702,13 +1702,13 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			################## SETUP ####################
-			* Upload app to S3 for Standalone
+			* Upload app to GCS for Standalone
 			* Create app source for Standalone
 			* Prepare and deploy Standalone
 			* While app download is completed, upload new versions of the apps
 			############## VERIFICATIONS ################
 			* Verify App download is in completed on Standalone
-			* Upload updated app to S3 as pervious app download is complete
+			* Upload updated app to GCS as pervious app download is complete
 			* Verify app is installed on Standalone
 			############## UPGRADE VERIFICATIONS ################
 			* Wait for next poll to trigger on Standalone
@@ -1716,22 +1716,22 @@ var _ = Describe("s1appfw test", func() {
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download test app from S3
+			// Download test app from GCS
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload apps to S3 for Standalone
-			testcaseEnvInst.Log.Info("Upload apps to S3 for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload app to S3 test directory for Standalone")
+			// Upload apps to GCS for Standalone
+			testcaseEnvInst.Log.Info("Upload apps to GCS for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload app to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 120)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 120)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1750,13 +1750,13 @@ var _ = Describe("s1appfw test", func() {
 			// Verify App download is in progress on Standalone
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), standalone.Kind, appSourceName, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
 
-			// Upload V2 apps to S3 for Standalone
+			// Upload V2 apps to GCS for Standalone
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s app to S3 for Standalone", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s app to GCS for Standalone", appVersion))
 			appFileList = testenv.GetAppFileList([]string{appListV2[0]})
 
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s app to S3 test directory for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s app to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			//######### VERIFICATIONS #############
@@ -1787,7 +1787,7 @@ var _ = Describe("s1appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Create a file on operator to utilize over 1G of space
-			   * Upload file to s3 for standalone
+			   * Upload file to gcs for standalone
 			   * Create app source for Standalone with parallelDownload=15
 			   * Prepare and deploy Standalone with app framework and wait for the pod to be ready
 			   ############### VERIFICATION ################
@@ -1811,13 +1811,13 @@ var _ = Describe("s1appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsPVTestApps, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
-			// Upload apps to S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirPVTestApps)
-			Expect(err).To(Succeed(), "Unable to upload apps to S3 test directory")
+			// Upload apps to GCS
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirPVTestApps)
+			Expect(err).To(Succeed(), "Unable to upload apps to GCS test directory")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1825,7 +1825,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework Spec
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -1861,34 +1861,34 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 				################## SETUP ####################
-				* Upload big-size app to S3 for Standalone
+				* Upload big-size app to GCS for Standalone
 				* Create app source for Standalone
 				* Prepare and deploy Standalone
 				* When app download is complete, delete apps from app directory
 				############## VERIFICATIONS ################
 				* Verify App installation is in progress on Standalone
-				* Upload more apps from S3 during bigger app install
+				* Upload more apps from GCS during bigger app install
 				* Wait for polling interval to pass
 			    * Verify all apps are installed on Standalone
 			*/
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Download big size apps from S3
+			// Download big size apps from GCS
 			appVersion := "V1"
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big app")
 
-			// Upload big-size app to S3 for Standalone
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Standalone")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Standalone")
+			// Upload big-size app to GCS for Standalone
+			testcaseEnvInst.Log.Info("Upload big-size app to GCS for Standalone")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCS test directory for Standalone")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1932,12 +1932,12 @@ var _ = Describe("s1appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to GCS for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework
 			   * Check isDeploymentInProgress is set for Monitoring Console CR
 			   * Wait for the pod to be ready
-			   * Upload V1 apps to S3 for Standalone
+			   * Upload V1 apps to GCS for Standalone
 			   * Create app source for Standalone
 			   * Prepare and deploy Standalone with app framework
 			   * Check isDeploymentInProgress is set for Monitoring Console CR
@@ -1946,20 +1946,20 @@ var _ = Describe("s1appfw test", func() {
 
 			// ################## SETUP FOR MONITORING CONSOLE ####################
 
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCS for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
 
-			s3TestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			gcsTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGCSBucket, gcsTestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGCSBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
 			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
 			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
 			mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -1984,10 +1984,10 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ################## SETUP FOR STANDALONE ####################
-			// Upload V1 apps to S3 for Standalone
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Standalone", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Standalone", appVersion))
+			// Upload V1 apps to GCS for Standalone
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Standalone", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGCSBucket, gcsTestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -1995,7 +1995,7 @@ var _ = Describe("s1appfw test", func() {
 
 			// Create App framework spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, gcsTestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{

@@ -71,9 +71,9 @@ var _ = Describe("m4appfw test", func() {
 		if deployment != nil {
 			deployment.Teardown()
 		}
-		// Delete files uploaded to S3
+		// Delete files uploaded to GCP
 		if !testcaseEnvInst.SkipTeardown {
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 		}
 		if testcaseEnvInst != nil {
 			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
@@ -92,10 +92,10 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to GCP for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   ########## INITIAL VERIFICATIONS ##########
 			   * Verify Apps Downloaded in App Deployment Info
@@ -119,13 +119,13 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCP for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
@@ -151,16 +151,16 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			// Upload V1 apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -231,32 +231,32 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############# UPGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on GCP
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
 
 			// get revision number of the resource
 			_ = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Upload V2 apps for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -310,10 +310,10 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V2 apps to S3 for Monitoring Console
+			   * Upload V2 apps to GCP for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload V2 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V2 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   ########## INITIAL VERIFICATIONS ##########
 			   * Verify Apps Downloaded in App Deployment Info
@@ -337,13 +337,13 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Upload V2 version of apps to S3 for Monitoring Console
+			// Upload V2 version of apps to GCP for Monitoring Console
 			appVersion := "V2"
 			appFileList := testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
@@ -369,16 +369,16 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V2 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			// Upload V2 apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -434,30 +434,30 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############# DOWNGRADE APPS ################
-			// Delete V2 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
+			// Delete V2 apps on GCP
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
 
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion = "V1"
 			appFileList = testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			// Upload V1 apps to GCP for Monitoring Console
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -508,7 +508,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for M4
+			   * Upload V1 apps to GCP for M4
 			   * Create app source for M4 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy M4 CRD with app config and wait for pods to be ready
 			   ########### INITIAL VERIFICATIONS #########
@@ -544,18 +544,18 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -787,7 +787,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to GCP
 			   * Create app source with local scope for M4 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy M4 CRD with app framework and wait for pods to be ready
 			   ########## INITIAL VERIFICATION #############
@@ -810,18 +810,18 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -866,23 +866,23 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete V1 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete V1 apps on GCP
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -919,10 +919,10 @@ var _ = Describe("m4appfw test", func() {
 		It("integration, m4, managerappframeworkm4, appframework: can deploy a M4 SVA with App Framework enabled for manual poll", func() {
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to GCP for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console with app framework and wait for the pod to be ready
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to GCP
 			   * Create app source with manaul poll for M4 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy M4 CRD with app framework and wait for pods to be ready
 			   ########## INITIAL VERIFICATION #############
@@ -950,13 +950,13 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			// ################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCP for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
@@ -982,16 +982,16 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			// Upload V1 apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1046,24 +1046,24 @@ var _ = Describe("m4appfw test", func() {
 
 			// ############### UPGRADE APPS ################
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			// Upload V2 apps to GCP for Monitoring Console
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1174,7 +1174,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to GCP
 			   * Create app source with local scope for M4 SVA (Cluster Manager and Deployer)
 			   * Prepare and deploy M4 CRD with app framework and wait for pods to be ready
 			   ########## INITIAL VERIFICATION #############
@@ -1201,18 +1201,18 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1256,23 +1256,23 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete V1 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete V1 apps on GCP
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1358,7 +1358,7 @@ var _ = Describe("m4appfw test", func() {
 			/* Test Steps
 			   ################## SETUP ####################
 			   * Split Applist into clusterlist and local list
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster for local and cluster scope
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster for local and cluster scope
 			   * Create app sources for Cluster Manager and Deployer with local and cluster scope
 			   * Prepare and deploy m4 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -1370,7 +1370,7 @@ var _ = Describe("m4appfw test", func() {
 			   * Verify bundle push is successful
 			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
 			   ############### UPGRADE APPS ################
-			   * Upload V2 apps on S3
+			   * Upload V2 apps on GCP
 			   * Wait for all m4 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
 			   * Verify Apps are Downloaded in App Deployment Info
@@ -1388,34 +1388,34 @@ var _ = Describe("m4appfw test", func() {
 			appListLocal := appListV1[len(appListV1)/2:]
 			appListCluster := appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of apps to S3 (to be used for local install) for Idxc
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			// Upload appListLocal list of apps to GCP (to be used for local install) for Idxc
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for local install (local scope)", appVersion))
 			s3TestDirIdxcLocal = "m4appfw-" + testenv.RandomDNSName(4)
 			localappFileList := testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxcLocal, localappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to GCP test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListLocal list of apps to S3 (to be used for local install) for Shc
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			// Upload appListLocal list of apps to GCP (to be used for local install) for Shc
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for local install (local scope)", appVersion))
 			s3TestDirShcLocal = "m4appfw-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShcLocal, localappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (local scope) to GCP test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
+			// Upload appListCluster list of apps to GCP (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for cluster-wide install (cluster scope)", appVersion))
 			s3TestDirIdxcCluster = "m4appfw-cluster-" + testenv.RandomDNSName(4)
 			clusterappFileList := testenv.GetAppFileList(appListCluster)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to GCP test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of apps to S3 (to be used for cluster-wide install)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster-wide install (cluster scope)", appVersion))
+			// Upload appListCluster list of apps to GCP (to be used for cluster-wide install)
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for cluster-wide install (cluster scope)", appVersion))
 			s3TestDirShcCluster = "m4appfw-cluster-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to S3 test directory", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShcCluster, clusterappFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps (cluster scope) to GCP test directory", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -1431,7 +1431,7 @@ var _ = Describe("m4appfw test", func() {
 			// Create App framework Spec for Cluster manager with scope local and append cluster scope
 
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalIdxc, s3TestDirIdxcLocal, 0)
-			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			volumeSpecCluster := []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameIdxcCluster, testenv.GetGCPEndpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultGCPRegion())}
 			appFrameworkSpecIdxc.VolList = append(appFrameworkSpecIdxc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec := enterpriseApi.AppSourceDefaultSpec{
 				VolName: appSourceVolumeNameIdxcCluster,
@@ -1442,7 +1442,7 @@ var _ = Describe("m4appfw test", func() {
 
 			// Create App framework Spec for Search head cluster with scope local and append cluster scope
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShcLocal, enterpriseApi.ScopeLocal, appSourceNameLocalShc, s3TestDirShcLocal, 0)
-			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
+			volumeSpecCluster = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(appSourceVolumeNameShcCluster, testenv.GetGCPEndpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultGCPRegion())}
 
 			appFrameworkSpecShc.VolList = append(appFrameworkSpecShc.VolList, volumeSpecCluster...)
 			appSourceClusterDefaultSpec = enterpriseApi.AppSourceDefaultSpec{
@@ -1495,34 +1495,34 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyNoPodReset(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), splunkPodAge, nil)
 
 			//############### UPGRADE APPS ################
-			// Delete apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete apps on GCP
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
 
 			// Redefine app lists as LDAP app isn't in V1 apps
 			appListLocal = appListV1[len(appListV1)/2:]
 			appListCluster = appListV1[:len(appListV1)/2]
 
-			// Upload appListLocal list of V2 apps to S3 (to be used for local install)
+			// Upload appListLocal list of V2 apps to GCP (to be used for local install)
 			appVersion = "V2"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for local install (local scope)", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for local install (local scope)", appVersion))
 			localappFileList = testenv.GetAppFileList(appListLocal)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxcLocal, localappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for local install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShcLocal, localappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for local install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload appListCluster list of V2 apps to S3 (to be used for cluster-wide install)
+			// Upload appListCluster list of V2 apps to GCP (to be used for cluster-wide install)
 			clusterappFileList = testenv.GetAppFileList(appListCluster)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for cluster install (cluster scope)", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for cluster install (cluster scope)", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxcCluster, clusterappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for cluster-wide install", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShcCluster, clusterappFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for cluster-wide install", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// ############ ENABLE MANUAL POLL ############
@@ -1588,26 +1588,26 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to GCP for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to GCP for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy M4 CRD with app framework
 			   * Verify app installation is in progress on Cluster Manager and Deployer
-			   * Upload more apps from S3 during bigger app install
+			   * Upload more apps from GCP during bigger app install
 			   * Wait for polling interval to pass
 			   * Verify all apps are installed on Cluster Manager and Deployer
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCP for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
@@ -1634,26 +1634,26 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Download all test apps from S3
+			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to S3 for Cluster Manager
+			// Upload big-size app to GCP for Cluster Manager
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload big-size app to GCP for Cluster Manager")
 			s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCP test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload big-size app to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Search Head Cluster")
+			// Upload big-size app to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big-size app to GCP for Search Head Cluster")
 			s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCP test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -1674,18 +1674,18 @@ var _ = Describe("m4appfw test", func() {
 			// Verify App installation is in progress on Cluster Manager
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
-			// Upload more apps to S3 for Cluster Manager
+			// Upload more apps to GCP for Cluster Manager
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Cluster Manager")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for  Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload more apps to GCP for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to GCP test directory for  Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload more apps to S3 for Deployer
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Deployer")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
+			// Upload more apps to GCP for Deployer
+			testcaseEnvInst.Log.Info("Upload more apps to GCP for Deployer")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to GCP test directory for Deployer")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -1720,27 +1720,27 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3 for Monitoring Console
+			   * Upload V1 apps to GCP for Monitoring Console
 			   * Create app source for Monitoring Console
 			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
-			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to GCP for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Manager and Deployer
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   ############## VERIFICATIONS ################
 			   * Verify App installation is in progress on Cluster Manager and Deployer
-			   * Upload more apps from S3 during bigger app install
+			   * Upload more apps from GCP during bigger app install
 			   * Wait for polling interval to pass
 			   * Verify all apps are installed on Cluster Manager and Deployer
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Monitoring Console
+			// Upload V1 apps to GCP for Monitoring Console
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Monitoring Console", appVersion))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Monitoring Console", appVersion))
 			s3TestDirMC := "m4appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Monitoring Console %s", appVersion, testS3Bucket))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirMC, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
@@ -1767,26 +1767,26 @@ var _ = Describe("m4appfw test", func() {
 			// Verify Monitoring Console is ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
-			// Download all test apps from S3
+			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload big-size app to S3 for Cluster Manager
+			// Upload big-size app to GCP for Cluster Manager
 			appList = testenv.BigSingleApp
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload big-size app to GCP for Cluster Manager")
 			s3TestDirIdxc = "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCP test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload big-size app to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info("Upload big-size app to S3 for Search Head Cluster")
+			// Upload big-size app to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big-size app to GCP for Search Head Cluster")
 			s3TestDirShc = "m4appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big-size app to S3 test directory for Search Head Cluster")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big-size app to GCP test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -1808,18 +1808,18 @@ var _ = Describe("m4appfw test", func() {
 			// Verify App installation is in progress
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyComplete)
 
-			// Upload more apps to S3 for Cluster Manager
+			// Upload more apps to GCP for Cluster Manager
 			appList = testenv.ExtraApps
 			appFileList = testenv.GetAppFileList(appList)
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Cluster Manager")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Cluster Manager")
+			testcaseEnvInst.Log.Info("Upload more apps to GCP for Cluster Manager")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to GCP test directory for Cluster Manager")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload more apps to S3 for Deployer
-			testcaseEnvInst.Log.Info("Upload more apps to S3 for Deployer")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload more apps to S3 test directory for Deployer")
+			// Upload more apps to GCP for Deployer
+			testcaseEnvInst.Log.Info("Upload more apps to GCP for Deployer")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload more apps to GCP test directory for Deployer")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Ensure Cluster Manager goes to Ready phase
@@ -1857,7 +1857,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   * While app install is in progress, restart the operator
 			   ########## VERIFICATIONS ##########
@@ -1871,23 +1871,23 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Download all apps from S3
+			// Download all apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -1949,7 +1949,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   * While app download is in progress, restart the operator
 			   ########## VERIFICATIONS ##########
@@ -1963,23 +1963,23 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Download all apps from S3
+			// Download all apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -2041,7 +2041,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   ########## INITIAL VERIFICATIONS ##########
 			   * Verify Apps Downloaded in App Deployment Info
@@ -2060,16 +2060,16 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			// Upload V1 apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -2114,13 +2114,13 @@ var _ = Describe("m4appfw test", func() {
 			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-			// Verify repo state on App to be disabled to be 1 (i.e app present on S3 bucket)
+			// Verify repo state on App to be disabled to be 1 (i.e app present on GCP bucket)
 			appName := appListV1[0]
 			appFileName := testenv.GetAppFileList([]string{appName})
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 1, appFileName[0])
 
 			// Disable the app
-			testenv.DisableAppsToS3(downloadDirV1, appFileName, s3TestDirIdxc)
+			testenv.DisableAppsToGCP(downloadDirV1, appFileName, s3TestDirIdxc)
 
 			// Check for changes in App phase to determine if next poll has been triggered
 			testenv.WaitforPhaseChange(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileName)
@@ -2137,12 +2137,12 @@ var _ = Describe("m4appfw test", func() {
 			// Wait for App state to update after config file change
 			testenv.WaitforAppInstallState(ctx, deployment, testcaseEnvInst, idxcPodNames, testcaseEnvInst.GetName(), appName, "disabled", true)
 
-			// Delete the file from S3
+			// Delete the file from GCP
 			s3Filepath := filepath.Join(s3TestDirIdxc, appFileName[0])
-			err = testenv.DeleteFileOnS3(testS3Bucket, s3Filepath)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on S3 test directory", appFileName))
+			err = testenv.DeleteFileOnGCP(testGcsBucket, s3Filepath)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to delete %s app on GCP test directory", appFileName))
 
-			// Verify repo state is set to 2 (i.e app deleted from S3 bucket)
+			// Verify repo state is set to 2 (i.e app deleted from GCP bucket)
 			testenv.VerifyAppRepoState(ctx, deployment, testcaseEnvInst, cm.Name, cm.Kind, appSourceNameIdxc, 2, appFileName[0])
 		})
 	})
@@ -2152,7 +2152,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to S3
+			   * Upload V1 apps to GCP
 			   * Create app source with local scope for M4 SVA, AppsRepoPollInterval=0 to set apps polling as manual
 			   * Prepare and deploy M4 CRD with app framework and wait for pods to be ready
 			   ########## INITIAL VERIFICATION #############
@@ -2175,18 +2175,18 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to S3 for Indexer Cluster
+			// Upload V1 apps to GCP for Indexer Cluster
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec
@@ -2281,23 +2281,23 @@ var _ = Describe("m4appfw test", func() {
 			Expect(strings.Contains(config.Data["ClusterManager"], "status: on") && strings.Contains(config.Data["SearchHeadCluster"], "status: on")).To(Equal(true), "Config map update not complete")
 
 			//############### UPGRADE APPS ################
-			// Delete V1 apps on S3
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on S3", appVersion))
-			testenv.DeleteFilesOnS3(testS3Bucket, uploadedApps)
+			// Delete V1 apps on GCP
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCP", appVersion))
+			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Get Pod age to check for pod resets later
@@ -2333,7 +2333,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   * While app download is in progress, restart the operator
 			   * While app download is completed, upload new versions of the apps
@@ -2356,23 +2356,23 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Download all apps from S3
+			// Download all apps from GCP
 			appVersion := "V1"
 			appListV1 := []string{appListV1[0]}
 			appFileList := testenv.GetAppFileList(appListV1)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download apps")
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			// Upload V1 apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -2392,19 +2392,19 @@ var _ = Describe("m4appfw test", func() {
 			// Verify App Download is in progress on Cluster Manager
 			testenv.VerifyAppState(ctx, deployment, testcaseEnvInst, deployment.GetName(), cm.Kind, appSourceNameIdxc, appFileList, enterpriseApi.AppPkgInstallComplete, enterpriseApi.AppPkgPodCopyPending)
 
-			// Upload V2 apps to S3 for Indexer Cluster
+			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
 			appListV2 := []string{appListV2[0]}
 			appFileList = testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V2 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V2 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV2)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Get Pod age to check for pod resets later
@@ -2452,7 +2452,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload 15 apps of 100MB size each to S3 for Indexer Cluster and Search Head Cluster for cluster scope
+			   * Upload 15 apps of 100MB size each to GCP for Indexer Cluster and Search Head Cluster for cluster scope
 			   * Create app sources for Cluster Master and Deployer with cluster scope
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   ######### INITIAL VERIFICATIONS #############
@@ -2476,21 +2476,21 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appList := testenv.PVTestApps
 			appFileList := testenv.GetAppFileList(appList)
-			err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3PVTestApps, downloadDirPVTestApps, appFileList)
+			err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsPVTestApps, downloadDirPVTestApps, appFileList)
 			Expect(err).To(Succeed(), "Unable to download app files")
 
-			// Upload apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
+			// Upload apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
 			s3TestDirIdxc := "m4appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirPVTestApps)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirPVTestApps)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search head Cluster", appVersion))
+			// Upload apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search head Cluster", appVersion))
 			s3TestDirShc := "m4appfw-shc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirPVTestApps)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Maximum apps to be downloaded in parallel
@@ -2544,7 +2544,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload big-size app to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload big-size app to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework and wait for the pods to be ready
 			   * When app download is complete, delete apps from app directory
 			   ########## VERIFICATIONS ##########
@@ -2558,23 +2558,23 @@ var _ = Describe("m4appfw test", func() {
 			*/
 
 			//################## SETUP ##################
-			// Download big size apps from S3
+			// Download big size apps from GCP
 			appList := testenv.BigSingleApp
 			appFileList := testenv.GetAppFileList(appList)
-			err := testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+			err := testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 			Expect(err).To(Succeed(), "Unable to download big-size app")
 
-			// Upload big size app to S3 for Indexer Cluster
+			// Upload big size app to GCP for Indexer Cluster
 			appVersion := "V1"
-			testcaseEnvInst.Log.Info("Upload big size app to S3 for Indexer Cluster")
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Indexer Cluster")
+			testcaseEnvInst.Log.Info("Upload big size app to GCP for Indexer Cluster")
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big size to GCP test directory for Indexer Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload big size app to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info("Upload big size app to S3 for Search Head Cluster")
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload big size to S3 test directory for Search Head Cluster")
+			// Upload big size app to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info("Upload big size app to GCP for Search Head Cluster")
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload big size to GCP test directory for Search Head Cluster")
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4
@@ -2639,7 +2639,7 @@ var _ = Describe("m4appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ##################
-			   * Upload V1 apps to S3 for Indexer Cluster and Search Head Cluster
+			   * Upload V1 apps to GCP for Indexer Cluster and Search Head Cluster
 			   * Prepare and deploy M4 CRD with app framework
 			   * Verify IsDeploymentInProgress is set
 			   * Wait for the pods to be ready
@@ -2649,16 +2649,16 @@ var _ = Describe("m4appfw test", func() {
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
 
-			// Upload V1 apps to S3 for Indexer Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Indexer Cluster", appVersion))
-			uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, s3TestDirIdxc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Indexer Cluster %s", appVersion, testS3Bucket))
+			// Upload V1 apps to GCP for Indexer Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, s3TestDirIdxc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Upload V1 apps to S3 for Search Head Cluster
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3 for Search Head Cluster", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testS3Bucket, s3TestDirShc, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3 test directory for Search Head Cluster", appVersion))
+			// Upload V1 apps to GCP for Search Head Cluster
+			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Search Head Cluster", appVersion))
+			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, s3TestDirShc, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP test directory for Search Head Cluster", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for M4

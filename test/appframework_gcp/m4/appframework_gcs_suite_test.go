@@ -39,11 +39,11 @@ var (
 	testSuiteName         = "m4appfw-" + testenv.RandomDNSName(3)
 	appListV1             []string
 	appListV2             []string
-	testDataS3Bucket      = os.Getenv("TEST_BUCKET")
-	testS3Bucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	s3AppDirV1            = testenv.AppLocationV1
-	s3AppDirV2            = testenv.AppLocationV2
-	s3PVTestApps          = testenv.PVTestAppsLocation
+	testDataGcsBucket      = os.Getenv("TEST_BUCKET")
+	testGcsBucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	gcsAppDirV1            = testenv.AppLocationV1
+	gcsAppDirV2            = testenv.AppLocationV2
+	gcsPVTestApps          = testenv.PVTestAppsLocation
 	currDir, _            = os.Getwd()
 	downloadDirV1         = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
@@ -64,20 +64,20 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 
 	if testenv.ClusterProvider == "gcp" {
-		// Create a list of apps to upload to S3
+		// Create a list of apps to upload to GCP
 		appListV1 = testenv.BasicApps
 		appFileList := testenv.GetAppFileList(appListV1)
 
-		// Download V1 Apps from S3
-		err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+		// Download V1 Apps from GCP
+		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 		Expect(err).To(Succeed(), "Unable to download V1 app files")
 
-		// Create a list of apps to upload to S3 after poll period
+		// Create a list of apps to upload to GCP after poll period
 		appListV2 = append(appListV1, testenv.NewAppsAddedBetweenPolls...)
 		appFileList = testenv.GetAppFileList(appListV2)
 
-		// Download V2 Apps from S3
-		err = testenv.DownloadFilesFromGCP(testDataS3Bucket, s3AppDirV2, downloadDirV2, appFileList)
+		// Download V2 Apps from GCP
+		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV2, downloadDirV2, appFileList)
 		Expect(err).To(Succeed(), "Unable to download V2 app files")
 	} else {
 		testenvInstance.Log.Info("Skipping Before Suite Setup", "Cluster Provider", testenv.ClusterProvider)
