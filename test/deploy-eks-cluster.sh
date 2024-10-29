@@ -93,6 +93,8 @@ function createCluster() {
     kubectl annotate serviceaccount -n $namespace $service_account eks.amazonaws.com/role-arn=arn:aws:iam::$account_id:role/${rolename}
     eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::$account_id:role/${rolename} --force
     eksctl utils update-cluster-logging --cluster ${TEST_CLUSTER_NAME}
+    # CSPL-2887 - Patch the default storage class to gp2
+    kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
   else
     echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"
     # Cluster exists but kubeconfig may not
