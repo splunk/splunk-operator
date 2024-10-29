@@ -1653,7 +1653,7 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
 			// ############## UPGRADE APPS #################
-			// Delete apps on 
+			// Delete apps on
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
 			testenv.DeleteFilesOnGCP(testGCSBucket, uploadedApps)
 			uploadedApps = nil

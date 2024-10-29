@@ -39,11 +39,11 @@ var (
 	testSuiteName         = "m4appfw-" + testenv.RandomDNSName(3)
 	appListV1             []string
 	appListV2             []string
-	testDataGcsBucket      = os.Getenv("TEST_BUCKET")
-	testGcsBucket          = os.Getenv("TEST_INDEXES_S3_BUCKET")
-	gcsAppDirV1            = testenv.AppLocationV1
-	gcsAppDirV2            = testenv.AppLocationV2
-	gcsPVTestApps          = testenv.PVTestAppsLocation
+	testDataGcsBucket     = os.Getenv("TEST_BUCKET")
+	testGcsBucket         = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	gcsAppDirV1           = testenv.AppLocationV1
+	gcsAppDirV2           = testenv.AppLocationV2
+	gcsPVTestApps         = testenv.PVTestAppsLocation
 	currDir, _            = os.Getwd()
 	downloadDirV1         = filepath.Join(currDir, "m4appfwV1-"+testenv.RandomDNSName(4))
 	downloadDirV2         = filepath.Join(currDir, "m4appfwV2-"+testenv.RandomDNSName(4))
