@@ -1254,15 +1254,20 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+	crScopedConfigMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
-		return ""
+		scopedLog.Error(err, "Unable to get the configMap", "name", crScopedConfigMapName)
+		configMap, err = splctrl.GetConfigMap(ctx, client, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get the configMap", "name", configMap)
+			return ""
+		}
 	}
 
 	statusRegex := ".*status: (?P<status>.*).*"
-	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]	
 
 	return extractFieldFromConfigMapData(statusRegex, data)
 }
