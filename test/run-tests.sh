@@ -38,10 +38,16 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
     exit 1
   fi
   docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
+
+  if [ "$GRAVITON" == "true" ]; then
+    echo "Graviton, push unnecessary"
+  else
+    echo "Pushing ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+    docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
   fi
 
   # Output

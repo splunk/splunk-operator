@@ -191,6 +191,7 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      GRAVITON: "true"
     steps:
       - name: Set Test Cluster Name
         run: |
