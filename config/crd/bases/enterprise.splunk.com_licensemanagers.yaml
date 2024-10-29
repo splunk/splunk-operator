@@ -959,7 +959,7 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure.'
+                            values: aws, minio, azure, gcp.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
@@ -3957,7 +3957,7 @@ spec:
                               type: string
                             provider:
                               description: 'App Package Remote Store provider. Supported
-                                values: aws, minio, azure.'
+                                values: aws, minio, azure, gcp.'
                               type: string
                             region:
                               description: Region of the remote storage volume where
