@@ -231,9 +231,9 @@ func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListR
 	}
 
 	// Set the Marker if StartAfter is provided.
-	if client.StartAfter != "" {
-		options.Marker = &client.StartAfter
-	}
+	//if client.StartAfter != "" {
+	//	options.Marker = &client.StartAfter
+	//}
 
 	// Create a pager to iterate through blobs.
 	pager := client.ContainerClient.NewListBlobsFlatPager(options)
