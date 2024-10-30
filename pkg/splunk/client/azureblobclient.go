@@ -139,9 +139,9 @@ func NewAzureBlobClient(
 	if endpoint != "" {
 		serviceURL = endpoint
 	} else if region != "" {
-		serviceURL = fmt.Sprintf("https://%s.blob.%s.core.windows.net/", storageAccountName, region)
+		serviceURL = fmt.Sprintf("https://%s.blob.%s.core.windows.net", storageAccountName, region)
 	} else {
-		serviceURL = fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccountName)
+		serviceURL = fmt.Sprintf("https://%s.blob.core.windows.net", storageAccountName)
 	}
 
 	var containerClient ContainerClientInterface
@@ -160,7 +160,7 @@ func NewAzureBlobClient(
 
 		// Initialize the container client with Shared Key Credential.
 		rawContainerClient, err := container.NewClientWithSharedKeyCredential(
-			fmt.Sprintf("%s%s", serviceURL, bucketName),
+			fmt.Sprintf("%s/%s", serviceURL, bucketName),
 			sharedKeyCredential,
 			nil,
 		)
