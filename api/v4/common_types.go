@@ -308,7 +308,7 @@ type VolumeSpec struct {
 	// Secret object name
 	SecretRef string `json:"secretRef"`
 
-	// Remote Storage type. Supported values: s3, blob. s3 works with aws or minio providers, whereas blob works with azure provider.
+	// Remote Storage type. Supported values: s3, blob, gcs. s3 works with aws or minio providers, whereas blob works with azure provider, gcs works for gcp.
 	Type string `json:"storageType"`
 
 	// App Package Remote Store provider. Supported values: aws, minio, azure, gcp.
