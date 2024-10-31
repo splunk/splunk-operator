@@ -80,6 +80,10 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+echo "Dumping operator config here..."
+kubectl describe deployment splunk-operator-controller-manager -n splunk-operator
+
+
 if [  "${CLUSTER_WIDE}" == "true" ]; then
   echo "wait for operator pod to be ready..."
   # sleep before checking for deployment, in slow clusters deployment call may not even started
