@@ -377,7 +377,7 @@ func GenerateAppFrameworkSpec(ctx context.Context, testenvInstance *TestCaseEnv,
 			volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpecAzureManagedID(volumeName, GetAzureEndpoint(ctx), "azure", "blob")}
 		}
 	case "gcp":
-		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "blob", GetDefaultS3Region())}
+		volumeSpec = []enterpriseApi.VolumeSpec{GenerateIndexVolumeSpec(volumeName, GetGCPEndpoint(), testenvInstance.GetIndexSecretName(), "gcp", "gcs", GetDefaultS3Region())}
 
 	default:
 		testenvInstance.Log.Info("Failed to identify cluster provider name: Should be 'eks' or 'azure' or 'gcp' ")
