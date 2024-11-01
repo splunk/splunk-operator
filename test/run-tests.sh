@@ -19,7 +19,10 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "Using private registry at ${PRIVATE_REGISTRY}"
 
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
-  PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
+  # CSPL-2920: Graviton support
+  if [ "$GRAVITON" != "true" ]; then
+    PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
+  fi
   echo "Checking to see if image exists, docker images -q ${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
   # Don't pull splunk operator if exists locally since we maybe building it locally
   if [ -z $(docker images -q ${PRIVATE_SPLUNK_OPERATOR_IMAGE}) ]; then
@@ -32,17 +35,19 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   fi
 
   # Always attempt to pull splunk enterprise image
+  echo "Pulling SPLUNK_ENTERPRISE_IMAGE=${SPLUNK_ENTERPRISE_IMAGE}..."
   docker pull ${SPLUNK_ENTERPRISE_IMAGE}
   if [ $? -ne 0 ]; then
     echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
     exit 1
   fi
-  docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
 
   if [ "$GRAVITON" == "true" ]; then
-    echo "Graviton, push unnecessary"
+    echo "Graviton, enterprise tag and push unnecessary"
   else
-    echo "Pushing ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+    echo "Tagging to privat repo ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+    docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    echo "Pushing to private repo ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
     docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
     if [ $? -ne 0 ]; then
       echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
