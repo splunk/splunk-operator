@@ -75,7 +75,7 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
   make uninstall
   bin/kustomize build config/crd | kubectl create -f -
 else
-  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE} using enterprise image from ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
 fi
 
