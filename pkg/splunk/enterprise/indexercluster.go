@@ -579,7 +579,7 @@ var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Indexe
 // getMonitoringConsoleClient for indexerClusterPodManager returns a SplunkClient for monitoring console
 func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseApi.IndexerCluster, cmMonitoringConsoleConfigRef string) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkMonitoringConsole, cmMonitoringConsoleConfigRef, false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.newSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
@@ -890,7 +890,7 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", adminPwd)
 }
 
 // getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager
@@ -921,7 +921,7 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", adminPwd)
 }
 
 // getSiteRepFactorOriginCount gets the origin count of the site_replication_factor

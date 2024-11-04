@@ -706,13 +706,10 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
-			AllowPrivilegeEscalation: &[]bool{false}[0],
+			AllowPrivilegeEscalation: &[]bool{true}[0],
 			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{
-					"ALL",
-				},
 				Add: []corev1.Capability{
-					"NET_BIND_SERVICE",
+					"ALL",
 				},
 			},
 			Privileged: &privileged,

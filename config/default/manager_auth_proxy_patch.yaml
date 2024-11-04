@@ -15,7 +15,7 @@ spec:
       containers:
       - name: kube-rbac-proxy
         securityContext:
-          allowPrivilegeEscalation: false
+          allowPrivilegeEscalation: true
           readOnlyRootFilesystem: true
           runAsNonRoot: true
           capabilities:
@@ -23,6 +23,8 @@ spec:
               - "ALL"
             add:
               - "NET_BIND_SERVICE"
+              - "NET_ADMIN"
+              - "NET_RAW"
           seccompProfile:
             type: "RuntimeDefault"
         image: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1

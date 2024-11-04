@@ -44,32 +44,32 @@ const (
 // List of URLs - Cluster Manager
 const (
 
-	//LocalURLClusterManagerApplyBundle = "https://localhost:8089/services/cluster/master/control/default/apply"
-	LocalURLClusterManagerApplyBundle = "https://localhost:8089" + URIClusterManagerApplyBundle
+	//LocalURLClusterManagerApplyBundle = "http://localhost:8089/services/cluster/master/control/default/apply"
+	LocalURLClusterManagerApplyBundle = "http://localhost:8089" + URIClusterManagerApplyBundle
 
-	//LocalURLClusterManagerGetInfo = "https://localhost:8089/services/cluster/master/info?count=0&output_mode=json"
-	LocalURLClusterManagerGetInfo = "https://localhost:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
+	//LocalURLClusterManagerGetInfo = "http://localhost:8089/services/cluster/master/info?count=0&output_mode=json"
+	LocalURLClusterManagerGetInfo = "http://localhost:8089" + URIClusterManagerGetInfo + "?count=0&output_mode=json"
 
-	//LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089/services/cluster/master/info?output_mode=json"
-	LocalURLClusterManagerGetInfoJSONOutput = "https://localhost:8089" + URIClusterManagerGetInfo + "?output_mode=json"
+	//LocalURLClusterManagerGetInfoJSONOutput = "http://localhost:8089/services/cluster/master/info?output_mode=json"
+	LocalURLClusterManagerGetInfoJSONOutput = "http://localhost:8089" + URIClusterManagerGetInfo + "?output_mode=json"
 
-	//LocalURLClusterManagerGetPeers = "https://localhost:8089/services/cluster/master/peers?count=0&output_mode=json"
-	LocalURLClusterManagerGetPeers = "https://localhost:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
+	//LocalURLClusterManagerGetPeers = "http://localhost:8089/services/cluster/master/peers?count=0&output_mode=json"
+	LocalURLClusterManagerGetPeers = "http://localhost:8089" + URIClusterManagerGetPeers + "?count=0&output_mode=json"
 
-	//LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089/services/cluster/master/peers?output_mode=json"
-	LocalURLClusterManagerGetPeersJSONOutput = "https://localhost:8089" + URIClusterManagerGetPeers + "?output_mode=json"
+	//LocalURLClusterManagerGetPeersJSONOutput = "http://localhost:8089/services/cluster/master/peers?output_mode=json"
+	LocalURLClusterManagerGetPeersJSONOutput = "http://localhost:8089" + URIClusterManagerGetPeers + "?output_mode=json"
 
-	//LocalURLClusterManagerRemovePeers = "https://localhost:8089/services/cluster/master/control/control/remove_peers
-	LocalURLClusterManagerRemovePeers = "https://localhost:8089" + URIClusterManagerRemovePeers
+	//LocalURLClusterManagerRemovePeers = "http://localhost:8089/services/cluster/master/control/control/remove_peers
+	LocalURLClusterManagerRemovePeers = "http://localhost:8089" + URIClusterManagerRemovePeers
 
-	//LocalURLClusterManagerGetSite = https://localhost:8089/services/cluster/master/sites?output_mode=json
-	LocalURLClusterManagerGetSite = "https://localhost:8089" + URIClusterManagerGetSites + "?output_mode=json"
+	//LocalURLClusterManagerGetSite = http://localhost:8089/services/cluster/master/sites?output_mode=json
+	LocalURLClusterManagerGetSite = "http://localhost:8089" + URIClusterManagerGetSites + "?output_mode=json"
 
-	//LocalURLClusterManagerGetHealth = "https://localhost:8089/services/cluster/master/health?output_mode=json"
-	LocalURLClusterManagerGetHealth = "https://localhost:8089" + URIClusterManagerGetHealth + "?output_mode=json"
+	//LocalURLClusterManagerGetHealth = "http://localhost:8089/services/cluster/master/health?output_mode=json"
+	LocalURLClusterManagerGetHealth = "http://localhost:8089" + URIClusterManagerGetHealth + "?output_mode=json"
 
-	//LocalURLClusterManagerGetSearchHeads = "https://localhost:8089/services/cluster/master/searchheads?output_mode=json"
-	LocalURLClusterManagerGetSearchHeads = "https://localhost:8089" + URIClusterManagerGetSearchHeads + "?output_mode=json"
+	//LocalURLClusterManagerGetSearchHeads = "http://localhost:8089/services/cluster/master/searchheads?output_mode=json"
+	LocalURLClusterManagerGetSearchHeads = "http://localhost:8089" + URIClusterManagerGetSearchHeads + "?output_mode=json"
 )
 
 // ***** Cluster Peers *****
@@ -87,11 +87,11 @@ const (
 // List of URLs - Cluster Peers
 const (
 
-	//URLPeerInfo = "https://localhost:8089/services/cluster/slave/info?count=0&output_mode=json"
-	URLPeerInfo = "https://localhost:8089" + URIPeerGetInfo + "?count=0&output_mode=json"
+	//URLPeerInfo = "http://localhost:8089/services/cluster/slave/info?count=0&output_mode=json"
+	URLPeerInfo = "http://localhost:8089" + URIPeerGetInfo + "?count=0&output_mode=json"
 
-	//URLPeerDecommission = "https://localhost:8089/services/cluster/slave/control/control/decommission
-	URLPeerDecommission = "https://localhost:8089" + URIPeerDecommission
+	//URLPeerDecommission = "http://localhost:8089/services/cluster/slave/control/control/decommission
+	URLPeerDecommission = "http://localhost:8089" + URIPeerDecommission
 )
 
 // ***** License Manager *****
@@ -114,9 +114,9 @@ const (
 // List of URLs - License Manager/Peer
 const (
 
-	//LocalURLLicensePeerJSONOutput = "https://localhost:8089/services/licenser/localslave?output_mode=json"
-	LocalURLLicensePeerJSONOutput = "https://localhost:8089/services/licenser/localslave?output_mode=json"
+	//LocalURLLicensePeerJSONOutput = "http://localhost:8089/services/licenser/localslave?output_mode=json"
+	LocalURLLicensePeerJSONOutput = "http://localhost:8089/services/licenser/localslave?output_mode=json"
 
-	//LocalURLLicenseManagerEdit = "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit"
-	LocalURLLicenseManagerEdit = "https://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit"
+	//LocalURLLicenseManagerEdit = "http://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit"
+	LocalURLLicenseManagerEdit = "http://localhost:8089/services/search/distributed/groups/dmc_group_license_master/edit"
 )

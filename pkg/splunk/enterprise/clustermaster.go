@@ -250,7 +250,7 @@ type clusterMasterPodManager struct {
 // getClusterMasterClient for clusterMasterPodManager returns a SplunkClient for cluster manager
 func (mgr *clusterMasterPodManager) getClusterMasterClient(cr *enterpriseApiV3.ClusterMaster) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, cr.GetName(), false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.newSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // validateClusterMasterSpec checks validity and makes default updates to a ClusterMasterSpec, and returns error if something is wrong.
@@ -399,7 +399,7 @@ func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr 
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterMaster, managerIdxcName, false))
 
 	// Get a Splunk client to execute the REST call
-	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", string(adminPwd))
 
 	return splunkClient.BundlePush(true)
 }

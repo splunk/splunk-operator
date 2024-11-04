@@ -514,12 +514,35 @@ func addEphemeralVolumes(statefulSet *appsv1.StatefulSet, volumeType string) err
 			Name: fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType), VolumeSource: emptyVolumeSource,
 		})
 
+	
 	// add volume mounts to splunk container for the ephemeral volumes
 	statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts,
 		corev1.VolumeMount{
 			Name:      fmt.Sprintf(splcommon.SplunkMountNamePrefix, volumeType),
 			MountPath: fmt.Sprintf(splcommon.SplunkMountDirecPrefix, volumeType),
 		})
+
+	return nil
+}
+
+// addCoreDumpEphemeralVolumes adds ephemeral volumes to statefulSet
+func addCoreDumpEphemeralVolumes(statefulSet *appsv1.StatefulSet) error {
+	// add ephemeral volumes to the splunk pod
+	emptyVolumeSource := corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	}
+	statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes,
+		corev1.Volume{
+			Name: "capture", VolumeSource: emptyVolumeSource,
+		})
+
+	for idx := range statefulSet.Spec.Template.Spec.Containers {
+		statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[idx].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "capture",
+				MountPath: "/mnt/capture",
+			})
+	}
 
 	return nil
 }
@@ -553,6 +576,8 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 			return err
 		}
 	}
+
+	addCoreDumpEphemeralVolumes(statefulSet)
 
 	// Add Splunk Probe config map
 	probeConfigMap, err := getProbeConfigMap(ctx, client, cr)
@@ -1022,13 +1047,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
-			AllowPrivilegeEscalation: &[]bool{false}[0],
+			AllowPrivilegeEscalation: &[]bool{true}[0],
 			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{
-					"ALL",
-				},
 				Add: []corev1.Capability{
-					"NET_BIND_SERVICE",
+                    "ALL",
 				},
 			},
 			Privileged: &privileged,

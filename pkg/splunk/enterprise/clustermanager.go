@@ -218,6 +218,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		podExecClient := splutil.GetPodExecClient(client, cr, "")
 
 		// Add a splunk operator telemetry app
+		cr.Status.TelAppInstalled = true
 		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
 			err := addTelApp(ctx, podExecClient, numberOfClusterMasterReplicas, cr)
 			if err != nil {
@@ -264,7 +265,7 @@ type clusterManagerPodManager struct {
 // getClusterManagerClient for clusterManagerPodManager returns a SplunkClient for cluster manager
 func (mgr *clusterManagerPodManager) getClusterManagerClient(cr *enterpriseApi.ClusterManager) *splclient.SplunkClient {
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false))
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
+	return mgr.newSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", string(mgr.secrets.Data["password"]))
 }
 
 // validateClusterManagerSpec checks validity and makes default updates to a ClusterManagerSpec, and returns error if something is wrong.
@@ -413,7 +414,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	fqdnName := splcommon.GetServiceFQDN(cr.GetNamespace(), GetSplunkServiceName(SplunkClusterManager, managerIdxcName, false))
 
 	// Get a Splunk client to execute the REST call
-	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", string(adminPwd))
 
 	return splunkClient.BundlePush(true)
 }

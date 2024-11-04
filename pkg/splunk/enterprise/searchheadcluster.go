@@ -561,7 +561,7 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
-	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.newSplunkClient(fmt.Sprintf("http://%s:8089", fqdnName), "admin", adminPwd)
 }
 
 // GetSearchHeadClusterMemberInfo used in mocking this function

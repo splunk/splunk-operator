@@ -103,7 +103,7 @@ const (
 
 	manualAppUpdateCMStr = "splunk-%s-manual-app-update"
 
-	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target https://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
+	applySHCBundleCmdStr = "/opt/splunk/bin/splunk apply shcluster-bundle -target http://%s:8089 -auth admin:`cat /mnt/splunk-secrets/password` --answer-yes -push-default-apps true &> %s &"
 
 	shcBundlePushCompleteStr = "Bundle has been pushed successfully to all the cluster members.\n"
 
@@ -204,7 +204,7 @@ access = read : [ * ], write : [ admin ]
 	createTelAppShcString = "mkdir -p %s/app_tel_for_sok8s_%s/default/; mkdir -p %s/app_tel_for_sok8s_%s/metadata/; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/default/app.conf; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/metadata/default.meta"
 
 	// Command to reload app configuration
-	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` http://localhost:8089/services/apps/local/_reload"
 )
 
 const (
