@@ -96,7 +96,7 @@ var _ = AfterSuite(func() {
 
 	// Delete locally downloaded app files
 	err := os.RemoveAll(downloadDirV1)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
+	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files.")
 	err = os.RemoveAll(downloadDirV2)
-	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files")
+	Expect(err).To(Succeed(), "Unable to delete locally downloaded V2 app files.")
 })
