@@ -188,6 +188,8 @@ IndexerCluster:
 			}
 
 		}
+		return true, nil
+	} else {
 		goto SearchHeadCluster
 	}
 SearchHeadCluster:
