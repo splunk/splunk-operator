@@ -897,7 +897,7 @@ func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, po
 	command := []string{"/bin/sh"}
 	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false)
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "shell", command, "command", stdin)
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "shell", command, "command", stdin, "error", err.Error())
 		return "", err
 	}
 	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
