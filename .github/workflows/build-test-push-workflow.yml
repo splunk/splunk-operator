@@ -1,4 +1,4 @@
-name: Build and Test
+name: Smoke Test
 on: push
 jobs:
   check-formating:

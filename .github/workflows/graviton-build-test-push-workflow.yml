@@ -1,4 +1,4 @@
-name: Graviton Build and Test
+name: Graviton Smoke Test
 on:
   push:
     branches:

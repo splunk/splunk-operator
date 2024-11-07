@@ -145,8 +145,6 @@ jobs:
       - name: Set Splunk Operator image
         run: |
             echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
-      - name: Pull Splunk Enterprise Image
-        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -156,6 +154,8 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
+      - name: Pull Splunk Enterprise Image
+        run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Create EKS cluster
         run: |
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
