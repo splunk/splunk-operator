@@ -751,11 +751,6 @@ The App Framework does not preview, analyze, verify versions, or enable Splunk A
 1. The App Framework has no support to remove an app or add-on once it’s been deployed. To disable an app, update the archive contents located in the App Source, and set the app.conf state to disabled.
 
 2. The App Framework defines one worker per CR type. For example, if you have multiple clusters receiveing app updates, a delay while managing one cluster will delay the app updates to the other cluster.
-Certainly! To enhance your Splunk Operator documentation, you can introduce a separate section dedicated to **Azure Workload Identity** alongside the existing **Azure Managed Identity** setup. This will provide users with flexible authentication options tailored to different deployment scenarios.
-
-Below is the updated documentation with the new **Azure Workload Identity** section added:
-
----
 
 ## Setup Azure Blob Access with Managed Identity
 
