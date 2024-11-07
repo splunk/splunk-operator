@@ -86,6 +86,7 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      GRAVITON: "true"
     steps:
       - name: Set Test Cluster Name
         run: |

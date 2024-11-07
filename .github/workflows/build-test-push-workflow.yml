@@ -1,4 +1,4 @@
-name: Smoke Test
+name: Smoke Test Workflow
 on: push
 jobs:
   check-formating:
