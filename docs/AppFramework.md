@@ -1143,11 +1143,6 @@ Azure Workload Identity allows you to assign IAM roles at more granular levels, 
 
 
 
-## Setup GCP bucket access
-
-Certainly! Below is the updated Splunk Operator documentation that includes **two separate sections** for setting up Google Cloud Storage (GCS) bucket access using **Service Account Keys** and **Workload Identity**. The **Workload Identity** section has been enhanced with your provided YAML example to illustrate how to configure the Splunk Operator using Workload Identity.
-
----
 
 ## Setup Google Cloud Storage Access for App Framework
 
@@ -1599,8 +1594,6 @@ Workload Identity allows Kubernetes workloads to authenticate to GCP services wi
     - Configure VPC Service Controls or firewall rules to restrict access to GCS buckets from authorized sources only.
 
 ---
-
-*If you have any further questions or need additional assistance with setting up Google Cloud Storage access for the Splunk Operator, feel free to reach out!*
 
 ## App Framework Troubleshooting
 
