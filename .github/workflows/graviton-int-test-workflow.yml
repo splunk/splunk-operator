@@ -2,7 +2,7 @@ name: Graviton Integration Test WorkFlow
 on:
   push:
     branches:
-      - CSPL_2920_xxxx
+      - CSPL_2920
 jobs:
   build-operator-image-graviton:
     runs-on: ubuntu-latest
