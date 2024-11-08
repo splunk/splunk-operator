@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - CSPL_2920
-      - CSPL_xxxx
+      - CSPL_xxx
 jobs:
   check-formating:
     runs-on: ubuntu-latest
