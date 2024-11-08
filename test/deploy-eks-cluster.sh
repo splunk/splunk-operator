@@ -22,6 +22,7 @@ fi
 
 function deleteCluster() {
   echo "Cleanup role, security-group, open-id ${TEST_CLUSTER_NAME}"
+  account_id=$(aws sts get-caller-identity --query "Account" --output text)
   rolename=$(echo ${TEST_CLUSTER_NAME} | awk -F- '{print "EBS_" $(NF-1) "_" $(NF)}')
   role_attached_policies=$(aws iam list-attached-role-policies --role-name $rolename --query 'AttachedPolicies[*].PolicyArn' --output text)
   for policy_arn in ${role_attached_policies};
