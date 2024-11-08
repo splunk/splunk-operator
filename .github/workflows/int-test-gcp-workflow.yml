@@ -243,6 +243,10 @@ jobs:
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash
           sudo mv kustomize /usr/local/bin/
 
+      - name: Verify kubectl Configuration
+        run: |
+          kubectl config current-context
+
       - name: Run Integration Tests
         run: |
           export GCP_SERVICE_ACCOUNT_KEY=${{ secrets.GCP_SERVICE_ACCOUNT_KEY_BASE64 }}
