@@ -34,7 +34,6 @@ function deleteCluster() {
   oidc_id=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5)
   aws iam delete-open-id-connect-provider --open-id-connect-provider-arn arn:aws:iam::${account_id}:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/${oidc_id}
   security_group_id=$(aws eks describe-cluster --name ${TEST_CLUSTER_NAME} --query "cluster.resourcesVpcConfig.securityGroupIds[0]" --output text)
-  aws ec2 delete-security-group --group-id ${security_group_id}
   echo "Cleanup remaining PVC on the EKS Cluster ${TEST_CLUSTER_NAME}"
 
   echo "Cleanup remaining PVC on the EKS Cluster ${TEST_CLUSTER_NAME}"
@@ -51,6 +50,7 @@ function deleteCluster() {
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
     return 1
   fi
+  aws ec2 delete-security-group --group-id ${security_group_id}
 
   return 0
 }
