@@ -316,7 +316,7 @@ func DeleteFileOnGCP(bucketName, objectName string) error {
 	defer cancel()
 
 	err = client.Client.Bucket(bucketName).Object(objectName).Delete(ctx)
-	if err != nil {
+	if err != nil && err != storage.ErrObjectNotExist {
 		logf.Log.Error(err, "Unable to delete object from bucket", "Object Name", objectName, "Bucket Name", bucketName)
 		return err
 	}

@@ -304,7 +304,7 @@ var _ = Describe("c3appfw test", func() {
 		})
 	})
 
-	XContext("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
+	Context("Single Site Indexer Cluster with Search Head Cluster (C3) and App Framework and Image Upgrade", func() {
 		It("smoke, c3gcp, managerappframeworkc3gcpt, appframeworkgcp, gcp_sanity: can deploy a C3 SVA with App Framework enabled, install apps then upgrade the image and apps", func() {
 
 			//################## SETUP ####################

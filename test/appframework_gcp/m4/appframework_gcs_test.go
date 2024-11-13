@@ -88,7 +88,7 @@ var _ = Describe("m4appfw test", func() {
 		}
 	})
 
-	XContext("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("smoke, m4gcp, masterappframeworkm4gcp, appframeworkgcp, gcp_sanity: can deploy a M4 SVA with App Framework enabled, install apps and upgrade them", func() {
 
 			/* Test Steps
@@ -1716,7 +1716,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	XContext("Single Site Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
+	Context("Single Site Indexer Cluster with Search Head Cluster (M4) and App Framework", func() {
 		It("smoke, m4gcp, masterappframeworkm4gcp, appframeworkgcp, gcp_sanity: can deploy a M4, add new apps to app source while install is in progress and have all apps installed cluster-wide", func() {
 
 			/* Test Steps
@@ -2635,7 +2635,7 @@ var _ = Describe("m4appfw test", func() {
 		})
 	})
 
-	XContext("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
+	Context("Multisite Indexer Cluster with Search Head Cluster (m4) with App Framework", func() {
 		It("smoke, m4gcp, masterappframeworkm4gcp, appframeworkgcp, gcp_sanity: can deploy a M4 SVA with App Framework enabled, install apps and check IsDeploymentInProgress for CM and SHC CR's", func() {
 
 			/* Test Steps
