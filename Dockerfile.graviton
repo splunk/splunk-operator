@@ -8,6 +8,9 @@ ARG TARGETARCH
 ARG BASE_OS
 
 WORKDIR /workspace
+
+RUN echo "BASE_OS is set to ${BASE_OS}"
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
