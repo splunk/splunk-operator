@@ -19,8 +19,8 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "Using private registry at ${PRIVATE_REGISTRY}"
 
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
-  # CSPL-2920: Graviton support
-  if [ "$GRAVITON" != "true" ]; then
+  # CSPL-2920: ARM64 support
+  if [ "$ARM64" != "true" ]; then
     PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
   fi
   echo "Checking to see if image exists, docker images -q ${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
@@ -42,8 +42,8 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
     exit 1
   fi
 
-  if [ "$GRAVITON" == "true" ]; then
-    echo "Graviton, enterprise tag and push unnecessary"
+  if [ "$ARM64" == "true" ]; then
+    echo "ARM64, enterprise tag and push unnecessary"
   else
     echo "Tagging to privat repo ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
     docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}

@@ -1,4 +1,4 @@
-name: Graviton Smoke Test WorkFlow Ubuntu
+name: Arm AL2023 Smoke Test WorkFlow
 on:
   push:
     branches:
@@ -49,7 +49,7 @@ jobs:
   #      with:
   #        name: coverage.out
   #        path: coverage.out
-  build-operator-image-graviton:
+  build-operator-image-arm-al2023:
     runs-on: ubuntu-latest
     #needs: unit-tests
     env:
@@ -94,10 +94,10 @@ jobs:
     - name: Build and push Splunk Operator Image
       run: |
         export PLATFORMS=linux/arm64
-        export BUILDPLATFORM=linux/arm64
-        export TARGETOS=linux
-        export TARGETARCH=arm64
-        docker buildx build --push --platform=linux/arm64,linux/amd64 --build-arg BASE_OS=ubuntu:24.10 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA -f Dockerfile.graviton .
+        export BASE_OS=public.ecr.aws/amazonlinux/amazonlinux
+        export BASE_OS_VERSION=2023
+        export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-buildx PLATFORMS=$PLATFORMS BASE_OS=$BASE_OS BASE_OS_VERSION=$BASE_OS_VERSION IMG=$IMG
     - name: Sign Splunk Operator image with a key
       run: |
         cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
@@ -110,7 +110,7 @@ jobs:
     #   contents: read
     #   security-events: write
     # runs-on: ubuntu-latest
-    # needs: build-operator-image-graviton
+    # needs: build-operator-image-arm-al2023
     # env:
     #   SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
     #   SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -156,9 +156,9 @@ jobs:
     #   uses: github/codeql-action/upload-sarif@v3
     #   with:
     #     sarif_file: 'trivy-results.sarif'
-  smoke-tests-graviton:
+  smoke-tests-arm-al2023:
     #needs: vulnerability-scan
-    needs: build-operator-image-graviton
+    needs: build-operator-image-arm-al2023
     strategy:
       fail-fast: false
       matrix:
@@ -174,8 +174,8 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_GRAVITON }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_GRAVITON }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
@@ -193,7 +193,7 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
-      GRAVITON: "true"
+      ARM64: "true"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -265,12 +265,7 @@ jobs:
       - name: Create EKS cluster
         run: |
            export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-           export PLATFORMS=linux/arm64
-           export BUILDPLATFORM=linux/arm64
-           export TARGETOS=linux
-           export TARGETARCH=arm64
-           export TARGETOSIMAGE=public.ecr.aws/amazonlinux/amazonlinux:2023.0.20211014
-           export EKS_INSTANCE_TYPE=${{ steps.dotenv.outputs.EKS_INSTANCE_TYPE_GRAVITON }}
+           export EKS_INSTANCE_TYPE=${{ steps.dotenv.outputs.EKS_INSTANCE_TYPE_ARM64 }}
            make cluster-up
       - name: install metric server
         run: |
