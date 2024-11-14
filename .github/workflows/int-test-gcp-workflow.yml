@@ -138,6 +138,7 @@ jobs:
             --num-nodes ${{ env.CLUSTER_WORKERS }} \
             --machine-type n2-standard-8  \
             --enable-ip-alias \
+            --disk-size 50 \
             --network ${{ env.GCP_NETWORK }} \
             --subnetwork ${{ env.GCP_SUBNETWORK }} \
             --scopes "https://www.googleapis.com/auth/cloud-platform"
