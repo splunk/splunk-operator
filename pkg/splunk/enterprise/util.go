@@ -238,7 +238,7 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 	return namespaceScopedSecret, nil
 }
 
-// ReconcileCRSpecificConfigMap reconciles CR Specific config map exists and contains the ManualUpdate field set to "on"
+// ReconcileCRSpecificConfigMap reconciles CR Specific config map exists and contains the ManualUpdate field set to "off"
 func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReconcileCRSpecificConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -256,7 +256,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 					Namespace: cr.GetNamespace(),
 				},
 				Data: map[string]string{
-					"ManualUpdate": "on",
+					"ManualUpdate": "off",
 				},
 			}
 			err = client.Create(ctx, configMap)
@@ -273,7 +273,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 
 	// Check if the ManualUpdate field exists
 	if _, exists := configMap.Data["ManualUpdate"]; !exists {
-		configMap.Data["ManualUpdate"] = "on"
+		configMap.Data["ManualUpdate"] = "off"
 		err = client.Update(ctx, configMap)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update config map with ManualUpdate field")
@@ -1456,6 +1456,7 @@ func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContex
 	return appStatusContext.AppsRepoStatusPollInterval != 0
 }
 
+// shouldCheckAppRepoStatus 
 func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
 	// If polling is disabled, check if manual update is on.
 	if !isAppRepoPollingEnabled(appStatusContext) {
@@ -1469,6 +1470,12 @@ func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerCl
 				*turnOffManualChecking = true
 			}
 			return true
+		} else {
+			configMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
+			if getManualUpdateStatus(ctx, client, cr, configMapName) == "on" {
+				*turnOffManualChecking = true
+				return true
+			}
 		}
 	} else {
 		return HasAppRepoCheckTimerExpired(ctx, appStatusContext)
@@ -1489,7 +1496,21 @@ func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 	return &cleanObjectHash, nil
 }
 
-// updateManualAppUpdateConfigMapLocked updates the manual app update config map
+
+// updateManualAppUpdateConfigMapLocked updates the manual app update configuration map for a given custom resource (CR).
+// It locks the resource mutex for the config map, retrieves the config map, and updates the status and reference count
+// based on whether manual checking is turned off or not.
+//
+// Parameters:
+// - ctx: The context for the request.
+// - client: The controller client to interact with the Kubernetes API.
+// - cr: The custom resource meta object.
+// - appStatusContext: The application deployment context.
+// - kind: The kind of the custom resource.
+// - turnOffManualChecking: A boolean indicating whether to turn off manual checking.
+//
+// Returns:
+// - error: An error if the operation fails, otherwise nil.
 func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking bool) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1498,43 +1519,67 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
-	mux := getResourceMutex(configMapName)
-	mux.Lock()
-	defer mux.Unlock()
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	{
+		mux := getResourceMutex(configMapName)
+		mux.Lock()
+		defer mux.Unlock()
+		configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
+			return err
+		}
+
+		// first check the refCount and status	
+		//	
+		numOfObjects := getManualUpdateRefCount(ctx, client, cr, configMapName)
+
+		// turn off the manual checking for this CR kind in the configMap
+		if turnOffManualChecking {
+			scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
+			// reset the status back to "off" and
+			// refCount to original count
+			status = "off"
+			numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
+		} else {
+			//just decrement the refCount if the status is "on"
+			status = getManualUpdateStatus(ctx, client, cr, configMapName)
+			if status == "on" {
+				numOfObjects--
+			}
+		}
+
+		// prepare the configMapData
+		configMapData := fmt.Sprintf(`status: %s
+	refCount: %d`, status, numOfObjects)
+
+		configMap.Data[kind] = configMapData
+
+		err = splutil.UpdateResource(ctx, client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+			return err
+		}
+	}
+
+	// now check namespace specific configmap if it contains manualUpdate settings
+	crScopedConfigMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
+	crNamespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
+	configMap, err := splctrl.GetConfigMap(ctx, client, crNamespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
 		return err
 	}
-
-	numOfObjects := getManualUpdateRefCount(ctx, client, cr, configMapName)
-
-	// turn off the manual checking for this CR kind in the configMap
 	if turnOffManualChecking {
-		scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
-		// reset the status back to "off" and
-		// refCount to original count
+		scopedLog.Info("Turning off manual checking of apps update in per CR configmap", "Kind", kind)
 		status = "off"
-		numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
-	} else {
-		//just decrement the refCount if the status is "on"
-		status = getManualUpdateStatus(ctx, client, cr, configMapName)
-		if status == "on" {
-			numOfObjects--
-		}
 	}
-
-	// prepare the configMapData
-	configMapData := fmt.Sprintf(`status: %s
-refCount: %d`, status, numOfObjects)
-
-	configMap.Data[kind] = configMapData
-
+	
 	err = splutil.UpdateResource(ctx, client, configMap)
 	if err != nil {
-		scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+		scopedLog.Error(err, "Could not update the per CR configMap", "name", crNamespacedName.Name)
 		return err
 	}
+
 	return nil
 }
 
