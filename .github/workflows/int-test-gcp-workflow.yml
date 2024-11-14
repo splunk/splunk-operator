@@ -91,8 +91,8 @@ jobs:
       TEST_TO_SKIP:  "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
-      GCP_ENTERPRISE_LICENSE_LOCATION: "test_licenses/"
-      ENTERPRISE_LICENSE_LOCATION: "test_licenses/"
+      GCP_ENTERPRISE_LICENSE_LOCATION: "test_licenses"
+      ENTERPRISE_LICENSE_LOCATION: "test_licenses"
       REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       CLUSTER_WIDE: "true"
       GCP_SERVICE_ACCOUNT_ENABLED: "false"
@@ -136,7 +136,7 @@ jobs:
           gcloud container clusters create ${{ env.CLUSTER_NAME }} \
             --zone ${{ env.GCP_ZONE }} \
             --num-nodes ${{ env.CLUSTER_WORKERS }} \
-            --machine-type e2-standard-4 \
+            --machine-type n2-standard-8  \
             --enable-ip-alias \
             --network ${{ env.GCP_NETWORK }} \
             --subnetwork ${{ env.GCP_SUBNETWORK }} \
