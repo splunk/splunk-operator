@@ -79,7 +79,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
+		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, s1_gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then upgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -250,7 +250,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
+		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, s1_gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
@@ -1928,7 +1928,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
+		It("smokegcp, s1gcp, appframeworks1gcp, appframeworkgcp, s1_gcp_sanity: can deploy a Standalone instance with App Framework enabled, install apps and check isDeploymentInProgress is set for Standaloen and MC CR's", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
