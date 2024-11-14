@@ -47,7 +47,7 @@ jobs:
         export TARGETOS=linux
         export TARGETARCH=arm64
         export BASE_OS=ubuntu:24.10
-        docker buildx build --push --platform=linux/arm64,linux/amd64 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA -f Dockerfile.graviton .
+        docker buildx build --push --platform=linux/arm64,linux/amd64 --build-arg BASE_OS=ubuntu:24.10 --tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA -f Dockerfile.graviton .
   int-tests-graviton:
     strategy:
       fail-fast: false
