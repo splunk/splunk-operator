@@ -65,11 +65,11 @@ jobs:
     strategy:
       matrix:
         test_focus: 
-          - "c3_gcp_sanity"
-          - "c3_mgr_gcp_sanity"
-          - "m4_gcp_sanity"
-          - "m4_mgr_gcp_sanity"
-          - "s1_gcp_sanity"
+          - { order: 1, name: "c3_gcp_sanity" }
+          - { order: 2, name: "c3_mgr_gcp_sanity" }
+          - { order: 3, name: "m4_gcp_sanity" }
+          - { order: 4, name: "m4_mgr_gcp_sanity" }
+          - { order: 5, name: "s1_gcp_sanity" }
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
@@ -82,7 +82,7 @@ jobs:
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
-      TEST_FOCUS: ${{ matrix.test_focus }}
+      TEST_FOCUS: ${{ matrix.test_focus.name }}
       CLUSTER_NODES: 2
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}
@@ -106,7 +106,7 @@ jobs:
     steps:
       - name: Set Test Cluster Name
         run: |
-          echo "CLUSTER_NAME=gke-$(echo ${{ matrix.test_focus }} | tail -c 5)-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=gke-${{ matrix.test_focus.order }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Checkout Code
         uses: actions/checkout@v2
 
@@ -260,7 +260,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: splunk-pods-logs-artifacts-${{ matrix.test_focus }}
+          name: splunk-pods-logs-artifacts-${{ matrix.test_focus.name }}
           path: /tmp/pod_logs/**
       - name: Cleanup Test Case Artifacts
         if: ${{ always() }}
