@@ -350,7 +350,6 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
-	//eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	currentEpoch := time.Now().Unix()
 	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
@@ -385,7 +384,6 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
 	}
 
-	//eventPublisher.Warning(ctx, "BundlePush", fmt.Sprintf("Bundle push failed %s", err.Error()))
 	return err
 }
 

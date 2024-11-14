@@ -273,7 +273,6 @@ var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
 func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
@@ -330,7 +329,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 		// If shc secret is different from namespace scoped secret change it
 		if shcSecret != nsShcSecret {
-			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("shcSecret different from namespace scoped secret, changing shc secret for pod %s", shPodName))
 			scopedLog.Info("shcSecret different from namespace scoped secret, changing shc secret")
 			// If shc secret already changed, ignore
 			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
@@ -355,7 +353,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Restarted Splunk for pod %s", shPodName))
 			scopedLog.Info("Restarted Splunk")
 
 			// Set the shc_secret changed flag to true
@@ -383,7 +380,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("admin password changed on the splunk instance of pod %s", shPodName))
 			scopedLog.Info("admin password changed on the splunk instance of pod")
 
 			// Get client for Pod and restart splunk instance on pod
@@ -392,7 +388,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Restarted Splunk for pod %s", shPodName))
 			scopedLog.Info("Restarted Splunk")
 
 			// Set the adminSecretChanged changed flag to true
@@ -409,7 +404,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 				return err
 			}
 			mgr.cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
-			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("Secret mounted on pod %s added to map", shPodName))
 			scopedLog.Info("Secret mounted on pod(to be changed) added to map")
 		}
 	}
@@ -426,7 +420,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
 			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
 			if err != nil {
-				//eventPublisher.Warning(ctx, "GetSecretByName", fmt.Sprintf("could not read secret %s, reason - %v", podSecretName, err))
 				return fmt.Errorf("could not read secret %s, reason - %v", podSecretName, err)
 			}
 			podSecret.Data["password"] = []byte(nsAdminSecret)
@@ -434,7 +427,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			if err != nil {
 				return err
 			}
-			//eventPublisher.Normal(ctx, "ApplyShcSecret", fmt.Sprintf("admin password changed on the secret mounted on pod %s", podSecretName))
 			scopedLog.Info("admin password changed on the secret mounted on pod")
 		}
 	}
@@ -445,7 +437,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
 func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
@@ -469,7 +460,6 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	// update CR status with SHC information
 	err = mgr.updateStatus(ctx, statefulSet)
 	if err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.CaptainReady {
-		//eventPublisher.Normal(ctx, "Update", fmt.Sprintf("Search head cluster is not ready %s", err))
 		mgr.log.Info("Search head cluster is not ready", "reason ", err)
 		return enterpriseApi.PhasePending, nil
 	}
@@ -480,7 +470,6 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 
 	// start by quarantining the pod
 	result, err := mgr.PrepareRecycle(ctx, n)
@@ -490,7 +479,6 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 	// pod is quarantined; decommission it
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
-	//eventPublisher.Normal(ctx, "PrepareScaleDown", fmt.Sprintf("Removing member from search head cluster %s", memberName))
 	mgr.log.Info("Removing member from search head cluster", "memberName", memberName)
 	c := mgr.getClient(ctx, n)
 	err = c.RemoveSearchHeadClusterMember()
@@ -504,14 +492,12 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 // PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Members[n].Status {
 	case "Up":
 		// Detain search head
-		//eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Detaining search head cluster member %s", memberName))
 		mgr.log.Info("Detaining search head cluster member", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, getApplicablePodNameForK8Probes(mgr.cr, n))
@@ -520,7 +506,6 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 			// During the Recycle, our reconcile loop is entered multiple times. If the Pod is already down,
 			// there is a chance of readiness probe failing, in which case, even the podExec will not be successful.
 			// So, just log the message, and ignore the error.
-			//eventPublisher.Normal(ctx, "SetProbeLevel", fmt.Sprintf("Setting Probe level failed. Probably, the Pod is already down %s", err.Error()))
 			mgr.log.Info("Setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
 		}
 
@@ -530,10 +515,8 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		// Wait until active searches have drained
 		searchesComplete := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount+mgr.cr.Status.Members[n].ActiveRealtimeSearchCount == 0
 		if searchesComplete {
-			//eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Detention complete %s", memberName))
 			mgr.log.Info("Detention complete", "memberName", memberName)
 		} else {
-			//eventPublisher.Normal(ctx, "PrepareRecycle", fmt.Sprintf("Waiting for active searches to complete %s", memberName))
 			mgr.log.Info("Waiting for active searches to complete", "memberName", memberName)
 		}
 		return searchesComplete, nil
@@ -549,7 +532,6 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 
 // FinishRecycle for searchHeadClusterPodManager completes recycle event for search head pod; it returns true when complete
 func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Members[n].Status {
@@ -559,7 +541,6 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 	case "ManualDetention":
 		// release from detention
-		//eventPublisher.Normal(ctx, "FinishRecycle", fmt.Sprintf("Releasing search head cluster member from detention %s", memberName))
 		mgr.log.Info("Releasing search head cluster member from detention", "memberName", memberName)
 		c := mgr.getClient(ctx, n)
 		return false, c.SetSearchHeadDetention(false)
@@ -571,7 +552,6 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 // getClient for searchHeadClusterPodManager returns a SplunkClient for the member n
 func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("searchHeadClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
 
@@ -585,7 +565,6 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 	if err != nil {
-		//eventPublisher.Warning(ctx, "GetSpecificSecretTokenFromPod", fmt.Sprintf("Couldn't retrieve the admin password from Pod %s", memberName))
 		scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
 	}
 
@@ -606,7 +585,6 @@ var GetSearchHeadCaptainInfo = func(ctx context.Context, mgr *searchHeadClusterP
 
 // updateStatus for searchHeadClusterPodManager uses the REST API to update the status for a SearcHead custom resource
 func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statefulSet *appsv1.StatefulSet) error {
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	// populate members status using REST API to get search head cluster member info
 	mgr.cr.Status.Captain = ""
 	mgr.cr.Status.CaptainReady = false
@@ -616,7 +594,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		//c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
@@ -627,7 +604,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 			memberStatus.ActiveHistoricalSearchCount = memberInfo.ActiveHistoricalSearchCount
 			memberStatus.ActiveRealtimeSearchCount = memberInfo.ActiveRealtimeSearchCount
 		} else {
-			//eventPublisher.Warning(ctx, "GetSearchHeadClusterMemberInfo", fmt.Sprintf("Unable to retrieve search head cluster member info %s", err))
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
 		}
 
@@ -642,7 +618,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
 			} else {
-				//eventPublisher.Warning(ctx, "GetSearchHeadCaptainInfo", fmt.Sprintf("Unable to retrieve captain info %s", err))
 				mgr.cr.Status.CaptainReady = false
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
 			}
@@ -709,7 +684,6 @@ func validateSearchHeadClusterSpec(ctx context.Context, c splcommon.ControllerCl
 
 // helper function to get the list of SearchHeadCluster types in the current namespace
 func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.SearchHeadClusterList, error) {
-	//eventPublisher := ctx.Value("eventPublisher").(*K8EventPublisher)
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getSearchHeadClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -717,7 +691,6 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 
 	err := c.List(context.TODO(), &objectList, listOpts...)
 	if err != nil {
-		//eventPublisher.Warning(ctx, "SearchHeadCluster types not found in namespace", fmt.Sprintf("Couldn't get SearchHeadCluster types %s", err))
 		scopedLog.Error(err, "SearchHeadCluster types not found in namespace", "namsespace", cr.GetNamespace())
 		return objectList, err
 	}
