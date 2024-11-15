@@ -47,7 +47,7 @@ function createCluster() {
       --disk-size 50 \
       #--network ${{ env.GCP_NETWORK }} \
       #--subnetwork=${GCP_VPC_PUBLIC_SUBNET_STRING} \
-      --cluster-version=${GKE_CLUSTER_K8_VERSION} \
+      #--cluster-version=${GKE_CLUSTER_K8_VERSION} \
       --machine-type n2-standard-8  \
       --scopes "https://www.googleapis.com/auth/cloud-platform" \
       --enable-ip-alias 
