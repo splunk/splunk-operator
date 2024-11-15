@@ -36,11 +36,11 @@ ENV OPERATOR=/manager \
 # Install necessary packages and configure user
 RUN if grep -q 'Ubuntu' /etc/os-release; then \
         apt-get update && \
-        apt-get install -y --no-install-recommends passwd=1:4.8.1-1ubuntu5.20.04 && \
+        apt-get install -y --no-install-recommends passwd=1:4.13+dfsg1-4ubuntu3 && \
         useradd -ms /bin/bash nonroot -u 1001 && \
-        apt-get install -y --no-install-recommends krb5-locales=1.17-6ubuntu4.1 && \
+        apt-get install -y --no-install-recommends krb5-locales && \
         apt-get upgrade -y && \
-        apt-get install -y --no-install-recommends unattended-upgrades=2.3ubuntu0.1 && \
+        apt-get install -y --no-install-recommends unattended-upgrades && \
         unattended-upgrades -v --security && \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
     else \
