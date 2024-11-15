@@ -37,11 +37,10 @@ ENV OPERATOR=/manager \
 RUN if grep -q 'Ubuntu' /etc/os-release; then \
         apt-get update && \
         apt-get install -y --no-install-recommends passwd && \
-        useradd -ms /bin/bash nonroot -u 1001 && \
         apt-get install -y --no-install-recommends krb5-locales && \
-        apt-get upgrade -y && \
         apt-get install -y --no-install-recommends unattended-upgrades && \
-        unattended-upgrades -v --security && \
+        useradd -ms /bin/bash nonroot -u 1001 && \
+        unattended-upgrades -v && \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
     else \
         yum -y install shadow-utils && \
