@@ -1456,7 +1456,7 @@ func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContex
 	return appStatusContext.AppsRepoStatusPollInterval != 0
 }
 
-// shouldCheckAppRepoStatus 
+// shouldCheckAppRepoStatus
 func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
 	// If polling is disabled, check if manual update is on.
 	if !isAppRepoPollingEnabled(appStatusContext) {
@@ -1496,7 +1496,6 @@ func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 	return &cleanObjectHash, nil
 }
 
-
 // updateManualAppUpdateConfigMapLocked updates the manual app update configuration map for a given custom resource (CR).
 // It locks the resource mutex for the config map, retrieves the config map, and updates the status and reference count
 // based on whether manual checking is turned off or not.
@@ -1529,8 +1528,8 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 			return err
 		}
 
-		// first check the refCount and status	
-		//	
+		// first check the refCount and status
+		//
 		numOfObjects := getManualUpdateRefCount(ctx, client, cr, configMapName)
 
 		// turn off the manual checking for this CR kind in the configMap
@@ -1573,7 +1572,7 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 		scopedLog.Info("Turning off manual checking of apps update in per CR configmap", "Kind", kind)
 		status = "off"
 	}
-	
+
 	err = splutil.UpdateResource(ctx, client, configMap)
 	if err != nil {
 		scopedLog.Error(err, "Could not update the per CR configMap", "name", crNamespacedName.Name)

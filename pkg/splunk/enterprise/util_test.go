@@ -693,13 +693,43 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	client := spltest.NewMockClient()
 
+	crConfigMap1 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("splunk-config-%s", cr.Name),
+			Namespace: cr.GetNamespace(),
+		},
+		Data : map[string]string{
+			"manualUpdate": "off",
+			"status": "off",
+		},
+	}
+	_, err := splctrl.ApplyConfigMap(ctx, client, crConfigMap1)
+	if err != nil {
+		t.Errorf("ApplyConfigMap should not have returned error for %s", crConfigMap1.Name)
+	}
+
 	// add another standalone cr to the list
 	revised := cr
 	revised.ObjectMeta.Name = "standalone2"
 
+	crConfigMap2 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("splunk-config-%s", revised.Name),
+			Namespace: cr.GetNamespace(),
+		},
+		Data : map[string]string{
+			"manualUpdate": "off",
+			"status": "off",
+		},
+	}
+	_, err = splctrl.ApplyConfigMap(ctx, client, crConfigMap2)
+	if err != nil {
+		t.Errorf("ApplyConfigMap should not have returned error for %s", crConfigMap2.Name)
+	}
+
 	var appDeployContext enterpriseApi.AppDeploymentContext
 	appDeployContext.AppFrameworkConfig = cr.Spec.AppFrameworkConfig
-	err := initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
+	err = initAndCheckAppInfoStatus(ctx, client, &cr, &cr.Spec.AppFrameworkConfig, &appDeployContext)
 	if err != nil {
 		t.Errorf("initAndCheckAppInfoStatus should not have returned error")
 	}

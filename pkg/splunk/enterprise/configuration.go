@@ -1254,22 +1254,29 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getManualUpdateStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	crScopedConfigMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
-	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
-	if err != nil {
-		scopedLog.Error(err, "Unable to get the configMap", "name", crScopedConfigMapName)
-		configMap, err = splctrl.GetConfigMap(ctx, client, namespacedName)
-		if err != nil {
-			scopedLog.Error(err, "Unable to get the configMap", "name", configMap)
-			return ""
+	result := ""
+	if err == nil {
+		statusRegex := ".*status: (?P<status>.*).*"
+		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+	 	result = extractFieldFromConfigMapData(statusRegex, data)
+		if result == "on" {
+			return result
 		}
+	} else {
+		scopedLog.Error(err, "Unable to get namespace specific configMap", "name", configMapName)
 	}
 
-	statusRegex := ".*status: (?P<status>.*).*"
-	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]	
-
-	return extractFieldFromConfigMapData(statusRegex, data)
+	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf("splunk-config-%s", cr.GetName())}
+	CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err == nil {
+		data := CrconfigMap.Data["manualUpdate"]
+	 	return data
+	} else {
+		scopedLog.Error(err, "Unable to get custom specific configMap", "name", configMapName)
+	}
+	return "off"
 }
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
