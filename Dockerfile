@@ -36,7 +36,7 @@ ENV OPERATOR=/manager \
 # Install necessary packages and configure user
 RUN if grep -q 'Ubuntu' /etc/os-release; then \
         apt-get update && \
-        apt-get install -y --no-install-recommends passwd=1:4.13+dfsg1-4ubuntu3 && \
+        apt-get install -y --no-install-recommends passwd && \
         useradd -ms /bin/bash nonroot -u 1001 && \
         apt-get install -y --no-install-recommends krb5-locales && \
         apt-get upgrade -y && \
