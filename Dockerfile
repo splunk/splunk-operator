@@ -22,6 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
+# This sha relates to ubi version 8.10-1132, which is tagged as 8.10 and latest as of Nov 15, 2024
 FROM registry.access.redhat.com/ubi8/ubi@sha256:8990388831e1b41c9a67389e4b691dae8b1283f77d5fb7263e1f4fc69c0a9d05
 ENV OPERATOR=/manager \
     USER_UID=1001 \
