@@ -1,7 +1,7 @@
 # Setup defaults for build arguments
-ARG PLATFORMS ?= linux/amd64
-ARG BASE_OS ?= registry.access.redhat.com/ubi8/ubi
-ARG BASE_OS_VERSION ?= 8.10
+ARG PLATFORMS=linux/amd64
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi
+ARG BASE_IMAGE_VERSION=8.10
 
 # Build the manager binary
 FROM golang:1.23.0 as builder
@@ -26,20 +26,31 @@ COPY hack hack/
 # TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
-# Use BASE_OS as the base image
-FROM ${BASE_OS}:${BASE_OS_VERSION}
+# Use BASE_IMAGE as the base image
+FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}
 
 ENV OPERATOR=/manager \
     USER_UID=1001 \
     USER_NAME=nonroot
 
 # Install necessary packages and configure user
-RUN yum -y install shadow-utils && \
-    useradd -ms /bin/bash nonroot -u 1001 && \
-    yum update -y krb5-libs && yum clean all && \
-    yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical && \
-    yum -y update-minimal --security --sec-severity=Moderate && \
-    yum -y update-minimal --security --sec-severity=Low
+RUN if grep -q 'Ubuntu' /etc/os-release; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends passwd=1:4.8.1-1ubuntu5.20.04 && \
+        useradd -ms /bin/bash nonroot -u 1001 && \
+        apt-get install -y --no-install-recommends krb5-locales=1.17-6ubuntu4.1 && \
+        apt-get upgrade -y && \
+        apt-get install -y --no-install-recommends unattended-upgrades=2.3ubuntu0.1 && \
+        unattended-upgrades -v --security && \
+        apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    else \
+        yum -y install shadow-utils && \
+        useradd -ms /bin/bash nonroot -u 1001 && \
+        yum update -y krb5-libs && yum clean all && \
+        yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical && \
+        yum -y update-minimal --security --sec-severity=Moderate && \
+        yum -y update-minimal --security --sec-severity=Low; \
+    fi
 
 # Metadata
 LABEL name="splunk" \
