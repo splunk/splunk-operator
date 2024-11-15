@@ -93,7 +93,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
     - name: Build and push Splunk Operator Image
       run: |
-        export PLATFORMS=linux/arm64, linux/amd64
+        export PLATFORMS=linux/arm64,linux/amd64
         export BASE_IMAGE=ubuntu
         export BASE_IMAGE_VERSION=24.10
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
