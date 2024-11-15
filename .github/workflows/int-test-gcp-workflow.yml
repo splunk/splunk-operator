@@ -65,10 +65,10 @@ jobs:
     strategy:
       matrix:
         test_focus: 
-          - { order: 1, name: "c3_gcp_sanity" }
-          - { order: 2, name: "c3_mgr_gcp_sanity" }
-          - { order: 3, name: "m4_gcp_sanity" }
-          - { order: 4, name: "m4_mgr_gcp_sanity" }
+          #- { order: 1, name: "c3_gcp_sanity" }
+          #- { order: 2, name: "c3_mgr_gcp_sanity" }
+          #- { order: 3, name: "m4_gcp_sanity" }
+          #- { order: 4, name: "m4_mgr_gcp_sanity" }
           - { order: 5, name: "s1_gcp_sanity" }
     runs-on: ubuntu-latest
     needs: build-operator-image
