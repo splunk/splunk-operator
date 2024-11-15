@@ -1260,7 +1260,7 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 	if err == nil {
 		statusRegex := ".*status: (?P<status>.*).*"
 		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
-	 	result = extractFieldFromConfigMapData(statusRegex, data)
+		result = extractFieldFromConfigMapData(statusRegex, data)
 		if result == "on" {
 			return result
 		}
@@ -1272,7 +1272,7 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 	CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
 		data := CrconfigMap.Data["manualUpdate"]
-	 	return data
+		return data
 	} else {
 		scopedLog.Error(err, "Unable to get custom specific configMap", "name", configMapName)
 	}

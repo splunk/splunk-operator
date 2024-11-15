@@ -698,9 +698,9 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 			Name:      fmt.Sprintf("splunk-config-%s", cr.Name),
 			Namespace: cr.GetNamespace(),
 		},
-		Data : map[string]string{
+		Data: map[string]string{
 			"manualUpdate": "off",
-			"status": "off",
+			"status":       "off",
 		},
 	}
 	_, err := splctrl.ApplyConfigMap(ctx, client, crConfigMap1)
@@ -717,9 +717,9 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 			Name:      fmt.Sprintf("splunk-config-%s", revised.Name),
 			Namespace: cr.GetNamespace(),
 		},
-		Data : map[string]string{
+		Data: map[string]string{
 			"manualUpdate": "off",
-			"status": "off",
+			"status":       "off",
 		},
 	}
 	_, err = splctrl.ApplyConfigMap(ctx, client, crConfigMap2)
