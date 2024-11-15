@@ -150,14 +150,21 @@ docker-push: ## Push docker image with the manager.
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi
 #   Build Base OS Version: 8.10
 # Pass only what is required, the rest will be defaulted
-docker-buildx: 
-	docker buildx build --push --platform=${PLATFORMS} \
-		--build-arg BASE_OS=${BASE_OS} \
-		--build-arg BASE_OS_VERSION=${BASE_OS_VERSION} \
-		--tag ${IMG} -f Dockerfile .
+# Setup defaults for build arguments
+PLATFORMS ?= linux/amd64
+BASE_OS ?= registry.access.redhat.com/ubi8/ubi
+BASE_OS_VERSION ?= 8.10
+docker-buildx:
+	@if [ -z "$(IMG)" ]; then \
+		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+		exit 1; \
+	fi
+	docker buildx build --push --platform="${PLATFORMS}" \
+		--build-arg BASE_OS="${BASE_OS}" \
+		--build-arg BASE_OS_VERSION="${BASE_OS_VERSION}" \
+		--tag "${IMG}" -f Dockerfile .
 
 ##@ Deployment
-
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side --force-conflicts -f -
 

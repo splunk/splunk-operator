@@ -27,7 +27,7 @@ COPY hack hack/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
 # Use BASE_OS as the base image
-FROM ${BASE_OS}:{BASE_OS_VERSION}
+FROM ${BASE_OS}:${BASE_OS_VERSION}
 
 ENV OPERATOR=/manager \
     USER_UID=1001 \
