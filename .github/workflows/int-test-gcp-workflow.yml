@@ -107,6 +107,7 @@ jobs:
       - name: Set Test Cluster Name
         run: |
           echo "CLUSTER_NAME=gke-${{ matrix.test_focus.order }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          echo "TEST_CLUSTER_NAME=gke-${{ matrix.test_focus.order }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Checkout Code
         uses: actions/checkout@v2
 
@@ -131,17 +132,22 @@ jobs:
         run: |
           gcloud config set project ${{ env.GCP_PROJECT_ID }}
 
+      #- name: Create GKE Cluster
+      #  run: |
+      #    gcloud container clusters create ${{ env.CLUSTER_NAME }} \
+      #      --zone ${{ env.GCP_ZONE }} \
+      #      --num-nodes ${{ env.CLUSTER_WORKERS }} \
+      #      --machine-type n2-standard-8  \
+      #      --enable-ip-alias \
+      #      --disk-size 50 \
+      #      --network ${{ env.GCP_NETWORK }} \
+      #      --subnetwork ${{ env.GCP_SUBNETWORK }} \
+      #      --scopes "https://www.googleapis.com/auth/cloud-platform"
       - name: Create GKE Cluster
         run: |
-          gcloud container clusters create ${{ env.CLUSTER_NAME }} \
-            --zone ${{ env.GCP_ZONE }} \
-            --num-nodes ${{ env.CLUSTER_WORKERS }} \
-            --machine-type n2-standard-8  \
-            --enable-ip-alias \
-            --disk-size 50 \
-            --network ${{ env.GCP_NETWORK }} \
-            --subnetwork ${{ env.GCP_SUBNETWORK }} \
-            --scopes "https://www.googleapis.com/auth/cloud-platform"
+          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+          export GKE_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+          make cluster-up
 
       - name: Get Kubernetes Credentials
         run: |
@@ -266,9 +272,12 @@ jobs:
       - name: Cleanup Test Case Artifacts
         if: ${{ always() }}
         run: |
+          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+          export GKE_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           tools/cleanup.sh
           make cleanup
           make clean
+          make cluster-down
       - name: Delete GKE Cluster
         if: always()
         run: |
