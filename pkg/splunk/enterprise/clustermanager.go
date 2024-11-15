@@ -185,10 +185,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	// check if the ClusterManager is ready for version upgrade, if required
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the ClusterManager is ready for version upgrade, if required
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	clusterManagerManager := splctrl.DefaultStatefulSetPodManager{}

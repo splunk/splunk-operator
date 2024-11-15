@@ -166,9 +166,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}

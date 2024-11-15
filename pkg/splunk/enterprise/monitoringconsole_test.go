@@ -98,11 +98,11 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
+
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
 		client.MatchingLabels(labels),
 	}
-
 	listOpts2 := []client.ListOption{
 		client.InNamespace("test"),
 	}
@@ -112,8 +112,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{ListOpts: listOpts2},
 	}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[10]}, "List": {listmockCall[0], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[10]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
