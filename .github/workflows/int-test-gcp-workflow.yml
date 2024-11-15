@@ -278,7 +278,11 @@ jobs:
           make cleanup
           make clean
           make cluster-down
-      - name: Delete GKE Cluster
-        if: always()
+      - name: Cleanup up EKS cluster
+        if: ${{ always() }}
         run: |
-          gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }} --quiet
+          make cluster-down
+      #- name: Delete GKE Cluster
+      #  if: always()
+      #  run: |
+      #    gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }} --quiet

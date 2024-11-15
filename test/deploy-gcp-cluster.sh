@@ -16,14 +16,14 @@ if [[ -z "${GCR_REPOSITORY}" ]]; then
 fi
 
 if [[ -z "${GKE_CLUSTER_K8_VERSION}" ]]; then
-  echo "GKE_CLUSTER_K8_VERSION not set. Changing to 1.26"
-  export GKE_CLUSTER_K8_VERSION="1.26"
+  echo "GKE_CLUSTER_K8_VERSION not set. Changing to 1.29"
+  export GKE_CLUSTER_K8_VERSION="1.29"
 fi
 
 function deleteCluster() {
   echo "Cleanup remaining PVC on the GKE Cluster ${TEST_CLUSTER_NAME}"
   tools/cleanup.sh
-  gcloud container clusters delete ${TEST_CLUSTER_NAME} --zone ${GCP_ZONE} --quiet
+  gcloud container clusters delete ${TEST_CLUSTER_NAME} --zone ${GCP_ZONE} --project ${GCP_PROJECT_ID} --quiet
   if [ $? -ne 0 ]; then
     echo "Unable to delete cluster - ${TEST_CLUSTER_NAME}"
     return 1
@@ -44,9 +44,13 @@ function createCluster() {
     gcloud container clusters create ${TEST_CLUSTER_NAME} \
       --num-nodes=${CLUSTER_WORKERS} \
       --zone=${GCP_ZONE} \
-      --subnetwork=${GCP_VPC_PUBLIC_SUBNET_STRING} \
+      --disk-size 50 \
+      #--network ${{ env.GCP_NETWORK }} \
+      #--subnetwork=${GCP_VPC_PUBLIC_SUBNET_STRING} \
       --cluster-version=${GKE_CLUSTER_K8_VERSION} \
-      --machine-type=n1-standard-4
+      --machine-type n2-standard-8  \
+      --scopes "https://www.googleapis.com/auth/cloud-platform" \
+      --enable-ip-alias 
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"
       return 1
