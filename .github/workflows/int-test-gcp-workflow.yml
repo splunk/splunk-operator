@@ -277,7 +277,6 @@ jobs:
           tools/cleanup.sh
           make cleanup
           make clean
-          make cluster-down
       - name: Cleanup up EKS cluster
         if: ${{ always() }}
         run: |
