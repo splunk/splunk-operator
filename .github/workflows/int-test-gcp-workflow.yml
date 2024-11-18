@@ -255,6 +255,10 @@ jobs:
       - name: Verify kubectl Configuration
         run: |
           kubectl config current-context
+      
+      - name: Apply StorageClass
+        run: |
+          kubectl apply -f test/gcp-storageclass.yaml
 
       - name: Run Integration Tests
         run: |
