@@ -256,7 +256,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 					Namespace: cr.GetNamespace(),
 				},
 				Data: map[string]string{
-					"ManualUpdate": "off",
+					"manualUpdate": "off",
 				},
 			}
 			err = client.Create(ctx, configMap)
@@ -272,14 +272,14 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 	}
 
 	// Check if the ManualUpdate field exists
-	if _, exists := configMap.Data["ManualUpdate"]; !exists {
-		configMap.Data["ManualUpdate"] = "off"
+	if _, exists := configMap.Data["manualUpdate"]; !exists {
+		configMap.Data["manualUpdate"] = "off"
 		err = client.Update(ctx, configMap)
 		if err != nil {
-			scopedLog.Error(err, "Failed to update config map with ManualUpdate field")
+			scopedLog.Error(err, "Failed to update config map with manualUpdate field")
 			return err
 		}
-		scopedLog.Info("Updated config map with ManualUpdate set to 'on'")
+		scopedLog.Info("Updated config map with manualUpdate set to 'on'")
 	}
 
 	return nil
