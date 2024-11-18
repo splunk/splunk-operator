@@ -116,6 +116,18 @@ func InitGCSClient(ctx context.Context, gcpCredentials string) (GCSClientInterfa
 	var err error
 
 	if len(gcpCredentials) == 0 {
+		// The storage.NewClient(ctx) internally uses Application Default Credentials (ADC) to authenticate, 
+		// and ADC works with Workload Identity when the required environment variables and setup are correctly configured.
+		// If the environment variables are not set, the client will use the default service account credentials.
+		// To use Google Workload Identity with storage.NewClient(ctx), ensure the following environment variables are properly set in your pod:
+		// 	GOOGLE_APPLICATION_CREDENTIALS (Optional):
+		// 		If you're not using the default workload identity path (/var/run/secrets/google.cloud/com.google.cloudsecrets/metadata/token), 
+		//		you can set GOOGLE_APPLICATION_CREDENTIALS to point to the federated token file manually.
+		// 		Otherwise, this can be left unset when Workload Identity is configured correctly.
+		// 	GOOGLE_CLOUD_PROJECT (Optional):
+		// 		Set this to your Google Cloud project ID if the SDK is not detecting it automatically.
+		// Additional Kubernetes Setup for Workload Identity:
+		// The Workload Identity configuration on your cluster ensures that the necessary tokens are automatically mounted for the pod and available without needing GOOGLE_APPLICATION_CREDENTIALS.
 		client, err = storage.NewClient(ctx)
 	} else {
 		client, err = storage.NewClient(ctx, option.WithCredentialsJSON([]byte(gcpCredentials)))
