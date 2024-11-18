@@ -185,30 +185,24 @@ case ${CLUSTER_PROVIDER} in
           echo "License path not set. Changing to default"
           export ENTERPRISE_LICENSE_LOCATION="${GCP_ENTERPRISE_LICENSE_LOCATION}"
         fi
-
-        if [[ -z "${TEST_CONTAINER}" ]]; then
-          echo "Data container not set. Changing to default"
-          export TEST_CONTAINER="${GCP_TEST_CONTAINER}"
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
         fi
 
-        if [[ -z "${INDEXES_CONTAINER}" ]]; then
-          echo "Test container not set. Changing to default"
-          export INDEXES_CONTAINER="${GCP_INDEXES_CONTAINER}"
+        if [[ -z "${TEST_BUCKET}" ]]; then
+          echo "Data bucket not set. Changing to default"
+          export TEST_BUCKET="${TEST_S3_BUCKET}"
         fi
 
-        if [[ -z "${REGION}" ]]; then
-          echo "GCP Region not set. Changing to default"
-          export REGION="${GCP_REGION}"
+        if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+          echo "Test bucket not set. Changing to default"
+          export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
         fi
 
-        if [[ -z "${STORAGE_ACCOUNT}" ]]; then
-          echo "GCP Storage account not set. Changing to default"
-          export STORAGE_ACCOUNT="${GCP_STORAGE_ACCOUNT}"
-        fi
-
-        if [[ -z "${STORAGE_ACCOUNT_KEY}" ]]; then
-          echo "GCP Storage account key not set. Changing to default"
-          export STORAGE_ACCOUNT_KEY="${GCP_STORAGE_ACCOUNT_KEY}"
+        if [[ -z "${S3_REGION}" ]]; then
+          echo "S3 Region not set. Changing to default"
+          export S3_REGION="${AWS_S3_REGION}"
         fi
         ;;
 esac
