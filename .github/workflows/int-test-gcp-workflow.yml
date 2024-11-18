@@ -136,17 +136,6 @@ jobs:
         run: |
           gcloud config set project ${{ env.GCP_PROJECT_ID }}
 
-      #- name: Create GKE Cluster
-      #  run: |
-      #    gcloud container clusters create ${{ env.CLUSTER_NAME }} \
-      #      --zone ${{ env.GCP_ZONE }} \
-      #      --num-nodes ${{ env.CLUSTER_WORKERS }} \
-      #      --machine-type n2-standard-8  \
-      #      --enable-ip-alias \
-      #      --disk-size 50 \
-      #      --network ${{ env.GCP_NETWORK }} \
-      #      --subnetwork ${{ env.GCP_SUBNETWORK }} \
-      #      --scopes "https://www.googleapis.com/auth/cloud-platform"
       - name: Create GKE Cluster
         run: |
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
