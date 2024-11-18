@@ -79,6 +79,7 @@ jobs:
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
+      AWS_S3_REGION: ${{ secrets.GCP_REGION }}
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_NETWORK: default  # Adjust if using a custom network
       GCP_SUBNETWORK: default  # Adjust if using a custom subnetwork
@@ -90,9 +91,12 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_TO_SKIP:  "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
+      TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
+      INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
       GCP_ENTERPRISE_LICENSE_LOCATION: "test_licenses"
       ENTERPRISE_LICENSE_LOCATION: "test_licenses"
+      ENTERPRISE_LICENSE_S3_PATH: "test_licenses"
       REGISTRY_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       CLUSTER_WIDE: "true"
       GCP_SERVICE_ACCOUNT_ENABLED: "false"
