@@ -1,7 +1,11 @@
 # Setup defaults for build arguments
 ARG PLATFORMS=linux/amd64
-ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi
-ARG BASE_IMAGE_VERSION=8.10
+
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+# This sha relates to ubi version 8.10-1132, which is tagged as 8.10 and latest as of Nov 15, 2024
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi@sha256
+ARG BASE_IMAGE_VERSION=8990388831e1b41c9a67389e4b691dae8b1283f77d5fb7263e1f4fc69c0a9d05
 
 # Build the manager binary
 FROM golang:1.23.0 AS builder
