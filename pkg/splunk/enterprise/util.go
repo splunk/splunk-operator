@@ -1571,7 +1571,7 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 	}
 	if turnOffManualChecking {
 		scopedLog.Info("Turning off manual checking of apps update in per CR configmap", "Kind", kind)
-		status = "off"
+		configMap.Data["manualUpdate"] = "off"
 	}
 
 	err = splutil.UpdateResource(ctx, client, configMap)
