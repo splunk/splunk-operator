@@ -272,13 +272,7 @@ jobs:
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           export GKE_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           tools/cleanup.sh
-          make cleanup
-          make clean
       - name: Cleanup up EKS cluster
         if: ${{ always() }}
         run: |
           make cluster-down
-      #- name: Delete GKE Cluster
-      #  if: always()
-      #  run: |
-      #    gcloud container clusters delete ${{ env.CLUSTER_NAME }} --zone ${{ env.GCP_ZONE }} --project ${{ env.GCP_PROJECT_ID }} --quiet
