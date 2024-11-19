@@ -40,6 +40,8 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         apt-get install -y --no-install-recommends krb5-locales && \
         apt-get install -y --no-install-recommends unattended-upgrades && \
         useradd -ms /bin/bash nonroot -u 1001 && \
+        apt-get install -y --no-install-recommends ca-certificates && \
+        update-ca-certificates && \
         unattended-upgrades -v && \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
     else \
