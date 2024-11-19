@@ -259,6 +259,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 					"manualUpdate": "off",
 				},
 			}
+			configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 			err = client.Create(ctx, configMap)
 			if err != nil {
 				scopedLog.Error(err, "Failed to create config map")
