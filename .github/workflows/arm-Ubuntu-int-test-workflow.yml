@@ -2,7 +2,7 @@ name: Arm Ubuntu Integration Test WorkFlow Ubuntu
 on:
   push:
     branches:
-      - CSPL_2920_xx
+      - CSPL_2920_xxx
 jobs:
   build-operator-image-arm-ubuntu:
     runs-on: ubuntu-latest
