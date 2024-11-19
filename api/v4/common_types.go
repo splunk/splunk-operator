@@ -316,6 +316,10 @@ type VolumeSpec struct {
 
 	// Region of the remote storage volume where apps reside. Used for aws, if provided. Not used for minio and azure.
 	Region string `json:"region"`
+
+	// Type of URL for S3 endpoints. Configure true for path sytle URL. False by default(Host style)
+	// https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
+	S3PathUrl bool `json:"s3PathUrl"`
 }
 
 // VolumeAndTypeSpec used to add any custom varaibles for volume implementation
