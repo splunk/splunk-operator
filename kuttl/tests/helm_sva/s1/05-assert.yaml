@@ -1,0 +1,7 @@
+# check for License manager to be in ready state
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: lm
+status:
+  phase: Ready
