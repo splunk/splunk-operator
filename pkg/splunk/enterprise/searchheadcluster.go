@@ -272,8 +272,6 @@ var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log
 
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
 func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
-
-
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -436,7 +434,6 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 // Update for searchHeadClusterPodManager handles all updates for a statefulset of search heads
 func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
-
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
@@ -470,7 +467,6 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
-
 	// start by quarantining the pod
 	result, err := mgr.PrepareRecycle(ctx, n)
 	if err != nil || !result {
@@ -492,7 +488,6 @@ func (mgr *searchHeadClusterPodManager) PrepareScaleDown(ctx context.Context, n 
 
 // PrepareRecycle for searchHeadClusterPodManager prepares search head pod to be recycled for updates; it returns true when ready
 func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
-
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
 	switch mgr.cr.Status.Members[n].Status {

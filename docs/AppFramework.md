@@ -33,10 +33,10 @@ Create a role and role-binding for the splunk-operator service account. This all
 ### Credentials via Kubernetes Secret or Workload Identity: 
 Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
 
-* Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
-* Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
+* **Kubernetes Secret**: Create a Kubernetes secret using the service account JSON key file for GCP access.
+* **Workload Identity**: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
 
-Example for creating the secret 
+## Example for creating the secret
 
 ```shell
 kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json
@@ -141,7 +141,7 @@ spec:
         secretRef: azureblob-secret
 ```
 
-example using GCP blob: Standalone.yaml
+Example using GCP blob: Standalone.yaml
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -845,9 +845,9 @@ Azure Managed Identities can be used to provide IAM access to the blobs. With ma
 
 ### **Azure Blob Authorization Recommendations:**
 
-- **Granular Access:** Azure allows "Managed Identities" assignment at the "storage accounts" level as well as at specific containers (buckets) levels. A managed identity assigned read permissions at a storage account level will have read access for all containers within that storage account. As a good security practice, assign the managed identity to only the specific containers it needs to access, rather than the entire storage account.
+- **Granular Access:** Azure allows **"Managed Identities"** assignment at the **"storage accounts"** level as well as at specific containers (buckets) levels. A managed identity assigned read permissions at a storage account level will have read access for all containers within that storage account. As a good security practice, assign the managed identity to only the specific containers it needs to access, rather than the entire storage account.
   
-- **Avoid Shared Access Keys:** In contrast to "Managed Identities", Azure allows "shared access keys" configurable only at the storage accounts level. When using the `secretRef` configuration in the CRD, the underlying secret key will allow both read and write access to the storage account (and all containers within it). Based on your security needs, consider using "Managed Identities" instead of secrets. Additionally, there's no automated way to rotate the secret key, so if you're using these keys, rotate them regularly (e.g., every 90 days).
+- **Avoid Shared Access Keys:** In contrast to **"Managed Identities"**, Azure allows **"shared access keys"** configurable only at the storage accounts level. When using the `secretRef` configuration in the CRD, the underlying secret key will allow both read and write access to the storage account (and all containers within it). Based on your security needs, consider using "Managed Identities" instead of secrets. Additionally, there's no automated way to rotate the secret key, so if you're using these keys, rotate them regularly (e.g., every 90 days).
 
 ---
 
