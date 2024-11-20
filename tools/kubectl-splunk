@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+
+import sys
+import subprocess
+import argparse
+import logging
+import os
+import configparser
+import threading
+import time
+import json
+import getpass
+from concurrent.futures import ThreadPoolExecutor
+from argparse import RawDescriptionHelpFormatter
+
+def load_config():
+    """Load configuration from file and environment variables."""
+    config = configparser.ConfigParser()
+    config_file = os.path.expanduser('~/.kubectl_splunk_config')
+    if os.path.exists(config_file):
+        config.read(config_file)
+        namespace = config.get('DEFAULT', 'namespace', fallback='default')
+        selector = config.get('DEFAULT', 'selector', fallback='app=splunk')
+        splunk_path = config.get('DEFAULT', 'splunk_path', fallback='splunk')
+        pod_name = config.get('DEFAULT', 'pod_name', fallback=None)
+    else:
+        namespace = 'default'
+        selector = 'app=splunk'
+        splunk_path = 'splunk'
+        pod_name = None
+
+    # Override with environment variables if set
+    namespace = os.environ.get('KUBECTL_SPLUNK_NAMESPACE', namespace)
+    selector = os.environ.get('KUBECTL_SPLUNK_SELECTOR', selector)
+    splunk_path = os.environ.get('KUBECTL_SPLUNK_PATH', splunk_path)
+    pod_name = os.environ.get('KUBECTL_SPLUNK_POD', pod_name)
+
+    return namespace, selector, splunk_path, pod_name
+
+def parse_args(namespace, selector, splunk_path, pod_name_from_config):
+    """Parse command-line arguments."""
+    epilog_text = """
+Examples:
+  kubectl splunk exec search "index=_internal | head 10"
+  kubectl splunk -n splunk-namespace -l app=splunk -P splunk-idxc-indexer-0 exec status
+  kubectl splunk cp /local/path/file.txt :/remote/path/file.txt
+  kubectl splunk --interactive
+    """
+    parser = argparse.ArgumentParser(
+        description='kubectl plugin to run Splunk commands within a Splunk pod',
+        epilog=epilog_text,
+        formatter_class=RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument('-n', '--namespace', default=namespace,
+                        help='Specify the Kubernetes namespace (default from config/env or "default")')
+    parser.add_argument('-l', '--selector', default=selector,
+                        help='Label selector to identify the Splunk pod(s) (default from config/env or "app=splunk")')
+    parser.add_argument('--context', help='Specify the Kubernetes context')
+    parser.add_argument('-P', '--pod', default=pod_name_from_config,
+                        help='Specify the exact pod name to run the command on (default from config/env if set)')
+    parser.add_argument('-i', '--interactive', action='store_true',
+                        help='Start an interactive shell inside the Splunk pod')
+    parser.add_argument('--splunk-path', default=splunk_path,
+                        help='Path to the Splunk CLI inside the container (default from config/env or "splunk")')
+    parser.add_argument('-v', '--verbose', action='count', default=0,
+                        help='Increase output verbosity (e.g., -v, -vv, -vvv)')
+    parser.add_argument('--version', action='version', version='kubectl-splunk 1.3',
+                        help='Show program version and exit')
+
+    auth_group = parser.add_argument_group('Authentication')
+    auth_group.add_argument('-u', '--username', help='Username for Splunk authentication')
+    auth_group.add_argument('-p', '--password', help='Password for Splunk authentication (will prompt if not provided)')
+
+    subparsers = parser.add_subparsers(dest='mode', required=True, help='Available modes')
+
+    # Subparser for exec mode
+    exec_parser = subparsers.add_parser('exec', help='Execute a Splunk command')
+    exec_parser.add_argument('splunk_command', nargs=argparse.REMAINDER, help='Splunk command to execute')
+
+    # Subparser for copy mode
+    cp_parser = subparsers.add_parser('cp', help='Copy files to/from the Splunk pod')
+    cp_parser.add_argument('src', help='Source file path')
+    cp_parser.add_argument('dest', help='Destination file path')
+
+    args = parser.parse_args()
+
+    return args
+
+def setup_logging(verbosity):
+    """Set up logging based on verbosity level."""
+    if verbosity >= 3:
+        level = logging.DEBUG
+    elif verbosity == 2:
+        level = logging.INFO
+    elif verbosity == 1:
+        level = logging.WARNING
+    else:
+        level = logging.ERROR
+
+    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+
+def get_pods(args):
+    """Retrieve the list of Splunk pods based on the label selector and namespace."""
+    if args.pod:
+        # If a specific pod is specified, return it directly
+        return [args.pod]
+    else:
+        kubectl_cmd = ['kubectl']
+        if args.context:
+            kubectl_cmd.extend(['--context', args.context])
+        kubectl_cmd.extend(['get', 'pods', '-n', args.namespace, '-l', args.selector,
+                            '-o', 'jsonpath={.items[*].metadata.name}'])
+
+        logging.debug(f"Running command: {' '.join(kubectl_cmd)}")
+
+        try:
+            pods_output = subprocess.check_output(kubectl_cmd, universal_newlines=True).strip()
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Failed to get pods: {e}")
+            sys.exit(1)
+
+        pods = pods_output.split()
+        if not pods:
+            logging.error(f"No Splunk pods found with selector '{args.selector}' in namespace '{args.namespace}'.")
+            sys.exit(1)
+
+        logging.debug(f"Found pods: {pods}")
+        return pods
+
+def select_pods(pods, args):
+    """Allow the user to select pods when multiple pods are present."""
+    if len(pods) == 1:
+        return pods
+
+    print("Multiple Splunk pods found:")
+    for idx, pod in enumerate(pods):
+        print(f"{idx + 1}. {pod}")
+    print("0. Run command on all pods")
+
+    while True:
+        try:
+            choice = int(input("Select a pod by number (or 0 to run on all): "))
+            if choice == 0:
+                return pods
+            elif 1 <= choice <= len(pods):
+                return [pods[choice - 1]]
+            else:
+                print(f"Please enter a number between 0 and {len(pods)}.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
+def cache_pod(pod_name, namespace, selector):
+    """Cache the pod name to a file."""
+    cache_file = '/tmp/kubectl_splunk_cache.json'
+    cache_data = {
+        'pod_name': pod_name,
+        'namespace': namespace,
+        'selector': selector,
+        'timestamp': time.time()
+    }
+    with open(cache_file, 'w') as f:
+        json.dump(cache_data, f)
+
+def load_cached_pod(namespace, selector):
+    """Load the cached pod name if available and valid."""
+    cache_file = '/tmp/kubectl_splunk_cache.json'
+    if os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            cache = json.load(f)
+        if (time.time() - cache['timestamp'] < 300 and
+                cache['namespace'] == namespace and
+                cache['selector'] == selector):
+            return cache['pod_name']
+    return None
+
+def execute_on_pod(args, pod_name):
+    """Execute the Splunk command on a single pod."""
+    kubectl_cmd = ['kubectl']
+    if args.context:
+        kubectl_cmd.extend(['--context', args.context])
+    kubectl_cmd.extend(['exec', '-n', args.namespace, pod_name, '--'])
+
+    if args.mode == 'exec':
+        cmd = kubectl_cmd + [args.splunk_path]
+        cmd += args.splunk_command  # Add the Splunk command arguments
+        # Authentication
+        if args.username:
+            if not args.password:
+                args.password = getpass.getpass(prompt='Splunk Password: ')
+            cmd += ['-auth', f"{args.username}:{args.password}"]  # Add auth after command arguments
+    elif args.mode == 'interactive':
+        cmd = kubectl_cmd + ['/bin/bash']
+    else:
+        return
+
+    logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd)}")
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Command failed on pod {pod_name} with exit code {e.returncode}")
+        sys.exit(e.returncode)
+
+
+def copy_to_pod(args, pod_name):
+    """Copy files to/from the Splunk pod."""
+    kubectl_cmd = ['kubectl']
+    if args.context:
+        kubectl_cmd.extend(['--context', args.context])
+    src = args.src
+    dest = args.dest
+    # If source or destination starts with ':', it's assumed to be remote
+    if src.startswith(':'):
+        src = f"{args.namespace}/{pod_name}:{src[1:]}"
+    if dest.startswith(':'):
+        dest = f"{args.namespace}/{pod_name}:{dest[1:]}"
+    kubectl_cmd.extend(['cp', src, dest])
+
+    logging.debug(f"Copying files with command: {' '.join(kubectl_cmd)}")
+    try:
+        subprocess.run(kubectl_cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Copy command failed with exit code {e.returncode}")
+        sys.exit(e.returncode)
+
+def main():
+    # Load configuration
+    namespace, selector, splunk_path, pod_name_from_config = load_config()
+
+    # Parse arguments
+    args = parse_args(namespace, selector, splunk_path, pod_name_from_config)
+
+    # Set up logging
+    setup_logging(args.verbose)
+    logging.debug(f"Arguments: {args}")
+
+    # Handle interactive shell separately
+    if args.interactive:
+        args.mode = 'interactive'
+        args.splunk_command = []
+
+    # Load cached pod if available
+    pod_name = None
+    if args.pod:
+        pods = [args.pod]
+    else:
+        pod_name = load_cached_pod(args.namespace, args.selector)
+        pods = []
+
+        if pod_name:
+            logging.info(f"Using cached pod: {pod_name}")
+            pods = [pod_name]
+        else:
+            # Get list of pods
+            pods = get_pods(args)
+            if len(pods) > 1 and args.mode != 'cp':
+                pods = select_pods(pods, args)
+            pod_name = pods[0]
+            # Cache the pod name
+            cache_pod(pod_name, args.namespace, args.selector)
+
+    # Handle modes
+    if args.mode == 'exec' or args.mode == 'interactive':
+        # Execute commands on pods (in parallel if multiple pods)
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for pod in pods:
+                futures.append(executor.submit(execute_on_pod, args, pod))
+            for future in futures:
+                future.result()  # To catch exceptions
+    elif args.mode == 'cp':
+        # Copy files (cannot copy to multiple pods at once)
+        if len(pods) > 1:
+            logging.error("Copy mode does not support multiple pods. Please specify a single pod.")
+            sys.exit(1)
+        copy_to_pod(args, pods[0])
+    else:
+        logging.error(f"Unknown mode: {args.mode}")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
