@@ -194,7 +194,8 @@ def execute_on_pod(args, pod_name):
     else:
         return
 
-    logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd)}")
+    sanitized_cmd = [arg if '-auth' not in arg else '-auth *****:*****' for arg in cmd]
+    logging.debug(f"Executing command on pod {pod_name}: {' '.join(sanitized_cmd)}")
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
