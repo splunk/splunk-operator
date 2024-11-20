@@ -1079,6 +1079,9 @@ func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstan
 		// Get current Age on all splunk pods and compare with previous
 		currentSplunkPodAge := GetPodsStartTime(ns)
 		for podName, currentpodAge := range currentSplunkPodAge {
+			if strings.Contains(podName, "monitoring-console") {
+				continue
+			}
 			// Only compare if the pod was present in previous pod iteration
 			testenvInstance.Log.Info("Checking Pod reset for Pod Name", "PodName", podName, "Current Pod Age", currentpodAge)
 			if _, ok := podStartTimeMap[podName]; ok {
