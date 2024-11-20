@@ -16,7 +16,7 @@ Users of Red Hat OpenShift may find that the default Security Context
 Constraint is too restrictive. You can fix this by granting the appropriate
 Service Accounts the `nonroot` Security Context Constraint by running the
 following commands within your namespace. If you are using OpenShift 4.14
-or later, you must use the nonroot-v2 Security Context Constraint instead.
+or later, you must use the `nonroot-v2` Security Context Constraint instead.
 
 For the Splunk Operator pod:
 ```
