@@ -2,15 +2,17 @@
 
 ## Overview
 
-`kubectl-splunk` is a kubectl plugin that allows you to execute Splunk commands directly within Splunk pods running in a Kubernetes cluster. It simplifies the management and interaction with Splunk instances deployed as StatefulSets or Deployments by providing a convenient command-line interface.
+`kubectl-splunk` is a `kubectl` plugin that allows you to execute Splunk commands directly within Splunk pods running in a Kubernetes cluster. It simplifies the management and interaction with Splunk instances deployed as StatefulSets or Deployments by providing a convenient command-line interface.
 
 This plugin supports various features such as:
 
 - Executing Splunk CLI commands inside Splunk pods.
+- Running Splunk REST API calls via port-forwarding.
 - Specifying pods directly via command line or configuration file.
+- Automatic retrieval of Splunk admin credentials from pods.
 - Interactive shell access to Splunk pods.
 - Copying files to and from Splunk pods.
-- Handling authentication securely.
+- Handling authentication securely with credential storage.
 - Customizable configurations and verbosity levels.
 - Cross-platform compatibility.
 - Auto-completion support.
@@ -30,8 +32,11 @@ This plugin supports various features such as:
   - [Configuration File](#configuration-file)
   - [Environment Variables](#environment-variables)
   - [Pod Selection Behavior](#pod-selection-behavior)
-- [Features](#features)
 - [Authentication](#authentication)
+  - [Default Credentials](#default-credentials)
+  - [Credential Storage](#credential-storage)
+- [Features](#features)
+- [REST API Mode](#rest-api-mode)
 - [Copy Mode](#copy-mode)
 - [Interactive Shell](#interactive-shell)
 - [Logging and Verbosity](#logging-and-verbosity)
@@ -48,6 +53,10 @@ This plugin supports various features such as:
 - **kubectl**: The Kubernetes command-line tool must be installed and configured.
 - **Access to Kubernetes Cluster**: You should have access to the Kubernetes cluster where Splunk is deployed.
 - **Splunk CLI in Pods**: The Splunk Command Line Interface should be available within the Splunk pods.
+- **Python Packages**: Install required Python packages:
+  ```bash
+  pip install requests argcomplete
+  ```
 
 ---
 
@@ -94,6 +103,7 @@ kubectl splunk [global options] <mode> [mode options]
 ### Modes of Operation
 
 - **exec**: Execute a Splunk command inside a Splunk pod.
+- **rest**: Execute a Splunk REST API call via port-forwarding.
 - **cp**: Copy files to or from a Splunk pod.
 - **interactive**: Start an interactive shell inside a Splunk pod (use `--interactive` flag).
 
@@ -109,18 +119,41 @@ kubectl splunk [global options] <mode> [mode options]
 - `-P`, `--pod`: Specify the exact pod name to run the command on (can be set in config/env).
 - `-i`, `--interactive`: Start an interactive shell inside the Splunk pod.
 - `--splunk-path`: Path to the Splunk CLI inside the container (default: `splunk` or from config/env).
+- `--local-port`: Local port for port-forwarding in REST mode (default: `8000` or from config/env).
 - `-v`: Increase output verbosity (use `-v`, `-vv`, or `-vvv`).
 - `--version`: Show program version and exit.
 
 ### Authentication Options
 
-- `-u`, `--username`: Username for Splunk authentication.
-- `-p`, `--password`: Password for Splunk authentication (will prompt if not provided).
+- `-u`, `--username`: Username for Splunk authentication (default: `admin`).
+- `-p`, `--password`: Password for Splunk authentication (will prompt or auto-detect if not provided).
+- `--insecure`: Disable SSL certificate verification (useful for self-signed certificates).
+- `--save-credentials`: Save credentials securely for future use.
 
 ### Mode Options
 
-- **exec**: Followed by the Splunk command and its arguments.
-- **cp**: Requires `src` and `dest` arguments for source and destination paths.
+#### **exec**
+
+- **Usage**: `kubectl splunk exec [splunk_command]`
+- **Options**:
+  - `splunk_command`: Splunk command to execute (e.g., `list user`).
+
+#### **rest**
+
+- **Usage**: `kubectl splunk rest METHOD ENDPOINT [options]`
+- **Options**:
+  - `METHOD`: HTTP method (`GET`, `POST`, `PUT`, `DELETE`).
+  - `ENDPOINT`: Splunk REST API endpoint (e.g., `/services/server/info`).
+  - `--data`: Data to send with the request (for `POST`/`PUT`).
+  - `--params`: Query parameters (e.g., `"key1=value1&key2=value2"`).
+
+#### **cp**
+
+- **Usage**: `kubectl splunk cp SRC DEST`
+- **Options**:
+  - `SRC`: Source file path.
+  - `DEST`: Destination file path.
+  - Use `:` to indicate the remote path in the pod (e.g., `:/path/in/pod`).
 
 ---
 
@@ -156,14 +189,6 @@ Or using the short alias:
 kubectl splunk -P splunk-idxc-indexer-0 exec status
 ```
 
-### Use Pod Name from Configuration File
-
-If you have set the `pod_name` in your configuration file, you can run commands without specifying the pod:
-
-```bash
-kubectl splunk exec status
-```
-
 ### Start an Interactive Shell
 
 ```bash
@@ -182,15 +207,23 @@ kubectl splunk cp /local/path/file.txt :/remote/path/file.txt
 kubectl splunk cp :/remote/path/file.txt /local/path/file.txt
 ```
 
-**Note**: Use `:` to indicate the remote path in the pod.
-
-### Use Authentication
+### Execute a REST API Call
 
 ```bash
-kubectl splunk -u admin exec list user
+kubectl splunk rest GET /services/server/info --insecure
 ```
 
-You will be prompted for the password if not provided with `-p` or `--password`.
+### Create a Search Job (POST Request)
+
+```bash
+kubectl splunk rest POST /services/search/jobs --data "search=search index=_internal | head 10" --insecure
+```
+
+### Use Authentication and Save Credentials
+
+```bash
+kubectl splunk -u admin --save-credentials exec list user
+```
 
 ### Increase Verbosity
 
@@ -222,12 +255,14 @@ namespace = splunk-namespace
 selector = app=splunk
 splunk_path = splunk
 pod_name = splunk-idxc-indexer-0  # Default pod name
+local_port = 8000                 # Default local port for REST mode
 ```
 
 - **namespace**: Default Kubernetes namespace.
 - **selector**: Default label selector to identify Splunk pods.
 - **splunk_path**: Path to the Splunk CLI inside the container.
 - **pod_name**: Default pod name to use if not specified via command line.
+- **local_port**: Default local port for port-forwarding in REST mode.
 
 ### Environment Variables
 
@@ -237,6 +272,7 @@ You can set environment variables to override defaults:
 - `KUBECTL_SPLUNK_SELECTOR`: Sets the default label selector.
 - `KUBECTL_SPLUNK_PATH`: Sets the default Splunk CLI path.
 - `KUBECTL_SPLUNK_POD`: Sets the default pod name.
+- `KUBECTL_SPLUNK_LOCAL_PORT`: Sets the default local port for REST mode.
 
 **Example**:
 
@@ -244,6 +280,7 @@ You can set environment variables to override defaults:
 export KUBECTL_SPLUNK_NAMESPACE=splunk-namespace
 export KUBECTL_SPLUNK_SELECTOR=app=splunk
 export KUBECTL_SPLUNK_POD=splunk-idxc-indexer-0
+export KUBECTL_SPLUNK_LOCAL_PORT=8000
 ```
 
 ### Pod Selection Behavior
@@ -258,30 +295,83 @@ The script determines which pod to use based on the following priority:
 
 ---
 
-## Features
+## Authentication
 
-- **Execute Splunk Commands**: Run any Splunk CLI command directly within the pod.
-- **Pod Selection**: Specify a pod directly via command line, environment variable, or configuration file. If not specified, the script will prompt for selection when multiple pods are present.
-- **Interactive Shell**: Start a shell session inside the Splunk pod.
-- **Copy Files**: Transfer files to and from Splunk pods.
-- **Authentication Support**: Securely handle Splunk authentication credentials.
-- **Configuration Flexibility**: Use config files or environment variables for defaults.
-- **Verbosity Control**: Adjust logging levels for more or less output.
-- **Caching**: Pod information is cached for improved performance.
-- **Cross-Platform**: Works on Linux, macOS, and Windows.
-- **Auto-Completion**: Supports shell auto-completion for commands and options.
+### Default Credentials
+
+- **Username**: Defaults to `admin` if not specified.
+- **Password**: If not provided, the script attempts to retrieve the password from the pod's `/mnt/splunk-secrets/password` file.
+- **Automatic Password Retrieval**: Works if the password file is accessible within the pod.
+
+**Usage Without Credentials**:
+
+```bash
+kubectl splunk exec list user
+```
+
+### Credential Storage
+
+- **Save Credentials**: Use `--save-credentials` to store credentials securely for future use.
+- **Credentials File**: Stored in `~/.kubectl_splunk_credentials` with permissions set to `600`.
+- **Provide Credentials Once**:
+
+  ```bash
+  kubectl splunk -u admin --save-credentials exec list user
+  ```
+
+- **Subsequent Commands**: Credentials are used automatically.
+
+**Note**: Passwords are handled securely and are not exposed in logs or command outputs.
 
 ---
 
-## Authentication
+## Features
 
-If the Splunk CLI requires authentication, you can provide credentials using `-u` and `-p`:
+- **Execute Splunk Commands**: Run any Splunk CLI command directly within the pod.
+- **REST API Support**: Execute Splunk REST API calls via port-forwarding.
+- **Pod Selection**: Specify a pod directly via command line, environment variable, or configuration file. If not specified, the script will prompt for selection when multiple pods are present.
+- **Automatic Credential Retrieval**: Defaults to `admin` user and retrieves the password from the pod if not provided.
+- **Interactive Shell**: Start a shell session inside the Splunk pod.
+- **Copy Files**: Transfer files to and from Splunk pods.
+- **Authentication Handling**: Securely handle Splunk authentication credentials with options to save them.
+- **Configuration Flexibility**: Use config files or environment variables for defaults.
+- **Verbosity Control**: Adjust logging levels for more or less output.
+- **Caching**: Pod information is cached for improved performance.
+- **Auto-Completion**: Supports shell auto-completion for commands and options.
+- **Secure Logging**: Sensitive information such as passwords is not logged.
+
+---
+
+## REST API Mode
+
+Use the `rest` mode to execute Splunk REST API calls via port-forwarding.
+
+**Usage**:
 
 ```bash
-kubectl splunk -u admin -p mypassword exec list user
+kubectl splunk rest METHOD ENDPOINT [--data DATA] [--params PARAMS] [options]
 ```
 
-If you omit `-p`, you will be securely prompted for the password.
+- **METHOD**: HTTP method (`GET`, `POST`, `PUT`, `DELETE`).
+- **ENDPOINT**: Splunk REST API endpoint (e.g., `/services/server/info`).
+- **Options**:
+  - `--data`: Data to send with the request (for `POST`/`PUT`).
+  - `--params`: Query parameters (e.g., `"key1=value1&key2=value2"`).
+  - `--insecure`: Disable SSL certificate verification.
+
+**Examples**:
+
+- **Get Server Info**:
+
+  ```bash
+  kubectl splunk rest GET /services/server/info --insecure
+  ```
+
+- **Create a Search Job**:
+
+  ```bash
+  kubectl splunk rest POST /services/search/jobs --data "search=search index=_internal | head 10" --insecure
+  ```
 
 ---
 
@@ -336,6 +426,8 @@ Adjust the logging verbosity using the `-v` flag:
 kubectl splunk -vv exec status
 ```
 
+**Note**: Sensitive information such as passwords is masked in logs.
+
 ---
 
 ## Caching
@@ -383,7 +475,7 @@ eval "$(register-python-argcomplete kubectl-splunk)"
 Reload your shell configuration:
 
 ```bash
-source ~/.bashrc
+source ~/.bashrc  # or your shell's config file
 ```
 
 ---
@@ -402,6 +494,10 @@ source ~/.bashrc
 
 - **Caching Issues**: If you believe the script is using an outdated pod from the cache, clear the cache by deleting the cache file.
 
+- **Password Retrieval Failure**: If the script fails to retrieve the password from the pod, ensure that:
+  - You have the necessary permissions to execute commands in the pod.
+  - The password file `/mnt/splunk-secrets/password` exists and is accessible.
+
 ---
 
 ## License
@@ -416,12 +512,10 @@ Contributions are welcome! Please submit issues and pull requests via the projec
 
 ---
 
-
 ## Feedback
 
-If you have any questions, suggestions, or need assistance, please open an issue on the project's GitHub repository or contact support.
+If you have any questions, suggestions, or need assistance, please open an issue on the project's GitHub repository or contact [Your Contact Information].
 
 ---
 
 Thank you for using `kubectl-splunk`! We hope this plugin enhances your productivity when managing Splunk deployments on Kubernetes.
-

@@ -10,8 +10,14 @@ import threading
 import time
 import json
 import getpass
+import requests
 from concurrent.futures import ThreadPoolExecutor
 from argparse import RawDescriptionHelpFormatter
+
+try:
+    import argcomplete
+except ImportError:
+    argcomplete = None
 
 def load_config():
     """Load configuration from file and environment variables."""
@@ -23,27 +29,30 @@ def load_config():
         selector = config.get('DEFAULT', 'selector', fallback='app=splunk')
         splunk_path = config.get('DEFAULT', 'splunk_path', fallback='splunk')
         pod_name = config.get('DEFAULT', 'pod_name', fallback=None)
+        local_port = config.getint('DEFAULT', 'local_port', fallback=8000)
     else:
         namespace = 'default'
         selector = 'app=splunk'
         splunk_path = 'splunk'
         pod_name = None
+        local_port = 8000
 
     # Override with environment variables if set
     namespace = os.environ.get('KUBECTL_SPLUNK_NAMESPACE', namespace)
     selector = os.environ.get('KUBECTL_SPLUNK_SELECTOR', selector)
     splunk_path = os.environ.get('KUBECTL_SPLUNK_PATH', splunk_path)
     pod_name = os.environ.get('KUBECTL_SPLUNK_POD', pod_name)
+    local_port = int(os.environ.get('KUBECTL_SPLUNK_LOCAL_PORT', local_port))
 
-    return namespace, selector, splunk_path, pod_name
+    return namespace, selector, splunk_path, pod_name, local_port
 
-def parse_args(namespace, selector, splunk_path, pod_name_from_config):
+def parse_args(namespace, selector, splunk_path, pod_name_from_config, local_port_from_config):
     """Parse command-line arguments."""
     epilog_text = """
 Examples:
   kubectl splunk exec search "index=_internal | head 10"
   kubectl splunk -n splunk-namespace -l app=splunk -P splunk-idxc-indexer-0 exec status
-  kubectl splunk cp /local/path/file.txt :/remote/path/file.txt
+  kubectl splunk rest GET /services/server/info
   kubectl splunk --interactive
     """
     parser = argparse.ArgumentParser(
@@ -63,14 +72,20 @@ Examples:
                         help='Start an interactive shell inside the Splunk pod')
     parser.add_argument('--splunk-path', default=splunk_path,
                         help='Path to the Splunk CLI inside the container (default from config/env or "splunk")')
+    parser.add_argument('--local-port', type=int, default=local_port_from_config,
+                        help='Local port for port-forwarding in REST mode (default from config/env or 8000)')
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help='Increase output verbosity (e.g., -v, -vv, -vvv)')
-    parser.add_argument('--version', action='version', version='kubectl-splunk 1.3',
+    parser.add_argument('--version', action='version', version='kubectl-splunk 1.6',
                         help='Show program version and exit')
 
     auth_group = parser.add_argument_group('Authentication')
-    auth_group.add_argument('-u', '--username', help='Username for Splunk authentication')
-    auth_group.add_argument('-p', '--password', help='Password for Splunk authentication (will prompt if not provided)')
+    auth_group.add_argument('-u', '--username', help='Username for Splunk authentication (default: admin)')
+    auth_group.add_argument('-p', '--password', help='Password for Splunk authentication (will prompt or auto-detect if not provided)')
+    auth_group.add_argument('--insecure', action='store_true',
+                            help='Disable SSL certificate verification')
+    auth_group.add_argument('--save-credentials', action='store_true',
+                            help='Save credentials securely for future use')
 
     subparsers = parser.add_subparsers(dest='mode', required=True, help='Available modes')
 
@@ -82,6 +97,16 @@ Examples:
     cp_parser = subparsers.add_parser('cp', help='Copy files to/from the Splunk pod')
     cp_parser.add_argument('src', help='Source file path')
     cp_parser.add_argument('dest', help='Destination file path')
+
+    # Subparser for rest mode
+    rest_parser = subparsers.add_parser('rest', help='Execute a Splunk REST API call')
+    rest_parser.add_argument('method', choices=['GET', 'POST', 'PUT', 'DELETE'], help='HTTP method')
+    rest_parser.add_argument('endpoint', help='Splunk REST API endpoint (e.g., /services/server/info)')
+    rest_parser.add_argument('--data', help='Data to send with the request (for POST/PUT)')
+    rest_parser.add_argument('--params', help='Query parameters (e.g., "key1=value1&key2=value2")')
+
+    if argcomplete:
+        argcomplete.autocomplete(parser)
 
     args = parser.parse_args()
 
@@ -174,6 +199,66 @@ def load_cached_pod(namespace, selector):
             return cache['pod_name']
     return None
 
+def get_credentials(args, pod_name):
+    """Retrieve stored credentials, prompt the user, or retrieve from pod."""
+    credentials_file = os.path.expanduser('~/.kubectl_splunk_credentials')
+    username = args.username
+    password = args.password
+
+    # Default username to 'admin' if not provided
+    if not username:
+        username = 'admin'
+
+    # Load credentials from file if available
+    if not password:
+        if os.path.exists(credentials_file):
+            try:
+                with open(credentials_file, 'r') as f:
+                    creds = json.load(f)
+                username = creds.get('username', username)
+                password = creds.get('password', password)
+            except Exception as e:
+                logging.warning("Failed to read stored credentials.")
+                os.remove(credentials_file)  # Remove corrupted credentials file
+
+    # Retrieve password from pod if still not available
+    if not password and username == 'admin':
+        password = retrieve_password_from_pod(args, pod_name)
+        if not password:
+            logging.error("Failed to retrieve password from pod.")
+            sys.exit(1)
+
+    # Prompt for missing credentials
+    if not password:
+        password = getpass.getpass(prompt='Splunk Password: ')
+
+    # Save credentials if requested
+    if args.save_credentials:
+        creds = {'username': username, 'password': password}
+        try:
+            with open(credentials_file, 'w') as f:
+                json.dump(creds, f)
+            os.chmod(credentials_file, 0o600)  # Set file permissions to be readable by owner only
+        except Exception as e:
+            logging.warning("Failed to save credentials.")
+
+    return username, password
+
+def retrieve_password_from_pod(args, pod_name):
+    """Retrieve the admin password from the pod's /mnt/splunk-secrets/password file."""
+    kubectl_cmd = ['kubectl']
+    if args.context:
+        kubectl_cmd.extend(['--context', args.context])
+    kubectl_cmd.extend(['exec', '-n', args.namespace, pod_name, '--', 'cat', '/mnt/splunk-secrets/password'])
+
+    logging.debug(f"Retrieving password from pod {pod_name}")
+    try:
+        password = subprocess.check_output(kubectl_cmd, universal_newlines=True).strip()
+        return password
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to retrieve password from pod {pod_name}: {e}")
+        return None
+
 def execute_on_pod(args, pod_name):
     """Execute the Splunk command on a single pod."""
     kubectl_cmd = ['kubectl']
@@ -185,23 +270,22 @@ def execute_on_pod(args, pod_name):
         cmd = kubectl_cmd + [args.splunk_path]
         cmd += args.splunk_command  # Add the Splunk command arguments
         # Authentication
-        if args.username:
-            if not args.password:
-                args.password = getpass.getpass(prompt='Splunk Password: ')
-            cmd += ['-auth', f"{args.username}:{args.password}"]  # Add auth after command arguments
+        username, password = get_credentials(args, pod_name)
+        cmd += ['-auth', f"{username}:{'********'}"]  # Masked password for logging
+        logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd)}")
+        # Replace masked password with actual password in the command to be executed
+        cmd[-1] = f"{username}:{password}"
     elif args.mode == 'interactive':
         cmd = kubectl_cmd + ['/bin/bash']
+        logging.debug(f"Starting interactive shell on pod {pod_name}")
     else:
         return
 
-    sanitized_cmd = [arg if '-auth' not in arg else '-auth *****:*****' for arg in cmd]
-    logging.debug(f"Executing command on pod {pod_name}: {' '.join(sanitized_cmd)}")
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
         logging.error(f"Command failed on pod {pod_name} with exit code {e.returncode}")
         sys.exit(e.returncode)
-
 
 def copy_to_pod(args, pod_name):
     """Copy files to/from the Splunk pod."""
@@ -224,16 +308,84 @@ def copy_to_pod(args, pod_name):
         logging.error(f"Copy command failed with exit code {e.returncode}")
         sys.exit(e.returncode)
 
+def execute_rest_call(args, pod_name):
+    """Execute a Splunk REST API call."""
+    # Start port-forwarding
+    port = 8089
+    local_port = args.local_port  # User-specified local port
+    kubectl_cmd = ['kubectl']
+    if args.context:
+        kubectl_cmd.extend(['--context', args.context])
+    kubectl_cmd.extend([
+        'port-forward', '-n', args.namespace, pod_name,
+        f'{local_port}:{port}'
+    ])
+
+    logging.debug(f"Starting port-forward with command: {' '.join(kubectl_cmd)}")
+    # Start port-forwarding as a background process
+    port_forward_proc = subprocess.Popen(kubectl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        # Wait for port-forwarding to start
+        for _ in range(10):
+            if port_forward_proc.poll() is not None:
+                raise Exception("Port-forward process terminated unexpectedly.")
+            time.sleep(0.5)
+        # Build the URL
+        url = f'https://127.0.0.1:{local_port}{args.endpoint}'
+        # Handle authentication
+        username, password = get_credentials(args, pod_name)
+        auth = (username, password)
+
+        # Handle SSL verification
+        verify_ssl = not args.insecure
+
+        # Prepare request parameters
+        method = args.method.upper()
+        headers = {'Content-Type': 'application/json'}
+        data = args.data
+        params = {}
+        if args.params:
+            # Parse query parameters
+            params = dict(param.split('=') for param in args.params.split('&'))
+
+        logging.debug(f"Sending {method} request to {url}")
+        # Send the request
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers,
+            params=params,
+            data=data,
+            auth=auth,
+            verify=verify_ssl
+        )
+        # Print the response
+        print(response.text)
+        if response.status_code >= 400:
+            logging.error(f"HTTP {response.status_code}: {response.reason}")
+            sys.exit(1)
+    except Exception as e:
+        logging.error(f"Error during REST API call: {e}")
+        sys.exit(1)
+    finally:
+        # Terminate port-forwarding
+        port_forward_proc.terminate()
+        port_forward_proc.wait()
+
 def main():
     # Load configuration
-    namespace, selector, splunk_path, pod_name_from_config = load_config()
+    namespace, selector, splunk_path, pod_name_from_config, local_port_from_config = load_config()
 
     # Parse arguments
-    args = parse_args(namespace, selector, splunk_path, pod_name_from_config)
+    args = parse_args(namespace, selector, splunk_path, pod_name_from_config, local_port_from_config)
 
     # Set up logging
     setup_logging(args.verbose)
-    logging.debug(f"Arguments: {args}")
+    # Ensure sensitive information is not logged
+    masked_args = vars(args).copy()
+    if masked_args.get('password'):
+        masked_args['password'] = '********'
+    logging.debug(f"Arguments: {masked_args}")
 
     # Handle interactive shell separately
     if args.interactive:
@@ -275,6 +427,12 @@ def main():
             logging.error("Copy mode does not support multiple pods. Please specify a single pod.")
             sys.exit(1)
         copy_to_pod(args, pods[0])
+    elif args.mode == 'rest':
+        # REST API call (only supports a single pod)
+        if len(pods) > 1:
+            logging.error("REST mode does not support multiple pods. Please specify a single pod.")
+            sys.exit(1)
+        execute_rest_call(args, pods[0])
     else:
         logging.error(f"Unknown mode: {args.mode}")
         sys.exit(1)
