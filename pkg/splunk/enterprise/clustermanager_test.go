@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -57,6 +57,7 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -97,7 +98,7 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[4]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[4]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{
@@ -114,6 +115,11 @@ func TestApplyClusterManager(t *testing.T) {
 			},
 		},
 	}
+	var gvk schema.GroupVersionKind
+	gvk.Kind = "SearchHead"
+	gvk.Group = "enterprise.splunk.com"
+	gvk.Version = "v4" 
+	current.SetGroupVersionKind(gvk)
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {

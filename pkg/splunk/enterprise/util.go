@@ -243,7 +243,7 @@ func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.Controll
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReconcileCRSpecificConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	configMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
+	configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
@@ -1472,7 +1472,7 @@ func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerCl
 			}
 			return true
 		} else {
-			configMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
+			configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
 			if getManualUpdateStatus(ctx, client, cr, configMapName) == "on" {
 				*turnOffManualChecking = true
 				return true
@@ -1562,7 +1562,7 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 	}
 
 	// now check namespace specific configmap if it contains manualUpdate settings
-	crScopedConfigMapName := fmt.Sprintf("splunk-config-%s", cr.GetName())
+	crScopedConfigMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
 	crNamespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, crNamespacedName)
 	if err != nil {

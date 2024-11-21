@@ -273,3 +273,27 @@ func (instanceType InstanceType) ToKind() string {
 	}
 	return kind
 }
+
+func KindToInstanceString(kind string) string {
+	switch kind {
+	case "Standalone":
+		return SplunkStandalone.ToString()
+	case "IndexerCluster":
+		return SplunkClusterMaster.ToString()
+	case "ClustetrManager":
+		return SplunkClusterManager.ToString()
+	case "LicenseMaster":
+		return SplunkIndexer.ToString()
+	case "ClusterMaster":
+		return SplunkClusterMaster.ToString() 
+	case "LicenseManager":
+		return SplunkLicenseManager.ToString()
+	case "MonitoringConsole":
+		return SplunkMonitoringConsole.ToString()
+	case "SearchHeadCluster":
+		return SplunkSearchHead.ToString()
+	case "SearchHead":
+		return SplunkSearchHead.ToString()
+	}
+	return ""
+}

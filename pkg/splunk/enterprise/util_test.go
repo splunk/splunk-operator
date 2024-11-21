@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -222,9 +223,10 @@ func TestApplySplunkConfig(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-search-head-defaults"},
+		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[5]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3],funcCalls[5] }}
 	searchHeadCR := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -234,6 +236,11 @@ func TestApplySplunkConfig(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+	var gvk schema.GroupVersionKind
+	gvk.Kind = "SearchHead"
+	gvk.Group = "enterprise.splunk.com"
+	gvk.Version = "v4" 
+	searchHeadCR.SetGroupVersionKind(gvk)
 	searchHeadCR.Spec.Defaults = "defaults-yaml"
 	searchHeadRevised := searchHeadCR.DeepCopy()
 	searchHeadRevised.Spec.Image = "splunk/test"
@@ -268,9 +275,10 @@ func TestApplySplunkConfig(t *testing.T) {
 	}
 	funcCalls = []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 	}
-	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0]}, "Create": funcCalls, "Update": {funcCalls[0]}}
-	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
+	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0], funcCalls[1]}, "Create": funcCalls, "Update": {funcCalls[0]}}
+	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[1]}}
 
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySplunkConfig", &indexerCR, indexerRevised, createCalls, updateCalls, reconcile, false)
 
@@ -695,7 +703,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	crConfigMap1 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("splunk-config-%s", cr.Name),
+			Name:      fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.Kind), cr.Name),
 			Namespace: cr.GetNamespace(),
 		},
 		Data: map[string]string{
@@ -714,7 +722,7 @@ func TestInitAndCheckAppInfoStatusShouldNotFail(t *testing.T) {
 
 	crConfigMap2 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("splunk-config-%s", revised.Name),
+			Name:      fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(revised.Kind), revised.Name),
 			Namespace: cr.GetNamespace(),
 		},
 		Data: map[string]string{
@@ -1339,18 +1347,24 @@ func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 	var turnOffManualChecking bool
 
-	crKindMap := make(map[string]string)
-	configMapData := `status: on
-refCount: 1`
-	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
-
-	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
-
 	// Test1: with no confiMap added, we should return error
 	err := updateManualAppUpdateConfigMapLocked(ctx, c, &cr, appStatusContext, kind, turnOffManualChecking)
 	if err == nil {
 		t.Errorf("updateManualAppUpdateConfigMapLocked should have returned error since there is no configMap yet.")
 	}
+
+	crKindMap := make(map[string]string)
+	crKindMap["manualUpdate"] = "off" 
+	crConfigMap := splctrl.PrepareConfigMap(fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName()), cr.GetNamespace(), crKindMap)
+
+	// now add the confiMap to the client
+	c.AddObject(crConfigMap)
+
+	crKindMap = make(map[string]string)
+	configMapData := `status: on
+refCount: 1`
+	crKindMap[cr.GetObjectKind().GroupVersionKind().Kind] = configMapData
+	configMap := splctrl.PrepareConfigMap(GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace()), cr.GetNamespace(), crKindMap)
 
 	// now add the confiMap to the client
 	c.AddObject(configMap)

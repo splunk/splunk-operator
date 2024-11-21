@@ -140,6 +140,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 			switch cr.GetObjectKind().GroupVersionKind().Kind {
 			case "Standalone":
 				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+					//{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 					{MetaName: "*v4.Standalone-test-stack1"},
 					{MetaName: "*v4.Standalone-test-stack1"},
