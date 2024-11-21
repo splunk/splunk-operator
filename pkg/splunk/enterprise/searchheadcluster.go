@@ -49,6 +49,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
 	var err error
@@ -590,7 +592,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		//c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
@@ -615,6 +616,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
 			} else {
+				mgr.cr.Status.CaptainReady = false
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
 			}
 		}
