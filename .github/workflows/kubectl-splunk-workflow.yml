@@ -5,10 +5,10 @@ name: Kubectl Splunk CI
 on:
   push:
     branches: 
-        - CSPL-3152 
+        - feature/CSPL-3152 
   pull_request:
     branches: 
-        - CSPL-3152 
+        - feature/CSPL-3152 
 
 jobs:
   build-and-test:
