@@ -57,6 +57,7 @@ var _ = Describe("c3appfw test", func() {
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+		testenv.SpecifiedTestTimeout = 100000
 	})
 
 	AfterEach(func() {
