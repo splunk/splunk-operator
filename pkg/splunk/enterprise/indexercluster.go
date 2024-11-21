@@ -202,11 +202,14 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 
-	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the IndexerCluster is ready for version upgrade
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	// check if version upgrade is set
@@ -454,11 +457,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 	}
 
-	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the IndexerCluster is ready for version upgrade
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	// check if version upgrade is set
@@ -629,8 +635,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR
-		scopedLog.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
 		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
+		scopedLog.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
 		return nil
 	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
 		// If resource version hasn't changed don't return
@@ -778,6 +784,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		}
 	} else {
 		mgr.log.Info("Cluster Manager is not ready yet", "reason ", err)
+		return enterpriseApi.PhaseError, err
 	}
 
 	// Get the podExecClient with empty targetPodName.
