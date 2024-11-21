@@ -1,0 +1,44 @@
+# .github/workflows/ci.yml
+
+name: CI
+
+on:
+  push:
+    branches: [ CSPL-3152 ]
+  pull_request:
+    branches: [ CSPL-3152 ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.8'
+
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        source .venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -e .
+        pip install pytest coverage
+
+    - name: Run Tests with Coverage
+      run: |
+        source .venv/bin/activate
+        coverage run -m unittest discover -s tests
+        coverage report
+        coverage xml
+
+    - name: Upload Coverage to Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        files: coverage.xml
+        flags: unittests
+        name: codecov-umbrella
