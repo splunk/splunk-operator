@@ -38,17 +38,28 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   fi
 
   # Always attempt to pull splunk enterprise image
-  docker pull ${SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
+  if docker manifest inspect "$PRIVATE_SPLUNK_ENTERPRISE_IMAGE" > /dev/null 2>&1; then
+    echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE exists on the remote repository."
+    docker pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
+  else
+    echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE does not exist on the remote repository."
+    docker pull ${SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
+    docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
   fi
-  docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
-  fi
+
 
   # Output
   echo "Docker images"
