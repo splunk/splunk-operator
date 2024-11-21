@@ -1,6 +1,6 @@
 # .github/workflows/ci.yml
 
-name: CI
+name: kubectl-splunk-workflow
 
 on:
   push:
