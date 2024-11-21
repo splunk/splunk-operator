@@ -180,6 +180,31 @@ case ${CLUSTER_PROVIDER} in
           export STORAGE_ACCOUNT_KEY="${AZURE_STORAGE_ACCOUNT_KEY}"
         fi
         ;;
+    "gcp")
+        if [[ -z "${GCP_ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${GCP_ENTERPRISE_LICENSE_LOCATION}"
+        fi
+        if [[ -z "${ENTERPRISE_LICENSE_LOCATION}" ]]; then
+          echo "License path not set. Changing to default"
+          export ENTERPRISE_LICENSE_LOCATION="${ENTERPRISE_LICENSE_S3_PATH}"
+        fi
+
+        if [[ -z "${TEST_BUCKET}" ]]; then
+          echo "Data bucket not set. Changing to default"
+          export TEST_BUCKET="${TEST_S3_BUCKET}"
+        fi
+
+        if [[ -z "${TEST_INDEXES_S3_BUCKET}" ]]; then
+          echo "Test bucket not set. Changing to default"
+          export TEST_INDEXES_S3_BUCKET="${INDEXES_S3_BUCKET}"
+        fi
+
+        if [[ -z "${S3_REGION}" ]]; then
+          echo "S3 Region not set. Changing to default"
+          export S3_REGION="${AWS_S3_REGION}"
+        fi
+        ;;
 esac
 
 
