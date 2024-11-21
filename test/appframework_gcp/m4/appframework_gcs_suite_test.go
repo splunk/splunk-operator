@@ -69,7 +69,7 @@ var _ = BeforeSuite(func() {
 		appFileList := testenv.GetAppFileList(appListV1)
 
 		// Download V1 Apps from GCP
-		testenvInstance.Log.Info("logging download details", "bucket", testDataGcsBucket, "gcsAppDirV1", gcsAppDirV1, "downloadDirV1", downloadDirV1, "appFileList", appFileList)	
+		testenvInstance.Log.Info("logging download details", "bucket", testDataGcsBucket, "gcsAppDirV1", gcsAppDirV1, "downloadDirV1", downloadDirV1, "appFileList", appFileList)
 		err = testenv.DownloadFilesFromGCP(testDataGcsBucket, gcsAppDirV1, downloadDirV1, appFileList)
 		Expect(err).To(Succeed(), "Unable to download V1 app files")
 

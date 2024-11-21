@@ -92,8 +92,8 @@ func NewMockAzureBlobClient(ctx context.Context, bucketName string, storageAccou
 	return &AzureBlobClient{
 		BucketName:         bucketName,
 		StorageAccountName: storageAccountName,
-		Prefix:   prefix,
-		Endpoint: endpoint,
+		Prefix:             prefix,
+		Endpoint:           endpoint,
 	}, nil
 }
 

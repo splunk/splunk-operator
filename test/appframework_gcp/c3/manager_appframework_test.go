@@ -2278,7 +2278,7 @@ var _ = Describe("c3appfw test", func() {
 					Volumes: []corev1.Volume{},
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
-			} 
+			}
 
 			// Deploy Monitoring Console
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")

@@ -178,15 +178,15 @@ func NewAzureBlobClient(
 		scopedLog.Info("Using Azure AD authentication")
 
 		// Create a Token Credential using DefaultAzureCredential.
-		// The Azure SDK uses environment variables to configure authentication when using DefaultAzureCredential. 
-		// For Workload Identity, by adding annotations to the pod's service account: 
+		// The Azure SDK uses environment variables to configure authentication when using DefaultAzureCredential.
+		// For Workload Identity, by adding annotations to the pod's service account:
 		// azure.workload.identity/client-id: <CLIENT_ID>
-		// the following environment variables are typically used: 
+		// the following environment variables are typically used:
 		// AZURE_AUTHORITY_HOST: The Azure Active Directory endpoint (default is https://login.microsoftonline.com/).
 		// AZURE_CLIENT_ID: The client ID of the Azure AD application linked to the pod's service account.
 		// AZURE_TENANT_ID: The tenant ID of the Azure Active Directory where the Azure AD application resides.
 		// AZURE_FEDERATED_TOKEN_FILE: The path to the file containing the token issued by Kubernetes, usually mounted as a volume.
-		// when using Azure AD Pod Identity (deprecated), the following environment variables are typically used:	
+		// when using Azure AD Pod Identity (deprecated), the following environment variables are typically used:
 		// AZURE_POD_IDENTITY_AUTHORITY_HOST: The Azure Active Directory endpoint (default is https://login.microsoftonline.com/).
 		// AZURE_POD_IDENTITY_CLIENT_ID: The client ID of the Azure AD application linked to the pod's service account.
 		// AZURE_POD_IDENTITY_TENANT_ID: The tenant ID of the Azure Active Directory where the Azure AD application resides.
