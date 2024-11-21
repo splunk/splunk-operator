@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
+# kubectl_splunk/main.py
 
 import sys
 import subprocess
 import argparse
 import logging
 import os
-import configparser
-import threading
 import time
+import configparser
 import json
 import getpass
 import requests
@@ -29,13 +28,14 @@ def load_config():
         selector = config.get('DEFAULT', 'selector', fallback='app=splunk')
         splunk_path = config.get('DEFAULT', 'splunk_path', fallback='splunk')
         pod_name = config.get('DEFAULT', 'pod_name', fallback=None)
-        local_port = config.getint('DEFAULT', 'local_port', fallback=8000)
+        local_port = config.getint('DEFAULT', 'local_port', fallback=8089)
     else:
         namespace = 'default'
         selector = 'app=splunk'
-        splunk_path = 'splunk'
+        splunk_path = '/opt/splunk/bin/splunk'
         pod_name = None
-        local_port = 8000
+        local_port = 8089
+    
 
     # Override with environment variables if set
     namespace = os.environ.get('KUBECTL_SPLUNK_NAMESPACE', namespace)
@@ -43,7 +43,6 @@ def load_config():
     splunk_path = os.environ.get('KUBECTL_SPLUNK_PATH', splunk_path)
     pod_name = os.environ.get('KUBECTL_SPLUNK_POD', pod_name)
     local_port = int(os.environ.get('KUBECTL_SPLUNK_LOCAL_PORT', local_port))
-
     return namespace, selector, splunk_path, pod_name, local_port
 
 def parse_args(namespace, selector, splunk_path, pod_name_from_config, local_port_from_config):
@@ -271,11 +270,10 @@ def execute_on_pod(args, pod_name):
         cmd += args.splunk_command  # Add the Splunk command arguments
         # Authentication
         username, password = get_credentials(args, pod_name)
-        cmd += ['-auth', f"{username}:{password}"]
-        # Create a copy of the command list with the password masked for logging
-        cmd_for_logging = cmd.copy()
-        cmd_for_logging[-1] = f"{username}:{'********'}"
-        logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd_for_logging)}")
+        cmd += ['-auth', f"{username}:{'********'}"]  # Masked password for logging
+        logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd)}")
+        # Replace masked password with actual password in the command to be executed
+        cmd[-1] = f"{username}:{password}"
     elif args.mode == 'interactive':
         cmd = kubectl_cmd + ['/bin/bash']
         logging.debug(f"Starting interactive shell on pod {pod_name}")
@@ -414,7 +412,7 @@ def main():
             cache_pod(pod_name, args.namespace, args.selector)
 
     # Handle modes
-    if args.mode == 'exec' or args.mode == 'interactive':
+    if args.mode in ['exec', 'interactive']:
         # Execute commands on pods (in parallel if multiple pods)
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -440,3 +438,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
