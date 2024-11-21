@@ -271,10 +271,11 @@ def execute_on_pod(args, pod_name):
         cmd += args.splunk_command  # Add the Splunk command arguments
         # Authentication
         username, password = get_credentials(args, pod_name)
-        cmd += ['-auth', f"{username}:{'********'}"]  # Masked password for logging
-        logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd)}")
-        # Replace masked password with actual password in the command to be executed
-        cmd[-1] = f"{username}:{password}"
+        cmd += ['-auth', f"{username}:{password}"]
+        # Create a copy of the command list with the password masked for logging
+        cmd_for_logging = cmd.copy()
+        cmd_for_logging[-1] = f"{username}:{'********'}"
+        logging.debug(f"Executing command on pod {pod_name}: {' '.join(cmd_for_logging)}")
     elif args.mode == 'interactive':
         cmd = kubectl_cmd + ['/bin/bash']
         logging.debug(f"Starting interactive shell on pod {pod_name}")
