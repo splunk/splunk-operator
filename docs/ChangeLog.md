@@ -1,5 +1,39 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.7.0 (2024-12-04)
+
+* This is the 2.7.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* CPSL-2699 - Add Azure and GCP SDK support for AppFramework
+
+* CSPL-3149 - Address openshift documentation for 4.14 or later
+
+* CSPL-3060 - Avoid upgrade path during deployment creation
+
+* CSPL-3058 - Build docker image using SHA instead of tag for redhat UBI
+
+* CSPL-3063 - Add an option to test SVA testing only via helm
+
+* CSPL-2496  - Cleanup AWS resources during cluster cleanup
+
+* CSPL-2887 - Update eksctl, K8s versions, default storage class
+
+* CSPL-2756 - Add documentation for PDB with SOK deployments
+
+* CSPL-2820 - Add Support for Configuring Custom Cluster Domain in Helm Chart
+
+### Supported Splunk Version
+
+>| Splunk Version|
+>| --- |
+>| 9.3.2 |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version|
+>| --- |
+>| 1.31+ |
+
 ## 2.6.1 (2024-08-27)
 
 * This is the 2.6.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)

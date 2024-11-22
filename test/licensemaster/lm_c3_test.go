@@ -74,6 +74,11 @@ var _ = Describe("licensemaster test", func() {
 				Expect(err).To(Succeed(), "Unable to download license file from Azure")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "gcp":
+				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
+				Expect(err).To(Succeed(), "Unable to download license file from GCP")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			default:
 				fmt.Printf("Unable to download license file")
 				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
@@ -172,6 +177,12 @@ var _ = Describe("licensemaster test", func() {
 				uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, testDir, appFileList)
 				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure", appVersion))
 				uploadedApps = append(uploadedApps, uploadedFiles...)
+			case "gcp":
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP", appVersion))
+				testDir = "lm-" + testenv.RandomDNSName(4)
+				uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, testDir, appFileList, downloadDirV1)
+				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to S3", appVersion))
+				uploadedApps = append(uploadedApps, uploadedFiles...)
 			}
 
 			// Download License File
@@ -187,6 +198,11 @@ var _ = Describe("licensemaster test", func() {
 				Expect(err).To(Succeed(), "Unable to download license file from Azure")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "gcp":
+				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
+				Expect(err).To(Succeed(), "Unable to download license file from GCP")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			default:
 				fmt.Printf("Unable to download license file")
 				testcaseEnvInst.Log.Info(fmt.Sprintf("Unable to download license file with Cluster Provider set as %v", testenv.ClusterProvider))
@@ -200,6 +216,8 @@ var _ = Describe("licensemaster test", func() {
 				volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "aws", "s3", testenv.GetDefaultS3Region())}
 			case "azure":
 				volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpecAzure(volumeName, testenv.GetAzureEndpoint(ctx), testcaseEnvInst.GetIndexSecretName(), "azure", "blob")}
+			case "gcp":
+				volumeSpec = []enterpriseApi.VolumeSpec{testenv.GenerateIndexVolumeSpec(volumeName, testenv.GetS3Endpoint(), testcaseEnvInst.GetIndexSecretName(), "gcp", "blob", testenv.GetDefaultS3Region())}
 			}
 
 			// AppSourceDefaultSpec: Remote Storage volume name and Scope of App deployment
@@ -280,6 +298,9 @@ var _ = Describe("licensemaster test", func() {
 				containerName := "/" + AzureDataContainer + "/" + appDirV2
 				err := testenv.DownloadFilesFromAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, downloadDirV2, containerName, appFileList)
 				Expect(err).To(Succeed(), "Unable to download V2 app files")
+			case "gcp":
+				err := testenv.DownloadFilesFromGCP(testDataS3Bucket, appDirV2, downloadDirV2, appFileList)
+				Expect(err).To(Succeed(), "Unable to download V2 app files")
 			}
 
 			// Upload V2 apps
@@ -293,6 +314,11 @@ var _ = Describe("licensemaster test", func() {
 				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure", appVersion))
 				uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, testDir, appFileList)
 				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure", appVersion))
+				uploadedApps = append(uploadedApps, uploadedFiles...)
+			case "gcp":
+				testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to S3", appVersion))
+				uploadedFiles, err := testenv.UploadFilesToGCP(testS3Bucket, testDir, appFileList, downloadDirV2)
+				Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCP", appVersion))
 				uploadedApps = append(uploadedApps, uploadedFiles...)
 			}
 
@@ -315,6 +341,8 @@ var _ = Describe("licensemaster test", func() {
 			case "azure":
 				azureBlobClient := &testenv.AzureBlobClient{}
 				azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
+			case "gcp":
+				testenv.DeleteFilesOnGCP(testS3Bucket, uploadedApps)
 			}
 
 			// Delete locally downloaded app files

@@ -819,6 +819,7 @@ func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
 			return splunkPods
 		}
 	}
+	logf.Log.Info("Operator pod is set to ", "operatorPod", splunkPods)
 	return splunkPods
 }
 

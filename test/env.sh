@@ -2,7 +2,7 @@
 
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
 : "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
-: "${CLUSTER_PROVIDER:=kind}"
+: "${CLUSTER_PROVIDER:=eks}"
 : "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
 : "${NUM_NODES:=2}"
@@ -15,11 +15,11 @@
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
 : "${EKS_CLUSTER_K8_VERSION:=1.31}"
 # Below env variables required to run license master test cases
-: "${ENTERPRISE_LICENSE_S3_PATH:=}"
-: "${TEST_S3_BUCKET:=}"
+: "${ENTERPRISE_LICENSE_S3_PATH:=/test_licenses}"
+: "${TEST_S3_BUCKET:=splk-test-data-bucket}"
 # Below env variables required to run remote indexes test cases
-: "${INDEXES_S3_BUCKET:=}"
-: "${AWS_S3_REGION:=}"
+: "${INDEXES_S3_BUCKET:=splk-integration-test-bucket}"
+: "${AWS_S3_REGION:=us-west-2}"
 # Azure specific variables
 : "${AZURE_REGION:=}"
 : "${AZURE_TEST_CONTAINER:=}"
@@ -33,6 +33,19 @@
 : "${AZURE_STORAGE_ACCOUNT:=}"
 : "${AZURE_STORAGE_ACCOUNT_KEY:=}"
 : "${AZURE_MANAGED_ID_ENABLED:=}"
+# GCP specific variables
+: "${GCP_REGION:=us-west2}"
+: "${GCP_TEST_CONTAINER:=}"
+: "${GCP_INDEXES_CONTAINER:=}"
+: "${GCP_ENTERPRISE_LICENSE_PATH:=}"
+: "${GCP_RESOURCE_GROUP:=}"
+: "${GCP_CONTAINER_REGISTRY:=}"
+: "${GCP_CONTAINER_REGISTRY_LOGIN_SERVER:=}"
+: "${GCP_CLUSTER_AGENTPOOL:=}"
+: "${GCP_CLUSTER_AGENTPOOL_RG:=}"
+: "${GCP_STORAGE_ACCOUNT:=}"
+: "${GCP_STORAGE_ACCOUNT_KEY:=}"
+: "${GCP_MANAGED_ID_ENABLED:=}"
 # set when operator need to be installed clusterwide
 : "${CLUSTER_WIDE:=false}"
 # Below env variable can be used to set the test cases to be run. Defaults to smoke test
@@ -44,6 +57,7 @@
 : "${DEBUG_RUN:=False}"
 # Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"
 : "${DEPLOYMENT_TYPE:=manifest}"
+: "${TEST_CLUSTER_PLATFORM:=eks}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
 if [ -z "${PRIVATE_REGISTRY}" ]; then
@@ -64,6 +78,14 @@ if [ -z "${PRIVATE_REGISTRY}" ]; then
           exit 1
         fi
         PRIVATE_REGISTRY="${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}"
+         echo "${PRIVATE_REGISTRY}"
+        ;;
+      gcp)
+        if [ -z "${GCP_CONTAINER_REGISTRY_LOGIN_SERVER}" ]; then
+          echo "Please define GCP_CONTAINER_REGISTRY_LOGIN_SERVER that specified where images are pushed and pulled from."
+          exit 1
+        fi
+        PRIVATE_REGISTRY="${GCP_CONTAINER_REGISTRY_LOGIN_SERVER}"
          echo "${PRIVATE_REGISTRY}"
         ;;
     esac

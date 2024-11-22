@@ -17,6 +17,7 @@ package testenv
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"time"
@@ -148,6 +149,8 @@ func (testenv *TestCaseEnv) setup() error {
 		testenv.createIndexSecret()
 	case "azure":
 		testenv.createIndexSecretAzure()
+	case "gcp":
+		testenv.createIndexSecretGCP()
 	default:
 		testenv.Log.Info("Failed to create secret object")
 	}
@@ -518,6 +521,34 @@ func (testenv *TestCaseEnv) createIndexSecret() error {
 		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
 		if err != nil {
 			testenv.Log.Error(err, "Unable to delete s3 index secret object")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
+// CreateIndexSecret create secret object
+func (testenv *TestCaseEnv) createIndexSecretGCP() error {
+	secretName := testenv.s3IndexSecret
+	ns := testenv.namespace
+	encodedString := os.Getenv("GCP_SERVICE_ACCOUNT_KEY")
+	gcpCredentials, err := base64.StdEncoding.DecodeString(encodedString)
+	if err != nil {
+		testenv.Log.Error(err, "Unable to decode GCP service account key")
+		return err
+	}
+	data := map[string][]byte{"key.json": []byte(gcpCredentials)}
+	secret := newSecretSpec(ns, secretName, data)
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create GCP index secret object")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete GCP index secret object")
 			return err
 		}
 		return nil
