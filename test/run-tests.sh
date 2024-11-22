@@ -38,6 +38,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   fi
 
   # Always attempt to pull splunk enterprise image
+  echo "check if image exists, docker manifest inspect $PRIVATE_SPLUNK_ENTERPRISE_IMAGE"
   if docker manifest inspect "$PRIVATE_SPLUNK_ENTERPRISE_IMAGE" > /dev/null 2>&1; then
     echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE exists on the remote repository."
     docker pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
