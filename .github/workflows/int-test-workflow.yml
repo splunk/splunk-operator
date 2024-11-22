@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - promote-develop-to-main-2.7.0
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
