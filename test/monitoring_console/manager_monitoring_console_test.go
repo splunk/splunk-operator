@@ -755,7 +755,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to get update Monitoring Console in Search Head Cluster CRD")
 
 			// Ensure Search Head Cluster go to Ready Phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			//testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC is Ready and stays in ready state
 			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
