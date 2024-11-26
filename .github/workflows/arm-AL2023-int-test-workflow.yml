@@ -2,7 +2,7 @@ name: Arm AL2023 Integration Test WorkFlow
 on:
   push:
     branches:
-      - CSPL_2920_xx
+      - CSPL_2920_xxx
 jobs:
   build-operator-image-arm-al2023:
     runs-on: ubuntu-latest
