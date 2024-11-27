@@ -56,7 +56,7 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1,
+            appframeworksS1,
             managerappframeworkc3,
             managerappframeworkm4,
             managersecret,
