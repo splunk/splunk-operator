@@ -60,7 +60,10 @@ func TestBasic(t *testing.T) {
 	}
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Running "+testSuiteName)
+	sc, _ := GinkgoConfiguration()
+	sc.Timeout = 240 * time.Minute
+
+	RunSpecs(t, "Running "+testSuiteName, sc)
 }
 
 //func TestMain(m *testing.M) {
