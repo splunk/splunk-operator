@@ -2,7 +2,7 @@ name: Arm Ubuntu Smoke Test WorkFlow
 on:
   push:
     branches:
-      - CSPL_2920_xxx
+      - CSPL_2920_xx
 jobs:
   check-formating:
     runs-on: ubuntu-latest
