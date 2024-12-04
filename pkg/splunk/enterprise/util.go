@@ -230,7 +230,7 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 			return nil, err
 		}
 	}
-	err = ReconcileCRSpecificConfigMap(ctx, client, cr)
+	err = ReconcileCRSpecificConfigMap(ctx, client, cr, instanceType)
 	if err != nil {
 		return nil, err
 	}
@@ -239,11 +239,15 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 }
 
 // ReconcileCRSpecificConfigMap reconciles CR Specific config map exists and contains the ManualUpdate field set to "off"
-func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) error {
+func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ReconcileCRSpecificConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	a := cr.GetObjectKind()
+	b := a.GroupVersionKind()
+	c := b.Kind
+	d := KindToInstanceString(c)
 
-	configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
+	configMapName := fmt.Sprintf(perCrConfigMapNameStr, d, cr.GetName())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)

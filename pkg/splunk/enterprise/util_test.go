@@ -30,10 +30,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -226,7 +226,7 @@ func TestApplySplunkConfig(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[5]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3],funcCalls[5] }}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[5]}}
 	searchHeadCR := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearcHead",
@@ -239,7 +239,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	var gvk schema.GroupVersionKind
 	gvk.Kind = "SearchHead"
 	gvk.Group = "enterprise.splunk.com"
-	gvk.Version = "v4" 
+	gvk.Version = "v4"
 	searchHeadCR.SetGroupVersionKind(gvk)
 	searchHeadCR.Spec.Defaults = "defaults-yaml"
 	searchHeadRevised := searchHeadCR.DeepCopy()
@@ -275,7 +275,7 @@ func TestApplySplunkConfig(t *testing.T) {
 	}
 	funcCalls = []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
-		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
 	}
 	createCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0], funcCalls[1]}, "Create": funcCalls, "Update": {funcCalls[0]}}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[1]}}
@@ -1354,7 +1354,7 @@ func TestUpdateManualAppUpdateConfigMapLocked(t *testing.T) {
 	}
 
 	crKindMap := make(map[string]string)
-	crKindMap["manualUpdate"] = "off" 
+	crKindMap["manualUpdate"] = "off"
 	crConfigMap := splctrl.PrepareConfigMap(fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName()), cr.GetNamespace(), crKindMap)
 
 	// now add the confiMap to the client

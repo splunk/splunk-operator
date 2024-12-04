@@ -257,7 +257,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[2],funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[10], funcCalls[12], funcCalls[15]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[10], funcCalls[12], funcCalls[15]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.Standalone{
@@ -506,6 +506,8 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 
 	client.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-standalone-standalone-configmap")
+	client.AddObject(&configmap)
 
 	// to pass the validation stage, add the directory to download apps
 	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
@@ -574,6 +576,9 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 
 	client.AddObject(&s3Secret)
+
+	configmap := spltest.GetMockPerCRConfigMap("splunk-standalone-standalone-configmap")
+	client.AddObject(&configmap)
 
 	// to pass the validation stage, add the directory to download apps
 	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
@@ -981,6 +986,8 @@ func TestApplyStandaloneDeletion(t *testing.T) {
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 
 	c.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-standalone-stack1-configmap")
+	c.AddObject(&configmap)
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")

@@ -139,48 +139,105 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 
 			switch cr.GetObjectKind().GroupVersionKind().Kind {
 			case "Standalone":
-				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
-					//{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
 					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 					{MetaName: "*v4.Standalone-test-stack1"},
 					{MetaName: "*v4.Standalone-test-stack1"},
-				}...)
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
+				}
 
 			case "LicenseMaster":
-				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-master-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
 					{MetaName: "*v3.LicenseMaster-test-stack1"},
 					{MetaName: "*v3.LicenseMaster-test-stack1"},
-				}...)
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-master-stack1-configmap"},
+				}
 
 			case "LicenseManager":
-				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 					{MetaName: "*v4.LicenseManager-test-stack1"},
 					{MetaName: "*v4.LicenseManager-test-stack1"},
-				}...)
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
+				}
 
 			case "SearchHeadCluster":
-				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
 					{MetaName: "*v4.SearchHeadCluster-test-stack1"},
-				}...)
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-search-head-stack1-configmap"},
+				}
 
 			case "ClusterMaster":
-				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
 					{MetaName: "*v3.ClusterMaster-test-stack1"},
 					{MetaName: "*v3.ClusterMaster-test-stack1"},
-				}...)
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
+				}
+			case "IndexerCluster":
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
+				}
 
 			case "ClusterManager":
-				mockCalls["Get"] = append(mockCalls["Get"], []spltest.MockFuncCall{
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
 					{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 					{MetaName: "*v4.ClusterManager-test-stack1"},
 					{MetaName: "*v4.ClusterManager-test-stack1"},
-				}...)
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
+				}
 
 				listOptsTest := []client.ListOption{
 					client.InNamespace(cr.GetNamespace()),
@@ -194,8 +251,18 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				}...)
 				mockCalls["List"][0], mockCalls["List"][len(mockCalls["List"])-1] = mockCalls["List"][len(mockCalls["List"])-1], mockCalls["List"][0]
 			case "MonitoringConsole":
-				mockCalls["Get"] = append(mockCalls["Get"], spltest.MockFuncCall{MetaName: "*v4.MonitoringConsole-test-stack1"})
-				mockCalls["Get"] = append(mockCalls["Get"], spltest.MockFuncCall{MetaName: "*v4.MonitoringConsole-test-stack1"})
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-monitoring-console-stack1-configmap"},
+					{MetaName: "*v4.MonitoringConsole-test-stack1"},
+					{MetaName: "*v4.MonitoringConsole-test-stack1"},
+				}
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-monitoring-console-stack1-configmap"},
+				}
 			}
 		} else {
 			mockCalls["Update"] = []spltest.MockFuncCall{
@@ -221,6 +288,24 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 				{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
 				{MetaName: "*v4.IndexerCluster-test-stack1"},
 				{MetaName: "*v4.IndexerCluster-test-stack1"},
+			}
+			switch cr.GetObjectKind().GroupVersionKind().Kind {
+			case "IndexerCluster":
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
+				}
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-indexer-stack1-configmap"},
+					{MetaName: "*v4.ClusterManager-test-manager1"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
+					{MetaName: "*v4.IndexerCluster-test-stack1"},
+					{MetaName: "*v4.IndexerCluster-test-stack1"},
+				}
 			}
 		}
 	}
