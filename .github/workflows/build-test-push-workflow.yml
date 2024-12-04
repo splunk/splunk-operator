@@ -38,8 +38,7 @@ jobs:
           go mod tidy
       - name: Run Unit Tests
         run: |
-          echo "commenting for now"
-          # make test
+          make test
       - name: Run Code Coverage
         run: goveralls -coverprofile=coverage.out -service=circle-ci -repotoken ${{ secrets.COVERALLS_TOKEN }}
       - name: Upload Coverage artifacts
