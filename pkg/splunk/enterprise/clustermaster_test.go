@@ -56,6 +56,7 @@ func TestApplyClusterMaster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -73,6 +74,7 @@ func TestApplyClusterMaster(t *testing.T) {
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerService},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -98,8 +100,8 @@ func TestApplyClusterMaster(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[5]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[6]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -203,6 +205,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -226,6 +229,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1ClusterManagerConfigMapSmartStore},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-master-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-master-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-master"},
@@ -251,8 +255,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11], funcCalls[13]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[14]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[12], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[15]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[10]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -636,8 +640,9 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
 	c.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-cluster-master-stack1-configmap")
+	c.AddObject(&configmap)
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")

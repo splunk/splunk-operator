@@ -179,6 +179,19 @@ func copyMockObject(dst, src *client.Object) {
 	//srcP := *src
 	// default if no types match
 	//*dst = srcP.DeepCopyObject()
+	// Set GVK if missing
+	srcObj := *src
+	gvk := srcObj.GetObjectKind().GroupVersionKind()
+	if gvk.Empty() {
+		gvk = schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com", // Replace with your default group
+			Version: "v4",
+			Kind:    reflect.TypeOf(srcObj).Elem().Name(),
+		}
+		srcObj.GetObjectKind().SetGroupVersionKind(gvk)
+	}
+
+	*dst = srcObj.DeepCopyObject().(client.Object)
 }
 
 // copyMockObjectList uses the global MockObjectCopiers to perform the typed copy of a client.Object from src to dst
@@ -296,7 +309,8 @@ type MockClient struct {
 // RESTMapper wrapper for REST Client
 // FIXME
 func (c MockClient) RESTMapper() meta.RESTMapper {
-	ne := &meta.DefaultRESTMapper{}
+	ne := meta.NewDefaultRESTMapper([]schema.GroupVersion{
+		{Group: "enterprise.splunk.com", Version: "v1"}})
 	return ne
 }
 
@@ -304,6 +318,7 @@ func (c MockClient) RESTMapper() meta.RESTMapper {
 // FIXME
 func (c MockClient) Scheme() *runtime.Scheme {
 	sc := &runtime.Scheme{}
+	setupScheme(sc)
 	return sc
 }
 
@@ -493,6 +508,14 @@ func (c *MockClient) CheckCalls(t *testing.T, testname string, wantCalls map[str
 	}
 }
 
+func setupScheme(scheme *runtime.Scheme) {
+	enterpriseApi.AddToScheme(scheme)
+	enterpriseApiV3.AddToScheme(scheme)
+	appsv1.AddToScheme(scheme)
+	corev1.AddToScheme(scheme)
+	// Add other necessary APIs
+}
+
 // AddObject adds an object to the MockClient's state
 func (c *MockClient) SubResource(subResource string) client.SubResourceClient {
 	src := MockSubResourceClient{}
@@ -535,34 +558,82 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 	switch resource.(type) {
 	case *enterpriseApi.Standalone:
 		cr := resource.(*enterpriseApi.Standalone)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "Standalone",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApiV3.LicenseMaster:
 		cr := resource.(*enterpriseApiV3.LicenseMaster)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "LicenseMaster",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.LicenseManager:
 		cr := resource.(*enterpriseApi.LicenseManager)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "LicenseManager",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.IndexerCluster:
 		cr := resource.(*enterpriseApi.IndexerCluster)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "IndexerCluster",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApiV3.ClusterMaster:
 		cr := resource.(*enterpriseApiV3.ClusterMaster)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "ClusterMaster",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.ClusterManager:
 		cr := resource.(*enterpriseApi.ClusterManager)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "ClusterManager",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.MonitoringConsole:
 		cr := resource.(*enterpriseApi.MonitoringConsole)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "MonitoringConsole",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 
 	case *enterpriseApi.SearchHeadCluster:
 		cr := resource.(*enterpriseApi.SearchHeadCluster)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "SearchHeadCluster",
+		}
+		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)
 	}
 
