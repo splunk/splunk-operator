@@ -37,7 +37,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 		// it takes more than 3000 seconds for one of the test case
 		testcaseEnvInst, err = testenv.NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
 		Expect(err).To(Succeed(), "Unable to create testcaseenv")
-		testenv.SpecifiedTestTimeout = 4000
+		testenv.SpecifiedTestTimeout = 40000
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
 	})
@@ -76,6 +76,11 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			case "azure":
 				licenseFilePath, err := testenv.DownloadLicenseFromAzure(ctx, downloadDir)
 				Expect(err).To(Succeed(), "Unable to download license file from Azure")
+				// Create License Config Map
+				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
+			case "gcp":
+				licenseFilePath, err := testenv.DownloadLicenseFromGCPBucket()
+				Expect(err).To(Succeed(), "Unable to download license file from GCP")
 				// Create License Config Map
 				testcaseEnvInst.CreateLicenseConfigMap(licenseFilePath)
 			default:

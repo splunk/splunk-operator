@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: helm upgrade --set standalone.replicaCount=2 --set splunk-operator.enabled=false --set standalone.enabled=true splunk-stdl ../../../../helm-chart/splunk-enterprise 
+    namespaced: true
+spec:
+  serviceAccount: helm-service-account

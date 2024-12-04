@@ -16,517 +16,336 @@
 package client
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"crypto/tls"
-	"encoding/base64"
-	"encoding/json"
-	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// blank assignment to verify that AzureBlobClient implements RemoteDataClient
 var _ RemoteDataClient = &AzureBlobClient{}
 
-// AzureBlobClient is a client to implement Azure Blob specific APIs
+// ContainerClientInterface abstracts the methods used from the Azure SDK's ContainerClient.
+type ContainerClientInterface interface {
+	NewListBlobsFlatPager(options *container.ListBlobsFlatOptions) *runtime.Pager[azblob.ListBlobsFlatResponse]
+	NewBlobClient(blobName string) BlobClientInterface
+}
+
+// BlobClientInterface abstracts the methods used from the Azure SDK's BlobClient.
+type BlobClientInterface interface {
+	DownloadStream(ctx context.Context, options *blob.DownloadStreamOptions) (blob.DownloadStreamResponse, error)
+}
+
+func (c *ContainerClientWrapper) NewListBlobsFlatPager(options *azblob.ListBlobsFlatOptions) *runtime.Pager[azblob.ListBlobsFlatResponse] {
+	return c.Client.NewListBlobsFlatPager(options)
+}
+
+// ContainerClientWrapper wraps the Azure SDK's ContainerClient and implements ContainerClientInterface.
+type ContainerClientWrapper struct {
+	*container.Client
+}
+
+// NewBlobClient wraps the Azure SDK's NewBlobClient method to return BlobClientInterface.
+func (w *ContainerClientWrapper) NewBlobClient(blobName string) BlobClientInterface {
+	return &BlobClientWrapper{w.Client.NewBlobClient(blobName)}
+}
+
+// BlobClientWrapper wraps the Azure SDK's BlobClient and implements BlobClientInterface.
+type BlobClientWrapper struct {
+	*blob.Client
+}
+
+// DownloadStream wraps the Azure SDK's DownloadStream method.
+func (w *BlobClientWrapper) DownloadStream(ctx context.Context, options *blob.DownloadStreamOptions) (blob.DownloadStreamResponse, error) {
+	return w.Client.DownloadStream(ctx, options)
+}
+
+// CredentialType defines the type of credential used for authentication.
+type CredentialType int
+
+const (
+	// CredentialTypeSharedKey indicates Shared Key authentication.
+	CredentialTypeSharedKey CredentialType = iota
+	// CredentialTypeAzureAD indicates Azure AD authentication.
+	CredentialTypeAzureAD
+)
+
+// AzureBlobClient implements the RemoteDataClient interface for Azure Blob Storage.
 type AzureBlobClient struct {
 	BucketName         string
 	StorageAccountName string
-	SecretAccessKey    string
 	Prefix             string
 	StartAfter         string
 	Endpoint           string
-	HTTPClient         SplunkHTTPClient
+	ContainerClient    ContainerClientInterface
+	CredentialType     CredentialType
 }
 
-// ContainerProperties represents blob properties
-type ContainerProperties struct {
-	CreationTime  string `xml:"Creation-Time"`
-	LastModified  string `xml:"Last-Modified"`
-	ETag          string `xml:"Etag"`
-	ContentLength string `xml:"Content-Length"`
-}
+// NewAzureBlobClient initializes and returns an AzureBlobClient.
+// It supports both Shared Key and Azure AD authentication based on provided credentials.
+// NewAzureBlobClient initializes a new AzureBlobClient with the provided parameters.
+// It supports both Shared Key and Azure AD authentication methods.
+//
+// Parameters:
+//   - ctx: The context for the operation.
+//   - bucketName: The name of the Azure Blob container.
+//   - storageAccountName: The name of the Azure Storage account.
+//   - secretAccessKey: The shared key for authentication (optional; leave empty to use Azure AD).
+//   - prefix: The prefix for blob listing (optional).
+//   - startAfter: The marker for blob listing (optional).
+//   - region: The Azure region (e.g., "eastus").
+//   - endpoint: A custom endpoint (optional).
+//   - initFunc: An initialization function to be executed (optional).
+//
+// Returns:
+//   - RemoteDataClient: An interface representing the remote data client.
+//   - error: An error object if the initialization fails.
+//
+// The function logs the initialization process and selects the appropriate
+// authentication method based on the presence of the secretAccessKey. If the
+// secretAccessKey is provided, Shared Key authentication is used; otherwise,
+// Azure AD authentication is used.
+func NewAzureBlobClient(
+	ctx context.Context,
+	bucketName string, // Azure Blob container name
+	storageAccountName string, // Azure Storage account name
+	secretAccessKey string, // Shared Key (optional; leave empty to use Azure AD)
+	prefix string, // Prefix for blob listing (optional)
+	startAfter string, // Marker for blob listing (optional)
+	region string, // Azure region (e.g., "eastus")
+	endpoint string, // Custom endpoint (optional)
+	initFunc GetInitFunc, // Initialization function
+) (RemoteDataClient, error) { // Matches GetRemoteDataClient signature
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("NewAzureBlobClient")
 
-// Blob represents a single blob
-type Blob struct {
-	XMLName    xml.Name            `xml:"Blob"`
-	Name       string              `xml:"Name"`
-	Properties ContainerProperties `xml:"Properties"`
-}
+	scopedLog.Info("Initializing AzureBlobClient")
 
-// Blobs represents a slice of blobs
-type Blobs struct {
-	XMLName xml.Name `xml:"Blobs"`
-	Blob    []Blob   `xml:"Blob"`
-}
-
-// EnumerationResults holds unmarshaled data from listing APIs
-type EnumerationResults struct {
-	XMLName xml.Name `xml:"EnumerationResults"`
-	Blobs   Blobs    `xml:"Blobs"`
-}
-
-// TokenResponse holds the unmarshaled oauth token
-type TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ClientID    string `json:"client_id"`
-}
-
-// ComputeHMACSHA256 generates a hash signature for an HTTP request or for a SAS.
-func ComputeHMACSHA256(message string, base64DecodedAccountKey []byte) (base64String string) {
-	// Signature=Base64(HMAC-SHA256(UTF8(StringToSign), Base64.decode(<your_azure_storage_account_shared_key>)))
-	h := hmac.New(sha256.New, base64DecodedAccountKey)
-	h.Write([]byte(message))
-	return base64.StdEncoding.EncodeToString(h.Sum(nil))
-}
-
-// buildStringToSign is a helper API for adding auth signature to HTTP headers
-func buildStringToSign(request http.Request, accountName string) (string, error) {
-	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
-	headers := request.Header
-	contentLength := headers.Get(headerContentLength)
-	if contentLength == "0" {
-		contentLength = ""
+	// Execute the initialization function if provided.
+	if initFunc != nil {
+		initResult := initFunc(ctx, endpoint, storageAccountName, secretAccessKey)
+		// Currently, no action is taken with initResult. Modify if needed.
+		_ = initResult
 	}
 
-	canonicalizedResource, err := buildCanonicalizedResource(request.URL, accountName)
-	if err != nil {
-		return "", err
-	}
-
-	stringToSign := strings.Join([]string{
-		request.Method,
-		headers.Get(headerContentEncoding),
-		headers.Get(headerContentLanguage),
-		contentLength,
-		headers.Get(headerContentMD5),
-		headers.Get(headerContentType),
-		"", // Empty date because x-ms-date is expected (as per web page above)
-		headers.Get(headerIfModifiedSince),
-		headers.Get(headerIfMatch),
-		headers.Get(headerIfNoneMatch),
-		headers.Get(headerIfUnmodifiedSince),
-		headers.Get(headerRange),
-		buildCanonicalizedHeader(headers),
-		canonicalizedResource,
-	}, "\n")
-	return stringToSign, nil
-}
-
-// buildCanonicalizedHeader is a helper API for adding auth signature to HTTP headers
-func buildCanonicalizedHeader(headers http.Header) string {
-	cm := map[string][]string{}
-	for k, v := range headers {
-		headerName := strings.TrimSpace(strings.ToLower(k))
-		if strings.HasPrefix(headerName, "x-ms-") {
-			cm[headerName] = v // NOTE: the value must not have any whitespace around it.
+	// Construct the service URL.
+	var serviceURL string
+	if endpoint != "" {
+		serviceURL = endpoint
+		if serviceURL[len(serviceURL)-1] == '/' {
+			serviceURL = serviceURL[:len(serviceURL)-1]
 		}
-	}
-	if len(cm) == 0 {
-		return ""
-	}
-
-	keys := make([]string, 0, len(cm))
-	for key := range cm {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	ch := bytes.NewBufferString("")
-	for i, key := range keys {
-		if i > 0 {
-			ch.WriteRune('\n')
-		}
-		ch.WriteString(key)
-		ch.WriteRune(':')
-		ch.WriteString(strings.Join(cm[key], ","))
-	}
-	return ch.String()
-}
-
-// buildCanonicalizedResource is a helper API for adding auth signature to HTTP headers
-func buildCanonicalizedResource(u *url.URL, accountName string) (string, error) {
-	// https://docs.microsoft.com/en-us/rest/api/storageservices/authentication-for-the-azure-storage-services
-	cr := bytes.NewBufferString("/")
-	cr.WriteString(accountName)
-
-	if len(u.Path) > 0 {
-		// Any portion of the CanonicalizedResource string that is derived from
-		// the resource's URI should be encoded exactly as it is in the URI.
-		// -- https://msdn.microsoft.com/en-gb/library/azure/dd179428.aspx
-		cr.WriteString(u.EscapedPath())
+	} else if region != "" {
+		serviceURL = fmt.Sprintf("https://%s.blob.%s.core.windows.net", storageAccountName, region)
 	} else {
-		// a slash is required to indicate the root path
-		cr.WriteString("/")
+		serviceURL = fmt.Sprintf("https://%s.blob.core.windows.net", storageAccountName)
 	}
 
-	// params is a map[string][]string; param name is key; params values is []string
-	params, err := url.ParseQuery(u.RawQuery) // Returns URL decoded values
-	if err != nil {
-		return "", errors.New("parsing query parameters must succeed, otherwise there might be serious problems in the SDK/generated code")
-	}
+	var containerClient ContainerClientInterface
+	var credentialType CredentialType
 
-	if len(params) > 0 { // There is at least 1 query parameter
-		paramNames := []string{} // We use this to sort the parameter key names
-		for paramName := range params {
-			paramNames = append(paramNames, paramName) // paramNames must be lowercase
+	if secretAccessKey != "" {
+		// Use Shared Key authentication.
+		scopedLog.Info("Using Shared Key authentication")
+
+		// Create a Shared Key Credential.
+		sharedKeyCredential, err := azblob.NewSharedKeyCredential(storageAccountName, secretAccessKey)
+		if err != nil {
+			scopedLog.Error(err, "Failed to create SharedKeyCredential")
+			return nil, fmt.Errorf("failed to create SharedKeyCredential: %w", err)
 		}
-		sort.Strings(paramNames)
 
-		for _, paramName := range paramNames {
-			paramValues := params[paramName]
-			sort.Strings(paramValues)
-
-			// Join the sorted key values separated by ','
-			// Then prepend "keyName:"; then add this string to the buffer
-			cr.WriteString("\n" + paramName + ":" + strings.Join(paramValues, ","))
+		// Initialize the container client with Shared Key Credential.
+		rawContainerClient, err := container.NewClientWithSharedKeyCredential(
+			fmt.Sprintf("%s/%s", serviceURL, bucketName),
+			sharedKeyCredential,
+			nil,
+		)
+		if err != nil {
+			scopedLog.Error(err, "Failed to create ContainerClient with SharedKeyCredential")
+			return nil, fmt.Errorf("failed to create ContainerClient with SharedKeyCredential: %w", err)
 		}
-	}
-	return cr.String(), nil
-}
 
-// NewAzureBlobClient returns an AzureBlob client
-func NewAzureBlobClient(ctx context.Context, bucketName string, storageAccountName string, secretAccessKey string, prefix string, startAfter string, region string, endpoint string, fn GetInitFunc) (RemoteDataClient, error) {
-	// Get http client
-	azureHTTPClient := fn(ctx, endpoint, storageAccountName, secretAccessKey)
+		// Wrap the container client.
+		containerClient = &ContainerClientWrapper{rawContainerClient}
+
+		credentialType = CredentialTypeSharedKey
+	} else {
+		// Use Azure AD authentication.
+		scopedLog.Info("Using Azure AD authentication")
+
+		// Create a Token Credential using DefaultAzureCredential.
+		// The Azure SDK uses environment variables to configure authentication when using DefaultAzureCredential.
+		// For Workload Identity, by adding annotations to the pod's service account:
+		// azure.workload.identity/client-id: <CLIENT_ID>
+		// the following environment variables are typically used:
+		// AZURE_AUTHORITY_HOST: The Azure Active Directory endpoint (default is https://login.microsoftonline.com/).
+		// AZURE_CLIENT_ID: The client ID of the Azure AD application linked to the pod's service account.
+		// AZURE_TENANT_ID: The tenant ID of the Azure Active Directory where the Azure AD application resides.
+		// AZURE_FEDERATED_TOKEN_FILE: The path to the file containing the token issued by Kubernetes, usually mounted as a volume.
+		// when using Azure AD Pod Identity (deprecated), the following environment variables are typically used:
+		// AZURE_POD_IDENTITY_AUTHORITY_HOST: The Azure Active Directory endpoint (default is https://login.microsoftonline.com/).
+		// AZURE_POD_IDENTITY_CLIENT_ID: The client ID of the Azure AD application linked to the pod's service account.
+		// AZURE_POD_IDENTITY_TENANT_ID: The tenant ID of the Azure Active Directory where the Azure AD application resides.
+		// AZURE_POD_IDENTITY_TOKEN_FILE: The path to the file containing the token issued by Kubernetes, usually mounted as a volume.
+		// AZURE_POD_IDENTITY_RESOURCE_ID: The resource ID of the Azure resource to access.
+		// AZURE_POD_IDENTITY_USE_MSI: Set to "true" to use Managed Service Identity (MSI) for authentication.
+		// AZURE_POD_IDENTITY_USER_ASSIGNED_ID
+
+		tokenCredential, err := azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			scopedLog.Error(err, "Failed to create DefaultAzureCredential")
+			return nil, fmt.Errorf("failed to create DefaultAzureCredential: %w", err)
+		}
+
+		// Initialize the container client with Token Credential.
+		rawContainerClient, err := container.NewClient(
+			fmt.Sprintf("%s/%s", serviceURL, bucketName),
+			tokenCredential,
+			nil,
+		)
+		if err != nil {
+			scopedLog.Error(err, "Failed to create ContainerClient with TokenCredential")
+			return nil, fmt.Errorf("failed to create ContainerClient with TokenCredential: %w", err)
+		}
+
+		// Wrap the container client.
+		containerClient = &ContainerClientWrapper{rawContainerClient}
+
+		credentialType = CredentialTypeAzureAD
+	}
+
+	scopedLog.Info("AzureBlobClient initialized successfully",
+		"CredentialType", credentialType,
+		"BucketName", bucketName,
+		"StorageAccountName", storageAccountName,
+	)
 
 	return &AzureBlobClient{
 		BucketName:         bucketName,
 		StorageAccountName: storageAccountName,
-		SecretAccessKey:    secretAccessKey,
 		Prefix:             prefix,
 		StartAfter:         startAfter,
 		Endpoint:           endpoint,
-		HTTPClient:         azureHTTPClient.(SplunkHTTPClient),
+		ContainerClient:    containerClient,
+		CredentialType:     credentialType,
 	}, nil
 }
 
-// InitAzureBlobClientWrapper is a wrapper around InitAzureBlobClientSession
-func InitAzureBlobClientWrapper(ctx context.Context, appAzureBlobEndPoint string, storageAccountName string, secretAccessKey string) interface{} {
-	return InitAzureBlobClientSession(ctx)
-}
-
-// InitAzureBlobClientSession initializes and returns a client session object
-func InitAzureBlobClientSession(ctx context.Context) SplunkHTTPClient {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("InitAzureBlobClientSession")
-
-	// Enforcing minimum version TLS1.2
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
-	}
-	tr.ForceAttemptHTTP2 = true
-
-	httpClient := http.Client{
-		Transport: tr,
-		Timeout:   appFrameworkHttpclientTimeout * time.Second,
-	}
-
-	// Validate transport
-	tlsVersion := "Unknown"
-	if tr, ok := httpClient.Transport.(*http.Transport); ok {
-		tlsVersion = getTLSVersion(tr)
-	}
-
-	scopedLog.Info("Azure Blob Client Session initialization successful.", "TLS Version", tlsVersion)
-
-	return &httpClient
-}
-
-// Update http request header with secrets info
-func updateAzureHTTPRequestHeaderWithSecrets(ctx context.Context, client *AzureBlobClient, httpRequest *http.Request) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateHttpRequestHeaderWithSecrets")
-
-	scopedLog.Info("Updating Azure Http Request with secrets")
-
-	// Update httpRequest header with data and version
-	httpRequest.Header[headerXmsDate] = []string{time.Now().UTC().Format(http.TimeFormat)}
-	httpRequest.Header[headerXmsVersion] = []string{azureHTTPHeaderXmsVersion}
-
-	// Get HMAC signature using storage account name and secret access key
-	stringToSign, err := buildStringToSign(*httpRequest, client.StorageAccountName)
-	if err != nil {
-		scopedLog.Error(err, "Azure Blob with secrets Failed to build string to sign")
-		return err
-	}
-	decodedAccountKey, err := base64.StdEncoding.DecodeString(client.SecretAccessKey)
-	if err != nil {
-		// failed to decode
-		scopedLog.Error(err, "Azure Blob with secrets failed to decode accountKey")
-		return err
-	}
-	signature := ComputeHMACSHA256(stringToSign, decodedAccountKey)
-	authHeader := strings.Join([]string{"SharedKey ", client.StorageAccountName, ":", signature}, "")
-
-	// Update httpRequest header with the HMAC256 signature
-	httpRequest.Header[headerAuthorization] = []string{authHeader}
-
-	return nil
-}
-
-// Update http request header with IAM info
-func updateAzureHTTPRequestHeaderWithIAM(ctx context.Context, client *AzureBlobClient, httpRequest *http.Request) error {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("updateHttpRequestHeaderWithIAM")
-
-	scopedLog.Info("Updating Azure Http Request with IAM")
-
-	// Create http request to retrive IAM oauth token from metadata URL
-	oauthRequest, err := http.NewRequest("GET", azureTokenFetchURL, nil)
-	if err != nil {
-		scopedLog.Error(err, "Azure Blob Failed to create new token request")
-		return err
-	}
-
-	// Mark metadata flag
-	oauthRequest.Header.Set("Metadata", "true")
-
-	// Create raw query for http request
-	values := oauthRequest.URL.Query()
-	values.Add("api-version", azureIMDSApiVersion)
-	values.Add("resource", "https://storage.azure.com/")
-	oauthRequest.URL.RawQuery = values.Encode()
-
-	// Retrieve oauth token
-	resp, err := client.HTTPClient.Do(oauthRequest)
-	if err != nil {
-		scopedLog.Error(err, "Azure blob,Errored when sending request to the server")
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	// A response code other than 200 usually means that no managed indentity is
-	// configured with the aks cluster.
-	if resp.StatusCode != 200 {
-		return errors.New("please validate that your cluster is configured to use managed identity")
-	}
-
-	// Read http response
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		scopedLog.Error(err, "Azure blob,Errored when reading resp body")
-		return err
-	}
-
-	// Extract the token from the http response
-	var azureOauthTokenResponse TokenResponse
-	err = json.Unmarshal(responseBody, &azureOauthTokenResponse)
-	if err != nil {
-		scopedLog.Error(err, "Unable to unmarshal response to token", "Response:", string(responseBody))
-		return err
-	}
-
-	// Update http request header with IAM access token
-	httpRequest.Header.Set(headerXmsVersion, azureHTTPHeaderXmsVersion)
-	httpRequest.Header.Set(headerAuthorization, "Bearer "+azureOauthTokenResponse.AccessToken)
-
-	return nil
-}
-
-// GetAppsList gets the list of apps from remote storage
+// GetAppsList retrieves a list of blobs (apps) from the Azure Blob container.
 func (client *AzureBlobClient) GetAppsList(ctx context.Context) (RemoteDataListResponse, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList").WithValues("Endpoint", client.Endpoint, "Bucket", client.BucketName,
-		"Prefix", client.Prefix)
+	scopedLog := reqLogger.WithName("AzureBlob:GetAppsList").WithValues("Bucket", client.BucketName)
 
-	scopedLog.Info("Getting Apps list")
+	scopedLog.Info("Fetching list of apps")
 
-	// create rest request URL with storage account name, container, prefix
-	appsListFetchURL := fmt.Sprintf(azureBlobListAppFetchURL, client.Endpoint, client.BucketName, client.Prefix)
-
-	// Create a http request with the URL
-	httpRequest, err := http.NewRequest("GET", appsListFetchURL, nil)
-	if err != nil {
-		scopedLog.Error(err, "Azure Blob Failed to create request for App fetch URL")
-		return RemoteDataListResponse{}, err
+	// Define options for listing blobs.
+	options := &container.ListBlobsFlatOptions{
+		Prefix: &client.Prefix,
 	}
 
-	// Setup the httpRequest with required authentication
-	if client.StorageAccountName != "" && client.SecretAccessKey != "" {
-		// Use Secrets
-		err = updateAzureHTTPRequestHeaderWithSecrets(ctx, client, httpRequest)
-	} else {
-		// No Secret provided, try using IAM
-		err = updateAzureHTTPRequestHeaderWithIAM(ctx, client, httpRequest)
-	}
-	if err != nil {
-		scopedLog.Error(err, "Failed to get http request authenticated")
-		return RemoteDataListResponse{}, err
-	}
+	// Set the Marker if StartAfter is provided.
+	//if client.StartAfter != "" {
+	//	options.Marker = &client.StartAfter
+	//}
 
-	// List the apps
-	httpResponse, err := client.HTTPClient.Do(httpRequest)
-	if err != nil {
-		scopedLog.Error(err, "Azure blob, unable to execute list apps http request")
-		return RemoteDataListResponse{}, err
-	}
+	// Create a pager to iterate through blobs.
+	pager := client.ContainerClient.NewListBlobsFlatPager(options)
 
-	defer httpResponse.Body.Close()
+	var blobs []*RemoteObject
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
+		if err != nil {
+			scopedLog.Error(err, "Error listing blobs")
+			return RemoteDataListResponse{}, fmt.Errorf("error listing blobs: %w", err)
+		}
 
-	// Authorization unsuccessul
-	if httpResponse.StatusCode != 200 {
-		err = errors.New("error authorizing the rest call. check your IAM/secret configuration")
-		return RemoteDataListResponse{}, err
-	}
+		for _, blob := range resp.Segment.BlobItems {
+			etag := string(*blob.Properties.ETag)
+			name := *blob.Name
+			lastModified := blob.Properties.LastModified
+			size := blob.Properties.ContentLength
 
-	// Extract response
-	azureRemoteDataResponse, err := extractResponse(ctx, httpResponse)
-	if err != nil {
-		scopedLog.Error(err, "unable to extract app packages list from http response")
-		return azureRemoteDataResponse, err
+			remoteObject := &RemoteObject{
+				Etag:         &etag,
+				Key:          &name,
+				LastModified: lastModified,
+				Size:         size,
+			}
+			blobs = append(blobs, remoteObject)
+		}
 	}
 
-	// Successfully listed apps
-	scopedLog.Info("Listing apps successful")
+	scopedLog.Info("Successfully fetched list of apps", "TotalBlobs", len(blobs))
 
-	return azureRemoteDataResponse, err
+	return RemoteDataListResponse{Objects: blobs}, nil
 }
 
-// Extract data from httpResponse and fill it in RemoteDataListResponse structs
-func extractResponse(ctx context.Context, httpResponse *http.Response) (RemoteDataListResponse, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AzureBlob:extractResponse")
-
-	azureAppsRemoteData := RemoteDataListResponse{}
-
-	// Read response body
-	responseBody, err := io.ReadAll(httpResponse.Body)
-	if err != nil {
-		scopedLog.Error(err, "Errored when reading resp body for app packages list rest call")
-		return azureAppsRemoteData, err
-	}
-
-	// Variable to hold unmarshaled data
-	data := &EnumerationResults{}
-
-	// Unmarshal http response
-	err = xml.Unmarshal(responseBody, data)
-	if err != nil {
-		scopedLog.Error(err, "Errored  unmarshalling app packages list", "rest call response:", string(responseBody))
-		return azureAppsRemoteData, err
-	}
-
-	// Extract data from all blobs
-	for count := 0; count < len(data.Blobs.Blob); count++ {
-		// Extract blob
-		blob := data.Blobs.Blob[count]
-
-		scopedLog.Info("Listing App package details", "Count:", count, "App package name", blob.Name,
-			"Etag", blob.Properties.ETag, "Created on", blob.Properties.CreationTime,
-			"Modified on", blob.Properties.LastModified, "Content Size", blob.Properties)
-
-		// Extract properties
-		newETag := blob.Properties.ETag
-		newKey := blob.Name
-		newLastModified, errTime := time.Parse(http.TimeFormat, blob.Properties.LastModified)
-		if errTime != nil {
-			scopedLog.Error(err, "Unable to get lastModifiedTime, not adding to list", "App Package", newKey, "name", blob.Properties.LastModified)
-			continue
-		}
-		newSize, errInt := strconv.ParseInt(blob.Properties.ContentLength, 10, 64)
-		if errInt != nil {
-			scopedLog.Error(err, "Unable to get newSize, not adding to list", "App package", newKey, "name", blob.Properties.ContentLength)
-			continue
-		}
-		newStorageClass := "standard" //TODO : map to a azure blob field
-
-		// Create new object and append
-		newRemoteObject := RemoteObject{Etag: &newETag, Key: &newKey, LastModified: &newLastModified, Size: &newSize, StorageClass: &newStorageClass}
-		azureAppsRemoteData.Objects = append(azureAppsRemoteData.Objects, &newRemoteObject)
-	}
-
-	return azureAppsRemoteData, nil
-}
-
-// DownloadApp downloads an app package from remote storage
+// DownloadApp downloads a specific blob from Azure Blob Storage to a local file.
 func (client *AzureBlobClient) DownloadApp(ctx context.Context, downloadRequest RemoteDataDownloadRequest) (bool, error) {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("AzureBlob:DownloadApp").WithValues("Endpoint", client.Endpoint, "Bucket", client.BucketName,
-		"Prefix", client.Prefix, "downloadRequest", downloadRequest)
+	scopedLog := reqLogger.WithName("AzureBlob:DownloadApp").WithValues(
+		"Bucket", client.BucketName,
+		"RemoteFile", downloadRequest.RemoteFile,
+		"LocalFile", downloadRequest.LocalFile,
+	)
 
-	scopedLog.Info("Download App package")
+	scopedLog.Info("Initiating blob download")
 
-	// create rest request URL with storage account name, container, prefix
-	appPackageFetchURL := fmt.Sprintf(azureBlobDownloadAppFetchURL, client.Endpoint, client.BucketName, downloadRequest.RemoteFile)
+	// Create a blob client for the specific blob.
+	blobClient := client.ContainerClient.NewBlobClient(downloadRequest.RemoteFile)
 
-	// Create a http request with the URL
-	httpRequest, err := http.NewRequest("GET", appPackageFetchURL, nil)
+	// Download the blob content.
+	get, err := blobClient.DownloadStream(ctx, nil)
 	if err != nil {
-		scopedLog.Error(err, "Azure Blob Failed to create request for App package fetch URL")
-		return false, err
+		scopedLog.Error(err, "Failed to download blob")
+		return false, fmt.Errorf("failed to download blob: %w", err)
 	}
+	defer get.Body.Close()
 
-	// Setup the httpRequest with required authentication
-	if client.StorageAccountName != "" && client.SecretAccessKey != "" {
-		// Use Secrets
-		err = updateAzureHTTPRequestHeaderWithSecrets(ctx, client, httpRequest)
-	} else {
-		// No Secret provided, try using IAM
-		err = updateAzureHTTPRequestHeaderWithIAM(ctx, client, httpRequest)
-	}
-	if err != nil {
-		scopedLog.Error(err, "Failed to get http request authenticated")
-		return false, err
-	}
-
-	scopedLog.Info("Calling the download rest request")
-
-	// Download the app
-	httpResponse, err := client.HTTPClient.Do(httpRequest)
-	if err != nil {
-		scopedLog.Error(err, "Azure blob, unable to execute download apps http request")
-		return false, err
-	}
-
-	defer httpResponse.Body.Close()
-
-	// Authorization unsuccessul for download rest call
-	if httpResponse.StatusCode != 200 {
-		err = errors.New("error authorizing the rest call. check your IAM/secret configuration")
-		return false, err
-	}
-
-	// Create local file on operator
+	// Create or truncate the local file.
 	localFile, err := os.Create(downloadRequest.LocalFile)
 	if err != nil {
-		scopedLog.Error(err, "Unable to open local file")
-		return false, err
+		scopedLog.Error(err, "Failed to create local file")
+		return false, fmt.Errorf("failed to create local file: %w", err)
 	}
 	defer localFile.Close()
 
-	scopedLog.Info("Copying the download response to localFile")
-
-	// Copy the http response (app packages to the local file path)
-	_, err = io.Copy(localFile, httpResponse.Body)
+	// Write the content to the local file.
+	_, err = io.Copy(localFile, get.Body)
 	if err != nil {
-		fmt.Println(err.Error(), "Failed when copying resp body for app download")
-		return false, err
+		scopedLog.Error(err, "Failed to write blob content to local file")
+		return false, fmt.Errorf("failed to write blob content to local file: %w", err)
 	}
 
-	// Successfully downloaded app package
-	scopedLog.Info("Download app package successful")
+	scopedLog.Info("Blob downloaded successfully")
 
-	return true, err
+	return true, nil
 }
 
-// RegisterAzureBlobClient will add the corresponding function pointer to the map
+// NoOpInitFunc performs no additional initialization.
+// It satisfies the GetInitFunc type and can be used when no extra setup is needed.
+func NoOpInitFunc(
+	ctx context.Context,
+	appAzureBlobEndPoint string,
+	storageAccountName string,
+	secretAccessKey string, // Optional: can be empty
+) interface{} {
+	// No additional initialization required.
+	return nil
+}
+
+// RegisterAzureBlobClient registers the AzureBlobClient in the RemoteDataClientsMap.
 func RegisterAzureBlobClient() {
-	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewAzureBlobClient, GetInitFunc: InitAzureBlobClientWrapper}
+	wrapperObject := GetRemoteDataClientWrapper{
+		GetRemoteDataClient: NewAzureBlobClient,
+		GetInitFunc:         NoOpInitFunc, // Use CustomInitFunc if additional initialization is needed
+	}
 	RemoteDataClientsMap["azure"] = wrapperObject
 }

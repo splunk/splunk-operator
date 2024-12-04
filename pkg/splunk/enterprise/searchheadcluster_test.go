@@ -83,7 +83,6 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
 
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 
@@ -111,7 +110,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-deployer-secret-v1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
+		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-search-head"},

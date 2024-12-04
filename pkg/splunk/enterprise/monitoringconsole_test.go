@@ -100,11 +100,11 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
+
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
 		client.MatchingLabels(labels),
 	}
-
 	listOpts2 := []client.ListOption{
 		client.InNamespace("test"),
 	}
