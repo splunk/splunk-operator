@@ -137,8 +137,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[11], funcCalls[13], funcCalls[17], funcCalls[18]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[10]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[11], funcCalls[12], funcCalls[16], funcCalls[18]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[16]}, "List": {listmockCall[0], listmockCall[0]}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
