@@ -114,8 +114,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{ListOpts: listOpts2},
 	}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[11], funcCalls[6]}, "Update": {funcCalls[0], funcCalls[11]}, "List": {listmockCall[0], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[5]}, "List": {listmockCall[0], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1], listmockCall[1]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[11], funcCalls[6]}, "Update": {funcCalls[0], funcCalls[11]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[5]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
