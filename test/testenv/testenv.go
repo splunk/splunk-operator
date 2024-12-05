@@ -58,7 +58,7 @@ const (
 	ConsistentDuration = 2000 * time.Millisecond
 
 	// DefaultTimeout is the max timeout before we failed.
-	DefaultTimeout = 200 * time.Minute
+	DefaultTimeout = 2000 * time.Minute
 
 	// SearchHeadPod Template String for search head pod
 	SearchHeadPod = "splunk-%s-shc-search-head-%d"

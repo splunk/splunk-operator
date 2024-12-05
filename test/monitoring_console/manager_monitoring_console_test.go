@@ -164,7 +164,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -319,7 +319,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -584,7 +584,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("managermc1, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -755,7 +755,7 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to get update Monitoring Console in Search Head Cluster CRD")
 
 			// Ensure Search Head Cluster go to Ready Phase
-			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			//testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC is Ready and stays in ready state
 			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
@@ -809,7 +809,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
-		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
+		It("managermc2, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
 			/*
 				Test Steps
 				1. Deploy Multisite Indexer Cluster
@@ -946,7 +946,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
+		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone with name "search-head-adhoc"

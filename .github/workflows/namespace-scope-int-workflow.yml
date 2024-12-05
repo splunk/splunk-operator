@@ -9,12 +9,13 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1,
+            appframeworksS1,
             managerappframeworkc3,
             managerappframeworkm4,
             managersecret,
             managersmartstore,
-            managermc,
+            managermc1,
+            managermc2,
             managerscaling,
             managercrcrud,
             licensemanager,
