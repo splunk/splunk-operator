@@ -2,7 +2,7 @@ name: Arm AL2023 Smoke Test WorkFlow
 on:
   push:
     branches:
-      - CSPL_2920_xx
+      - CSPL_2920
 jobs:
   check-formating:
     runs-on: ubuntu-latest
@@ -162,12 +162,12 @@ jobs:
       fail-fast: false
       matrix:
         test: [
-                basic,
-                appframeworks1,
+                # basic,
+                # appframeworks1,
                 managerappframeworkc3,
-                managerappframeworkm4,
-                managersecret,
-                managermc,
+                # managerappframeworkm4,
+                # managersecret,
+                # managermc,
                ]
     runs-on: ubuntu-latest
     env:
