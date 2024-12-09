@@ -35,6 +35,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   fi
 
   # Always attempt to pull splunk enterprise image
+<<<<<<< HEAD
   echo "Pulling SPLUNK_ENTERPRISE_IMAGE=${SPLUNK_ENTERPRISE_IMAGE}..."
   docker pull ${SPLUNK_ENTERPRISE_IMAGE}
   if [ $? -ne 0 ]; then
@@ -48,6 +49,24 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
     echo "Tagging to privat repo ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
     docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
     echo "Pushing to private repo ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+=======
+  echo "check if image exists, docker manifest inspect $PRIVATE_SPLUNK_ENTERPRISE_IMAGE"
+  if docker manifest inspect "$PRIVATE_SPLUNK_ENTERPRISE_IMAGE" > /dev/null 2>&1; then
+    echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE exists on the remote repository."
+    docker pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
+  else
+    echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE does not exist on the remote repository."
+    docker pull ${SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
+    docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+>>>>>>> 7f9b7158 (Update 2.7.0 branch for gitlab testig needs.)
     docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
     if [ $? -ne 0 ]; then
       echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
