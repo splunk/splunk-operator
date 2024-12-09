@@ -104,6 +104,7 @@ Other make targets include (more info below):
 * `make scorecard`: Runs operator-sdk scorecard tests using OLM installation bundle
 * `make generate`: runs operator-generate k8s, crds and csv commands, updating installation YAML files and OLM bundle
 * `make docker-build`: generates `splunk-operator` container image  example `make docker-build IMG=docker.io/splunk/splunk-operator:<tag name>`
+* `make docker-buildx`: generates `splunk-operator` container image  for multiple platforms, example `make docker-buildx IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make docker-push`: push docker image to given repository example `make docker-push IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make clean`: removes the binary build output and `splunk-operator` container image example `make docker-push IMG=docker.io/splunk/splunk-operator:<tag name>`
 * `make run`: runs the Splunk Operator locally, monitoring the Kubernetes cluster configured in your current `kubectl` context

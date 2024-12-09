@@ -9,6 +9,8 @@
 : "${COMMIT_HASH:=}"
 # AWS specific variables
 : "${ECR_REGISTRY:=}"
+# CSPL-2920 - default instance type, use .env to set specific types to use in workflows
+: "${EKS_INSTANCE_TYPE:=m5.2xlarge}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
 : "${EKS_CLUSTER_K8_VERSION:=1.31}"
