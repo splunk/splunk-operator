@@ -37,6 +37,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -232,8 +233,64 @@ func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, c
 			return nil, err
 		}
 	}
+	err = ReconcileCRSpecificConfigMap(ctx, client, cr, instanceType)
+	if err != nil {
+		return nil, err
+	}
 
 	return namespaceScopedSecret, nil
+}
+
+// ReconcileCRSpecificConfigMap reconciles CR Specific config map exists and contains the ManualUpdate field set to "off"
+func ReconcileCRSpecificConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ReconcileCRSpecificConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	a := cr.GetObjectKind()
+	b := a.GroupVersionKind()
+	c := b.Kind
+	d := KindToInstanceString(c)
+
+	configMapName := fmt.Sprintf(perCrConfigMapNameStr, d, cr.GetName())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// Create a new config map if it doesn't exist
+			configMap = &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: cr.GetNamespace(),
+				},
+				Data: map[string]string{
+					"manualUpdate": "off",
+				},
+			}
+			configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+			err = client.Create(ctx, configMap)
+			if err != nil {
+				scopedLog.Error(err, "Failed to create config map")
+				return err
+			}
+			scopedLog.Info("Created new config map with ManualUpdate set to 'on'")
+			return nil
+		}
+		scopedLog.Error(err, "Failed to get config map")
+		return err
+	}
+
+	// Check if the ManualUpdate field exists
+	if _, exists := configMap.Data["manualUpdate"]; !exists {
+		configMap.Data["manualUpdate"] = "off"
+		err = client.Update(ctx, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Failed to update config map with manualUpdate field")
+			return err
+		}
+		scopedLog.Info("Updated config map with manualUpdate set to 'on'")
+	}
+
+	return nil
 }
 
 // getClusterMasterExtraEnv returns extra environment variables used by indexer clusters
@@ -1407,6 +1464,7 @@ func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContex
 	return appStatusContext.AppsRepoStatusPollInterval != 0
 }
 
+// shouldCheckAppRepoStatus
 func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
 	// If polling is disabled, check if manual update is on.
 	if !isAppRepoPollingEnabled(appStatusContext) {
@@ -1420,6 +1478,12 @@ func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerCl
 				*turnOffManualChecking = true
 			}
 			return true
+		} else {
+			configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
+			if getManualUpdateStatus(ctx, client, cr, configMapName) == "on" {
+				*turnOffManualChecking = true
+				return true
+			}
 		}
 	} else {
 		return HasAppRepoCheckTimerExpired(ctx, appStatusContext)
@@ -1440,7 +1504,20 @@ func getCleanObjectDigest(rawObjectDigest *string) (*string, error) {
 	return &cleanObjectHash, nil
 }
 
-// updateManualAppUpdateConfigMapLocked updates the manual app update config map
+// updateManualAppUpdateConfigMapLocked updates the manual app update configuration map for a given custom resource (CR).
+// It locks the resource mutex for the config map, retrieves the config map, and updates the status and reference count
+// based on whether manual checking is turned off or not.
+//
+// Parameters:
+// - ctx: The context for the request.
+// - client: The controller client to interact with the Kubernetes API.
+// - cr: The custom resource meta object.
+// - appStatusContext: The application deployment context.
+// - kind: The kind of the custom resource.
+// - turnOffManualChecking: A boolean indicating whether to turn off manual checking.
+//
+// Returns:
+// - error: An error if the operation fails, otherwise nil.
 func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking bool) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
@@ -1449,43 +1526,67 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 
-	mux := getResourceMutex(configMapName)
-	mux.Lock()
-	defer mux.Unlock()
-	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	{
+		mux := getResourceMutex(configMapName)
+		mux.Lock()
+		defer mux.Unlock()
+		configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+		if err != nil {
+			scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
+			return err
+		}
+
+		// first check the refCount and status
+		//
+		numOfObjects := getManualUpdateRefCount(ctx, client, cr, configMapName)
+
+		// turn off the manual checking for this CR kind in the configMap
+		if turnOffManualChecking {
+			scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
+			// reset the status back to "off" and
+			// refCount to original count
+			status = "off"
+			numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
+		} else {
+			//just decrement the refCount if the status is "on"
+			status = getManualUpdateStatus(ctx, client, cr, configMapName)
+			if status == "on" {
+				numOfObjects--
+			}
+		}
+
+		// prepare the configMapData
+		configMapData := fmt.Sprintf(`status: %s
+	refCount: %d`, status, numOfObjects)
+
+		configMap.Data[kind] = configMapData
+
+		err = splutil.UpdateResource(ctx, client, configMap)
+		if err != nil {
+			scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+			return err
+		}
+	}
+
+	// now check namespace specific configmap if it contains manualUpdate settings
+	crScopedConfigMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
+	crNamespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
+	configMap, err := splctrl.GetConfigMap(ctx, client, crNamespacedName)
 	if err != nil {
 		scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
 		return err
 	}
-
-	numOfObjects := getManualUpdateRefCount(ctx, client, cr, configMapName)
-
-	// turn off the manual checking for this CR kind in the configMap
 	if turnOffManualChecking {
-		scopedLog.Info("Turning off manual checking of apps update", "Kind", kind)
-		// reset the status back to "off" and
-		// refCount to original count
-		status = "off"
-		numOfObjects = getNumOfOwnerRefsKind(configMap, kind)
-	} else {
-		//just decrement the refCount if the status is "on"
-		status = getManualUpdateStatus(ctx, client, cr, configMapName)
-		if status == "on" {
-			numOfObjects--
-		}
+		scopedLog.Info("Turning off manual checking of apps update in per CR configmap", "Kind", kind)
+		configMap.Data["manualUpdate"] = "off"
 	}
-
-	// prepare the configMapData
-	configMapData := fmt.Sprintf(`status: %s
-refCount: %d`, status, numOfObjects)
-
-	configMap.Data[kind] = configMapData
 
 	err = splutil.UpdateResource(ctx, client, configMap)
 	if err != nil {
-		scopedLog.Error(err, "Could not update the configMap", "name", namespacedName.Name)
+		scopedLog.Error(err, "Could not update the per CR configMap", "name", crNamespacedName.Name)
 		return err
 	}
+
 	return nil
 }
 

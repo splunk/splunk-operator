@@ -19,15 +19,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"io"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -57,6 +57,7 @@ func TestApplyClusterManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -73,6 +74,7 @@ func TestApplyClusterManager(t *testing.T) {
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -97,12 +99,13 @@ func TestApplyClusterManager(t *testing.T) {
 	}
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[4]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[9], funcCalls[5]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "ClusterManager",
+			Kind:       "ClusterManager",
+			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
@@ -114,8 +117,16 @@ func TestApplyClusterManager(t *testing.T) {
 			},
 		},
 	}
+	// Define GroupVersionKind
+	gvk := schema.GroupVersionKind{
+		Group:   "enterprise.splunk.com",
+		Version: "v4",
+		Kind:    "ClusterManager",
+	}
+	current.SetGroupVersionKind(gvk)
 	revised := current.DeepCopy()
 	revised.Spec.Image = "splunk/test"
+	revised.SetGroupVersionKind(gvk)
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager))
 		return err
@@ -493,6 +504,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -515,6 +527,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-clustermanager-smartstore"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-cluster-manager-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-cluster-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-cluster-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -544,8 +557,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		{ListOpts: listOpts},
 		{ListOpts: listOpts1},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[10], funcCalls[12]}, "List": {listmockCall[0], listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[13]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[8]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[11], funcCalls[13]}, "List": {listmockCall[0], listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[14]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -937,8 +950,9 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
 	c.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-cluster-manager-stack1-configmap")
+	c.AddObject(&configmap)
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")

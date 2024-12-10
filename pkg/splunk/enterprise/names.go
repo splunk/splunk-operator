@@ -47,6 +47,9 @@ const (
 	// identifier
 	probeConfigMapTemplateStr = "splunk-%s-probe-configmap"
 
+	// per cr configmap name
+	perCrConfigMapNameStr = "splunk-%s-%s-configmap"
+
 	// livenessScriptName
 	livenessScriptName = "livenessProbe.sh"
 
