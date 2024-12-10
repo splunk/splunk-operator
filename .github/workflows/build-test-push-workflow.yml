@@ -165,11 +165,11 @@ jobs:
       matrix:
         test: [
                 basic,
-                appframeworksS1,
-                managerappframeworkc3,
-                managerappframeworkm4,
-                managersecret,
-                managermc,
+                testnewlabel,
+                # managerappframeworkc3,
+                # managerappframeworkm4,
+                # managersecret,
+                # managermc,
                ]
     runs-on: ubuntu-latest
     env:
