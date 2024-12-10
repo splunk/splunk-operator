@@ -9,7 +9,7 @@ jobs:
       matrix:
         test:
           [
-            testnewlabelforteardown,
+            testnewlabel,
             managerappframeworkc3,
             managerappframeworkm4,
             managersecret,
