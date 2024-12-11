@@ -165,7 +165,7 @@ jobs:
       matrix:
         test: [
                 basic,
-                testnewlabel,
+                appframeworksS1,
                 # managerappframeworkc3,
                 # managerappframeworkm4,
                 # managersecret,
