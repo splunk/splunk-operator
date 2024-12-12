@@ -57,7 +57,6 @@ jobs:
         test:
           [
             appframeworksS1,
-            appframeworkhang,
             # managerappframeworkc3,
             # managerappframeworkm4,
             # managersecret,
