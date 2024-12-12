@@ -1090,7 +1090,7 @@ var _ = Describe("s1appfw test", func() {
 	})
 
 	Context("Standalone deployment (S1) with App Framework", func() {
-		It("integration, s1, appframeworkhang, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
+		It("integration, s1, appframeworksS1, appframework: can deploy Several standalone CRs in the same namespace with App Framework enabled", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
