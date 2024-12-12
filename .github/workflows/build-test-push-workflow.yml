@@ -166,10 +166,10 @@ jobs:
         test: [
                 basic,
                 appframeworksS1,
-                # managerappframeworkc3,
-                # managerappframeworkm4,
-                # managersecret,
-                # managermc,
+                managerappframeworkc3,
+                managerappframeworkm4,
+                managersecret,
+                managermc,
                ]
     runs-on: ubuntu-latest
     env:
