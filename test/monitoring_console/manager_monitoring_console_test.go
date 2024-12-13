@@ -755,16 +755,12 @@ var _ = Describe("Monitoring Console test", func() {
 			Expect(err).To(Succeed(), "Failed to get update Monitoring Console in Search Head Cluster CRD")
 
 			// Ensure Search Head Cluster go to Ready Phase
-			//testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC is Ready and stays in ready state
 			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
 			// ############################  VERIFICATION FOR MONITORING CONSOLE TWO POST SHC RECONFIG ###############################
-
-			// Adding a sleep so that SHC can come up correctly
-			testcaseEnvInst.Log.Info("Sleeping to allow SHC and MC to become ready")
-			time.Sleep(900 * time.Second)
 
 			// Check Cluster Manager in Monitoring Console Two Config Map
 			testcaseEnvInst.Log.Info("Verify Cluster Manager on Monitoring Console Two Config Map after SHC Reconfig")
