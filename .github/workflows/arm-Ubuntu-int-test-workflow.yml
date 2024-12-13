@@ -2,7 +2,8 @@ name: Arm Ubuntu Integration Test WorkFlow Ubuntu
 on:
   push:
     branches:
-      - CSPL_2920_xxx
+      - develop
+      - main
 jobs:
   build-operator-image-arm-ubuntu:
     runs-on: ubuntu-latest
@@ -53,12 +54,13 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1,
+            appframeworksS1,
             managerappframeworkc3,
             managerappframeworkm4,
             managersecret,
             managersmartstore,
-            managermc,
+            managermc1,
+            managermc2,
             managercrcrud,
             licensemanager,
             managerdeletecr,

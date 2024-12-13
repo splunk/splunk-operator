@@ -1,8 +1,5 @@
-name: Smoke Test Workflow
-on:
-  push:
-    branches:
-      - CSPL_2920_xxx
+name: Build and Test
+on: push
 jobs:
   check-formating:
     runs-on: ubuntu-latest
