@@ -92,7 +92,7 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 // StandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
 func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deploymentName, standalone)
+		err := deployment.GetInstance(ctx, standalone.Name, standalone)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
@@ -104,7 +104,7 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), standalone)
+		_ = deployment.GetInstance(ctx, standalone.Name, standalone)
 		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "standalone")
 		return standalone.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -144,7 +144,6 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 		testenvInstance.Log.Info("Waiting for Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 
-		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -152,6 +151,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), shc)
 		testenvInstance.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
 		return shc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
