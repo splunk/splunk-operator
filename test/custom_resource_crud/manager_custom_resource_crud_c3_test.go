@@ -159,7 +159,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Search Head Cluster", func() {
-		It("managercrcrud, smoke, c3: can deploy Search Head Cluster with Deployer resource spec configured", func() {
+		It("managercrcrud, integration, c3: can deploy Search Head Cluster with Deployer resource spec configured", func() {
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			_, err := deployment.DeploySearchHeadCluster(ctx, shcName, "", "", "", "")
 			if err != nil {
