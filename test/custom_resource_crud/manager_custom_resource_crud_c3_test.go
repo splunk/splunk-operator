@@ -158,6 +158,67 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		})
 	})
 
+	Context("Search Head Cluster", func() {
+		It("managercrcrud, smoke, c3: can deploy Search Head Cluster with Deployer resource spec configured", func() {
+			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
+			_, err := deployment.DeploySearchHeadCluster(ctx, shcName, "", "", "", "")
+			if err != nil {
+				Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster", "Shc", shcName)
+			}
+
+			// Verify CPU limits on Search Heads and deployer before updating CR
+			searchHeadCount := 3
+			for i := 0; i < searchHeadCount; i++ {
+				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), SearchHeadPodName, defaultCPULimits)
+			}
+
+			DeployerPodName := fmt.Sprintf(testenv.DeployerPod, deployment.GetName())
+			testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), DeployerPodName, defaultCPULimits)
+
+			shc := &enterpriseApi.SearchHeadCluster{}
+			err = deployment.GetInstance(ctx, shcName, shc)
+			Expect(err).To(Succeed(), "Unable to fetch Search Head Cluster deployment")
+
+			// Assign new resources for deployer pod only
+			newCPULimits = "4"
+			newCPURequests := "2"
+			newMemoryLimits := "14Gi"
+			newMemoryRequests := "12Gi"
+
+			depResSpec := corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse(newCPURequests),
+					"memory": resource.MustParse(newMemoryRequests),
+				},
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse(newCPULimits),
+					"memory": resource.MustParse(newMemoryLimits),
+				},
+			}
+			shc.Spec.DeployerResourceSpec = depResSpec
+
+			err = deployment.UpdateCR(ctx, shc)
+			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
+
+			// Verify Search Head Cluster is updating
+			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
+
+			// Verify Search Head go to ready state
+			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify CPU limits on Search Heads - Should be same as before
+			searchHeadCount = 3
+			for i := 0; i < searchHeadCount; i++ {
+				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
+				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), SearchHeadPodName, defaultCPULimits)
+			}
+
+			// Verify modified deployer spec
+			testenv.VerifyResourceConstraints(deployment, testcaseEnvInst.GetName(), DeployerPodName, depResSpec)
+		})
+	})
+
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
 		It("managercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
 
