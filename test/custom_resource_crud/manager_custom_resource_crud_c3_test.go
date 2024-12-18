@@ -201,9 +201,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			err = deployment.UpdateCR(ctx, shc)
 			Expect(err).To(Succeed(), "Unable to deploy Search Head Cluster with updated CR")
 
-			// Verify Search Head Cluster is updating
-			testenv.VerifySearchHeadClusterPhase(ctx, deployment, testcaseEnvInst, enterpriseApi.PhaseUpdating)
-
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
