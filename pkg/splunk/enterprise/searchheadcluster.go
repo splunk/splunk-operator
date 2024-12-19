@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -653,7 +654,12 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 
 // CSPL-3652 Configure deployer resources if configured
 // Use default otherwise
-func setDeployerResources(cr *enterpriseApi.SearchHeadCluster, podTemplate *corev1.PodTemplateSpec) {
+// Make sure to set the resources ONLY for the deployer
+func setDeployerResources(cr *enterpriseApi.SearchHeadCluster, podTemplate *corev1.PodTemplateSpec) error {
+	// Break out if this is not a deployer
+	if !strings.Contains("deployer", podTemplate.Labels["app.kubernetes.io/name"]) {
+		return errors.New("not a deployer, skipping setting resources")
+	}
 	depRes := cr.Spec.DeployerResourceSpec
 	for i := range podTemplate.Spec.Containers {
 		if len(depRes.Requests) != 0 {
@@ -664,6 +670,8 @@ func setDeployerResources(cr *enterpriseApi.SearchHeadCluster, podTemplate *core
 			podTemplate.Spec.Containers[i].Resources.Limits = cr.Spec.DeployerResourceSpec.Limits
 		}
 	}
+
+	return nil
 }
 
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
@@ -674,7 +682,10 @@ func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// CSPL-3562 - Set deployer resources if configured
-	setDeployerResources(cr, &ss.Spec.Template)
+	err = setDeployerResources(cr, &ss.Spec.Template)
+	if err != nil {
+		return ss, err
+	}
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
