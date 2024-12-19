@@ -58,6 +58,7 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
     fi
   fi
 
+
   # Output
   echo "Docker images"
   docker images
