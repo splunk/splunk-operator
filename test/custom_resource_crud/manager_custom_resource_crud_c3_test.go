@@ -159,7 +159,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 	})
 
 	Context("Search Head Cluster", func() {
-		It("managercrcrud, integration, c3: can deploy Search Head Cluster with Deployer resource spec configured", func() {
+		// CSPL-3256 - Adding the SHC only test case under c3 as IDXC is irrelevant for this test case
+		It("managercrcrud, integration, shc: can deploy Search Head Cluster with Deployer resource spec configured", func() {
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			_, err := deployment.DeploySearchHeadCluster(ctx, shcName, "", "", "", "")
 			if err != nil {
