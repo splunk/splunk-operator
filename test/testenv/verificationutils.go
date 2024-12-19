@@ -25,6 +25,7 @@ import (
 	"time"
 
 	gomega "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -41,6 +42,10 @@ type PodDetailsStruct struct {
 					CPU    string `json:"cpu"`
 					Memory string `json:"memory"`
 				} `json:"limits"`
+				Requests struct {
+					CPU    string `json:"cpu"`
+					Memory string `json:"memory"`
+				} `json:"requests"`
 			} `json:"resources"`
 		}
 		ServiceAccount     string `json:"serviceAccount"`
@@ -635,6 +640,48 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 			if strings.Contains(restResponse.Spec.Containers[0].Resources.Limits.CPU, expectedCPULimits) {
 				result = true
 				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", expectedCPULimits)
+			}
+		}
+		return result
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyResourceConstraints verifies value of CPU limits is as expected
+func VerifyResourceConstraints(deployment *Deployment, ns string, podName string, res corev1.ResourceRequirements) {
+	gomega.Eventually(func() bool {
+		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return false
+		}
+		restResponse := PodDetailsStruct{}
+		err = json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse JSON")
+			return false
+		}
+		result := false
+
+		for i := 0; i < len(restResponse.Spec.Containers); i++ {
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", res.Limits.Cpu().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
+				result = true
+				logf.Log.Info("Verifying Memory limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Limits.Memory, "EXPECTED", res.Limits.Memory().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.CPU, "EXPECTED", res.Requests.Cpu().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.Memory, "EXPECTED", res.Requests.Memory().String())
 			}
 		}
 		return result

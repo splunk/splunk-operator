@@ -44,6 +44,9 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// Splunk Deployer resource spec
+	DeployerResourceSpec corev1.ResourceRequirements `json:"deployerResourceSpec,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
