@@ -144,7 +144,7 @@ splunkOperator:
 
   # Set storageClassName for the PersistentVolumeClaim
   persistentVolumeClaim:
-    storageClassName: "default"
+    storageClassName: ""
 
   # Specify volumes for Splunk Operator pod, append additional volumes to list
   # reference: https://kubernetes.io/docs/concepts/storage/volumes/
