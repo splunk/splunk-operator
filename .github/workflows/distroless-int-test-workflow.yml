@@ -1,4 +1,4 @@
-name: Arm Ubuntu Integration Test WorkFlow Ubuntu
+name: distroless image integration test workflow
 on:
   push:
     branches:
