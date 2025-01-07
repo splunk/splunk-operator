@@ -101,7 +101,80 @@ As part of enhancing security and reducing the attack surface of the Splunk Oper
 
 ### Debugging with Distroless Images
 
-Since distroless images do not contain a shell, debugging may require additional steps. One approach is to use a **sidecar container** that includes a shell and necessary utilities to inspect mapped volumes and files. This will be documented in future releases.
+Since distroless images do not contain a shell, debugging may require additional steps. One approach is to use a **sidecar container** that includes a shell and necessary utilities to inspect mapped volumes and files.
+
+---
+
+#### **Steps to Debug a Distroless Image Using a Sidecar**
+
+1. **Modify the Splunk Operator Deployment**:
+   - Add a sidecar container to the `splunk-operator-controller-manager` deployment. The sidecar container will have a shell and basic debugging tools.
+
+   Example deployment snippet with a sidecar:
+
+   ```yaml
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: splunk-operator-controller-manager
+     namespace: splunk-operator
+   spec:
+     replicas: 1
+     selector:
+       matchLabels:
+         control-plane: controller-manager
+     template:
+       metadata:
+         labels:
+           control-plane: controller-manager
+       spec:
+         containers:
+           - name: manager
+             image: splunk/splunk-operator:2.7.0-distroless
+             env:
+               - name: WATCH_NAMESPACE
+                 value: ""
+               - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+                 value: splunk/splunk:9.4.0
+           - name: debug-sidecar
+             image: ubuntu:20.04  # Use any lightweight image with a shell
+             command: ["/bin/bash", "-c", "tail -f /dev/null"]
+             volumeMounts:
+               - name: app-staging
+                 mountPath: /opt/splunk/appframework/
+         volumes:
+           - name: app-staging
+             persistentVolumeClaim:
+              claimName: splunk-operator-app-download
+   ```
+
+2. **Access the Sidecar Container**:
+   - Once the sidecar is running, you can `exec` into it and inspect the shared volumes or files.
+   
+   Example command to access the sidecar container:
+   ```bash
+   kubectl exec -it <splunk-operator-pod-name> -c debug-sidecar -- /bin/bash
+   ```
+
+3. **Inspect Shared Files**:
+   - Navigate to the mounted volume (`/opt/splunk/appframework/` in the example above) to inspect files shared with the distroless container.
+   
+   Example commands:
+   ```bash
+   cd /opt/splunk/appframework/
+   ls -l
+   ```
+
+4. **Check Logs**:
+   - You can also check logs directly by accessing the appropriate log files (if mapped) or using `kubectl logs`.
+   
+   Example command:
+   ```bash
+   kubectl logs <splunk-operator-pod-name> -c manager
+   ```
+
+5. **Cleanup**:
+   - After debugging, remove the sidecar container by editing the deployment and deleting the sidecar configuration, or simply redeploy the Splunk Operator without the sidecar.
 
 ---
 
