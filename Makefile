@@ -154,15 +154,25 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi
 BASE_IMAGE_VERSION ?= 8.10
+
 docker-buildx:
 	@if [ -z "$(IMG)" ]; then \
 		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
 		exit 1; \
-	fi
-	docker buildx build --push --platform="${PLATFORMS}" \
-		--build-arg BASE_IMAGE="${BASE_IMAGE}" \
-		--build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-		--tag "${IMG}" -f Dockerfile .
+	fi; \
+	if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
+		DOCKERFILE="Dockerfile.distroless"; \
+		BUILD_TAG="$(IMG)-distroless"; \
+	else \
+		DOCKERFILE="Dockerfile"; \
+		BUILD_TAG="$(IMG)"; \
+	fi; \
+	docker buildx build --push --platform="$(PLATFORMS)" \
+		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
+		--build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
+		--tag "$$BUILD_TAG" -f "$$DOCKERFILE" .
+
+
 
 ##@ Deployment
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
