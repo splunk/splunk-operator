@@ -1,4 +1,4 @@
-name: distroless image integration test workflow
+name: Distroless image integration test workflow
 on:
   push:
     branches:
