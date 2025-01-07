@@ -78,6 +78,32 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
               fieldPath: metadata.name
 ...
 ```
+## Distroless Image Support
+
+As part of enhancing security and reducing the attack surface of the Splunk Operator container, a **distroless image** is now supported. The distroless image contains only the essential components required to run the Splunk Operator, without a shell or package manager, resulting in a smaller and more secure image.
+
+### How to Use the Distroless Image
+
+1. **Image Tag**:
+   - The distroless image can be identified by the `-distroless` suffix in its tag.
+   - Example: `splunk/splunk-operator:2.7.0-distroless`
+
+2. **Modifying the Deployment**:
+   - To use the distroless image, update the `manager` container image in the `splunk-operator-controller-manager` deployment as follows:
+
+   ```yaml
+   # Replace this with the distroless image name
+   image: splunk/splunk-operator:2.7.0-distroless
+   ```
+
+3. **Private Registry**:
+   - If using a private registry, ensure that the distroless image is retagged and pushed appropriately, and update the deployment image reference.
+
+### Debugging with Distroless Images
+
+Since distroless images do not contain a shell, debugging may require additional steps. One approach is to use a **sidecar container** that includes a shell and necessary utilities to inspect mapped volumes and files. This will be documented in future releases.
+
+---
 
 ## Cluster Domain
 
@@ -88,3 +114,6 @@ environment variable to the operator's deployment spec:
 - name: CLUSTER_DOMAIN
   value: "mydomain.com"
 ```
+
+
+
