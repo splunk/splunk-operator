@@ -191,9 +191,9 @@ To configure HashiCorp Vault for your Splunk deployment, update your Splunk CR t
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
-kind: SplunkEnterprise
+kind: ClusterManager
 metadata:
-  name: my-splunk
+  name: cm
 spec:
   vaultIntegration:
     enable: true                     # Enable Vault support
