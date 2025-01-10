@@ -1466,27 +1466,39 @@ func isAppRepoPollingEnabled(appStatusContext *enterpriseApi.AppDeploymentContex
 
 // shouldCheckAppRepoStatus
 func shouldCheckAppRepoStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("shouldCheckAppRepoStatus")
 	// If polling is disabled, check if manual update is on.
 	if !isAppRepoPollingEnabled(appStatusContext) {
 		configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
 
 		// Check if we need to manually check for app updates for this CR kind
+		scopedLog.Info("checking if namespace specific configmap contains manualUpdate settings")
 		if getManualUpdateStatus(ctx, client, cr, configMapName) == "on" {
+			scopedLog.Info("namespace specific configmap contains manualUpdate is set to on", "configMapName", configMapName)
 			// There can be more than 1 CRs of this kind. We should only
 			// turn off the status once all the CRs have finished the reconciles
 			if getManualUpdateRefCount(ctx, client, cr, configMapName) == 1 {
 				*turnOffManualChecking = true
 			}
 			return true
-		} else {
-			configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
-			if getManualUpdateStatus(ctx, client, cr, configMapName) == "on" {
-				*turnOffManualChecking = true
-				return true
-			}
 		}
 	} else {
 		return HasAppRepoCheckTimerExpired(ctx, appStatusContext)
+	}
+	return false
+}
+
+func IsManualUpdateSetInCRConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking *bool) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("shouldCheckAppRepoStatusPerCR")
+
+	configMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
+	scopedLog.Info("checking if per CR specific configmap contains manualUpdate settings")
+	if getManualUpdatePerCrStatus(ctx, client, cr, configMapName) == "on" {
+		scopedLog.Info("CR specific configmap contains manualUpdate is set to on", "configMapName", configMapName)
+		//*turnOffManualChecking = true
+		return true
 	}
 	return false
 }
@@ -1568,6 +1580,15 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 		}
 	}
 
+	return nil
+}
+
+func updateCrSpecificManualAppUpdateConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, appStatusContext *enterpriseApi.AppDeploymentContext, kind string, turnOffManualChecking bool) error {
+
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateManualAppUpdateConfigMap").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+	configMapName := GetSplunkManualAppUpdateConfigMapName(cr.GetNamespace())
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	// now check namespace specific configmap if it contains manualUpdate settings
 	crScopedConfigMapName := fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())
 	crNamespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: crScopedConfigMapName}
@@ -1576,7 +1597,7 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 		scopedLog.Error(err, "Unable to get configMap", "name", namespacedName.Name)
 		return err
 	}
-	if turnOffManualChecking {
+	if configMap.Data["manualUpdate"] == "on" {
 		scopedLog.Info("Turning off manual checking of apps update in per CR configmap", "Kind", kind)
 		configMap.Data["manualUpdate"] = "off"
 	}
@@ -1586,8 +1607,7 @@ func updateManualAppUpdateConfigMapLocked(ctx context.Context, client splcommon.
 		scopedLog.Error(err, "Could not update the per CR configMap", "name", crNamespacedName.Name)
 		return err
 	}
-
-	return nil
+	return err
 }
 
 // initAndCheckAppInfoStatus initializes the RemoteDataClients and checks the status of apps on remote storage.
@@ -1611,7 +1631,9 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 	kind := cr.GetObjectKind().GroupVersionKind().Kind
 
 	//check if the apps need to be downloaded from remote storage
-	if shouldCheckAppRepoStatus(ctx, client, cr, appStatusContext, kind, &turnOffManualChecking) || !reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
+	if shouldCheckAppRepoStatus(ctx, client, cr, appStatusContext, kind, &turnOffManualChecking) ||
+		IsManualUpdateSetInCRConfig(ctx, client, cr, appStatusContext, kind, &turnOffManualChecking) ||
+		!reflect.DeepEqual(appStatusContext.AppFrameworkConfig, *appFrameworkConf) {
 
 		if appStatusContext.IsDeploymentInProgress {
 			scopedLog.Info("App installation is already in progress. Not checking for any latest app repo changes")
@@ -1663,6 +1685,11 @@ func initAndCheckAppInfoStatus(ctx context.Context, client splcommon.ControllerC
 			err = updateManualAppUpdateConfigMapLocked(ctx, client, cr, appStatusContext, kind, turnOffManualChecking)
 			if err != nil {
 				scopedLog.Error(err, "failed to update the manual app udpate configMap")
+				return err
+			}
+			err = updateCrSpecificManualAppUpdateConfigMap(ctx, client, cr, appStatusContext, kind, turnOffManualChecking)
+			if err != nil {
+				scopedLog.Error(err, "failed to update the manual app udpate CR specific configMap")
 				return err
 			}
 		}

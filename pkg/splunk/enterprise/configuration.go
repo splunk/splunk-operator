@@ -1262,20 +1262,42 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
 		result = extractFieldFromConfigMapData(statusRegex, data)
 		if result == "on" {
+			scopedLog.Info("Namespace configMap value is set to", "name", configMapName, "data", result)
 			return result
 		}
 	} else {
 		scopedLog.Error(err, "Unable to get namespace specific configMap", "name", configMapName)
 	}
 
-	namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
+	/*
+		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
+		CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+		if err == nil {
+			scopedLog.Info("Custom configMap value is set to", "name", configMapName, "data", CrconfigMap.Data)
+			data := CrconfigMap.Data["manualUpdate"]
+			return data
+		} else {
+			scopedLog.Error(err, "Unable to get custom specific configMap", "name", configMapName)
+		}
+	*/
+	return "off"
+}
+
+// getManualUpdatePerCrStatus extracts the status field from the configMap data
+func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getManualUpdatePerCrStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
 	CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
+		scopedLog.Info("Custom configMap value is set to", "name", configMapName, "data", CrconfigMap.Data)
 		data := CrconfigMap.Data["manualUpdate"]
 		return data
 	} else {
 		scopedLog.Error(err, "Unable to get custom specific configMap", "name", configMapName)
 	}
+
 	return "off"
 }
 
