@@ -822,7 +822,7 @@ func getAppTopFolderFromPackage(rctx context.Context, cr splcommon.MetaObject, a
 		// The onus falls on the user to make sure the app packages are tarred appropriately
 		// to avoid the re-installation cycles as it is prudent to continue
 		// to the install step for harmless warnings
-		scopedLog.Info("Error in tar contents list, app can still be installed", "stdOut", stdOut, "stdErr", stdErr, "command", command, "appPkgPathOnPod", appPkgPathOnPod)
+		scopedLog.Info("Error in tar contents list, but app installation will continue", "stdOut", stdOut, "stdErr", stdErr, "command", command, "appPkgPathOnPod", appPkgPathOnPod)
 		if stdOut == "" {
 			return "Empty app package name, could not get installed app name", err
 		}
