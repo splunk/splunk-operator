@@ -143,25 +143,28 @@ docker-build: test ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
-# PLATFORMS defines the target platforms for  the manager image be build to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
-# - able to use docker buildx . More info: https://docs.docker.com/build/buildx/
-# - have enable BuildKit, More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image for your registry (i.e. if you do not inform a valid value via IMG=<myregistry/image:<tag>> than the export will fail)
-# To properly provided solutions that supports more than one platform you should use this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
-.PHONY: docker-buildx
-docker-buildx: test ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- docker buildx create --name project-v3-builder
-	docker buildx use project-v3-builder
-	- docker buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross
-	- docker buildx rm project-v3-builder
-	rm Dockerfile.cross
+# Docker-buildx is used to build the image for multiple OS/platforms
+# IMG is a mandatory argument to specify the image name
+# Defaults:
+#   Build Platform: linux/amd64
+#   Build Base OS: registry.access.redhat.com/ubi8/ubi
+#   Build Base OS Version: 8.10
+# Pass only what is required, the rest will be defaulted
+# Setup defaults for build arguments
+PLATFORMS ?= linux/amd64
+BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi
+BASE_IMAGE_VERSION ?= 8.10
+docker-buildx:
+	@if [ -z "$(IMG)" ]; then \
+		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+		exit 1; \
+	fi
+	docker buildx build --push --platform="${PLATFORMS}" \
+		--build-arg BASE_IMAGE="${BASE_IMAGE}" \
+		--build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+		--tag "${IMG}" -f Dockerfile .
 
 ##@ Deployment
-
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side --force-conflicts -f -
 

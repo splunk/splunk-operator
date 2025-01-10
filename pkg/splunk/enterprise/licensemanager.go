@@ -22,8 +22,8 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,6 +46,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyLicenseManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "LicenseManager"
 
 	var err error
@@ -138,7 +139,6 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if err != nil {
 		return result, err
 	}
-
 
 	if cr.Spec.VaultIntegration.Enable {
 		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.

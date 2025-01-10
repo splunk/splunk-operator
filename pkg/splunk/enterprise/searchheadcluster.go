@@ -49,6 +49,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
 	var err error
@@ -166,9 +168,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	if cr.Spec.VaultIntegration.Enable {
@@ -268,22 +273,22 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 // searchHeadClusterPodManager is used to manage the pods within a search head cluster
 type searchHeadClusterPodManager struct {
-	c               splcommon.ControllerClient
-	log             logr.Logger
-	cr              *enterpriseApi.SearchHeadCluster
-	secrets         *corev1.Secret
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+	c                splcommon.ControllerClient
+	log              logr.Logger
+	cr               *enterpriseApi.SearchHeadCluster
+	secrets          *corev1.Secret
+	newSplunkClient  func(managementURI, username, password string) *splclient.SplunkClient
 	vaultIntegration *enterpriseApi.VaultIntegration
 }
 
 // newSerachHeadClusterPodManager function to create pod manager this is added to write unit test case
 var newSearchHeadClusterPodManager = func(client splcommon.ControllerClient, log logr.Logger, cr *enterpriseApi.SearchHeadCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) searchHeadClusterPodManager {
 	return searchHeadClusterPodManager{
-		log:             log,
-		cr:              cr,
-		secrets:         secret,
-		newSplunkClient: newSplunkClient,
-		c:               client,
+		log:              log,
+		cr:               cr,
+		secrets:          secret,
+		newSplunkClient:  newSplunkClient,
+		c:                client,
 		vaultIntegration: &cr.Spec.VaultIntegration,
 	}
 }
@@ -471,7 +476,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		err = ApplyShcSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
-		} 
+		}
 		// FIXME here TODO add mgr.secrets somehow from vault to get password so shc rest call can be called
 	}
 
@@ -584,7 +589,7 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")
-		} 
+		}
 	} else {
 		// Retrieve admin password from Pod
 		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
@@ -619,7 +624,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		//c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
@@ -644,6 +648,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
 			} else {
+				mgr.cr.Status.CaptainReady = false
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
 			}
 		}

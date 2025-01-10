@@ -50,6 +50,7 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyMonitoringConsole")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "MonitoringConsole"
 
 	if cr.Status.ResourceRevMap == nil {
@@ -141,10 +142,13 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	// check if the Monitoring Console is ready for version upgrade, if required
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the Monitoring Console is ready for version upgrade, if required
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	if cr.Spec.VaultIntegration.Enable {

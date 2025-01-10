@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -972,14 +973,14 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	// Invalid remote volume type should return error.
 	AppFramework.VolList[0].Type = "s4"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
-	if err == nil || !strings.Contains(err.Error(), "storageType 's4' is invalid. Valid values are 's3' and 'blob'") {
+	if err == nil || !strings.Contains(err.Error(), "storageType 's4' is invalid. Valid values are 's3', 'gcs' and 'blob'") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid remote volume type should have returned error.")
 	}
 
 	AppFramework.VolList[0].Type = "s3"
 	AppFramework.VolList[0].Provider = "invalid-provider"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
-	if err == nil || !strings.Contains(err.Error(), "provider 'invalid-provider' is invalid. Valid values are 'aws', 'minio' and 'azure'") {
+	if err == nil || !strings.Contains(err.Error(), "provider 'invalid-provider' is invalid. Valid values are 'aws', 'minio', 'gcp' and 'azure'") {
 		t.Errorf("ValidateAppFrameworkSpec with invalid provider should have returned error.")
 	}
 
@@ -987,7 +988,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.VolList[0].Type = "s3"
 	AppFramework.VolList[0].Provider = "azure"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
-	if err == nil || !strings.Contains(err.Error(), "storageType 's3' cannot be used with provider 'azure'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
+	if err == nil || !strings.Contains(err.Error(), "storageType 's3' cannot be used with provider 'azure'. Valid combinations are (s3,aws), (s3,minio), (gcs,gcp) and (blob,azure)") {
 		t.Errorf("ValidateAppFrameworkSpec with s3 and azure combination should have returned error.")
 	}
 
@@ -1015,11 +1016,18 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 		t.Errorf("ValidateAppFrameworkSpec with s3 and minio combination should not have returned error.")
 	}
 
+	// Validate gcs and gcp are right combination
+	AppFramework.VolList[0].Type = "gcs"
+	AppFramework.VolList[0].Provider = "gcp"
+	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
+	if err != nil {
+		t.Errorf("ValidateAppFrameworkSpec with gcs and gcp combination should not have returned error.")
+	}
 	// Validate blob and aws are not right combination
 	AppFramework.VolList[0].Type = "blob"
 	AppFramework.VolList[0].Provider = "aws"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
-	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'aws'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
+	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'aws'. Valid combinations are (s3,aws), (s3,minio), (gcs,gcp) and (blob,azure)") {
 		t.Errorf("ValidateAppFrameworkSpec with blob and aws combination should have returned error.")
 	}
 
@@ -1027,7 +1035,7 @@ func TestValidateAppFrameworkSpec(t *testing.T) {
 	AppFramework.VolList[0].Type = "blob"
 	AppFramework.VolList[0].Provider = "minio"
 	err = ValidateAppFrameworkSpec(ctx, &AppFramework, &appFrameworkContext, false, "")
-	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'minio'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)") {
+	if err == nil || !strings.Contains(err.Error(), "storageType 'blob' cannot be used with provider 'minio'. Valid combinations are (s3,aws), (s3,minio), (gcs,gcp) and (blob,azure)") {
 		t.Errorf("ValidateAppFrameworkSpec with blob and minio combination should have returned error.")
 	}
 
@@ -1769,7 +1777,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "",
 			SecretPath: "",
 		}
-		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.NoError(t, err)
 		assert.Nil(t, statefulset.ObjectMeta.Annotations)
 	})
@@ -1780,7 +1788,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "",
 			SecretPath: "secret/data/splunk",
 		}
-		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.Error(t, err)
 		assert.EqualError(t, err, "vault role is required when vault is enabled")
 	})
@@ -1791,7 +1799,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "splunk-role",
 			SecretPath: "",
 		}
-		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.Error(t, err)
 		assert.EqualError(t, err, "vault secretPath is required when vault is enabled")
 	})
@@ -1802,7 +1810,7 @@ func TestInjectVaultSecret(t *testing.T) {
 			Role:       "splunk-role",
 			SecretPath: "secret/data/splunk",
 		}
-		err := InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
 		assert.NoError(t, err)
 
 		expectedAnnotations := map[string]string{

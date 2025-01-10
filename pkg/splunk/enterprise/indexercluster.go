@@ -56,6 +56,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIndexerClusterManager").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "IndexerCluster"
 
 	var err error
@@ -211,11 +212,14 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 
-	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the IndexerCluster is ready for version upgrade
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	// check if version upgrade is set
@@ -472,11 +476,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 	}
 
-	// check if the IndexerCluster is ready for version upgrade
 	cr.Kind = "IndexerCluster"
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the IndexerCluster is ready for version upgrade
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, &mgr)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	// check if version upgrade is set
@@ -578,21 +585,21 @@ var VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, clie
 
 // indexerClusterPodManager is used to manage the pods within an indexer cluster
 type indexerClusterPodManager struct {
-	c               splcommon.ControllerClient
-	log             logr.Logger
-	cr              *enterpriseApi.IndexerCluster
-	secrets         *corev1.Secret
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+	c                splcommon.ControllerClient
+	log              logr.Logger
+	cr               *enterpriseApi.IndexerCluster
+	secrets          *corev1.Secret
+	newSplunkClient  func(managementURI, username, password string) *splclient.SplunkClient
 	vaultIntegration *enterpriseApi.VaultIntegration
 }
 
 // newIndexerClusterPodManager function to create pod manager this is added to write unit test case
 var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
 	return indexerClusterPodManager{
-		log:             log,
-		cr:              cr,
-		secrets:         secret,
-		newSplunkClient: newSplunkClient,
+		log:              log,
+		cr:               cr,
+		secrets:          secret,
+		newSplunkClient:  newSplunkClient,
 		vaultIntegration: &cr.Spec.VaultIntegration,
 	}
 }
@@ -612,7 +619,7 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, c, &cr.Spec.VaultIntegration, "password")
 		if err != nil {
 			return err
-		} 
+		}
 	} else {
 		// Retrieve admin password from Pod
 		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, c, cmPodName, cr.GetNamespace(), "password")
@@ -659,8 +666,8 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR
-		scopedLog.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
 		mgr.cr.Status.NamespaceSecretResourceVersion = namespaceSecret.ObjectMeta.ResourceVersion
+		scopedLog.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
 		return nil
 	} else if mgr.cr.Status.NamespaceSecretResourceVersion == namespaceSecret.ObjectMeta.ResourceVersion {
 		// If resource version hasn't changed don't return
@@ -808,6 +815,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		}
 	} else {
 		mgr.log.Info("Cluster Manager is not ready yet", "reason ", err)
+		return enterpriseApi.PhaseError, err
 	}
 
 	// Get the podExecClient with empty targetPodName.
@@ -925,12 +933,12 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 
 	var adminPwd string
 	var err error
-	if (mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) {
+	if mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
-		} 
-	} else {	
+		}
+	} else {
 		// Retrieve admin password from Pod
 		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
 		if err != nil {
@@ -964,11 +972,11 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 
 	var adminPwd string
 	var err error
-	if (mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) {
+	if mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
-		} 
+		}
 	} else {
 		// Retrieve admin password for Pod
 		podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
@@ -1083,23 +1091,21 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	return nil
 }
 
-
 // ApplyIdxcVaultSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
 func ApplyIdxcVaultSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
-	var adminPwd string 
-	var version string 
+	var adminPwd string
+	var version string
 	var err error
 
 	adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 	if err != nil {
 		mgr.log.Error(err, "Couldn't retrieve the admin password from vault")
-	} 
+	}
 	version, err = splclient.GetSpecificSecretTokenVersionFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 	if err != nil {
 		mgr.log.Error(err, "Couldn't retrieve the admin password from vault")
-	} 
+	}
 
-	
 	// If namespace scoped secret revision is the same ignore
 	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
 		// First time, set resource version in CR

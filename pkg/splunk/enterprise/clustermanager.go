@@ -50,7 +50,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "ClusterManager"
+
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -185,10 +187,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
-	// check if the ClusterManager is ready for version upgrade, if required
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		// check if the ClusterManager is ready for version upgrade, if required
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	if cr.Spec.VaultIntegration.Enable {
@@ -357,7 +362,6 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 	// Reconciler can be called for multiple reasons. If we are waiting on configMap update to happen,
 	// do not increment the Retry Count unless the last check was 5 seconds ago.
 	// This helps, to wait for the required time
-	//eventPublisher, _ := newK8EventPublisher(c, cr)
 
 	currentEpoch := time.Now().Unix()
 	if cr.Status.BundlePushTracker.LastCheckInterval+5 > currentEpoch {
@@ -392,7 +396,6 @@ func PerformCmBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *
 		cr.Status.BundlePushTracker.NeedToPushManagerApps = false
 	}
 
-	//eventPublisher.Warning(ctx, "BundlePush", fmt.Sprintf("Bundle push failed %s", err.Error()))
 	return err
 }
 

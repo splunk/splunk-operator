@@ -36,7 +36,6 @@ import (
 	"os"
 	"strconv"
 
-
 	"github.com/go-resty/resty/v2"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -66,24 +65,26 @@ type Metadata struct {
 }
 
 type Data struct {
-	Data SecretData `json:"data,omitempty"`
-	Metadata      Metadata `json:"metadata,omitempty"`
+	Data     SecretData `json:"data,omitempty"`
+	Metadata Metadata   `json:"metadata,omitempty"`
 }
+
 // VaultResponse represents the structure of a response from a Vault request.
 // It includes details such as the request ID, lease ID, lease duration, and
 // whether the lease is renewable. It also contains nested Data and Metadata
 // structures that hold additional information returned by the Vault.
 type VaultResponse struct {
-	RequestId     string   `json:"request_id,omitempty"`
-	LeaseId       string   `json:"lease_id,omitempty"`
-	Renewable     bool     `json:"renewable,omitempty"`
-	LeaseDuration int      `json:"lease_duration,omitempty"`
-	Data          Data     `json:"data,omitempty"`
+	RequestId     string `json:"request_id,omitempty"`
+	LeaseId       string `json:"lease_id,omitempty"`
+	Renewable     bool   `json:"renewable,omitempty"`
+	LeaseDuration int    `json:"lease_duration,omitempty"`
+	Data          Data   `json:"data,omitempty"`
 }
 
 type VaultError struct {
 	Errors []string `json:"errors,omitempty"`
 }
+
 
 func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, vaultSpec *enterpriseApi.VaultIntegration) error {
 	logger.Info("InjectVaultSecret called", "vaultSpec", vaultSpec)
@@ -201,7 +202,7 @@ func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, s
 //  2. Authenticates with Vault using the Kubernetes auth method.
 //  3. Iterates over specified keys to check if any secret version has changed in Vault.
 //  4. Updates the StatefulSet annotations to trigger a rolling restart if any secret version has changed.
-func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, vaultIntegration *enterpriseApi.VaultIntegration) (error) {
+func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, vaultIntegration *enterpriseApi.VaultIntegration) error {
 
 	logger.Info("CheckAndRestartStatefulSet called", "statefulSet", statefulSet.Name, "vaultIntegration", vaultIntegration)
 
@@ -282,7 +283,6 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 	return nil
 }
 
-
 // GetSpecificSecretTokenFromVault retrieves a specific secret token's value from a Pod
 func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.ControllerClient, vaultIntegration *enterpriseApi.VaultIntegration, secretToken string) (string, error) {
 	logger.Info("CheckAndRestartStatefulSet called")
@@ -350,7 +350,6 @@ func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.Controller
 
 	return password, nil
 }
-
 
 // GetSpecificSecretTokenVersionFromVault retrieves a specific secret token's value from a Pod
 func GetSpecificSecretTokenVersionFromVault(ctx context.Context, c splcommon.ControllerClient, vaultIntegration *enterpriseApi.VaultIntegration, secretToken string) (string, error) {
