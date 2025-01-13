@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - CSPL-3064
 jobs:
   check-formating:
     runs-on: ubuntu-latest
