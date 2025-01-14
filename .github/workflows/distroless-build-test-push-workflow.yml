@@ -55,13 +55,12 @@ jobs:
     needs: unit-tests
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator-distroless
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
       - name: Set up cosign
         uses: sigstore/cosign-installer@main
-
       - uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
@@ -97,7 +96,7 @@ jobs:
           export PLATFORMS=linux/arm64,linux/amd64
           export BASE_IMAGE=ubuntu
           export BASE_IMAGE_VERSION=24.10
-          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
           make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
       - name: Sign Splunk Operator image with a key
         run: |
@@ -250,7 +249,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN}}
       - name: Set Splunk Operator image
         run: |
-          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
+          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless" >> $GITHUB_ENV
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
