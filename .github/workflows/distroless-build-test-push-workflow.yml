@@ -1,4 +1,4 @@
-name: Arm Distroless Smoke Test WorkFlow
+name: Distroless Smoke Test WorkFlow
 on:
   push:
     branches:
@@ -97,11 +97,11 @@ jobs:
           export PLATFORMS=linux/arm64,linux/amd64
           export BASE_IMAGE=ubuntu
           export BASE_IMAGE_VERSION=24.10
-          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}-distroless:$GITHUB_SHA
+          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
       - name: Sign Splunk Operator image with a key
         run: |
-          cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}-distroless:${{ github.sha }}
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
