@@ -1895,7 +1895,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	}
 }
 
-func TestSetDeployerResources(t *testing.T) {
+func TestSetDeployerConfig(t *testing.T) {
 	ctx := context.TODO()
 	client := spltest.NewMockClient()
 	depResSpec := corev1.ResourceRequirements{
@@ -1916,21 +1916,40 @@ func TestSetDeployerResources(t *testing.T) {
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			DeployerResourceSpec: depResSpec,
+			DeployerNodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{},
+				},
+			},
 		},
 	}
+
+	nsTerm := corev1.NodeSelectorTerm{
+		MatchExpressions: []corev1.NodeSelectorRequirement{
+			{
+				Key: "node-role.kubernetes.io/master",
+			},
+		},
+	}
+	shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, nsTerm)
 
 	// Get deployer STS and set resources
 	depSts, err := getSplunkStatefulSet(ctx, client, &shc, &shc.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(&shc, shc.Spec.Replicas))
 	if err != nil {
 		t.Errorf("Failed to get deployer statefulset due to error=%s", err)
 	}
-	setDeployerResources(&shc, &depSts.Spec.Template)
+	setDeployerConfig(ctx, &shc, &depSts.Spec.Template)
 	if !reflect.DeepEqual(depResSpec.Limits, depSts.Spec.Template.Spec.Containers[0].Resources.Limits) {
 		t.Errorf("Failed to set deployer resources properly, limits are off")
 	}
 
 	// Verify deployer resources are set properly
 	if !reflect.DeepEqual(depResSpec.Requests, depSts.Spec.Template.Spec.Containers[0].Resources.Requests) {
+		t.Errorf("Failed to set deployer resources properly, requests are off")
+	}
+
+	// Verify deployer nodeAffinity are set properly
+	if !reflect.DeepEqual(shc.Spec.DeployerNodeAffinity, depSts.Spec.Template.Spec.Affinity.NodeAffinity) {
 		t.Errorf("Failed to set deployer resources properly, requests are off")
 	}
 }

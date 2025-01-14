@@ -47,6 +47,9 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer resource spec
 	DeployerResourceSpec corev1.ResourceRequirements `json:"deployerResourceSpec,omitempty"`
+
+	// Splunk Deployer Node Affinity
+	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
