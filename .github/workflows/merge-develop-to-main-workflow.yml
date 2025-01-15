@@ -95,11 +95,11 @@ jobs:
       # Build and push Distroless image
       - name: Build Distroless Image
         run: |
-          make docker-build IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }}-distroless-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=gcr.io/distroless/static BASE_IMAGE_VERSION=latest
+          make docker-build IMG=splunk/splunk-operator-distroless:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=gcr.io/distroless/static BASE_IMAGE_VERSION=latest
 
       - name: Push Distroless Image
         run: |
-          make docker-push IMG=splunk/splunk-operator:${{ github.event.inputs.release_version }}-distroless-RC${{ github.event.inputs.release_candiate_version }}
+          make docker-push IMG=splunk/splunk-operator-distroless:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
 
       - name: Tag and Push Default UBI RC Image
         run: |
@@ -108,8 +108,8 @@ jobs:
 
       - name: Tag and Push Default Distroless RC Image
         run: |
-          docker tag splunk/splunk-operator:${{ github.event.inputs.release_version }}-distroless-RC${{ github.event.inputs.release_candiate_version }} splunk/splunk-operator:${{ github.event.inputs.release_version }}-distroless-RC
-          docker push splunk/splunk-operator:${{ github.event.inputs.release_version }}-distroless-RC
+          docker tag splunk/splunk-operator:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}-distroless splunk/splunk-operator-distroless:${{ github.event.inputs.release_version }}-RC-distroless
+          docker push splunk/splunk-operator:${{ github.event.inputs.release_version }}-RC-distroless
 
       - name: Generate Release Artifacts
         run: |
