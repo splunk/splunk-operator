@@ -167,7 +167,7 @@ jobs:
 
       - name: Deploy Application with Sidecar
         run: |
-          kubectl apply -f deployment-with-sidecar.yaml
+          kubectl apply -f .github/workflows/deployment-with-sidecar.yaml
 
       - name: Install Metric Server
         run: |
