@@ -15,40 +15,40 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v2
-    - name: Dotenv Action
-      id: dotenv
-      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Setup Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2.5.0
-    - name: Install Operator SDK
-      run: |
-        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
-        export OS=$(uname | awk '{print tolower($0)}')
-        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
-        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-        sudo chmod +x operator-sdk_${OS}_${ARCH}
-        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-    - name: Build and push Splunk Operator Image
-      run: |
-        export PLATFORMS=linux/arm64,linux/amd64
-        export BASE_IMAGE=gcr.io/distroless/static-debian12
-        export BASE_IMAGE_VERSION=latest
-        export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-        make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
+      - uses: actions/checkout@v2
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2.5.0
+      - name: Install Operator SDK
+        run: |
+          export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+          export OS=$(uname | awk '{print tolower($0)}')
+          export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+          sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+          sudo chmod +x operator-sdk_${OS}_${ARCH}
+          sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Build and push Splunk Operator Image
+        run: |
+          export PLATFORMS=linux/arm64,linux/amd64
+          export BASE_IMAGE=gcr.io/distroless/static-debian12
+          export BASE_IMAGE_VERSION=latest
+          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
   int-tests-arm-ubuntu:
     strategy:
       fail-fast: false
@@ -76,7 +76,6 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
-      # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: eks
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
@@ -100,12 +99,12 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - name: Checkcout code
+      - name: Checkout Code
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Change splunk enterprise to release image on main branches
+      - name: Change Splunk Enterprise to Release Image on Main Branches
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
@@ -141,15 +140,15 @@ jobs:
           eksctl version
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
-      - name: Configure Docker Hub credentials
+      - name: Configure Docker Hub Credentials
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
-      - name: Set Splunk Operator image
+      - name: Set Splunk Operator Image
         run: |
-            echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless" >> $GITHUB_ENV
-      - name: Configure AWS credentials
+          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless" >> $GITHUB_ENV
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -160,49 +159,62 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: Create EKS cluster
+      - name: Create EKS Cluster
         run: |
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
           export EKS_INSTANCE_TYPE=${{ steps.dotenv.outputs.EKS_INSTANCE_TYPE_ARM64 }}
           make cluster-up
-      - name: install metric server
+
+      - name: Deploy Application with Sidecar
+        run: |
+          kubectl apply -f deployment-with-sidecar.yaml
+
+      - name: Install Metric Server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-      - name: install k8s dashboard
+
+      - name: Install K8s Dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+
       - name: Setup Kustomize
         run: |
           sudo snap install kustomize
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
-      - name: Run Integration test
+
+      - name: Run Integration Test
         run: |
           make int-test
+
       - name: Collect Test Logs
         if: ${{ always() }}
         run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
+
       - name: Archive Pod Logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4.4.0
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
-      - name: Cleanup Test Case artifacts
+
+      - name: Cleanup Test Case Artifacts
         if: ${{ always() }}
         run: |
           make cleanup
           make clean
-      - name: Cleanup up EKS cluster
+
+      - name: Cleanup EKS Cluster
         if: ${{ always() }}
         run: |
           make cluster-down
-      #- name: Test Report
-      #  uses: dorny/test-reporter@v1
-      #  if: success() || failure()    # run this step even if previous step failed
-      #  with:
-      #    name: Integration Tests          # Name of the check run which will be created
-      #    path: inttest-*.xml         # Path to test results
-      #    reporter: jest-junit        # Format of test results
+
+      # - name: Test Report
+      #   uses: dorny/test-reporter@v1
+      #   if: success() || failure()    # run this step even if previous step failed
+      #   with:
+      #     name: Integration Tests          # Name of the check run which will be created
+      #     path: inttest-*.xml         # Path to test results
+      #     reporter: jest-junit        # Format of test results
