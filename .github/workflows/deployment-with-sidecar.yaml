@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: manager
-          image: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
+          image: ${{ secrets.ECR_REPOSITORY }}.${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
           env:
             - name: WATCH_NAMESPACE
               value: ""
