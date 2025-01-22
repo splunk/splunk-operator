@@ -165,10 +165,6 @@ jobs:
           export EKS_INSTANCE_TYPE=${{ steps.dotenv.outputs.EKS_INSTANCE_TYPE_ARM64 }}
           make cluster-up
 
-      - name: Deploy Application with Sidecar
-        run: |
-          kubectl apply -f .github/workflows/deployment-with-sidecar.yaml
-
       - name: Install Metric Server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
