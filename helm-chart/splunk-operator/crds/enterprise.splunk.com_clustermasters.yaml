@@ -967,7 +967,7 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure.'
+                            values: aws, minio, azure, gcp.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
@@ -979,8 +979,8 @@ spec:
                           type: string
                         storageType:
                           description: 'Remote Storage type. Supported values: s3,
-                            blob. s3 works with aws or minio providers, whereas blob
-                            works with azure provider.'
+                            blob, gcs. s3 works with aws or minio providers, whereas
+                            blob works with azure provider, gcs works for gcp.'
                           type: string
                       type: object
                     type: array
@@ -2087,7 +2087,7 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure.'
+                            values: aws, minio, azure, gcp.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
@@ -2099,8 +2099,8 @@ spec:
                           type: string
                         storageType:
                           description: 'Remote Storage type. Supported values: s3,
-                            blob. s3 works with aws or minio providers, whereas blob
-                            works with azure provider.'
+                            blob, gcs. s3 works with aws or minio providers, whereas
+                            blob works with azure provider, gcs works for gcp.'
                           type: string
                       type: object
                     type: array
@@ -4081,7 +4081,7 @@ spec:
                               type: string
                             provider:
                               description: 'App Package Remote Store provider. Supported
-                                values: aws, minio, azure.'
+                                values: aws, minio, azure, gcp.'
                               type: string
                             region:
                               description: Region of the remote storage volume where
@@ -4093,8 +4093,9 @@ spec:
                               type: string
                             storageType:
                               description: 'Remote Storage type. Supported values:
-                                s3, blob. s3 works with aws or minio providers, whereas
-                                blob works with azure provider.'
+                                s3, blob, gcs. s3 works with aws or minio providers,
+                                whereas blob works with azure provider, gcs works
+                                for gcp.'
                               type: string
                           type: object
                         type: array
@@ -4347,7 +4348,7 @@ spec:
                           type: string
                         provider:
                           description: 'App Package Remote Store provider. Supported
-                            values: aws, minio, azure.'
+                            values: aws, minio, azure, gcp.'
                           type: string
                         region:
                           description: Region of the remote storage volume where apps
@@ -4359,8 +4360,8 @@ spec:
                           type: string
                         storageType:
                           description: 'Remote Storage type. Supported values: s3,
-                            blob. s3 works with aws or minio providers, whereas blob
-                            works with azure provider.'
+                            blob, gcs. s3 works with aws or minio providers, whereas
+                            blob works with azure provider, gcs works for gcp.'
                           type: string
                       type: object
                     type: array

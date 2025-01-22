@@ -164,7 +164,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC with new standalone deployment", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -319,7 +319,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment with Scale up", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
+		It("managermc1, integration: can deploy a MC with standalone instance and update MC when standalone is scaled up", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone
@@ -584,7 +584,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Clustered deployment (C3 - clustered indexer, search head cluster)", func() {
-		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
+		It("managermc1, integration: MC can configure SHC, indexer instances and reconfigure to new MC", func() {
 			/*
 				Test Steps
 				1. Deploy Single Site Indexer Cluster
@@ -760,7 +760,7 @@ var _ = Describe("Monitoring Console test", func() {
 			// Verify MC is Ready and stays in ready state
 			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcTwoName, mcTwo, testcaseEnvInst)
 
-			// ############################  VERIFICATOIN FOR MONITORING CONSOLE TWO POST SHC RECONFIG ###############################
+			// ############################  VERIFICATION FOR MONITORING CONSOLE TWO POST SHC RECONFIG ###############################
 
 			// Check Cluster Manager in Monitoring Console Two Config Map
 			testcaseEnvInst.Log.Info("Verify Cluster Manager on Monitoring Console Two Config Map after SHC Reconfig")
@@ -781,7 +781,7 @@ var _ = Describe("Monitoring Console test", func() {
 			testcaseEnvInst.Log.Info("Checking for Indexer Pod on MC TWO after SHC Reconfig")
 			testenv.VerifyPodsInMCConfigString(ctx, deployment, testcaseEnvInst, indexerPods, mcTwoName, true, true)
 
-			// ############################  VERIFICATOIN FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
+			// ############################  VERIFICATION FOR MONITORING CONSOLE ONE POST SHC RECONFIG ###############################
 
 			// Verify MC ONE is Ready and stays in ready state before running verfications
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, mcName, mc, testcaseEnvInst)
@@ -809,7 +809,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Multisite Clustered deployment (M4 - 3 Site clustered indexer, search head cluster)", func() {
-		It("managermc, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
+		It("managermc2, integration: MC can configure SHC, indexer instances and reconfigure Cluster Manager to new Monitoring Console", func() {
 			/*
 				Test Steps
 				1. Deploy Multisite Indexer Cluster
@@ -946,7 +946,7 @@ var _ = Describe("Monitoring Console test", func() {
 	})
 
 	Context("Standalone deployment (S1)", func() {
-		It("managermc, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
+		It("managermc2, integration: can deploy a MC with standalone instance and update MC with new standalone deployment of similar names", func() {
 			/*
 				Test Steps
 				1.  Deploy Standalone with name "search-head-adhoc"
