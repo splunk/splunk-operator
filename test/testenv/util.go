@@ -44,7 +44,7 @@ import (
 
 const (
 	letterBytes = "abcdefghijklmnopqrstuvwxyz0123456789"
-	sidecarName = "debug-sidecar"
+	sidecarName = "sok-debug"
 )
 
 func init() {

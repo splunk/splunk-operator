@@ -136,7 +136,7 @@ Since distroless images do not contain a shell, debugging may require additional
                  value: ""
                - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
                  value: splunk/splunk:9.4.0
-           - name: debug-sidecar
+           - name: sok-debug
              image: ubuntu:20.04  # Use any lightweight image with a shell
              command: ["/bin/bash", "-c", "tail -f /dev/null"]
              volumeMounts:
@@ -153,7 +153,7 @@ Since distroless images do not contain a shell, debugging may require additional
    
    Example command to access the sidecar container:
    ```bash
-   kubectl exec -it <splunk-operator-pod-name> -c debug-sidecar -- /bin/bash
+   kubectl exec -it <splunk-operator-pod-name> -c sok-debug -- /bin/bash
    ```
 
 3. **Inspect Shared Files**:
