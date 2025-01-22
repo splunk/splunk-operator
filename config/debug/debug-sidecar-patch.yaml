@@ -1,0 +1,28 @@
+# This patch inject a sidecar container which is a HTTP proxy for the
+# controller manager, it performs RBAC authorization against the Kubernetes API using SubjectAccessReviews.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    metadata:
+        labels:
+          control-plane: controller-manager
+          name: splunk-operator
+    spec:
+      containers:
+      - name: sok-debug
+        image: busybox
+        command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 5m
+            memory: 64Mi
+        volumeMounts:
+          - name: app-staging
+            mountPath: /opt/splunk/appframework/
