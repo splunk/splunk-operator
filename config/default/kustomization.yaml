@@ -140,7 +140,7 @@ patches:
       value:
         name: debug-sidecar
         image: busybox:latest
-        command: ["/bin/bash", "-c", "tail -f /dev/null"]
+        command: ["/bin/sh", "-c", "tail -f /dev/null"]
         volumeMounts:
           - name: app-staging
             mountPath: /opt/splunk/appframework/
