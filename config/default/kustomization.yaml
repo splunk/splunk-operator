@@ -135,16 +135,12 @@ patches:
     kind: Deployment
     name: controller-manager
   patch: |-
-      - op: add
-        path: /spec/template/spec/containers/-
-        value:
-          - name: debug-sidecar
-            image: busybox:latest
-            command: [ "/bin/bash", "-c", "tail -f /dev/null" ]
-            volumeMounts:
-            - name: app-staging
-              mountPath: /opt/splunk/appframework/
-            volumes:
-              - name: app-staging
-            persistentVolumeClaim:
-              claimName: splunk-operator-app-download
+    - op: add
+      path: /spec/template/spec/containers/-
+      value:
+        name: debug-sidecar
+        image: busybox:latest
+        command: ["/bin/bash", "-c", "tail -f /dev/null"]
+        volumeMounts:
+          - name: app-staging
+            mountPath: /opt/splunk/appframework/
