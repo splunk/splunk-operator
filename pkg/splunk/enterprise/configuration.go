@@ -1191,7 +1191,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// Check if the secret version is already tracked, and if there is a change in it
 			if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
 				if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
-					scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
+					scopedLog.Info("secret keys changed", "previous resource version", existingSecretVersion, "current version", namespaceScopedSecret.ResourceVersion)
 					ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 					return true
 				}
@@ -1201,7 +1201,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// First time adding to track the secret resource version
 			ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 		} else {
-			scopedLog.Info("No valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
+			scopedLog.Info("no valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
 		}
 	}
 
@@ -1232,17 +1232,17 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
-		scopedLog.Info("Creating manual app update configMap")
+		scopedLog.Info("creating manual app update configMap")
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
 		}
 	} else {
-		scopedLog.Info("Updating manual app update configMap")
+		scopedLog.Info("updating manual app update configMap")
 		err = splutil.UpdateResource(ctx, client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "Unable to update the configMap", "name", configMapName)
+			scopedLog.Error(err, "unable to update the configMap", "name", configMapName)
 			return configMap, err
 		}
 	}
@@ -1262,24 +1262,13 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
 		result = extractFieldFromConfigMapData(statusRegex, data)
 		if result == "on" {
-			scopedLog.Info("Namespace configMap value is set to", "name", configMapName, "data", result)
+			scopedLog.Info("namespace configMap value is set to", "name", configMapName, "data", result)
 			return result
 		}
 	} else {
 		scopedLog.Error(err, "Unable to get namespace specific configMap", "name", configMapName)
 	}
 
-	/*
-		namespacedName = types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
-		CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
-		if err == nil {
-			scopedLog.Info("Custom configMap value is set to", "name", configMapName, "data", CrconfigMap.Data)
-			data := CrconfigMap.Data["manualUpdate"]
-			return data
-		} else {
-			scopedLog.Error(err, "Unable to get custom specific configMap", "name", configMapName)
-		}
-	*/
 	return "off"
 }
 
@@ -1291,11 +1280,11 @@ func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.Controller
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
 	CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
-		scopedLog.Info("Custom configMap value is set to", "name", configMapName, "data", CrconfigMap.Data)
+		scopedLog.Info("custom configMap value is set to", "name", configMapName, "data", CrconfigMap.Data)
 		data := CrconfigMap.Data["manualUpdate"]
 		return data
 	} else {
-		scopedLog.Error(err, "Unable to get custom specific configMap", "name", configMapName)
+		scopedLog.Error(err, "unable to get custom specific configMap", "name", configMapName)
 	}
 
 	return "off"
@@ -1309,7 +1298,7 @@ func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerCli
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		scopedLog.Error(err, "unable to get the configMap", "name", configMapName)
 		return refCount
 	}
 
@@ -1351,7 +1340,7 @@ func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.Cont
 			}
 		}
 
-		scopedLog.Info("Existing configMap data", "data", configMap.Data)
+		scopedLog.Info("existing configMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
@@ -1377,7 +1366,7 @@ refCount: %d`, status, numOfObjects+1)
 	// Create/update the configMap to store the values of manual trigger per CR kind.
 	configMap, err = ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
 	if err != nil {
-		scopedLog.Error(err, "Create/update configMap for app update failed")
+		scopedLog.Error(err, "create/update configMap for app update failed")
 		return configMap, err
 	}
 
