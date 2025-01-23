@@ -92,7 +92,7 @@ jobs:
           make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
       - name: Sign Splunk Operator image with a key
         run: |
-          cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}-distroless
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
