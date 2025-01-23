@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -31,6 +32,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -1890,5 +1892,64 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	_, err = ApplySearchHeadCluster(ctx, c, searchheadcluster)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for search head cluster with app framework. Error=%v", err)
+	}
+}
+
+func TestSetDeployerConfig(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	depResSpec := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("14Gi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("2"),
+			corev1.ResourceMemory: resource.MustParse("7Gi"),
+		},
+	}
+
+	shc := enterpriseApi.SearchHeadCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stack1",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.SearchHeadClusterSpec{
+			DeployerResourceSpec: depResSpec,
+			DeployerNodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{},
+				},
+			},
+		},
+	}
+
+	nsTerm := corev1.NodeSelectorTerm{
+		MatchExpressions: []corev1.NodeSelectorRequirement{
+			{
+				Key: "node-role.kubernetes.io/master",
+			},
+		},
+	}
+	shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(shc.Spec.DeployerNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, nsTerm)
+
+	// Get deployer STS and set resources
+	depSts, err := getSplunkStatefulSet(ctx, client, &shc, &shc.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(&shc, shc.Spec.Replicas))
+	if err != nil {
+		t.Errorf("Failed to get deployer statefulset due to error=%s", err)
+	}
+	setDeployerConfig(ctx, &shc, &depSts.Spec.Template)
+	if !reflect.DeepEqual(depResSpec.Limits, depSts.Spec.Template.Spec.Containers[0].Resources.Limits) {
+		t.Errorf("Failed to set deployer resources properly, limits are off")
+	}
+
+	// Verify deployer resources are set properly
+	if !reflect.DeepEqual(depResSpec.Requests, depSts.Spec.Template.Spec.Containers[0].Resources.Requests) {
+		t.Errorf("Failed to set deployer resources properly, requests are off")
+	}
+
+	// Verify deployer nodeAffinity are set properly
+	if !reflect.DeepEqual(shc.Spec.DeployerNodeAffinity, depSts.Spec.Template.Spec.Affinity.NodeAffinity) {
+		t.Errorf("Failed to set deployer resources properly, requests are off")
 	}
 }
