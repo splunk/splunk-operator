@@ -75,6 +75,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	// create or update general config resources
+	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
+	if err != nil {
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		return result, err
+	}
+
 	// If the app framework is configured then do following things -
 	// 1. Initialize the S3Clients based on providers
 	// 2. Check the status of apps on remote storage.
@@ -102,14 +110,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	if cr.Status.AdminPasswordChangedSecrets == nil {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
-	}
-
-	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
-	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
 	}
 
 	// check if deletion has been requested

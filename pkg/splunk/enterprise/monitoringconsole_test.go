@@ -61,6 +61,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-monitoring-console-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
@@ -79,6 +80,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-monitoring-console-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
@@ -112,8 +114,8 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{ListOpts: listOpts2},
 	}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[10], funcCalls[5]}, "Update": {funcCalls[0], funcCalls[10]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[4]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[10], funcCalls[11], funcCalls[6]}, "Update": {funcCalls[0], funcCalls[11]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[5]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
@@ -463,8 +465,9 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
 	client.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-monitoring-console-monitoringConsole-configmap")
+	client.AddObject(&configmap)
 
 	// to pass the validation stage, add the directory to download apps
 	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
@@ -1048,6 +1051,8 @@ func TestApplyMonitoringConsoleDeletion(t *testing.T) {
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 
 	c.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-monitoring-console-stack1-configmap")
+	c.AddObject(&configmap)
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
