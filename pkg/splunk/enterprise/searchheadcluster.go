@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -651,9 +652,48 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	return ss, nil
 }
 
+// CSPL-3652 Configure deployer resources if configured
+// Use default otherwise
+// Make sure to set the resources ONLY for the deployer
+func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster, podTemplate *corev1.PodTemplateSpec) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("setDeployerConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Break out if this is not a deployer
+	if !strings.Contains("deployer", podTemplate.Labels["app.kubernetes.io/name"]) {
+		return errors.New("not a deployer, skipping setting resources")
+	}
+	depRes := cr.Spec.DeployerResourceSpec
+	for i := range podTemplate.Spec.Containers {
+		if len(depRes.Requests) != 0 {
+			podTemplate.Spec.Containers[i].Resources.Requests = cr.Spec.DeployerResourceSpec.Requests
+			scopedLog.Info("Setting deployer resources requests", "requests", cr.Spec.DeployerResourceSpec.Requests)
+		}
+
+		if len(depRes.Limits) != 0 {
+			podTemplate.Spec.Containers[i].Resources.Limits = cr.Spec.DeployerResourceSpec.Limits
+			scopedLog.Info("Setting deployer resources limits", "limits", cr.Spec.DeployerResourceSpec.Limits)
+		}
+	}
+
+	// Add node affinity if configured
+	if cr.Spec.DeployerNodeAffinity != nil {
+		podTemplate.Spec.Affinity.NodeAffinity = cr.Spec.DeployerNodeAffinity
+		scopedLog.Info("Setting deployer node affinity", "nodeAffinity", cr.Spec.DeployerNodeAffinity)
+	}
+
+	return nil
+}
+
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return ss, err
+	}
+
+	// CSPL-3562 - Set deployer resources if configured
+	err = setDeployerConfig(ctx, cr, &ss.Spec.Template)
 	if err != nil {
 		return ss, err
 	}
