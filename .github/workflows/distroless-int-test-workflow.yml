@@ -1,4 +1,4 @@
-name: Distroless image integration test workflow
+name: Ubuntu Integration Test WorkFlow Ubuntu
 on:
   push:
     branches:
@@ -6,7 +6,7 @@ on:
       - main
       - CSPL-3064
 jobs:
-  build-operator-image-arm-ubuntu:
+  build-operator-image-distroless:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
@@ -47,9 +47,9 @@ jobs:
           export PLATFORMS=linux/arm64,linux/amd64
           export BASE_IMAGE=gcr.io/distroless/static-debian12
           export BASE_IMAGE_VERSION=latest
-          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
           make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
-  int-tests-arm-ubuntu:
+  int-tests:
     strategy:
       fail-fast: false
       matrix:
@@ -67,15 +67,16 @@ jobs:
             managerdeletecr,
           ]
     runs-on: ubuntu-latest
-    needs: build-operator-image-arm-ubuntu
+    needs: build-operator-image-distroless
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
+      # This regex matches any string not containing integration keyword
       TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
       TEST_CLUSTER_PLATFORM: eks
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
@@ -88,7 +89,6 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
-      ARM64: "true"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -99,12 +99,12 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - name: Checkout Code
+      - name: Checkcout code
         uses: actions/checkout@v2
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Change Splunk Enterprise to Release Image on Main Branches
+      - name: Change splunk enterprise to release image on main branches
         if: github.ref == 'refs/heads/main'
         run: |
           echo "SPLUNK_ENTERPRISE_IMAGE=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_ENV
@@ -140,15 +140,15 @@ jobs:
           eksctl version
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
-      - name: Configure Docker Hub Credentials
+      - name: Configure Docker Hub credentials
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN}}
-      - name: Set Splunk Operator Image
+      - name: Set Splunk Operator image
         run: |
           echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless" >> $GITHUB_ENV
-      - name: Configure AWS Credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -159,58 +159,48 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: Create EKS Cluster
+      - name: Create EKS cluster
         run: |
           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-          export EKS_INSTANCE_TYPE=${{ steps.dotenv.outputs.EKS_INSTANCE_TYPE_ARM64 }}
           make cluster-up
-
-      - name: Install Metric Server
+      - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-
-      - name: Install K8s Dashboard
+      - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
-
       - name: Setup Kustomize
         run: |
           sudo snap install kustomize
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
-
-      - name: Run Integration Test
+      - name: Run Integration test
         run: |
           make int-test
-
       - name: Collect Test Logs
         if: ${{ always() }}
         run: |
           mkdir -p /tmp/pod_logs
           find ./test -name "*.log" -exec cp {} /tmp/pod_logs \;
-
       - name: Archive Pod Logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4.4.0
         with:
           name: "splunk-pods-logs--artifacts-${{ matrix.test }}"
           path: "/tmp/pod_logs/**"
-
-      - name: Cleanup Test Case Artifacts
+      - name: Cleanup Test Case artifacts
         if: ${{ always() }}
         run: |
           make cleanup
           make clean
-
-      - name: Cleanup EKS Cluster
+      - name: Cleanup up EKS cluster
         if: ${{ always() }}
         run: |
           make cluster-down
-
-      # - name: Test Report
-      #   uses: dorny/test-reporter@v1
-      #   if: success() || failure()    # run this step even if previous step failed
-      #   with:
-      #     name: Integration Tests          # Name of the check run which will be created
-      #     path: inttest-*.xml         # Path to test results
-      #     reporter: jest-junit        # Format of test results
+      #- name: Test Report
+      #  uses: dorny/test-reporter@v1
+      #  if: success() || failure()    # run this step even if previous step failed
+      #  with:
+      #    name: Integration Tests          # Name of the check run which will be created
+      #    path: inttest-*.xml         # Path to test results
+      #    reporter: jest-junit        # Format of test results
