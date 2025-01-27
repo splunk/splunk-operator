@@ -1036,7 +1036,15 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		}
+		podTemplateSpec.Spec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline &&  /opt/splunk/bin/splunk stop"},
+				},
+			},
+		}
 	}
+	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &spec.TerminationGracePeriodSeconds
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
