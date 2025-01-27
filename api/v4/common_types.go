@@ -112,6 +112,8 @@ type Spec struct {
 
 	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
 }
 
 // Phase is used to represent the current phase of a custom resource
