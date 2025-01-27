@@ -187,6 +187,3 @@ environment variable to the operator's deployment spec:
 - name: CLUSTER_DOMAIN
   value: "mydomain.com"
 ```
-
-
-
