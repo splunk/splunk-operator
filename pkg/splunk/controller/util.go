@@ -244,6 +244,13 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
 				result = true
 			}
+			current.Containers[idx].Lifecycle = &corev1.Lifecycle{
+				PreStop: &corev1.LifecycleHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{"/opt/splunk/bin/splunk", "stop"},
+					},
+				},
+			}
 		}
 	}
 
