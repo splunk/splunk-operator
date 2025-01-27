@@ -778,6 +778,7 @@ splunk-<namespace>-<custom-resource-name>-configmap
    - The system first checks the namespace-specific `configMap` (`splunk-default-manual-app-update`).
    - If manual updates are not enabled in the namespace-specific `configMap`, it then checks the per CR `configMap` for the `manualUpdate` field.
    - If `manualUpdate: true` is set in the per CR `configMap`, the App Framework performs the app check and resets the field to `manualUpdate: false` after completing the task.
+   - For Indexer Cluster update, use the Cluster Manager configmap.  Individual Indexer Cluster configmap cannot be used for manual app update.
 
 **Example Per CR ConfigMap:**
 

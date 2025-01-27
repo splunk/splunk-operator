@@ -1278,10 +1278,10 @@ func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.Controller
 	scopedLog := reqLogger.WithName("getManualUpdatePerCrStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
-	CrconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	crconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err == nil {
-		scopedLog.Info("custom configMap value is set to", "name", configMapName, "data", CrconfigMap.Data)
-		data := CrconfigMap.Data["manualUpdate"]
+		scopedLog.Info("custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
+		data := crconfigMap.Data["manualUpdate"]
 		return data
 	} else {
 		scopedLog.Error(err, "unable to get custom specific configMap", "name", configMapName)
