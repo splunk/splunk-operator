@@ -698,19 +698,37 @@ spec:
 ```
 
 
-## Manual initiation of app management
-You can prevent the App Framework from automatically polling the remote storage for app changes. By configuring the `appsRepoPollIntervalSeconds` setting to `0`, the App Framework polling is disabled, and the configMap is updated with a new `status` field. The App Framework will perform an initial poll of the remote storage, even when the CR is initialized with polling disabled.
+## Manual Initiation of App Management
 
-When you're ready to initiate an app check using the App Framework, manually update the `status` field in the configMap for that CR type to `on`. The 'status' field defaults to 'off'.
+You can control how the App Framework manages app updates by configuring the polling behavior. This allows you to prevent the App Framework from automatically polling the remote storage for app changes and instead manually trigger app updates when desired.
 
-For example, you deployed one Standalone CR with app framework enabled.
+### Disabling Automatic Polling
 
+To disable the App Framework's automatic polling of the remote storage for app changes, set the `appsRepoPollIntervalSeconds` setting to `0`. This configuration stops the App Framework from periodically checking for app updates and updates the `configMap` with a new `status` field. 
+
+**Note:** The App Framework will still perform an initial poll of the remote storage even when polling is disabled upon CR initialization.
+
+```yaml
+appsRepoPollIntervalSeconds: 0
 ```
+
+### Manual Triggering of App Checks
+
+When you are ready to initiate an app check using the App Framework, you need to manually update the `status` field in the `configMap`. The `status` field defaults to `off`.
+
+#### Namespace-Specific ConfigMap
+
+The primary `configMap` used for manual updates is namespace-specific. For example, if you have deployed a Standalone Custom Resource (CR) with the App Framework enabled, the Splunk Operator will create a `configMap` named `splunk-default-manual-app-update` (assuming the `default` namespace).
+
+##### Example Standalone CR Deployment
+
+```bash
 kubectl get standalone
 NAME   PHASE   DESIRED   READY   AGE
 s1     Ready   1         1       13h
 ```
-As mentioned above, Splunk Operator will create the configMap (assuming `default` namespace) `splunk-default-manual-app-update` with an entry for Standalone CR as below:
+
+##### Generated Namespace-Specific ConfigMap
 
 ```yaml
 apiVersion: v1
@@ -732,17 +750,80 @@ metadata:
   resourceVersion: "75406013"
   selfLink: /api/v1/namespaces/default/configmaps/splunk-manual-app-update
   uid: 413c6053-af4f-4cb3-97e0-6dbe7cd17721
-  ```
+```
 
-To trigger manual checking of apps, update the configMap, and set the `status` field to `on` for the Standalone CR as below:
+To trigger a manual app check, update the `status` field to `on`:
 
-```kubectl patch cm/splunk-default-manual-app-update --type merge -p '{"data":{"Standalone":"status: on\nrefCount: 1"}}'```
+```bash
+kubectl patch cm/splunk-default-manual-app-update --type merge -p '{"data":{"Standalone":"status: on\nrefCount: 1"}}'
+```
 
-The App Framework will perform its checks, update or install apps, and reset the `status` to `off` when it has completed its tasks.
+The App Framework will perform its checks, update or install apps as necessary, and reset the `status` to `off` upon completion.
 
-To reinstate automatic polling, update the CR `appsRepoPollIntervalSeconds` setting to a value greater than 0.
+#### Per Custom Resource ConfigMap
 
-NOTE: All CRs of the same type must have polling enabled, or disabled. For example, if `appsRepoPollIntervalSeconds` is set to '0' for one Standalone CR, all other Standalone CRs must also have polling disabled. Use the `kubectl` command to identify all CRs of the same type before updating the polling interval. You can experience unexpected polling behavior if there are CRs configured with a mix of polling enabled and disabled.
+In addition to the namespace-specific `configMap`, the system now supports a `configMap` per custom resource. This provides finer control over app updates for individual CRs.
+
+**ConfigMap Naming Convention:**
+
+```
+splunk-<namespace>-<custom-resource-name>-configmap
+```
+
+**Behavior:**
+
+1. **Creation:** When a custom resource is created, a corresponding `configMap` is automatically created alongside other resources.
+   
+2. **Manual Update Check:**
+   - The system first checks the namespace-specific `configMap` (`splunk-default-manual-app-update`).
+   - If manual updates are not enabled in the namespace-specific `configMap`, it then checks the per CR `configMap` for the `manualUpdate` field.
+   - If `manualUpdate: true` is set in the per CR `configMap`, the App Framework performs the app check and resets the field to `manualUpdate: false` after completing the task.
+   - For Indexer Cluster update, use the Cluster Manager configmap.  Individual Indexer Cluster configmap cannot be used for manual app update.
+
+**Example Per CR ConfigMap:**
+
+```yaml
+apiVersion: v1
+data:
+  manualUpdate: "true"
+kind: ConfigMap
+metadata:
+  name: splunk-default-s1-configmap
+  namespace: default
+  ownerReferences:
+  - apiVersion: enterprise.splunk.com/v3
+    controller: true
+    kind: Standalone
+    name: s1
+    uid: ddb9528f-2e25-49be-acd4-4fadde489849
+```
+
+To trigger a manual app check for a specific custom resource, update the `manualUpdate` field to `true`:
+
+```bash
+kubectl patch cm/splunk-default-s1-configmap --type merge -p '{"data":{"manualUpdate":"true"}}'
+```
+
+The App Framework will perform the necessary app checks and reset `manualUpdate` to `false` once completed.
+
+### Reinstate Automatic Polling
+
+If you wish to re-enable automatic polling, update the CR's `appsRepoPollIntervalSeconds` setting to a value greater than `0`.
+
+```yaml
+appsRepoPollIntervalSeconds: 60
+```
+
+### Important Considerations
+
+- **Consistency Across CRs:** All CRs of the same type within a namespace must have polling either enabled or disabled uniformly. For example, if `appsRepoPollIntervalSeconds` is set to `0` for one Standalone CR, all other Standalone CRs in the same namespace must also have polling disabled.
+  
+- **Avoid Mixed Configurations:** Using a mix of enabled and disabled polling across CRs of the same type can lead to unexpected behavior. Use the `kubectl` command to identify and ensure consistent polling configurations across all CRs before making changes.
+
+- **Namespace and CR-Specific Configuration:** The system prioritizes the namespace-specific `configMap` for manual updates. If it is not enabled, it falls back to the per CR `configMap`. This hierarchical approach ensures that manual updates can be managed both at the namespace level and for individual resources as needed.
+
+By following these guidelines, you can effectively manage when and how the App Framework checks for and applies app updates, providing both broad and granular control over your application environment.
+
 
 ## App Framework Limitations
 

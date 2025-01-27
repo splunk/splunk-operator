@@ -32,6 +32,21 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// GetMockPerCRConfigMap returns per cr configmap
+func GetMockPerCRConfigMap(name string) corev1.ConfigMap {
+	// Create S3 secret
+	cfg := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "test",
+		},
+		Data: map[string]string{
+			"manualUpdate": "false",
+		},
+	}
+	return cfg
+}
+
 // GetMockS3SecretKeys returns S3 secret keys
 func GetMockS3SecretKeys(name string) corev1.Secret {
 	accessKey := []byte{'1'}
