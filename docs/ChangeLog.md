@@ -12,9 +12,9 @@
 
 * CSPL-3256 - Support to configure deployer spec in SHC CRD
 
-* CSPL-3253: Change default storageClassName value in PVC
+* CSPL-3253 - Change default storageClassName value in PVC
 
-* CSPL-2920: Add support for ARM64 pipelines
+* CSPL-2920 - Add support for ARM64 pipelines
 
 ### Supported Splunk Version
 
