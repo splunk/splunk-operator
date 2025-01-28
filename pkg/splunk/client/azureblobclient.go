@@ -138,6 +138,9 @@ func NewAzureBlobClient(
 	var serviceURL string
 	if endpoint != "" {
 		serviceURL = endpoint
+		if serviceURL[len(serviceURL)-1] == '/' {
+			serviceURL = serviceURL[:len(serviceURL)-1]
+		}
 	} else if region != "" {
 		serviceURL = fmt.Sprintf("https://%s.blob.%s.core.windows.net", storageAccountName, region)
 	} else {
@@ -203,7 +206,7 @@ func NewAzureBlobClient(
 
 		// Initialize the container client with Token Credential.
 		rawContainerClient, err := container.NewClient(
-			fmt.Sprintf("%s%s", serviceURL, bucketName),
+			fmt.Sprintf("%s/%s", serviceURL, bucketName),
 			tokenCredential,
 			nil,
 		)
