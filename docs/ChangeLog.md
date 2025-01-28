@@ -1,5 +1,33 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.7.1 (2025-01-28)
+
+* This is the 2.7.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* CSPL-3064 - Support for Distroless Image Creation in Splunk Operator for Kubernetes
+
+* CSPL-2966 - Manual App Updates per Custom Resource (CR) in Splunk Operator
+
+* CSPL-3156 - Add kubectl-splunk Plugin for Executing Splunk Commands within Kubernetes Pods
+
+* CSPL-3256 - Support to configure deployer spec in SHC CRD
+
+* CSPL-3253: Change default storageClassName value in PVC
+
+* CSPL-2920: Add support for ARM64 pipelines
+
+### Supported Splunk Version
+
+>| Splunk Version|
+>| --- |
+>| 9.4.0 |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version|
+>| --- |
+>| 1.31+ |
+
 ## 2.7.0 (2024-12-04)
 
 * This is the 2.7.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
