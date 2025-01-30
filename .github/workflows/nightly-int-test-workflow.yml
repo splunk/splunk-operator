@@ -63,14 +63,6 @@ jobs:
             managerscaling,
             managercrcrud,
             licensemanager,
-            masterappframeworkc3,
-            masterappframeworkm4,
-            mastersecret,
-            mastersmartstore,
-            mastermc,
-            masterscaling,
-            mastercrcrud,
-            licensemaster,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image

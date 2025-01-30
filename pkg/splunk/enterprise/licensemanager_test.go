@@ -49,6 +49,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
+		{MetaName: "*v1.ConfigMap-test-splunk-license-manager-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-license-manager-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -72,9 +73,9 @@ func TestApplyLicenseManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[6], funcCalls[8], funcCalls[10]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[9], funcCalls[11], funcCalls[12]}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[4]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[9], funcCalls[10]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[10], funcCalls[12], funcCalls[12]}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseManager",
@@ -239,8 +240,9 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
 	client.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-license-manager-stack1-configmap")
+	client.AddObject(&configmap)
 
 	// to pass the validation stage, add the directory to download apps
 	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
@@ -648,6 +650,8 @@ func TestApplyLicenseManagerDeletion(t *testing.T) {
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 
 	c.AddObject(&s3Secret)
+	configmap := spltest.GetMockPerCRConfigMap("splunk-license-manager-stack1-configmap")
+	c.AddObject(&configmap)
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
