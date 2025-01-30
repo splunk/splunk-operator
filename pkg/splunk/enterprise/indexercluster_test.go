@@ -1260,6 +1260,20 @@ func TestApplyIdxcSecret(t *testing.T) {
 	if err.Error() != fmt.Sprintf(splcommon.PodSecretNotFoundError, podName) {
 		t.Errorf("Couldn't recognize missing secret from Pod, error: %s", err.Error())
 	}
+
+	// Test the secret update is skipped when the pod is not existing
+	err = splutil.UpdateResource(ctx, c, secrets)
+	if err != nil {
+		t.Errorf("Couldn't update resource %v, err: %v", secrets, err)
+	}
+	err = splutil.DeleteResource(ctx, c, pod)
+	if err != nil {
+		t.Errorf("Couldn't update resource %v, err: %v", pod, err)
+	}
+	err = ApplyIdxcSecret(ctx, mgr, 1, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Couldn't recognize missing idxc secret %s", err.Error())
+	}
 }
 
 func TestInvalidIndexerClusterSpec(t *testing.T) {
