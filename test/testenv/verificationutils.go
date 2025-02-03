@@ -25,6 +25,7 @@ import (
 	"time"
 
 	gomega "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -41,6 +42,10 @@ type PodDetailsStruct struct {
 					CPU    string `json:"cpu"`
 					Memory string `json:"memory"`
 				} `json:"limits"`
+				Requests struct {
+					CPU    string `json:"cpu"`
+					Memory string `json:"memory"`
+				} `json:"requests"`
 			} `json:"resources"`
 		}
 		ServiceAccount     string `json:"serviceAccount"`
@@ -87,7 +92,7 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 // StandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
 func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deploymentName, standalone)
+		err := deployment.GetInstance(ctx, standalone.Name, standalone)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
@@ -99,7 +104,7 @@ func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), standalone)
+		_ = deployment.GetInstance(ctx, standalone.Name, standalone)
 		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "standalone")
 		return standalone.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -139,7 +144,6 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 		testenvInstance.Log.Info("Waiting for Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
 
-		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -147,6 +151,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), shc)
 		testenvInstance.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
 		return shc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -635,6 +640,48 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 			if strings.Contains(restResponse.Spec.Containers[0].Resources.Limits.CPU, expectedCPULimits) {
 				result = true
 				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", expectedCPULimits)
+			}
+		}
+		return result
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// VerifyResourceConstraints verifies value of CPU limits is as expected
+func VerifyResourceConstraints(deployment *Deployment, ns string, podName string, res corev1.ResourceRequirements) {
+	gomega.Eventually(func() bool {
+		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return false
+		}
+		restResponse := PodDetailsStruct{}
+		err = json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse JSON")
+			return false
+		}
+		result := false
+
+		for i := 0; i < len(restResponse.Spec.Containers); i++ {
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", res.Limits.Cpu().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
+				result = true
+				logf.Log.Info("Verifying Memory limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Limits.Memory, "EXPECTED", res.Limits.Memory().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.CPU, "EXPECTED", res.Requests.Cpu().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.Memory, "EXPECTED", res.Requests.Memory().String())
 			}
 		}
 		return result

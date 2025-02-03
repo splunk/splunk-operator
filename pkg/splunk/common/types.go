@@ -32,6 +32,7 @@ type MetaObject interface {
 	schema.ObjectKind
 	runtime.Object
 	GetObjectMeta() metav1.Object
+	GetObjectKind() schema.ObjectKind
 }
 
 // The ControllerClient interfaces implements methods of the Kubernetes controller-runtime client

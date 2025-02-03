@@ -1,0 +1,45 @@
+# Build the manager binary
+FROM golang:1.23.0 AS builder
+
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# Cache dependencies before building to speed up future builds
+RUN go mod download
+
+# Copy the go source
+COPY main.go main.go
+COPY api/ api/
+COPY controllers/ controllers/
+COPY pkg/ pkg/
+COPY tools/ tools/
+COPY hack hack/
+
+# Build
+# TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
+
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless
+FROM gcr.io/distroless/static:nonroot
+
+# Set environment variables
+ENV OPERATOR=/manager \
+    USER_UID=1001 \
+    USER_NAME=nonroot
+
+# Create necessary directories
+WORKDIR /
+COPY --from=builder /workspace/manager /
+COPY tools/EULA_Red_Hat_Universal_Base_Image_English_20190422.pdf /licenses/
+COPY LICENSE /licenses/LICENSE-2.0.txt
+COPY tools/k8_probes/livenessProbe.sh /tools/k8_probes/
+COPY tools/k8_probes/readinessProbe.sh /tools/k8_probes/
+COPY tools/k8_probes/startupProbe.sh /tools/k8_probes/
+
+# Use non-root user for running the application
+USER 1001
+
+# Specify the entry point
+ENTRYPOINT ["/manager"]

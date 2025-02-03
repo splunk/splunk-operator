@@ -19,35 +19,43 @@ if [ -n "${PRIVATE_REGISTRY}" ]; then
   echo "Using private registry at ${PRIVATE_REGISTRY}"
 
   PRIVATE_SPLUNK_OPERATOR_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_OPERATOR_IMAGE}
-  PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
-  echo "docker images -q ${SPLUNK_OPERATOR_IMAGE}"
+  # CSPL-2920: ARM64 support
+  if [ "$ARM64" != "true" ]; then
+    PRIVATE_SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_REGISTRY}/${SPLUNK_ENTERPRISE_IMAGE}
+  fi
+  echo "Checking to see if image exists, docker images -q ${PRIVATE_SPLUNK_OPERATOR_IMAGE}"
   # Don't pull splunk operator if exists locally since we maybe building it locally
-  if [ -z $(docker images -q ${SPLUNK_OPERATOR_IMAGE}) ]; then
-    docker pull ${SPLUNK_OPERATOR_IMAGE}
+  if [ -z $(docker images -q ${PRIVATE_SPLUNK_OPERATOR_IMAGE}) ]; then
+    echo "Doesn't exist, pulling ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
+    docker pull ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
     if [ $? -ne 0 ]; then
      echo "Unable to pull ${SPLUNK_OPERATOR_IMAGE}. Exiting..."
      exit 1
     fi
   fi
 
-  docker tag ${SPLUNK_OPERATOR_IMAGE} ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-  docker push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to push ${PRIVATE_SPLUNK_OPERATOR_IMAGE}. Exiting..."
-    exit 1
-  fi
-
   # Always attempt to pull splunk enterprise image
-  docker pull ${SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
-  fi
-  docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
-  if [ $? -ne 0 ]; then
-    echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
-    exit 1
+  echo "check if image exists, docker manifest inspect $PRIVATE_SPLUNK_ENTERPRISE_IMAGE"
+  if docker manifest inspect "$PRIVATE_SPLUNK_ENTERPRISE_IMAGE" > /dev/null 2>&1; then
+    echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE exists on the remote repository."
+    docker pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to pull ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
+  else
+    echo "Image $PRIVATE_SPLUNK_ENTERPRISE_IMAGE does not exist on the remote repository."
+    docker pull ${SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to pull ${SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
+    docker tag ${SPLUNK_ENTERPRISE_IMAGE} ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    docker push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}
+    if [ $? -ne 0 ]; then
+      echo "Unable to push ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}. Exiting..."
+      exit 1
+    fi
   fi
 
   # Output
@@ -70,8 +78,8 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
   make uninstall
   bin/kustomize build config/crd | kubectl create -f -
 else
-  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE}..."
-  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=""
+  echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE} using enterprise image from ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
+  make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE="" ENVIRONMENT=debug
 fi
 
 if [ $? -ne 0 ]; then
@@ -79,6 +87,10 @@ if [ $? -ne 0 ]; then
   kubectl describe pod -n splunk-operator
   exit 1
 fi
+
+echo "Dumping operator config here..."
+kubectl describe deployment splunk-operator-controller-manager -n splunk-operator
+
 
 if [  "${CLUSTER_WIDE}" == "true" ]; then
   echo "wait for operator pod to be ready..."

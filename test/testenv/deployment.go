@@ -255,7 +255,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 }
 
 // OperatorPodExecCommand execute a shell command in the specified pod
-func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool) (string, string, error) {
+func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string, cmd []string, stdin string, tty bool, containerName string) (string, string, error) {
 	pod := &corev1.Pod{}
 	d.GetInstance(ctx, podName, pod)
 	gvk, _ := apiutil.GVKForObject(pod, scheme.Scheme)
@@ -289,7 +289,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 			Resource("pods").
 			Name(podName).
 			Namespace(opNamespace).
-			Param("container", "manager").
+			Param("container", containerName).
 			SubResource("exec")
 		option = &corev1.PodExecOptions{
 			Container: "manager",
