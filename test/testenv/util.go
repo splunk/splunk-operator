@@ -44,6 +44,7 @@ import (
 
 const (
 	letterBytes = "abcdefghijklmnopqrstuvwxyz0123456789"
+	sidecarName = "sok-debug"
 )
 
 func init() {
@@ -736,6 +737,24 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// DumpDescribePods prints and returns list of pods in the namespace
+func DumpDescribePods(ns string) []string {
+	output, err := exec.Command("kubectl", "describe", "pods", "-n", ns).Output()
+	var splunkPods []string
+	if err != nil {
+		//cmd := fmt.Sprintf("kubectl get pods -n %s", ns)
+		//logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return nil
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk") && !strings.HasPrefix(line, "splunk-op") {
+			splunkPods = append(splunkPods, strings.Fields(line)[0])
+		}
+	}
+	return splunkPods
+}
+
 // DumpGetTopNodes prints and returns Node load information
 func DumpGetTopNodes() []string {
 	output, err := exec.Command("kubectl", "top", "nodes").Output()
@@ -801,6 +820,7 @@ func GetOperatorPodName(testcaseEnvInst *TestCaseEnv) string {
 			return splunkPods
 		}
 	}
+	logf.Log.Info("Operator pod is set to ", "operatorPod", splunkPods)
 	return splunkPods
 }
 
@@ -877,9 +897,9 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 // ExecuteCommandOnOperatorPod execute command on given pod and return result
 func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false)
+	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false, sidecarName)
 	if err != nil {
-		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "command", command)
+		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "shell", command, "command", stdin, "error", err.Error())
 		return "", err
 	}
 	logf.Log.Info("Command executed", "on pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)

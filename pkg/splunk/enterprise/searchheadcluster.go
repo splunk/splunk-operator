@@ -17,6 +17,7 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -49,6 +50,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplySearchHeadCluster")
 	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "SearchHeadCluster"
 
 	var err error
@@ -69,6 +72,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, false)
 	if err != nil {
+		return result, err
+	}
+
+	// create or update general config resources
+	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
+	if err != nil {
+		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -99,14 +110,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	}
 	if cr.Status.AdminPasswordChangedSecrets == nil {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
-	}
-
-	// create or update general config resources
-	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkSearchHead)
-	if err != nil {
-		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-		return result, err
 	}
 
 	// check if deletion has been requested
@@ -166,9 +169,12 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
-	continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-	if err != nil || !continueReconcile {
-		return result, err
+	// CSPL-3060 - If statefulSet is not created, avoid upgrade path validation
+	if !statefulSet.CreationTimestamp.IsZero() {
+		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
+		if err != nil || !continueReconcile {
+			return result, err
+		}
 	}
 
 	deployerManager := splctrl.DefaultStatefulSetPodManager{}
@@ -587,7 +593,6 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 	}
 	gotCaptainInfo := false
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		//c := mgr.getClient(ctx, n)
 		memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 		memberStatus := enterpriseApi.SearchHeadClusterMemberStatus{Name: memberName}
 		memberInfo, err := GetSearchHeadClusterMemberInfo(ctx, mgr, n)
@@ -612,6 +617,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 				mgr.cr.Status.MaintenanceMode = captainInfo.MaintenanceMode
 				gotCaptainInfo = true
 			} else {
+				mgr.cr.Status.CaptainReady = false
 				mgr.log.Error(err, "Unable to retrieve captain info", "memberName", memberName)
 			}
 		}
@@ -646,9 +652,48 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	return ss, nil
 }
 
+// CSPL-3652 Configure deployer resources if configured
+// Use default otherwise
+// Make sure to set the resources ONLY for the deployer
+func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster, podTemplate *corev1.PodTemplateSpec) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("setDeployerConfig").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Break out if this is not a deployer
+	if !strings.Contains("deployer", podTemplate.Labels["app.kubernetes.io/name"]) {
+		return errors.New("not a deployer, skipping setting resources")
+	}
+	depRes := cr.Spec.DeployerResourceSpec
+	for i := range podTemplate.Spec.Containers {
+		if len(depRes.Requests) != 0 {
+			podTemplate.Spec.Containers[i].Resources.Requests = cr.Spec.DeployerResourceSpec.Requests
+			scopedLog.Info("Setting deployer resources requests", "requests", cr.Spec.DeployerResourceSpec.Requests)
+		}
+
+		if len(depRes.Limits) != 0 {
+			podTemplate.Spec.Containers[i].Resources.Limits = cr.Spec.DeployerResourceSpec.Limits
+			scopedLog.Info("Setting deployer resources limits", "limits", cr.Spec.DeployerResourceSpec.Limits)
+		}
+	}
+
+	// Add node affinity if configured
+	if cr.Spec.DeployerNodeAffinity != nil {
+		podTemplate.Spec.Affinity.NodeAffinity = cr.Spec.DeployerNodeAffinity
+		scopedLog.Info("Setting deployer node affinity", "nodeAffinity", cr.Spec.DeployerNodeAffinity)
+	}
+
+	return nil
+}
+
 // getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
 func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster) (*appsv1.StatefulSet, error) {
 	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, 1, getSearchHeadExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		return ss, err
+	}
+
+	// CSPL-3562 - Set deployer resources if configured
+	err = setDeployerConfig(ctx, cr, &ss.Spec.Template)
 	if err != nil {
 		return ss, err
 	}

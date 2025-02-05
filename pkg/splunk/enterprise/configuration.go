@@ -1191,7 +1191,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// Check if the secret version is already tracked, and if there is a change in it
 			if existingSecretVersion, ok := ResourceRev[volume.SecretRef]; ok {
 				if existingSecretVersion != namespaceScopedSecret.ResourceVersion {
-					scopedLog.Info("Secret Keys changed", "Previous Resource Version", existingSecretVersion, "Current Version", namespaceScopedSecret.ResourceVersion)
+					scopedLog.Info("secret keys changed", "previous resource version", existingSecretVersion, "current version", namespaceScopedSecret.ResourceVersion)
 					ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 					return true
 				}
@@ -1201,7 +1201,7 @@ func AreRemoteVolumeKeysChanged(ctx context.Context, client splcommon.Controller
 			// First time adding to track the secret resource version
 			ResourceRev[volume.SecretRef] = namespaceScopedSecret.ResourceVersion
 		} else {
-			scopedLog.Info("No valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
+			scopedLog.Info("no valid SecretRef for volume.  No secret to track.", "volumeName", volume.Name)
 		}
 	}
 
@@ -1232,17 +1232,17 @@ func ApplyManualAppUpdateConfigMap(ctx context.Context, client splcommon.Control
 	configMap.SetOwnerReferences(append(configMap.GetOwnerReferences(), splcommon.AsOwner(cr, false)))
 
 	if newConfigMap {
-		scopedLog.Info("Creating manual app update configMap")
+		scopedLog.Info("creating manual app update configMap")
 		err = splutil.CreateResource(ctx, client, configMap)
 		if err != nil {
 			scopedLog.Error(err, "Unable to create the configMap", "name", configMapName)
 			return configMap, err
 		}
 	} else {
-		scopedLog.Info("Updating manual app update configMap")
+		scopedLog.Info("updating manual app update configMap")
 		err = splutil.UpdateResource(ctx, client, configMap)
 		if err != nil {
-			scopedLog.Error(err, "Unable to update the configMap", "name", configMapName)
+			scopedLog.Error(err, "unable to update the configMap", "name", configMapName)
 			return configMap, err
 		}
 	}
@@ -1256,15 +1256,38 @@ func getManualUpdateStatus(ctx context.Context, client splcommon.ControllerClien
 
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
-	if err != nil {
-		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
-		return ""
+	result := ""
+	if err == nil {
+		statusRegex := ".*status: (?P<status>.*).*"
+		data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+		result = extractFieldFromConfigMapData(statusRegex, data)
+		if result == "on" {
+			scopedLog.Info("namespace configMap value is set to", "name", configMapName, "data", result)
+			return result
+		}
+	} else {
+		scopedLog.Error(err, "Unable to get namespace specific configMap", "name", configMapName)
 	}
 
-	statusRegex := ".*status: (?P<status>.*).*"
-	data := configMap.Data[cr.GetObjectKind().GroupVersionKind().Kind]
+	return "off"
+}
 
-	return extractFieldFromConfigMapData(statusRegex, data)
+// getManualUpdatePerCrStatus extracts the status field from the configMap data
+func getManualUpdatePerCrStatus(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, configMapName string) string {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getManualUpdatePerCrStatus").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: fmt.Sprintf(perCrConfigMapNameStr, KindToInstanceString(cr.GroupVersionKind().Kind), cr.GetName())}
+	crconfigMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
+	if err == nil {
+		scopedLog.Info("custom configMap value is set to", "name", configMapName, "data", crconfigMap.Data)
+		data := crconfigMap.Data["manualUpdate"]
+		return data
+	} else {
+		scopedLog.Error(err, "unable to get custom specific configMap", "name", configMapName)
+	}
+
+	return "off"
 }
 
 // getManualUpdateRefCount extracts the refCount field from the configMap data
@@ -1275,7 +1298,7 @@ func getManualUpdateRefCount(ctx context.Context, client splcommon.ControllerCli
 	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
 	configMap, err := splctrl.GetConfigMap(ctx, client, namespacedName)
 	if err != nil {
-		scopedLog.Error(err, "Unable to get the configMap", "name", configMapName)
+		scopedLog.Error(err, "unable to get the configMap", "name", configMapName)
 		return refCount
 	}
 
@@ -1317,7 +1340,7 @@ func createOrUpdateAppUpdateConfigMap(ctx context.Context, client splcommon.Cont
 			}
 		}
 
-		scopedLog.Info("Existing configMap data", "data", configMap.Data)
+		scopedLog.Info("existing configMap data", "data", configMap.Data)
 		crKindMap = configMap.Data
 
 		// get the number of instance types of this kind
@@ -1343,7 +1366,7 @@ refCount: %d`, status, numOfObjects+1)
 	// Create/update the configMap to store the values of manual trigger per CR kind.
 	configMap, err = ApplyManualAppUpdateConfigMap(ctx, client, cr, crKindMap)
 	if err != nil {
-		scopedLog.Error(err, "Create/update configMap for app update failed")
+		scopedLog.Error(err, "create/update configMap for app update failed")
 		return configMap, err
 	}
 
@@ -1633,15 +1656,15 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 		// For now, Smartstore supports only S3, which is by default.
 		if isAppFramework {
 			if !isValidStorageType(volume.Type) {
-				return fmt.Errorf("storageType '%s' is invalid. Valid values are 's3' and 'blob'", volume.Type)
+				return fmt.Errorf("storageType '%s' is invalid. Valid values are 's3', 'gcs' and 'blob'", volume.Type)
 			}
 
 			if !isValidProvider(volume.Provider) {
-				return fmt.Errorf("provider '%s' is invalid. Valid values are 'aws', 'minio' and 'azure'", volume.Provider)
+				return fmt.Errorf("provider '%s' is invalid. Valid values are 'aws', 'minio', 'gcp' and 'azure'", volume.Provider)
 			}
 
 			if !isValidProviderForStorageType(volume.Type, volume.Provider) {
-				return fmt.Errorf("storageType '%s' cannot be used with provider '%s'. Valid combinations are (s3,aws), (s3,minio) and (blob,azure)", volume.Type, volume.Provider)
+				return fmt.Errorf("storageType '%s' cannot be used with provider '%s'. Valid combinations are (s3,aws), (s3,minio), (gcs,gcp) and (blob,azure)", volume.Type, volume.Provider)
 			}
 		}
 	}
@@ -1650,19 +1673,20 @@ func validateRemoteVolumeSpec(ctx context.Context, volList []enterpriseApi.Volum
 
 // isValidStorageType checks if the storage type specified is valid and supported
 func isValidStorageType(storage string) bool {
-	return storage != "" && (storage == "s3" || storage == "blob")
+	return storage != "" && (storage == "s3" || storage == "blob" || storage == "gcs")
 }
 
 // isValidProvider checks if the provider specified is valid and supported
 func isValidProvider(provider string) bool {
-	return provider != "" && (provider == "aws" || provider == "minio" || provider == "azure")
+	return provider != "" && (provider == "aws" || provider == "minio" || provider == "azure" || provider == "gcp")
 }
 
 // Valid provider for s3 are aws and minio
 // Valid provider for blob is azure
 func isValidProviderForStorageType(storageType string, provider string) bool {
 	return ((storageType == "s3" && (provider == "aws" || provider == "minio")) ||
-		(storageType == "blob" && provider == "azure"))
+		(storageType == "blob" && provider == "azure") ||
+		(storageType == "gcs" && provider == "gcp"))
 }
 
 // validateSplunkIndexesSpec validates the smartstore index spec

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	gomega "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -41,6 +42,10 @@ type PodDetailsStruct struct {
 					CPU    string `json:"cpu"`
 					Memory string `json:"memory"`
 				} `json:"limits"`
+				Requests struct {
+					CPU    string `json:"cpu"`
+					Memory string `json:"memory"`
+				} `json:"requests"`
 			} `json:"resources"`
 		}
 		ServiceAccount     string `json:"serviceAccount"`
@@ -72,8 +77,7 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 		}
 		testenvInstance.Log.Info("Waiting for Monitoring Console phase to be ready", "instance", monitoringConsole.ObjectMeta.Name, "Phase", monitoringConsole.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -88,20 +92,19 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 // StandaloneReady verify Standalone is in ReadyStatus and does not flip-flop
 func StandaloneReady(ctx context.Context, deployment *Deployment, deploymentName string, standalone *enterpriseApi.Standalone, testenvInstance *TestCaseEnv) {
 	gomega.Eventually(func() enterpriseApi.Phase {
-		err := deployment.GetInstance(ctx, deploymentName, standalone)
+		err := deployment.GetInstance(ctx, standalone.Name, standalone)
 		if err != nil {
 			return enterpriseApi.PhaseError
 		}
 		testenvInstance.Log.Info("Waiting for Standalone phase to be ready", "instance", standalone.ObjectMeta.Name, "Phase", standalone.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
-		_ = deployment.GetInstance(ctx, deployment.GetName(), standalone)
+		_ = deployment.GetInstance(ctx, standalone.Name, standalone)
 		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "standalone")
 		return standalone.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -118,8 +121,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 		}
 		testenvInstance.Log.Info("Waiting for Search head cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -130,8 +132,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 		}
 		testenvInstance.Log.Info("Waiting for Deployer phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.DeployerPhase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return shc.Status.DeployerPhase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -142,9 +143,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 		}
 		testenvInstance.Log.Info("Waiting for Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
-		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
+
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -152,6 +151,7 @@ func SearchHeadClusterReady(ctx context.Context, deployment *Deployment, testenv
 	gomega.Consistently(func() enterpriseApi.Phase {
 		_ = deployment.GetInstance(ctx, deployment.GetName(), shc)
 		testenvInstance.Log.Info("Check for Consistency Search Head Cluster phase to be ready", "instance", shc.ObjectMeta.Name, "Phase", shc.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-shc-")
 		return shc.Status.Phase
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
@@ -167,8 +167,7 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 		}
 		testenvInstance.Log.Info("Waiting for indexer instance's phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return idc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -192,8 +191,7 @@ func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		}
 		testenvInstance.Log.Info("Waiting for cluster-manager phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -219,8 +217,7 @@ func ClusterMasterReady(ctx context.Context, deployment *Deployment, testenvInst
 		}
 		testenvInstance.Log.Info("Waiting for cluster-master phase to be ready", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		// Test ClusterMaster Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -249,8 +246,7 @@ func IndexersReady(ctx context.Context, deployment *Deployment, testenvInstance 
 			}
 			testenvInstance.Log.Info("Waiting for indexer site instance phase to be ready", "instance", instanceName, "Phase", idc.Status.Phase)
 			DumpGetPods(testenvInstance.GetName())
-			DumpGetTopPods(testenvInstance.GetName())
-			DumpGetTopNodes()
+
 			return idc.Status.Phase
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 
@@ -340,8 +336,6 @@ func LicenseManagerReady(ctx context.Context, deployment *Deployment, testenvIns
 		testenvInstance.Log.Info("Waiting for License Manager instance status to be ready",
 			"instance", LicenseManager.ObjectMeta.Name, "Phase", LicenseManager.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
 
 		return LicenseManager.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -366,8 +360,6 @@ func LicenseMasterReady(ctx context.Context, deployment *Deployment, testenvInst
 		testenvInstance.Log.Info("Waiting for License Master instance status to be ready",
 			"instance", LicenseMaster.ObjectMeta.Name, "Phase", LicenseMaster.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
 
 		return LicenseMaster.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
@@ -482,8 +474,7 @@ func VerifySearchHeadClusterPhase(ctx context.Context, deployment *Deployment, t
 		}
 		testenvInstance.Log.Info("Waiting for Search Head Cluster Phase", "instance", shc.ObjectMeta.Name, "Expected", phase, "Phase", shc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return shc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseScalingUp))
 }
@@ -498,8 +489,7 @@ func VerifyIndexerClusterPhase(ctx context.Context, deployment *Deployment, test
 		}
 		testenvInstance.Log.Info("Waiting for Indexer Cluster Phase", "instance", idxc.ObjectMeta.Name, "Expected", phase, "Phase", idxc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return idxc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
@@ -514,8 +504,7 @@ func VerifyStandalonePhase(ctx context.Context, deployment *Deployment, testenvI
 		}
 		testenvInstance.Log.Info("Waiting for Standalone status", "instance", standalone.ObjectMeta.Name, "Expected", phase, " Actual Phase", standalone.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return standalone.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
@@ -530,8 +519,7 @@ func VerifyMonitoringConsolePhase(ctx context.Context, deployment *Deployment, t
 		}
 		testenvInstance.Log.Info("Waiting for Monitoring Console CR status", "instance", mc.ObjectMeta.Name, "Expected", phase, " Actual Phase", mc.Status.Phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return mc.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
 }
@@ -626,8 +614,7 @@ func VerifyCustomResourceVersionChanged(ctx context.Context, deployment *Deploym
 		}
 		testenvInstance.Log.Info("Waiting for ", kind, " CR status", "instance", name, "Not Expected", resourceVersion, " Actual Resource Version", newResourceVersion)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		return newResourceVersion
 	}, deployment.GetTimeout(), PollInterval).ShouldNot(gomega.Equal(resourceVersion))
 }
@@ -659,6 +646,48 @@ func VerifyCPULimits(deployment *Deployment, ns string, podName string, expected
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
 
+// VerifyResourceConstraints verifies value of CPU limits is as expected
+func VerifyResourceConstraints(deployment *Deployment, ns string, podName string, res corev1.ResourceRequirements) {
+	gomega.Eventually(func() bool {
+		output, err := exec.Command("kubectl", "get", "pods", "-n", ns, podName, "-o", "json").Output()
+		if err != nil {
+			cmd := fmt.Sprintf("kubectl get pods -n %s %s -o json", ns, podName)
+			logf.Log.Error(err, "Failed to execute command", "command", cmd)
+			return false
+		}
+		restResponse := PodDetailsStruct{}
+		err = json.Unmarshal([]byte(output), &restResponse)
+		if err != nil {
+			logf.Log.Error(err, "Failed to parse JSON")
+			return false
+		}
+		result := false
+
+		for i := 0; i < len(restResponse.Spec.Containers); i++ {
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.CPU, res.Limits.Cpu().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[0].Resources.Limits.CPU, "EXPECTED", res.Limits.Cpu().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Limits.Memory, res.Limits.Memory().String()) {
+				result = true
+				logf.Log.Info("Verifying Memory limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Limits.Memory, "EXPECTED", res.Limits.Memory().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.CPU, res.Requests.Cpu().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.CPU, "EXPECTED", res.Requests.Cpu().String())
+			}
+
+			if strings.Contains(restResponse.Spec.Containers[i].Resources.Requests.Memory, res.Requests.Memory().String()) {
+				result = true
+				logf.Log.Info("Verifying CPU limits: ", "POD", podName, "FOUND", restResponse.Spec.Containers[i].Resources.Requests.Memory, "EXPECTED", res.Requests.Memory().String())
+			}
+		}
+		return result
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
 // VerifyClusterManagerPhase verify phase of cluster manager
 func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, phase enterpriseApi.Phase) {
 	cm := &enterpriseApi.ClusterManager{}
@@ -669,8 +698,7 @@ func VerifyClusterManagerPhase(ctx context.Context, deployment *Deployment, test
 		}
 		testenvInstance.Log.Info("Waiting for cluster-manager Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
@@ -686,8 +714,7 @@ func VerifyClusterMasterPhase(ctx context.Context, deployment *Deployment, teste
 		}
 		testenvInstance.Log.Info("Waiting for cluster-manager Phase", "instance", cm.ObjectMeta.Name, "Phase", cm.Status.Phase, "Expected", phase)
 		DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		// Test ClusterManager Phase to see if its ready
 		return cm.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(phase))
@@ -1051,8 +1078,7 @@ func VerifyClusterManagerBundlePush(ctx context.Context, deployment *Deployment,
 			return false
 		}
 		clusterPodNames := DumpGetPods(testenvInstance.GetName())
-		DumpGetTopPods(testenvInstance.GetName())
-		DumpGetTopNodes()
+
 		for _, podName := range clusterPodNames {
 			if strings.Contains(podName, "-indexer-") {
 				if _, present := clusterManagerBundleStatus[podName]; present {
@@ -1077,16 +1103,14 @@ func VerifyDeployerBundlePush(ctx context.Context, deployment *Deployment, teste
 		if len(deployerAppPushStatus) == 0 {
 			testenvInstance.Log.Info("Bundle push not complete on all pods")
 			DumpGetPods(testenvInstance.GetName())
-			DumpGetTopPods(testenvInstance.GetName())
-			DumpGetTopNodes()
+
 			return false
 		}
 		for appName, val := range deployerAppPushStatus {
 			if val < replicas {
 				testenvInstance.Log.Info("Bundle push not complete on all pods for", "AppName", appName)
 				DumpGetPods(testenvInstance.GetName())
-				DumpGetTopPods(testenvInstance.GetName())
-				DumpGetTopNodes()
+
 				return false
 			}
 		}
@@ -1102,6 +1126,9 @@ func VerifyNoPodReset(ctx context.Context, deployment *Deployment, testenvInstan
 		// Get current Age on all splunk pods and compare with previous
 		currentSplunkPodAge := GetPodsStartTime(ns)
 		for podName, currentpodAge := range currentSplunkPodAge {
+			if strings.Contains(podName, "monitoring-console") {
+				continue
+			}
 			// Only compare if the pod was present in previous pod iteration
 			testenvInstance.Log.Info("Checking Pod reset for Pod Name", "PodName", podName, "Current Pod Age", currentpodAge)
 			if _, ok := podStartTimeMap[podName]; ok {

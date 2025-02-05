@@ -140,72 +140,9 @@ ClusterManager:
 		if clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != spec.Image {
 			return false, nil
 		}
-		goto SearchHeadCluster
-	}
-SearchHeadCluster:
-	if cr.GroupVersionKind().Kind == "SearchHeadCluster" {
-
-		namespacedName := types.NamespacedName{
-			Namespace: cr.GetNamespace(),
-			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
-		}
-
-		// check if the stateful set is created at this instance
-		statefulSet := &appsv1.StatefulSet{}
-		err := c.Get(ctx, namespacedName, statefulSet)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return true, nil
-			}
-			return false, nil
-		}
-		return true, nil
-	} else {
-
-		// get the clusterManagerRef attached to the instance
-		clusterManagerRef := spec.ClusterManagerRef
-
-		// check if a search head cluster exists with the same ClusterManager instance attached
-		searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
-		opts := []rclient.ListOption{
-			rclient.InNamespace(cr.GetNamespace()),
-		}
-		searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
-		if err != nil {
-			if err.Error() == "NotFound" {
-				goto IndexerCluster
-			}
-			return false, err
-		}
-		if len(searchHeadList.Items) == 0 {
-			goto IndexerCluster
-		}
-
-		// check if instance has the ClusterManagerRef defined
-		for _, shc := range searchHeadList.Items {
-			if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
-				searchHeadClusterInstance = shc
-				break
-			}
-		}
-		if len(searchHeadClusterInstance.GetName()) == 0 {
-			goto IndexerCluster
-		}
-
-		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
-		if err != nil {
-			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
-			scopedLog.Error(err, "Unable to get SearchHeadCluster current image")
-			return false, err
-		}
-
-		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
-		// further reconcile operations on IDX until SHC is ready
-		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
-			return false, nil
-		}
 		goto IndexerCluster
 	}
+
 IndexerCluster:
 	if cr.GroupVersionKind().Kind == "IndexerCluster" {
 
@@ -250,6 +187,72 @@ IndexerCluster:
 				}
 			}
 
+		}
+		return true, nil
+	} else {
+		goto SearchHeadCluster
+	}
+SearchHeadCluster:
+	if cr.GroupVersionKind().Kind == "SearchHeadCluster" {
+
+		namespacedName := types.NamespacedName{
+			Namespace: cr.GetNamespace(),
+			Name:      GetSplunkStatefulsetName(SplunkSearchHead, cr.GetName()),
+		}
+
+		// check if the stateful set is created at this instance
+		statefulSet := &appsv1.StatefulSet{}
+		err := c.Get(ctx, namespacedName, statefulSet)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, nil
+		}
+		return true, nil
+	} else {
+
+		// get the clusterManagerRef attached to the instance
+		clusterManagerRef := spec.ClusterManagerRef
+
+		// check if a search head cluster exists with the same ClusterManager instance attached
+		searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
+		opts := []rclient.ListOption{
+			rclient.InNamespace(cr.GetNamespace()),
+		}
+		searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
+		if err != nil {
+			if err.Error() == "NotFound" {
+				goto MonitoringConsole
+			}
+			return false, err
+		}
+		if len(searchHeadList.Items) == 0 {
+			goto MonitoringConsole
+		}
+
+		// check if instance has the ClusterManagerRef defined
+		for _, shc := range searchHeadList.Items {
+			if shc.Spec.ClusterManagerRef.Name == clusterManagerRef.Name {
+				searchHeadClusterInstance = shc
+				break
+			}
+		}
+		if len(searchHeadClusterInstance.GetName()) == 0 {
+			goto MonitoringConsole
+		}
+
+		shcImage, err := getCurrentImage(ctx, c, &searchHeadClusterInstance, SplunkSearchHead)
+		if err != nil {
+			eventPublisher.Warning(ctx, "UpgradePathValidation", fmt.Sprintf("Could not get the Search Head Cluster Image. Reason %v", err))
+			scopedLog.Error(err, "Unable to get SearchHeadCluster current image")
+			return false, err
+		}
+
+		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
+		// further reconcile operations on IDX until SHC is ready
+		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
+			return false, nil
 		}
 		goto MonitoringConsole
 	}
@@ -339,5 +342,4 @@ MonitoringConsole:
 	}
 EndLabel:
 	return true, nil
-
 }

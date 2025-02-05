@@ -9,23 +9,16 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1,
+            appframeworksS1,
             managerappframeworkc3,
             managerappframeworkm4,
             managersecret,
             managersmartstore,
-            managermc,
+            managermc1,
+            managermc2,
             managerscaling,
             managercrcrud,
             licensemanager,
-            masterappframeworkc3,
-            masterappframeworkm4,
-            mastersecret,
-            mastersmartstore,
-            mastermc,
-            masterscaling,
-            mastercrcrud,
-            licensemaster,
           ]
     runs-on: ubuntu-latest
     env:
