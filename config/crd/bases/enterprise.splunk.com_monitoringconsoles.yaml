@@ -2278,6 +2278,9 @@ spec:
                   enable:
                     description: Enable vault support
                     type: boolean
+                  operatorRole:
+                    description: OperatorRole if different from the role
+                    type: string
                   role:
                     description: Vault Role
                     type: string
@@ -6476,6 +6479,9 @@ spec:
                   enable:
                     description: Enable vault support
                     type: boolean
+                  operatorRole:
+                    description: OperatorRole if different from the role
+                    type: string
                   role:
                     description: Vault Role
                     type: string

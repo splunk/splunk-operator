@@ -85,7 +85,6 @@ type VaultError struct {
 	Errors []string `json:"errors,omitempty"`
 }
 
-
 func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, vaultSpec *enterpriseApi.VaultIntegration) error {
 	logger.Info("InjectVaultSecret called", "vaultSpec", vaultSpec)
 
@@ -210,6 +209,11 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 	client := resty.New()
 	client.SetDebug(true) //FIXME TODO remove once code complete
 
+	role := vaultIntegration.Role
+	if vaultIntegration.OperatorRole != "" {
+		role = vaultIntegration.OperatorRole
+	}
+
 	// Read the Kubernetes service account token
 	tokenFile := "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	token, err := os.ReadFile(tokenFile)
@@ -220,7 +224,7 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 
 	// Authenticate with Vault using the Kubernetes auth method
 	data := map[string]interface{}{
-		"role": vaultIntegration.Role,
+		"role": role,
 		"jwt":  string(token),
 	}
 	var authResponse map[string]interface{}
@@ -291,6 +295,11 @@ func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.Controller
 	client := resty.New()
 	client.SetDebug(true) //FIXME TODO remove once code complete
 
+	role := vaultIntegration.Role
+	if vaultIntegration.OperatorRole != "" {
+		role = vaultIntegration.OperatorRole
+	}
+
 	// Read the Kubernetes service account token
 	tokenFile := "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	token, err := os.ReadFile(tokenFile)
@@ -301,7 +310,7 @@ func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.Controller
 
 	// Authenticate with Vault using the Kubernetes auth method
 	data := map[string]interface{}{
-		"role": vaultIntegration.Role,
+		"role": role,
 		"jwt":  string(token),
 	}
 	var authResponse map[string]interface{}
@@ -359,6 +368,11 @@ func GetSpecificSecretTokenVersionFromVault(ctx context.Context, c splcommon.Con
 	client := resty.New()
 	client.SetDebug(true) //FIXME TODO remove once code complete
 
+	role := vaultIntegration.Role
+	if vaultIntegration.OperatorRole != "" {
+		role = vaultIntegration.OperatorRole
+	}
+
 	// Read the Kubernetes service account token
 	tokenFile := "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	token, err := os.ReadFile(tokenFile)
@@ -369,7 +383,7 @@ func GetSpecificSecretTokenVersionFromVault(ctx context.Context, c splcommon.Con
 
 	// Authenticate with Vault using the Kubernetes auth method
 	data := map[string]interface{}{
-		"role": vaultIntegration.Role,
+		"role": role,
 		"jwt":  string(token),
 	}
 	var authResponse map[string]interface{}

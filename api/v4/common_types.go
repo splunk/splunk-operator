@@ -586,6 +586,9 @@ type VaultIntegration struct {
 
 	// Vault secret path
 	SecretPath string `json:"secretPath"`
+
+	// OperatorRole if different from the role
+	OperatorRole string `json:"operatorRole,omitempty"`
 }
 
 const (
