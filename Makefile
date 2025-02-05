@@ -1,3 +1,6 @@
+# Default environment is default
+ENVIRONMENT=${1:-default}
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -137,7 +140,7 @@ build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: test ## Build docker image with the manager.
+docker-build: #test ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
@@ -154,15 +157,25 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi
 BASE_IMAGE_VERSION ?= 8.10
+
 docker-buildx:
 	@if [ -z "$(IMG)" ]; then \
 		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
 		exit 1; \
-	fi
-	docker buildx build --push --platform="${PLATFORMS}" \
-		--build-arg BASE_IMAGE="${BASE_IMAGE}" \
-		--build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-		--tag "${IMG}" -f Dockerfile .
+	fi; \
+	if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
+		DOCKERFILE="Dockerfile.distroless"; \
+		BUILD_TAG="$(IMG)-distroless"; \
+	else \
+		DOCKERFILE="Dockerfile"; \
+		BUILD_TAG="$(IMG)"; \
+	fi; \
+	docker buildx build --push --platform="$(PLATFORMS)" \
+		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
+		--build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
+		--tag "$$BUILD_TAG" -f "$$DOCKERFILE" .
+
+
 
 ##@ Deployment
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
@@ -172,17 +185,17 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
 deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
-	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
-	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/$(ENVIRONMENT)/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default | kubectl apply --server-side --force-conflicts -f -
-	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/default/kustomization.yaml
-	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/default/kustomization.yaml
-	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/default/kustomization.yaml
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl apply --server-side --force-conflicts -f -
+	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/$(ENVIRONMENT)/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/default | kubectl delete -f -
+	$(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl delete -f -
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin

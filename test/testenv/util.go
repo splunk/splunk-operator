@@ -44,6 +44,7 @@ import (
 
 const (
 	letterBytes = "abcdefghijklmnopqrstuvwxyz0123456789"
+	sidecarName = "sok-debug"
 )
 
 func init() {
@@ -896,7 +897,7 @@ func ExecuteCommandOnPod(ctx context.Context, deployment *Deployment, podName st
 // ExecuteCommandOnOperatorPod execute command on given pod and return result
 func ExecuteCommandOnOperatorPod(ctx context.Context, deployment *Deployment, podName string, stdin string) (string, error) {
 	command := []string{"/bin/sh"}
-	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false)
+	stdout, stderr, err := deployment.OperatorPodExecCommand(ctx, podName, command, stdin, false, sidecarName)
 	if err != nil {
 		logf.Log.Error(err, "Failed to execute command on pod", "pod", podName, "shell", command, "command", stdin, "error", err.Error())
 		return "", err
