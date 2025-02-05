@@ -1176,7 +1176,7 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 }
 
 func TestIsAppExtentionValid(t *testing.T) {
-	if !isAppExtentionValid("testapp.spl") || !isAppExtentionValid("testapp.tgz") {
+	if !isAppExtentionValid("testapp.spl") || !isAppExtentionValid("testapp.tgz") || !isAppExtentionValid("testapp.tar.gz") {
 		t.Errorf("failed to detect valid app extension")
 	}
 

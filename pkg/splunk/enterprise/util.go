@@ -1198,6 +1198,9 @@ func isAppExtentionValid(receivedKey string) bool {
 	case "tgz":
 		return true
 
+	case "tar.gz":
+		return true
+
 	default:
 		return false
 	}
