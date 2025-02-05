@@ -1185,25 +1185,15 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 }
 
 // isAppExtentionValid checks if an app extention is supported or not
-func isAppExtentionValid(receivedKey string) bool {
-	appExtIdx := strings.LastIndex(receivedKey, ".")
-	if appExtIdx < 0 {
-		return false
+func isAppExtensionValid(receivedKey string) bool {
+	validExtensions := []string{".spl", ".tgz", ".tar.gz"}
+
+	for _, ext := range validExtensions {
+		if strings.HasSuffix(receivedKey, ext) {
+			return true
+		}
 	}
-
-	switch appExt := receivedKey[appExtIdx+1:]; appExt {
-	case "spl":
-		return true
-
-	case "tgz":
-		return true
-
-	case "tar.gz":
-		return true
-
-	default:
-		return false
-	}
+	return false
 }
 
 // AddOrUpdateAppSrcDeploymentInfoList  modifies the App deployment status as perceived from the remote object listing
@@ -1219,7 +1209,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentIn
 
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
-		if !isAppExtentionValid(receivedKey) {
+		if !isAppExtensionValid(receivedKey) {
 			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extension", "receivedKey", receivedKey)
 			continue
 		}

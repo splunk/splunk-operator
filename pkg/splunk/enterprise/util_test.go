@@ -1175,12 +1175,12 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 	}
 }
 
-func TestIsAppExtentionValid(t *testing.T) {
-	if !isAppExtentionValid("testapp.spl") || !isAppExtentionValid("testapp.tgz") || !isAppExtentionValid("testapp.tar.gz") {
+func TestIsAppExtensionValid(t *testing.T) {
+	if !isAppExtensionValid("testapp.spl") || !isAppExtensionValid("testapp.tgz") || !isAppExtensionValid("testapp.tar.gz") {
 		t.Errorf("failed to detect valid app extension")
 	}
 
-	if isAppExtentionValid("testapp.aspl") || isAppExtentionValid("testapp.ttgz") {
+	if isAppExtensionValid("testapp.aspl") || isAppExtensionValid("testapp.ttgz") {
 		t.Errorf("failed to detect invalid app extension")
 	}
 }
