@@ -196,6 +196,15 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		}
 	}
 
+	if cr.Spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
+		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	clusterManagerManager := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := clusterManagerManager.Update(ctx, client, statefulSet, 1)
 	if err != nil {

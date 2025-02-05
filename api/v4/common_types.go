@@ -238,6 +238,8 @@ type CommonSplunkSpec struct {
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	VaultIntegration VaultIntegration `json:"vaultIntegration,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration
@@ -567,6 +569,26 @@ type PhaseInfo struct {
 	Status AppPhaseStatusType `json:"status,omitempty"`
 	// represents number of failures
 	FailCount uint32 `json:"failCount,omitempty"`
+}
+
+// Vault represents the Vault configuration for enabling secret injection.
+// +kubebuilder:object:generate=true
+// +kubebuilder:validation:Optional
+type VaultIntegration struct {
+	// Enable vault support
+	Enable bool `json:"enable,omitempty"`
+
+	// Vault Address
+	Address string `json:"address"`
+
+	// Vault Role
+	Role string `json:"role"`
+
+	// Vault secret path
+	SecretPath string `json:"secretPath"`
+
+	// OperatorRole if different from the role
+	OperatorRole string `json:"operatorRole,omitempty"`
 }
 
 const (

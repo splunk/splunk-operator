@@ -26,7 +26,9 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
@@ -35,6 +37,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func configTester2(t *testing.T, method string, f func() (interface{}, error), want string) {
@@ -1758,4 +1762,114 @@ func TestValidateLivenessProbe(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
+}
+
+func TestInjectVaultSecret(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{},
+	}
+
+	t.Run("Vault integration disabled", func(t *testing.T) {
+		vaultSpec := &enterpriseApi.VaultIntegration{
+			Enable:     false,
+			Role:       "",
+			SecretPath: "",
+		}
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		assert.NoError(t, err)
+		assert.Nil(t, statefulset.ObjectMeta.Annotations)
+	})
+
+	t.Run("Missing role when Vault is enabled", func(t *testing.T) {
+		vaultSpec := &enterpriseApi.VaultIntegration{
+			Enable:     true,
+			Role:       "",
+			SecretPath: "secret/data/splunk",
+		}
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		assert.Error(t, err)
+		assert.EqualError(t, err, "vault role is required when vault is enabled")
+	})
+
+	t.Run("Missing secretPath when Vault is enabled", func(t *testing.T) {
+		vaultSpec := &enterpriseApi.VaultIntegration{
+			Enable:     true,
+			Role:       "splunk-role",
+			SecretPath: "",
+		}
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		assert.Error(t, err)
+		assert.EqualError(t, err, "vault secretPath is required when vault is enabled")
+	})
+
+	t.Run("Successfully add Vault annotations", func(t *testing.T) {
+		vaultSpec := &enterpriseApi.VaultIntegration{
+			Enable:     true,
+			Role:       "splunk-role",
+			SecretPath: "secret/data/splunk",
+		}
+		err := splclient.InjectVaultSecret(ctx, client, statefulset, vaultSpec)
+		assert.NoError(t, err)
+
+		expectedAnnotations := map[string]string{
+			"vault.hashicorp.com/agent-inject":                "true",
+			"vault.hashicorp.com/agent-inject-path":           "/mnt/splunk-secrets",
+			"vault.hashicorp.com/role":                        "splunk-role",
+			"vault.hashicorp.com/agent-inject-file-defaults":  "default.yml",
+			"vault.hashicorp.com/secret-volume-path-defaults": "/mnt/splunk-secrets",
+			"vault.hashicorp.com/agent-inject-template-defaults": `
+splunk:
+    hec_disabled: 0
+    hec_enableSSL: 0
+    hec_token: "{{- with secret \"secret/data/splunk/hec_token\" -}}{{ .Data.data.value }}{{- end }}"
+    password: "{{- with secret \"secret/data/splunk/password\" -}}{{ .Data.data.value }}{{- end }}"
+    pass4SymmKey: "{{- with secret \"secret/data/splunk/pass4SymmKey\" -}}{{ .Data.data.value }}{{- end }}"
+    idxc:
+        secret: "{{- with secret \"secret/data/splunk/idxc_secret\" -}}{{ .Data.data.value }}{{- end }}"
+    shc:
+        secret: "{{- with secret \"secret/data/splunk/shc_secret\" -}}{{ .Data.data.value }}{{- end }}"`,
+			"vault.hashicorp.com/agent-inject-secret-hec_token":    "secret/data/splunk/hec_token",
+			"vault.hashicorp.com/agent-inject-file-hec_token":      "hec_token",
+			"vault.hashicorp.com/secret-volume-path-hec_token":     "/mnt/splunk-secrets/hec_token",
+			"vault.hashicorp.com/agent-inject-secret-idxc_secret":  "secret/data/splunk/idxc_secret",
+			"vault.hashicorp.com/agent-inject-file-idxc_secret":    "idxc_secret",
+			"vault.hashicorp.com/secret-volume-path-idxc_secret":   "/mnt/splunk-secrets/idxc_secret",
+			"vault.hashicorp.com/agent-inject-secret-pass4SymmKey": "secret/data/splunk/pass4SymmKey",
+			"vault.hashicorp.com/agent-inject-file-pass4SymmKey":   "pass4SymmKey",
+			"vault.hashicorp.com/secret-volume-path-pass4SymmKey":  "/mnt/splunk-secrets/pass4SymmKey",
+			"vault.hashicorp.com/agent-inject-secret-password":     "secret/data/splunk/password",
+			"vault.hashicorp.com/agent-inject-file-password":       "password",
+			"vault.hashicorp.com/secret-volume-path-password":      "/mnt/splunk-secrets/password",
+			"vault.hashicorp.com/agent-inject-secret-shc_secret":   "secret/data/splunk/shc_secret",
+			"vault.hashicorp.com/agent-inject-file-shc_secret":     "shc_secret",
+			"vault.hashicorp.com/secret-volume-path-shc_secret":    "/mnt/splunk-secrets/shc_secret",
+		}
+
+		for key, value := range expectedAnnotations {
+			if key == "vault.hashicorp.com/agent-inject-template-defaults" {
+				//assert.True(t, compareYAMLStrings(value, podTemplateSpec.ObjectMeta.Annotations[key]))
+				continue
+			}
+			assert.Equal(t, value, statefulset.ObjectMeta.Annotations[key])
+		}
+	})
+}
+
+func compareYAMLStrings(yamlStr1, yamlStr2 string) bool {
+	var yamlMap1, yamlMap2 map[string]interface{}
+
+	// Parse YAML strings into Go maps
+	if err := yaml.Unmarshal([]byte(yamlStr1), &yamlMap1); err != nil {
+		fmt.Printf("Error parsing YAML 1: %v\n", err)
+		return false
+	}
+	if err := yaml.Unmarshal([]byte(yamlStr2), &yamlMap2); err != nil {
+		fmt.Printf("Error parsing YAML 2: %v\n", err)
+		return false
+	}
+
+	// Compare the maps
+	return fmt.Sprintf("%v", yamlMap1) == fmt.Sprintf("%v", yamlMap2)
 }

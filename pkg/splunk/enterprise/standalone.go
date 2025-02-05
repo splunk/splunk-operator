@@ -23,6 +23,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -206,6 +207,15 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 
+	if cr.Spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
+		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
@@ -247,6 +257,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
 		}
+
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.

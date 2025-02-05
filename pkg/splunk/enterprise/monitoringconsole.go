@@ -24,7 +24,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -147,6 +147,15 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		// check if the Monitoring Console is ready for version upgrade, if required
 		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
 		if err != nil || !continueReconcile {
+			return result, err
+		}
+	}
+
+	if cr.Spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
+		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		if err != nil {
 			return result, err
 		}
 	}
