@@ -1,5 +1,9 @@
 name: Build and Test Distroless
-on: push
+on:
+  push:
+    branches:
+      - develop
+      - main
 jobs:
   check-formating:
     runs-on: ubuntu-latest
