@@ -49,14 +49,11 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         unattended-upgrades -v && \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
     else \
-        yum -y install shadow-utils && \
+        microdnf -y install shadow-utils && \
         useradd -ms /bin/bash nonroot -u 1001 && \
-        yum install -y ca-certificates && \
+        microdnf install -y ca-certificates && \
         update-ca-trust &&  \
-        yum update -y krb5-libs && yum clean all && \
-        yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical && \
-        yum -y update-minimal --security --sec-severity=Moderate && \
-        yum -y update-minimal --security --sec-severity=Low; \
+        microdnf update -y krb5-libs && microdnf clean all; \
     fi
 
 # Metadata
