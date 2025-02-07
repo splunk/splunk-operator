@@ -21,7 +21,7 @@ resources are then created in that new namespace:
 1. Operator/Deployment
 
 The tests are then run within the scope/context of the TestEnv object. Resources used by the tests are scoped to the
-TestEnv object (ie Kubernetes namespace). When the tests are completed, the TestEnv object is destroyed and the
+TestEnv object (i.e Kubernetes namespace). When the tests are completed, the TestEnv object is destroyed and the
 resources within are deleted.
 
 ### Deployment
@@ -98,7 +98,7 @@ it is best to copy an existing test spec file in that suite and modified it.
 
 ### Add a new test suite
 
-1. If you are adding a new test suite (ie you want to run the test in a separate TestEnv or k8s namespace), it is best to copy the test/example folder entirely and modify it
+1. If you are adding a new test suite (i.e you want to run the test in a separate TestEnv or k8s namespace), it is best to copy the test/example folder entirely and modify it
 
 ## Notes
 
