@@ -207,7 +207,7 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 
 	// Initialize Vault client
 	client := resty.New()
-	client.SetDebug(true) //FIXME TODO remove once code complete
+	//client.SetDebug(true) //FIXME TODO remove once code complete
 
 	role := vaultIntegration.Role
 	if vaultIntegration.OperatorRole != "" {
@@ -293,7 +293,7 @@ func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.Controller
 
 	// Initialize Vault client
 	client := resty.New()
-	client.SetDebug(true) //FIXME TODO remove once code complete
+	//client.SetDebug(true) //FIXME TODO remove once code complete
 
 	role := vaultIntegration.Role
 	if vaultIntegration.OperatorRole != "" {
@@ -366,7 +366,7 @@ func GetSpecificSecretTokenVersionFromVault(ctx context.Context, c splcommon.Con
 
 	// Initialize Vault client
 	client := resty.New()
-	client.SetDebug(true) //FIXME TODO remove once code complete
+	//client.SetDebug(true) //FIXME TODO remove once code complete
 
 	role := vaultIntegration.Role
 	if vaultIntegration.OperatorRole != "" {

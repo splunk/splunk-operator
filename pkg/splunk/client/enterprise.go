@@ -70,7 +70,7 @@ func NewSplunkClient(managementURI, username, password string) *SplunkClient {
 func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj interface{}) error {
 	client := resty.New()
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-	client.SetDebug(true) //FIXME TODO
+	//client.SetDebug(true) //FIXME TODO
 
 	// Set basic auth
 	request.SetBasicAuth(c.Username, c.Password)
