@@ -1,5 +1,5 @@
 name: Build and Test
-on:
+on: 
   pull_request: {}
   push:
     branches:
