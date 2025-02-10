@@ -5,7 +5,7 @@ The Splunk Operator requires these docker images to be present or available to y
 * `splunk/splunk-operator`: The Splunk Operator image built by this repository or the [official release](https://hub.docker.com/r/splunk/splunk-operator)
 * `splunk/splunk:<version>`: The [Splunk Enterprise image](https://github.com/splunk/docker-splunk)
 
-All of these images are publicly available, and published on [Docker Hub](https://hub.docker.com/).
+All of these images are publicly available, and published on [Docker Hub](https://hub.docker.com/). Starting with release 2.7.2, the base image for the released image is ubi8/ubi-minimal, which minimizes security risks and reduces unneeded packages in the image. A released image based on the distroless base image is also available under the `-distroless` suffix tag on Docker Hub.
 
 If your cluster does not have access to pull directly from Docker Hub, you will need to manually download and push these images to an accessible registry. You will also need to specify the location of these images by using an environment variable passed to the Operator, or by adding additional `spec` parameters to your
 custom resource definition.
