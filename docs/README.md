@@ -121,6 +121,8 @@ A Kubernetes cluster administrator can install and start the Splunk Operator for
 kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-cluster.yaml --server-side  --force-conflicts
 ```
 
+The reason for appending `--server-side` and `--force-conflicts` to the apply command is that some of the CRDs are getting to long according to the CRD standards. There are no real implications caused by this.
+
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
 
 *Note: We recommended that the Splunk Enterprise Docker image is copied to a private registry, or directly onto your Kubernetes workers before creating large Splunk Enterprise deployments. See the [Required Images Documentation](Images.md) page, and the [Advanced Installation Instructions](Install.md) page for guidance on working with copies of the Docker images.*
