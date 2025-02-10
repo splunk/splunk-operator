@@ -56,6 +56,7 @@ func TestApplyConfigMap(t *testing.T) {
 		_, err := ApplyConfigMap(ctx, c, cr.(*corev1.ConfigMap))
 		return err
 	}
+
 	spltest.ReconcileTester(t, "TestApplyConfigMap", &current, revised, createCalls, updateCalls, reconcile, false)
 
 	// Update owner references test
