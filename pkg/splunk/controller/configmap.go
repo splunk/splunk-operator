@@ -78,6 +78,7 @@ func ApplyConfigMap(ctx context.Context, client splcommon.ControllerClient, conf
 			}
 		} else {
 			scopedLog.Info("No changes for ConfigMap")
+			scopedLog.Info("Adding another log line")
 		}
 
 	} else if k8serrors.IsNotFound(err) {
