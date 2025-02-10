@@ -48,6 +48,15 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         update-ca-certificates && \
         unattended-upgrades -v && \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    elif grep -q 'Amazon Linux' /etc/os-release; then \
+        yum -y install shadow-utils && \
+        useradd -ms /bin/bash nonroot -u 1001 && \
+        yum install -y ca-certificates && \
+        update-ca-trust &&  \
+        yum update -y krb5-libs && yum clean all && \
+        yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical && \
+        yum -y update-minimal --security --sec-severity=Moderate && \
+        yum -y update-minimal --security --sec-severity=Low; \
     else \
         microdnf -y install shadow-utils && \
         useradd -ms /bin/bash nonroot -u 1001 && \
