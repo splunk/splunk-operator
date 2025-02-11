@@ -7,7 +7,7 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-cluster.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-cluster.yaml
 ```
 
 ## Default Installation
@@ -17,7 +17,7 @@ Based on the file used Splunk Operator can be installed cluster-wide or namespac
 By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
-wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-cluster.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-cluster.yaml
 kubectl apply -f splunk-operator-cluster.yaml
 ```
 
@@ -31,7 +31,7 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
         - name: WATCH_NAMESPACE
           value: "namespace1,namespace2"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.3.2
+          value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -44,10 +44,10 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
 
 ## Install operator to watch single namespace with restrictive permission
 
-In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace.
+In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace.
 
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-namespace.yaml
 kubectl apply -f splunk-operator-namespace.yaml
 ```
 
@@ -68,7 +68,7 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
         - name: WATCH_NAMESPACE
           value: "namespace1,namespace2"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.3.2
+          value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -86,14 +86,14 @@ As part of enhancing security and reducing the attack surface of the Splunk Oper
 
 1. **Image Tag**:
    - The distroless image can be identified by the `-distroless` suffix in its tag.
-   - Example: `splunk/splunk-operator:2.7.0-distroless`
+   - Example: `splunk/splunk-operator:2.7.1-distroless`
 
 2. **Modifying the Deployment**:
    - To use the distroless image, update the `manager` container image in the `splunk-operator-controller-manager` deployment as follows:
 
    ```yaml
    # Replace this with the distroless image name
-   image: splunk/splunk-operator:2.7.0-distroless
+   image: splunk/splunk-operator:2.7.1-distroless
    ```
 
 3. **Private Registry**:
@@ -130,7 +130,7 @@ Since distroless images do not contain a shell, debugging may require additional
        spec:
          containers:
            - name: manager
-             image: splunk/splunk-operator:2.7.0-distroless
+             image: splunk/splunk-operator:2.7.1-distroless
              env:
                - name: WATCH_NAMESPACE
                  value: ""

@@ -3,9 +3,9 @@ ARG PLATFORMS=linux/amd64
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-# This sha relates to ubi version 8.10-1132, which is tagged as 8.10 and latest as of Nov 15, 2024
-ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi@sha256
-ARG BASE_IMAGE_VERSION=8990388831e1b41c9a67389e4b691dae8b1283f77d5fb7263e1f4fc69c0a9d05
+# This sha relates to ubi minimal version 8.10-1179, which is tagged as 8.10 and latest as of Feb 6, 2025
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal@sha256
+ARG BASE_IMAGE_VERSION=d16d4445b1567f29449fba3b6d2bc37db467dc3067d33e940477e55aecdf6e8e
 
 # Build the manager binary
 FROM golang:1.23.0 AS builder
@@ -48,7 +48,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         update-ca-certificates && \
         unattended-upgrades -v && \
         apt-get clean && rm -rf /var/lib/apt/lists/*; \
-    else \
+    elif grep -q 'Amazon Linux' /etc/os-release; then \
         yum -y install shadow-utils && \
         useradd -ms /bin/bash nonroot -u 1001 && \
         yum install -y ca-certificates && \
@@ -57,13 +57,19 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         yum -y update-minimal --security --sec-severity=Important --sec-severity=Critical && \
         yum -y update-minimal --security --sec-severity=Moderate && \
         yum -y update-minimal --security --sec-severity=Low; \
+    else \
+        microdnf -y install shadow-utils && \
+        useradd -ms /bin/bash nonroot -u 1001 && \
+        microdnf install -y ca-certificates && \
+        update-ca-trust &&  \
+        microdnf update -y krb5-libs && microdnf clean all; \
     fi
 
 # Metadata
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
-      version="2.6.1" \
+      version="2.7.1" \
       release="1" \
       summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
       description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."

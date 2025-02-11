@@ -87,10 +87,12 @@ jobs:
     - name: Promote RC Image to Release
       run: |
         docker tag splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+        docker tag splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }} splunk/splunk-operator:latest
 
     - name: Push Release Image
       run: |
         docker push splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+        docker push splunk/splunk-operator:latest
     
     - name: Sign Splunk Operator image with a key
       run: |
@@ -102,6 +104,31 @@ jobs:
     - name: Verify Splunk Operator image with a key
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}
+      env:
+        COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+
+    - name: Pull Distroless RC Splunk Operator Image
+      run: |
+        docker pull splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-distroless-RC
+
+    - name: Promote Distroless RC Image to Release
+      run: |
+        docker tag splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-distroless-RC splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+
+    - name: Push Distroless Release Image
+      run: |
+        docker push splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+    
+    - name: Sign Distroless Splunk Operator image with a key
+      run: |
+        cosign sign --yes --key env://COSIGN_PRIVATE_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+    
+    - name: Verify Distroless Splunk Operator image with a key
+      run: |
+        cosign verify --key env://COSIGN_PUBLIC_KEY  splunk/splunk-operator:${{ github.event.inputs.operator_image_tag }}-distroless
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
 

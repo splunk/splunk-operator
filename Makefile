@@ -150,13 +150,13 @@ docker-push: ## Push docker image with the manager.
 # IMG is a mandatory argument to specify the image name
 # Defaults:
 #   Build Platform: linux/amd64
-#   Build Base OS: registry.access.redhat.com/ubi8/ubi
-#   Build Base OS Version: 8.10
+#   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal@sha256
+#   Build Base OS Version: d16d4445b1567f29449fba3b6d2bc37db467dc3067d33e940477e55aecdf6e8e (corresponds to tag 8.10)
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64
-BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi
-BASE_IMAGE_VERSION ?= 8.10
+BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal@sha256
+BASE_IMAGE_VERSION ?= d16d4445b1567f29449fba3b6d2bc37db467dc3067d33e940477e55aecdf6e8e
 
 docker-buildx:
 	@if [ -z "$(IMG)" ]; then \
