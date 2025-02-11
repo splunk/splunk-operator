@@ -1,5 +1,10 @@
 name: Build and Test Distroless
-on: push
+on:
+  pull_request: {}
+  push:
+    branches:
+    - main
+    - develop
 jobs:
   check-formating:
     runs-on: ubuntu-latest
@@ -149,6 +154,7 @@ jobs:
 #        with:
 #          sarif_file: 'trivy-results.sarif'
   smoke-tests:
+    needs: build-operator-image
     strategy:
       fail-fast: false
       matrix:
