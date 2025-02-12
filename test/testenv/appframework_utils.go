@@ -53,7 +53,7 @@ var AppInfo = map[string]map[string]string{
 	"100mb-app-12":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-12.tgz"},
 	"100mb-app-13":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-13.tgz"},
 	"100mb-app-14":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-14.tgz"},
-	"100mb-app-15":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-15.tgz"},
+	"100mb-app-15":                      {"V1": "1.0.0", "V2": "1.0.0", "filename": "100mb-app-15.tar.gz"},
 }
 
 // AppSourceInfo holds info related to app sources
