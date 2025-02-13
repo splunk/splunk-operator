@@ -653,17 +653,27 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 		// Get Indexer's name
 		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
 
+		// Check if pod exists before updating secrets
+		pod := &corev1.Pod{}
+		namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: indexerPodName}
+		scopedLog.Info("Check if pod is created before updating its secrets")
+		err := mgr.c.Get(ctx, namespacedName, pod)
+		if err != nil {
+			mgr.log.Info("Peer doesn't exists", "peerName", indexerPodName)
+			continue
+		}
+
 		// Retrieve secret from pod
 		podSecret, err := splutil.GetSecretFromPod(ctx, mgr.c, indexerPodName, mgr.cr.GetNamespace())
 		if err != nil {
-			return fmt.Errorf(fmt.Sprintf(splcommon.PodSecretNotFoundError, indexerPodName))
+			return fmt.Errorf(splcommon.PodSecretNotFoundError, indexerPodName)
 		}
 
 		// Retrieve idxc_secret token
 		if indIdxcSecretByte, ok := podSecret.Data[splcommon.IdxcSecret]; ok {
 			indIdxcSecret = string(indIdxcSecretByte)
 		} else {
-			return fmt.Errorf(fmt.Sprintf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret))
+			return fmt.Errorf(splcommon.SecretTokenNotRetrievable, splcommon.IdxcSecret)
 		}
 
 		// If idxc secret is different from namespace scoped secret change it
