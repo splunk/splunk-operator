@@ -652,6 +652,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      GetSplunkStatefulsetName(instanceType, cr.GetName()),
 				Namespace: cr.GetNamespace(),
+				Labels:    labels,
 			},
 		}
 	}
