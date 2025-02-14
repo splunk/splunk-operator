@@ -736,6 +736,17 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	return configMap
 }
 
+// set the PreStop lifecycle handler for the specified container index
+func setPreStopLifecycleHandler(podTemplateSpec *corev1.PodTemplateSpec, idx int) {
+    podTemplateSpec.Spec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+        PreStop: &corev1.LifecycleHandler{
+            Exec: &corev1.ExecAction{
+                Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline &&  /opt/splunk/bin/splunk stop"},
+            },
+        },
+    }
+}
+
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
@@ -1036,13 +1047,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		}
-		podTemplateSpec.Spec.Containers[idx].Lifecycle = &corev1.Lifecycle{
-			PreStop: &corev1.LifecycleHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline &&  /opt/splunk/bin/splunk stop"},
-				},
-			},
-		}
+
+		// Use the helper function to set the lifecycle handler
+		setPreStopLifecycleHandler(podTemplateSpec, idx)
 	}
 	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &spec.TerminationGracePeriodSeconds
 }
