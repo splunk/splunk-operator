@@ -251,17 +251,22 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
 				result = true
 			}
-			current.Containers[idx].Lifecycle = &corev1.Lifecycle{
-				PreStop: &corev1.LifecycleHandler{
-					Exec: &corev1.ExecAction{
-						Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline &&  /opt/splunk/bin/splunk stop"},
-					},
-				},
-			}
+			setPreStopLifecycleHandler(current, idx)
 		}
 	}
 
 	return result
+}
+
+// set the PreStop lifecycle handler for the specified container index
+func setPreStopLifecycleHandler(podSpec *corev1.PodSpec, idx int) {
+    podSpec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+        PreStop: &corev1.LifecycleHandler{
+            Exec: &corev1.ExecAction{
+                Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline &&  /opt/splunk/bin/splunk stop"},
+            },
+        },
+    }
 }
 
 // SortStatefulSetSlices sorts required slices in a statefulSet

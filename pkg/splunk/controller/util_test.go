@@ -212,6 +212,12 @@ func TestMergePodUpdates(t *testing.T) {
 	}
 	podUpdateTester("Pod TopologySpreadConstraints changed")
 
+	// check Pre Stop Lifecycle Handler updated
+	idx := 0
+	setPreStopLifecycleHandler(&revised.Spec, idx)
+	matcher = func () bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers ) }
+	podUpdateTester("PreStopLifecycleHandler updated")
+
 	// check container removed
 	revised.Spec.Containers = []corev1.Container{}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
