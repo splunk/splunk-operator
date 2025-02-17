@@ -46,8 +46,7 @@ jobs:
           export PLATFORMS=linux/arm64,linux/amd64
           export BASE_IMAGE=gcr.io/distroless/static-debian12
           export BASE_IMAGE_VERSION=latest
-          export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-          make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
+          make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
   int-tests:
     strategy:
       fail-fast: false
