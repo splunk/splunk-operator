@@ -95,7 +95,7 @@ jobs:
       # Build and push Distroless image
       - name: Build Distroless Image
         run: |
-          make docker-build IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-distroless-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=gcr.io/distroless/static BASE_IMAGE_VERSION=latest
+          make docker-buildx IMG=splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-distroless-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=gcr.io/distroless/static BASE_IMAGE_VERSION=latest
 
       - name: Push Distroless Image
         run: |
