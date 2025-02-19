@@ -62,7 +62,11 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         useradd -ms /bin/bash nonroot -u 1001 && \
         microdnf install -y ca-certificates && \
         update-ca-trust &&  \
-        microdnf update -y krb5-libs && microdnf clean all; \
+        microdnf update -y krb5-libs && \
+        microdnf update -y libstdc++ && \
+        microdnf update -y libxml2 && \
+        microdnf update -y libgcc&& \
+        microdnf clean all; \
     fi
 
 # Metadata
