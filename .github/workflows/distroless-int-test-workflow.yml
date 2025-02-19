@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - main
-      - CSPL_3460
 jobs:
   build-operator-image-distroless:
     runs-on: ubuntu-latest
