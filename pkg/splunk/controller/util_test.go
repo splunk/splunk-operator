@@ -103,7 +103,9 @@ func TestMergePodUpdates(t *testing.T) {
 	// check Termination Grace Period updated
 	terminationGracePeriodSeconds := int64(60)
 	revised.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
-	matcher = func () bool { return reflect.DeepEqual(current.Spec.TerminationGracePeriodSeconds, revised.Spec.TerminationGracePeriodSeconds) }
+	matcher = func() bool {
+		return reflect.DeepEqual(current.Spec.TerminationGracePeriodSeconds, revised.Spec.TerminationGracePeriodSeconds)
+	}
 	podUpdateTester("TerminationGracePeriod updated")
 
 	// check new container added
@@ -215,7 +217,7 @@ func TestMergePodUpdates(t *testing.T) {
 	// check Pre Stop Lifecycle Handler updated
 	idx := 0
 	setPreStopLifecycleHandler(&revised.Spec, idx)
-	matcher = func () bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers ) }
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
 	podUpdateTester("PreStopLifecycleHandler updated")
 
 	// check container removed
