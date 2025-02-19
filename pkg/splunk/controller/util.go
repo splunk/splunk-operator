@@ -165,6 +165,13 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 			}
 		}
 	}
+	if current.TerminationGracePeriodSeconds != revised.TerminationGracePeriodSeconds {
+		scopedLog.Info("Pod TerminationGracePeriodSeconds differs",
+			"current", current.TerminationGracePeriodSeconds,
+			"revised", revised.TerminationGracePeriodSeconds)
+		current.TerminationGracePeriodSeconds = revised.TerminationGracePeriodSeconds
+		result = true
+	}
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Containers) != len(revised.Containers) {
@@ -244,10 +251,22 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
 				result = true
 			}
+			setPreStopLifecycleHandler(current, idx)
 		}
 	}
 
 	return result
+}
+
+// set the PreStop lifecycle handler for the specified container index
+func setPreStopLifecycleHandler(podSpec *corev1.PodSpec, idx int) {
+	podSpec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline && /opt/splunk/bin/splunk stop"},
+			},
+		},
+	}
 }
 
 // SortStatefulSetSlices sorts required slices in a statefulSet

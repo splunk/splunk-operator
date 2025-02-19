@@ -100,6 +100,14 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.InitContainers, revised.Spec.InitContainers) }
 	podUpdateTester("InitContainer image changed")
 
+	// check Termination Grace Period updated
+	terminationGracePeriodSeconds := int64(60)
+	revised.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
+	matcher = func() bool {
+		return reflect.DeepEqual(current.Spec.TerminationGracePeriodSeconds, revised.Spec.TerminationGracePeriodSeconds)
+	}
+	podUpdateTester("TerminationGracePeriod updated")
+
 	// check new container added
 	revised.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
@@ -205,6 +213,12 @@ func TestMergePodUpdates(t *testing.T) {
 		return reflect.DeepEqual(current.Spec.TopologySpreadConstraints, revised.Spec.TopologySpreadConstraints)
 	}
 	podUpdateTester("Pod TopologySpreadConstraints changed")
+
+	// check Pre Stop Lifecycle Handler updated
+	idx := 0
+	setPreStopLifecycleHandler(&revised.Spec, idx)
+	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
+	podUpdateTester("PreStopLifecycleHandler updated")
 
 	// check container removed
 	revised.Spec.Containers = []corev1.Container{}
