@@ -1479,6 +1479,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 					Image:           "splunk/splunk:latest",
+					TerminationGracePeriodSeconds: 20,
 				},
 				Volumes: []corev1.Volume{},
 				LicenseManagerRef: corev1.ObjectReference{
