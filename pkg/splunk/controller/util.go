@@ -165,12 +165,15 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 			}
 		}
 	}
-	if current.TerminationGracePeriodSeconds != revised.TerminationGracePeriodSeconds {
-		scopedLog.Info("Pod TerminationGracePeriodSeconds differs",
-			"current", current.TerminationGracePeriodSeconds,
-			"revised", revised.TerminationGracePeriodSeconds)
-		current.TerminationGracePeriodSeconds = revised.TerminationGracePeriodSeconds
-		result = true
+
+	if current.TerminationGracePeriodSeconds != nil && revised.TerminationGracePeriodSeconds != nil {
+		if *current.TerminationGracePeriodSeconds != *revised.TerminationGracePeriodSeconds {
+			scopedLog.Info("Pod TerminationGracePeriodSeconds differs",
+				"current", current.TerminationGracePeriodSeconds,
+				"revised", revised.TerminationGracePeriodSeconds)
+			current.TerminationGracePeriodSeconds = revised.TerminationGracePeriodSeconds
+			result = true
+		}
 	}
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
