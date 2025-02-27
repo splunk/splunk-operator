@@ -65,7 +65,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
         microdnf update -y krb5-libs && \
         microdnf update -y libstdc++ && \
         microdnf update -y libxml2 && \
-        microdnf update -y libgcc&& \
+        microdnf update -y libgcc && \
         microdnf clean all; \
     fi
 
