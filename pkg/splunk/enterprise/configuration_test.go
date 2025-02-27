@@ -1787,7 +1787,7 @@ func TestSetPreStopLifecycleHandler(t *testing.T) {
 			t.Error("Expected Exec to be set, but it was nil")
 		}
 
-		expectedCommand := []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk offline && /opt/splunk/bin/splunk stop"}
+		expectedCommand := []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk", "offline", "&&", "/opt/splunk/bin/splunk", "stop"}
 		if !reflect.DeepEqual(podTemplateSpec.Spec.Containers[idx].Lifecycle.PreStop.Exec.Command, expectedCommand) {
 			t.Errorf("Expected command to be %v, but got %v", expectedCommand, podTemplateSpec.Spec.Containers[idx].Lifecycle.PreStop.Exec.Command)
 		}

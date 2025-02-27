@@ -1437,8 +1437,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
+					ImagePullPolicy:               "Always",
+					Image:                         "splunk/splunk:latest",
 					TerminationGracePeriodSeconds: 20,
 				},
 				Volumes: []corev1.Volume{},
@@ -1478,8 +1478,8 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
+					ImagePullPolicy:               "Always",
+					Image:                         "splunk/splunk:latest",
 					TerminationGracePeriodSeconds: 20,
 				},
 				Volumes: []corev1.Volume{},
