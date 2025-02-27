@@ -166,14 +166,16 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		}
 	}
 
-	if current.TerminationGracePeriodSeconds != nil && revised.TerminationGracePeriodSeconds != nil {
-		if *current.TerminationGracePeriodSeconds != *revised.TerminationGracePeriodSeconds {
-			scopedLog.Info("Pod TerminationGracePeriodSeconds differs",
-				"current", current.TerminationGracePeriodSeconds,
-				"revised", revised.TerminationGracePeriodSeconds)
-			current.TerminationGracePeriodSeconds = revised.TerminationGracePeriodSeconds
-			result = true
-		}
+	if (current.TerminationGracePeriodSeconds == nil && revised.TerminationGracePeriodSeconds != nil) ||
+		(current.TerminationGracePeriodSeconds != nil && revised.TerminationGracePeriodSeconds == nil) ||
+		(current.TerminationGracePeriodSeconds != nil && revised.TerminationGracePeriodSeconds != nil &&
+			*current.TerminationGracePeriodSeconds != *revised.TerminationGracePeriodSeconds) {
+
+		scopedLog.Info("Pod TerminationGracePeriodSeconds differs",
+			"current", current.TerminationGracePeriodSeconds,
+			"revised", revised.TerminationGracePeriodSeconds)
+		current.TerminationGracePeriodSeconds = revised.TerminationGracePeriodSeconds
+		result = true
 	}
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
@@ -254,14 +256,44 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 				current.Containers[idx].StartupProbe = revised.Containers[idx].StartupProbe
 				result = true
 			}
-			setPreStopLifecycleHandler(current, idx)
+
+			// check PreStop Lifecycle
+			if hasPreStopChanged(current.Containers[idx].Lifecycle, revised.Containers[idx].Lifecycle) {
+				scopedLog.Info("Pod Container PreStop Lifecycle differ",
+					"current", current.Containers[idx].Lifecycle,
+					"revised", revised.Containers[idx].Lifecycle)
+				setPreStopLifecycleHandler(current, idx)
+				result = true
+			}
 		}
 	}
 
 	return result
 }
 
-// set the PreStop lifecycle handler for the specified container index
+// Function to check if PreStop Lifecycle has changed
+func hasPreStopChanged(current, revised *corev1.Lifecycle) bool {
+	// If both are nil, there's no change
+	if current == nil && revised == nil {
+		return false
+	}
+
+	// If one is nil and the other isn't, there's a change
+	if (current == nil || current.PreStop == nil || current.PreStop.Exec == nil) &&
+		(revised != nil && revised.PreStop != nil && revised.PreStop.Exec != nil) {
+		return true
+	}
+
+	if (revised == nil || revised.PreStop == nil || revised.PreStop.Exec == nil) &&
+		(current != nil && current.PreStop != nil && current.PreStop.Exec != nil) {
+		return true
+	}
+
+	// If both are non-nil, compare the command
+	return !reflect.DeepEqual(current.PreStop.Exec.Command, revised.PreStop.Exec.Command)
+}
+
+// Set the PreStop lifecycle handler for the specified container index
 func setPreStopLifecycleHandler(podSpec *corev1.PodSpec, idx int) {
 	podSpec.Containers[idx].Lifecycle = &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{

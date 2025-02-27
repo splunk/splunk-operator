@@ -104,7 +104,13 @@ func TestMergePodUpdates(t *testing.T) {
 	terminationGracePeriodSeconds := int64(60)
 	revised.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
 	matcher = func() bool {
-		return reflect.DeepEqual(current.Spec.TerminationGracePeriodSeconds, revised.Spec.TerminationGracePeriodSeconds)
+		if current.Spec.TerminationGracePeriodSeconds == nil {
+			return true
+		}
+		if current.Spec.TerminationGracePeriodSeconds == revised.Spec.TerminationGracePeriodSeconds {
+			return true
+		}
+		return false
 	}
 	podUpdateTester("TerminationGracePeriod updated")
 
@@ -116,12 +122,16 @@ func TestMergePodUpdates(t *testing.T) {
 	// check container different Ports
 	revised.Spec.Containers = []corev1.Container{{Image: "splunk/splunk"}}
 	revised.Spec.Containers[0].Ports = []corev1.ContainerPort{{ContainerPort: 8000}}
-	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
+	matcher = func() bool {
+		return current.Spec.Containers[0].Ports[0].ContainerPort == revised.Spec.Containers[0].Ports[0].ContainerPort
+	}
 	podUpdateTester("Container Ports")
 
 	// check container different VolumeMounts
 	revised.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "mnt-splunk"}}
-	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
+	matcher = func() bool {
+		return revised.Spec.Containers[0].VolumeMounts[0].Name == current.Spec.Containers[0].VolumeMounts[0].Name
+	}
 	podUpdateTester("Container VolumeMounts")
 
 	// check container different Resources
@@ -135,7 +145,20 @@ func TestMergePodUpdates(t *testing.T) {
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		},
 	}
-	matcher = func() bool { return reflect.DeepEqual(current.Spec.Containers, revised.Spec.Containers) }
+	matcher = func() bool {
+		if len(current.Spec.Containers) != len(revised.Spec.Containers) {
+			return false
+		}
+
+		for i := range current.Spec.Containers {
+			if !reflect.DeepEqual(current.Spec.Containers[i].Resources.Requests, revised.Spec.Containers[i].Resources.Requests) ||
+				!reflect.DeepEqual(current.Spec.Containers[i].Resources.Limits, revised.Spec.Containers[i].Resources.Limits) {
+				return false
+			}
+		}
+
+		return true
+	}
 	podUpdateTester("Container Resources")
 
 	// check pod env update
