@@ -1354,6 +1354,42 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              securityContext:
+                description: Security configuration on the pod level.
+                properties:
+                  runAsUser:
+                    anyOf:
+                      - type: integer
+                      - type: string
+                    description: |-
+                      User ID for all processes in any containers in the pod.
+                    x-kubernetes-int-or-string: true
+                  runAsGroup:
+                    anyOf:
+                        - type: integer
+                        - type: string
+                    description: |-
+                      Primary Group ID for all processes within any containers of the pod.
+                      Root by default.
+                    x-kubernetes-int-or-string: true
+                  fsGroup:
+                    anyOf:
+                      - type: integer
+                      - type: string
+                    description: |-
+                      Supplementary Group ID for all processes within any containers of the pod.
+                    x-kubernetes-int-or-string: true
+                  fsGroupChangePolicy:
+                    description: |-
+                      Behavior for changing ownership and permissions of the volume.
+                      Applies only to volume types that support fsGroup controlled ownership and permissions.
+                      Can be either OnRootMismatch or Always (default).
+                    default: Always
+                    enum:
+                      - OnRootMismatch
+                      - Always
+                    type: string
+                type: object
               schedulerName:
                 description: Name of Scheduler to use for pod placement (defaults
                   to “default-scheduler”)

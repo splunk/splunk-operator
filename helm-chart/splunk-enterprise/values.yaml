@@ -329,6 +329,10 @@ indexerCluster:
     #   memory: "12Gi"
     #   cpu: "24"
 
+  # Set security context for Indexer Cluster pods
+  # Reference: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods
+  securityContext: {}
+
   serviceAccount: ""
 
   # ServiceTemplate is a template used to create Kubernetes services

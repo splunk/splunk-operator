@@ -133,6 +133,10 @@ items:
     resources:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.indexerCluster.securityContext }}
+    securityContext:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.indexerCluster.serviceTemplate }}
     serviceTemplate:
 {{ toYaml . | indent 6 }}
