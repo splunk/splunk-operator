@@ -4,7 +4,6 @@ on:
 jobs:
   rc-release:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
