@@ -59,11 +59,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2.5.0
 
-      - name: Configure Docker Credentials
-        uses: docker/login-action@v1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
 
       - name: Setup Go
         uses: actions/setup-go@v2
@@ -86,7 +93,7 @@ jobs:
       # Build and push UBI image
       - name: Build and push UBI Image
         run: |
-          make docker-buildx IMG=public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=ubi8/ubi-minimal BASE_IMAGE_VERSION=latest
+          make docker-buildx IMG=public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal BASE_IMAGE_VERSION=latest
 
       # Build and push Distroless image
       - name: Build and push Distroless Image
