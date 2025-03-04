@@ -569,6 +569,11 @@ type PhaseInfo struct {
 	FailCount uint32 `json:"failCount,omitempty"`
 }
 
+type UpgradeStrategy struct {
+	WaitForHistSearchDomain            bool `json:"waitForHistSearchDrain,omitempty"`
+	EnableSearchRestartOnRemoteFailure bool `json:"enableSearchRestartOnRemoteFailure,omitempty"`
+}
+
 const (
 	// AppPkgDownloadPending indicates pending
 	AppPkgDownloadPending AppPhaseStatusType = 101
