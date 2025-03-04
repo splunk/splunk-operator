@@ -57,10 +57,12 @@ jobs:
 
       - name: Tag and Push Default UBI RC Image
         run: |
+          docker pull public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC1
           docker tag public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC1 public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC
           docker push public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC
 
       - name: Tag and Push Default Distroless RC Image
         run: |
+          docker pull public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC1-distroless
           docker tag public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC1-distroless public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC-distroless
           docker push public.ecr.aws/t7s8z8m6/splunk/splunk-operator-rc:test-ecr-push-RC-distroless
