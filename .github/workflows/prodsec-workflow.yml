@@ -8,7 +8,7 @@ name: Prodsec Workflow
 jobs:
   semgrep:
     name: Semgrep Scanner
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
