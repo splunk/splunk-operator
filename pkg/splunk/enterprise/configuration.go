@@ -1037,6 +1037,30 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			},
 		}
 	}
+
+	// Existing logic, e.g. volumes for secrets, configmaps, environment, etc.
+
+	annotations := cr.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	// Check if user wants a "csi" approach or a "sidecar-injector" approach
+	certMode := annotations["splunk.com/cert-manager"]
+
+	switch certMode {
+	case "csi":
+		splclient.AddCertManagerCsiVolume(podTemplateSpec, annotations)
+		splclient.AddCertManagerSidecar(podTemplateSpec)
+
+	case "injector":
+		// Tells an external webhook to do the injection
+		splclient.AddCertManagerSidecarInjector(podTemplateSpec)
+		splclient.AddCertManagerSidecar(podTemplateSpec)
+
+	default:
+		// No cert-manager integration or unknown
+	}
+
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {
