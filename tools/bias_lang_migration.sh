@@ -541,7 +541,12 @@ get_current_deployment() {
 			fi
 
       # Updates CR to use new version (v4)
-      convert_CR_version ${updated_name} ${CR} ${CR_NAME}
+	  if [[ "${CR}" == "MonitoringConsole" ]]; then
+		cp ${original_name} ${updated_name}
+		convert_CR_version ${updated_name} ${CR} ${CR_NAME}
+	  else
+		convert_CR_version ${updated_name} ${CR} ${CR_NAME}
+	  fi
 
 			# Validate the updated CR is valid
 			dry_run ${updated_name}

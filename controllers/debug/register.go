@@ -54,7 +54,7 @@ func RegisterEndpoint(register func(string, http.Handler) error, options *Option
 		}
 	}
 	if options.Symbol {
-		err := register("/debug/pprof/symobol", http.HandlerFunc(pprof.Symbol))
+		err := register("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
 		if err != nil {
 			return err
 		}
