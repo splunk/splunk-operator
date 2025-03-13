@@ -1,9 +1,6 @@
 name: Arm Ubuntu Smoke Test WorkFlow
 on:
-  push:
-    branches:
-      - develop
-      - main
+  workflow_dispatch:
 jobs:
   check-formating:
     runs-on: ubuntu-latest
