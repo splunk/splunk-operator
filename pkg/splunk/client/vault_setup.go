@@ -31,6 +31,7 @@ package client
 
 import (
 	"context"
+
 	//"encoding/json"
 	"fmt"
 	"os"
@@ -43,6 +44,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	// Marshal the splunkConfig to JSON
 	"gopkg.in/yaml.v2"
 )
@@ -67,6 +69,7 @@ type Metadata struct {
 type Data struct {
 	Data     SecretData `json:"data,omitempty"`
 	Metadata Metadata   `json:"metadata,omitempty"`
+	Value    string     `json:"value,omitempty"`
 }
 
 // VaultResponse represents the structure of a response from a Vault request.
@@ -79,10 +82,24 @@ type VaultResponse struct {
 	Renewable     bool   `json:"renewable,omitempty"`
 	LeaseDuration int    `json:"lease_duration,omitempty"`
 	Data          Data   `json:"data,omitempty"`
+	Value         string `json:"value,omitempty"`
 }
 
 type VaultError struct {
 	Errors []string `json:"errors,omitempty"`
+}
+
+// KVSecretsEngineResponse represents the structure of a response from a Vault request on KV Secrets Engine.
+type KVOptions struct {
+	Version string `json:"version,omitempty"`
+}
+
+type KVData struct {
+	Options KVOptions `json:"options,omitempty"`
+}
+
+type KVSecretsEngineResponse struct {
+	Data KVData `json:"data,omitempty"`
 }
 
 func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, vaultSpec *enterpriseApi.VaultIntegration) error {
@@ -114,7 +131,6 @@ func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, s
 		return fmt.Errorf("vault secretPath is required when vault is enabled")
 	}
 
-	secretPath := vaultSpec.SecretPath
 	vaultRole := vaultSpec.Role
 	secretKeyToEnv := []string{
 		"hec_token",
@@ -124,6 +140,11 @@ func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, s
 		"shc_secret",
 	}
 
+	secretPath := vaultSpec.SecretPath
+	if secretPath[len(secretPath)-1] != '/' {
+		secretPath = secretPath + "/"
+	}
+
 	// Adding annotations for vault injection
 	annotations := map[string]string{
 		"vault.hashicorp.com/agent-inject":      "true",
@@ -131,20 +152,43 @@ func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, s
 		"vault.hashicorp.com/role":              vaultRole,
 	}
 
+	kvVersion, err := GetKVSecretsEngineVersionFromVault(ctx, client, vaultSpec)
+	if err != nil {
+		logger.Error(err, "Failed to read KV secrets engine version from Vault")
+		return fmt.Errorf("failed to read KV secrets engine version from Vault: %v", err)
+	}
+
 	splunkConfig := map[string]interface{}{
 		"splunk": map[string]interface{}{
 			"hec_disabled":  0,
 			"hec_enableSSL": 0,
-			"hec_token":     `{{- with secret "secret/data/splunk/hec_token" -}}{{ .Data.data.value }}{{- end }}`,
-			"password":      `{{- with secret "secret/data/splunk/password" -}}{{ .Data.data.value }}{{- end }}`,
-			"pass4SymmKey":  `{{- with secret "secret/data/splunk/pass4SymmKey" -}}{{ .Data.data.value }}{{- end }}`,
+			"hec_token":     fmt.Sprintf(`{{- with secret "%shec_token" -}}{{ .Data.value }}{{- end }}`, secretPath),
+			"password":      fmt.Sprintf(`{{- with secret "%spassword" -}}{{ .Data.value }}{{- end }}`, secretPath),
+			"pass4SymmKey":  fmt.Sprintf(`{{- with secret "%spass4SymmKey" -}}{{ .Data.value }}{{- end }}`, secretPath),
 			"idxc": map[string]interface{}{
-				"secret": `{{- with secret "secret/data/splunk/idxc_secret" -}}{{ .Data.data.value }}{{- end }}`,
+				"secret": fmt.Sprintf(`{{- with secret "%sidxc_secret" -}}{{ .Data.value }}{{- end }}`, secretPath),
 			},
 			"shc": map[string]interface{}{
-				"secret": `{{- with secret "secret/data/splunk/shc_secret" -}}{{ .Data.data.value }}{{- end }}`,
+				"secret": fmt.Sprintf(`{{- with secret "%sshc_secret" -}}{{ .Data.value }}{{- end }}`, secretPath),
 			},
 		},
+	}
+	if kvVersion == "2" {
+		splunkConfig = map[string]interface{}{
+			"splunk": map[string]interface{}{
+				"hec_disabled":  0,
+				"hec_enableSSL": 0,
+				"hec_token":     fmt.Sprintf(`{{- with secret "%shec_token" -}}{{ .Data.data.value }}{{- end }}`, secretPath),
+				"password":      fmt.Sprintf(`{{- with secret "%spassword" -}}{{ .Data.data.value }}{{- end }}`, secretPath),
+				"pass4SymmKey":  fmt.Sprintf(`{{- with secret "%spass4SymmKey" -}}{{ .Data.data.value }}{{- end }}`, secretPath),
+				"idxc": map[string]interface{}{
+					"secret": fmt.Sprintf(`{{- with secret "%sidxc_secret" -}}{{ .Data.data.value }}{{- end }}`, secretPath),
+				},
+				"shc": map[string]interface{}{
+					"secret": fmt.Sprintf(`{{- with secret "%sshc_secret" -}}{{ .Data.data.value }}{{- end }}`, secretPath),
+				},
+			},
+		}
 	}
 
 	splunkConfigYAML, err := yaml.Marshal(splunkConfig)
@@ -160,12 +204,17 @@ func InjectVaultSecret(ctx context.Context, client splcommon.ControllerClient, s
 	annotations["vault.hashicorp.com/secret-volume-path-defaults"] = "/mnt/splunk-secrets"
 	annotations["vault.hashicorp.com/agent-inject-template-defaults"] = splunkConfigString
 	for _, key := range secretKeyToEnv {
-		annotationKey := fmt.Sprintf("vault.hashicorp.com/agent-inject-secret-%s", key)
-		annotations[annotationKey] = fmt.Sprintf("%s/%s", secretPath, key)
+		annotationKey := fmt.Sprintf("vault.hashicorp.com/agent-inject-template-%s", key)
+
+		if kvVersion == "1" {
+			annotations[annotationKey] = fmt.Sprintf("{{- with secret \"%s%s\" -}}{{ .Data.value }}{{- end }}", secretPath, key)
+		} else {
+			annotations[annotationKey] = fmt.Sprintf("{{- with secret \"%s%s\" -}}{{ .Data.data.value }}{{- end }}", secretPath, key)
+		}
 		annotationFile := fmt.Sprintf("vault.hashicorp.com/agent-inject-file-%s", key)
 		annotations[annotationFile] = key
 		annotationVolumeKey := fmt.Sprintf("vault.hashicorp.com/secret-volume-path-%s", key)
-		annotations[annotationVolumeKey] = fmt.Sprintf("/mnt/splunk-secrets/%s", key)
+		annotations[annotationVolumeKey] = "/mnt/splunk-secrets"
 	}
 
 	// Apply these annotations to the StatefulSet PodTemplateSpec without overwriting existing ones
@@ -253,8 +302,9 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 		// Construct the metadata path for each key
 		metadataPath := fmt.Sprintf("%s/%s", vaultIntegration.SecretPath, key)
 		if vaultIntegration.SecretPath[len(vaultIntegration.SecretPath)-1] == '/' {
-			metadataPath = fmt.Sprintf("%smetadata/%s", vaultIntegration.SecretPath, key)
+			metadataPath = fmt.Sprintf("%s%s", vaultIntegration.SecretPath, key)
 		}
+
 		vaultError := &VaultError{}
 		// Read the secret metadata from Vault to get the version
 		var metadataResponse VaultResponse
@@ -272,6 +322,8 @@ func CheckAndRestartStatefulSet(ctx context.Context, kubeClient splcommon.Contro
 			logger.Error(fmt.Errorf("failed to read secret metadata from Vault"), "Vault metadata read failed", "response", vaultError)
 			return fmt.Errorf("failed to read secret metadata from Vault: %v", vaultError)
 		}
+
+		logger.Info(fmt.Sprintf("Vault data for secret %s: %v", key, metadataResponse))
 
 		version := metadataResponse.Data.Metadata.Version
 
@@ -335,7 +387,7 @@ func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.Controller
 	// Construct the metadata path for each key
 	metadataPath := fmt.Sprintf("%s/%s", vaultIntegration.SecretPath, key)
 	if vaultIntegration.SecretPath[len(vaultIntegration.SecretPath)-1] == '/' {
-		metadataPath = fmt.Sprintf("%smetadata/%s", vaultIntegration.SecretPath, key)
+		metadataPath = fmt.Sprintf("%s%s", vaultIntegration.SecretPath, key)
 	}
 	vaultError := &VaultError{}
 	// Read the secret metadata from Vault to get the version
@@ -355,7 +407,18 @@ func GetSpecificSecretTokenFromVault(ctx context.Context, c splcommon.Controller
 		return "", fmt.Errorf("failed to read secret metadata from Vault: %v", vaultError)
 	}
 
-	password := metadataResponse.Data.Data.Value
+	kvVersion, err := GetKVSecretsEngineVersionFromVault(ctx, c, vaultIntegration)
+	if err != nil {
+		logger.Error(err, "Failed to read KV secrets engine version from Vault")
+		return "", fmt.Errorf("failed to read KV secrets engine version from Vault: %v", err)
+	}
+
+	password := ""
+	if kvVersion == "1" {
+		password = metadataResponse.Data.Value
+	} else if kvVersion == "2" {
+		password = metadataResponse.Data.Data.Value
+	}
 
 	return password, nil
 }
@@ -408,7 +471,7 @@ func GetSpecificSecretTokenVersionFromVault(ctx context.Context, c splcommon.Con
 	// Construct the metadata path for each key
 	metadataPath := fmt.Sprintf("%s/%s", vaultIntegration.SecretPath, key)
 	if vaultIntegration.SecretPath[len(vaultIntegration.SecretPath)-1] == '/' {
-		metadataPath = fmt.Sprintf("%smetadata/%s", vaultIntegration.SecretPath, key)
+		metadataPath = fmt.Sprintf("%s%s", vaultIntegration.SecretPath, key)
 	}
 	vaultError := &VaultError{}
 	// Read the secret metadata from Vault to get the version
@@ -431,4 +494,78 @@ func GetSpecificSecretTokenVersionFromVault(ctx context.Context, c splcommon.Con
 	version := metadataResponse.Data.Metadata.Version
 
 	return strconv.Itoa(version), nil
+}
+
+// GetSpecificSecretTokenVersionFromVault retrieves a specific secret token's value from a Pod
+func GetKVSecretsEngineVersionFromVault(ctx context.Context, c splcommon.ControllerClient, vaultIntegration *enterpriseApi.VaultIntegration) (string, error) {
+	// Initialize Vault client
+	client := resty.New()
+
+	// Assign role to access Vault setup
+	role := vaultIntegration.Role
+	if vaultIntegration.OperatorRole != "" {
+		role = vaultIntegration.OperatorRole
+	}
+
+	// Read the service account token
+	tokenFile := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	token, err := os.ReadFile(tokenFile)
+	if err != nil {
+		logger.Error(err, "Failed to read service account token")
+		return "", fmt.Errorf("failed to read service account token: %v", err)
+	}
+
+	// Authenticate with Vault using the Kubernetes auth method
+	data := map[string]interface{}{
+		"role": role,
+		"jwt":  string(token),
+	}
+	var authResponse map[string]interface{}
+	resp, err := client.R().
+		SetBody(data).
+		SetResult(&authResponse).
+		Post(fmt.Sprintf("%s/v1/auth/kubernetes/login", vaultIntegration.Address))
+	if err != nil {
+		logger.Error(err, "Failed to authenticate with Vault")
+		return "", fmt.Errorf("failed to authenticate with Vault: %v", err)
+	}
+	if resp.StatusCode() != 200 {
+		logger.Error(fmt.Errorf("failed to authenticate with Vault"), "Vault authentication failed", "response", resp.String())
+		return "", fmt.Errorf("failed to authenticate with Vault: %v", resp.String())
+	}
+
+	// Set the client token after successful authentication
+	tokenValue := authResponse["auth"].(map[string]interface{})["client_token"].(string)
+	logger.Info("Authenticated with Vault", "client_token", tokenValue)
+
+	// Construct the metadata path
+	metadataPath := fmt.Sprintf("sys/mounts/%s/tune", vaultIntegration.SecretPath)
+	if vaultIntegration.SecretPath[len(vaultIntegration.SecretPath)-1] == '/' {
+		metadataPath = fmt.Sprintf("sys/mounts/%stune", vaultIntegration.SecretPath)
+	}
+
+	// Read the KV Secrets Engine Version from Vault
+	vaultError := &VaultError{}
+	var metadataResponse KVSecretsEngineResponse
+	resp, err = client.R().
+		SetHeader("X-Vault-Token", tokenValue).
+		SetResult(&metadataResponse).
+		SetError(vaultError).
+		ForceContentType("application/json").
+		Get(fmt.Sprintf("%s/v1/%s", vaultIntegration.Address, metadataPath))
+	if err != nil {
+		logger.Error(err, "Failed to read KV Secrets Engine info from Vault", "metadataPath", metadataPath)
+		return "", fmt.Errorf("failed to read KV Secrets Engine info from Vault: %v", err)
+	}
+	if resp.StatusCode() != 200 {
+		logger.Error(fmt.Errorf("failed to read KV Secrets Engine info from Vault"), "Vault KV Secrets Engine info read failed", "response", vaultError)
+		return "", fmt.Errorf("failed to read KV Secrets Engine info from Vault: %v", vaultError)
+	}
+
+	kvVersion := metadataResponse.Data.Options.Version
+	if kvVersion == "" {
+		kvVersion = "1"
+	}
+
+	return kvVersion, nil
 }

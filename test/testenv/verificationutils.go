@@ -1208,3 +1208,47 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 	}
 }
+
+func VerifyStatefulSetVaultAnnotations(currentAnnotations map[string]string) bool  {
+	expectedAnnotations := map[string]string{
+		"vault.hashicorp.com/agent-inject":                "true",
+		"vault.hashicorp.com/agent-inject-path":           "/mnt/splunk-secrets",
+		"vault.hashicorp.com/role":                        "splunk-role",
+		"vault.hashicorp.com/agent-inject-file-defaults":  "default.yml",
+		"vault.hashicorp.com/secret-volume-path-defaults": "/mnt/splunk-secrets",
+		"vault.hashicorp.com/agent-inject-template-defaults": `
+splunk:
+hec_disabled: 0
+hec_enableSSL: 0
+hec_token: "{{- with secret \"secret/data/splunk/hec_token\" -}}{{ .Data.data.value }}{{- end }}"
+password: "{{- with secret \"secret/data/splunk/password\" -}}{{ .Data.data.value }}{{- end }}"
+pass4SymmKey: "{{- with secret \"secret/data/splunk/pass4SymmKey\" -}}{{ .Data.data.value }}{{- end }}"
+idxc:
+	secret: "{{- with secret \"secret/data/splunk/idxc_secret\" -}}{{ .Data.data.value }}{{- end }}"
+shc:
+	secret: "{{- with secret \"secret/data/splunk/shc_secret\" -}}{{ .Data.data.value }}{{- end }}"`,
+		"vault.hashicorp.com/agent-inject-secret-hec_token":    "secret/data/splunk/hec_token",
+		"vault.hashicorp.com/agent-inject-file-hec_token":      "hec_token",
+		"vault.hashicorp.com/secret-volume-path-hec_token":     "/mnt/splunk-secrets/hec_token",
+		"vault.hashicorp.com/agent-inject-secret-idxc_secret":  "secret/data/splunk/idxc_secret",
+		"vault.hashicorp.com/agent-inject-file-idxc_secret":    "idxc_secret",
+		"vault.hashicorp.com/secret-volume-path-idxc_secret":   "/mnt/splunk-secrets/idxc_secret",
+		"vault.hashicorp.com/agent-inject-secret-pass4SymmKey": "secret/data/splunk/pass4SymmKey",
+		"vault.hashicorp.com/agent-inject-file-pass4SymmKey":   "pass4SymmKey",
+		"vault.hashicorp.com/secret-volume-path-pass4SymmKey":  "/mnt/splunk-secrets/pass4SymmKey",
+		"vault.hashicorp.com/agent-inject-secret-password":     "secret/data/splunk/password",
+		"vault.hashicorp.com/agent-inject-file-password":       "password",
+		"vault.hashicorp.com/secret-volume-path-password":      "/mnt/splunk-secrets/password",
+		"vault.hashicorp.com/agent-inject-secret-shc_secret":   "secret/data/splunk/shc_secret",
+		"vault.hashicorp.com/agent-inject-file-shc_secret":     "shc_secret",
+		"vault.hashicorp.com/secret-volume-path-shc_secret":    "/mnt/splunk-secrets/shc_secret",
+	}
+
+	for key, _ := range expectedAnnotations {
+		if currentAnnotations[key] != expectedAnnotations[key]  {
+			return false
+		}
+	}
+
+	return true
+}

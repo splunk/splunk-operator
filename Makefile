@@ -1,5 +1,7 @@
 # Default environment is default
-ENVIRONMENT=${1:-default}
+ENVIRONMENT ?= ${1}
+$(ENVIRONMENT):
+	ENVIRONMENT = default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
@@ -185,20 +187,20 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
 deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl apply --server-side --force-conflicts -f -
-	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/$(ENVIRONMENT)/kustomization.yaml
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
+	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/${ENVIRONMENT}/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl delete -f -
+	$(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl delete -f -
 
 ## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
+LOCALBIN ?= "$(shell pwd)/bin"
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
