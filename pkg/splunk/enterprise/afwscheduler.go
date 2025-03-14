@@ -557,9 +557,6 @@ downloadWork:
 					continue
 				}
 
-				// increment the count in worker waitgroup
-				downloadWorker.waiter.Add(1)
-
 				// update the download state of app to be DownloadInProgress
 				updatePplnWorkerPhaseInfo(ctx, downloadWorker.appDeployInfo, downloadWorker.appDeployInfo.PhaseInfo.FailCount, enterpriseApi.AppPkgDownloadInProgress)
 
@@ -586,6 +583,9 @@ downloadWork:
 					<-downloadWorkersRunPool
 					continue
 				}
+
+				// increment the count in worker waitgroup
+				downloadWorker.waiter.Add(1)
 
 				// start the actual download
 				go downloadWorker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
