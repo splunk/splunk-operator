@@ -1828,8 +1828,6 @@ func TestScheduleDownloads(t *testing.T) {
 	downloadPhaseWaiter.Wait()
 }
 
-// CSPL-3490: Fix Segmentation Fault in Splunk Operator Due to App Volume Name Change
-// A customer changed the name of an app in the app source, which caused the operator to crash.
 // This test case is to verify that the operator does not crash when the app name is changed.
 func TestScheduleDownloadsFailRemoteDataClientMgr(t *testing.T) {
 	ctx := context.TODO()
