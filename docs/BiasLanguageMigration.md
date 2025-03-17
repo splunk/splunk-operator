@@ -79,6 +79,7 @@ The `updated` folder has all of the files needed for the migration. The next ste
 10) Apply IndexerCluster CR
 11) Apply SearchHeadCluster CR
 12) Apply Standalone CR
+13) Migrate apps from master-app to manager-app directory
 
 Once you validate your environment, you can delete the CM and LM CRs using the files in the folder `to_remove_CRs`. 
 Example: `kubectl delete -f ./to_remove_CRs/<filename>`
