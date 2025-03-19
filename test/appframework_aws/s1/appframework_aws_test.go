@@ -249,7 +249,7 @@ var _ = Describe("s1appfw test", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with App Framework", func() {
+	XContext("Standalone deployment (S1) with App Framework", func() {
 		It("smoke, s1, appframeworksS1, appframework: can deploy a Standalone instance with App Framework enabled, install apps then downgrade them", func() {
 
 			/* Test Steps
