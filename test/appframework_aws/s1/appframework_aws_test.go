@@ -591,6 +591,7 @@ var _ = Describe("s1appfw test", func() {
 
 			standalone.Spec.Replicas = int32(scaledReplicaCount)
 			err = deployment.UpdateCR(ctx, standalone)
+			time.Sleep(2 * time.Minute)
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
 			// Ensure Standalone is scaling down
