@@ -557,9 +557,6 @@ downloadWork:
 					continue
 				}
 
-				// increment the count in worker waitgroup
-				downloadWorker.waiter.Add(1)
-
 				// update the download state of app to be DownloadInProgress
 				updatePplnWorkerPhaseInfo(ctx, downloadWorker.appDeployInfo, downloadWorker.appDeployInfo.PhaseInfo.FailCount, enterpriseApi.AppPkgDownloadInProgress)
 
@@ -577,7 +574,18 @@ downloadWork:
 				}
 
 				// get the remoteDataClientMgr instance
-				remoteDataClientMgr, _ := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+				remoteDataClientMgr, err := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+				if err != nil {
+					scopedLog.Error(err, "unable to get remote data client manager")
+					// increment the retry count and mark this app as download error
+					updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadError)
+
+					<-downloadWorkersRunPool
+					continue
+				}
+
+				// increment the count in worker waitgroup
+				downloadWorker.waiter.Add(1)
 
 				// start the actual download
 				go downloadWorker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
