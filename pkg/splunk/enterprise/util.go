@@ -535,7 +535,7 @@ func getRemoteObjectKey(ctx context.Context, cr splcommon.MetaObject, appFramewo
 
 	appSrc, err := getAppSrcSpec(appFrameworkConfig.AppSources, appSrcName)
 	if err != nil {
-		scopedLog.Error(err, "unable to get appSrcSpc")
+		scopedLog.Error(err, "unable to get appSourceSpec")
 		return remoteObjectKey, err
 	}
 

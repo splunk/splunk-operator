@@ -326,10 +326,6 @@ func setServiceTemplateDefaults(spec *enterpriseApi.Spec) {
 			}
 		}
 	}
-
-	if spec.ServiceTemplate.Spec.Type == "" {
-		spec.ServiceTemplate.Spec.Type = corev1.ServiceTypeClusterIP
-	}
 }
 
 // validateCommonSplunkSpec checks validity and makes default updates to a CommonSplunkSpec, and returns error if something is wrong.
