@@ -123,6 +123,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, updatedSecretData)
 			Expect(err).To(Succeed(), "Unable to update secret Object")
 
+			// Ensure standalone is updating
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
+
 			// Wait for License Manager to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
@@ -223,6 +226,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			err = testenv.DeleteSecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
 			Expect(err).To(Succeed(), "Unable to delete secret Object")
 
+			// Ensure standalone is updating
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
+
 			// Wait for License Manager to be in READY status
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
 
@@ -306,6 +312,9 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Delete secret by passing empty Data Map
 			err = testenv.ModifySecretObject(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName, map[string][]byte{})
 			Expect(err).To(Succeed(), "Unable to delete secret Object")
+
+			// Ensure standalone is updating
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseUpdating)
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
