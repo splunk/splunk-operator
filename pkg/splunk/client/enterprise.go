@@ -18,6 +18,7 @@ package client
 import (
 	"crypto/tls"
 	"encoding/json"
+	"net/url"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,6 +49,16 @@ type SplunkClient struct {
 
 	// HTTP client used to process requests
 	Client SplunkHTTPClient
+}
+
+// UpgradeMetrics holds search metrics for a search head during upgrade.
+type UpgradeMetrics struct {
+	ShortSearchSuccess int `json:"short_search_success"`
+	ShortSearchFailure int `json:"short_search_failure"`
+	LongSearchSuccess  int `json:"long_search_success"`
+	LongSearchFailure  int `json:"long_search_failure"`
+	TotalSearchSuccess int `json:"total_search_success"`
+	TotalSearchFailure int `json:"total_search_failure"`
 }
 
 // NewSplunkClient returns a new SplunkClient object initialized with a username and password.
@@ -935,3 +946,60 @@ func (c *SplunkClient) RestartSplunk() error {
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
 }
+
+// GetUpgradeSearchMetrics query the search head for upgrade search metrics.
+func (c *SplunkClient) GetUpgradeSearchMetrics() (*UpgradeMetrics, error) {
+    var metrics UpgradeMetrics
+
+	// Create the request URL.
+    path :=  "/services/search/metrics"
+
+	err := c.Get(path, &metrics)
+	if err != nil {
+		return nil, err
+	}
+
+    return &metrics, nil
+}
+
+// InitShcUpgrade calls the endpoint to display the upgrade banner.
+func (c *SplunkClient) InitShcUpgrade() error {
+	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-init", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, nil)
+
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200}
+
+	return c.Do(request, expectedStatus, nil)
+}
+
+func (c *SplunkClient) FinalizeShcUpgrade() error {
+	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-finalize", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, nil)
+
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200}
+
+	return c.Do(request, expectedStatus, nil)
+}
+
+// SetManualDetentionMode 
+func (c *SplunkClient) SetManualDetentionMode(status string) error {
+    params := url.Values{}
+    params.Add("manual_detention", status)
+
+	endpoint := fmt.Sprintf("%s/services/shcluster/member/control/control/set_manual_detention", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(params.Encode()))
+
+	if err != nil {
+		return fmt.Errorf("creating request for manual detention failed: %w", err)
+	}
+	expectedStatus := []int{200}
+
+	return c.Do(request, expectedStatus, nil)
+}
+
