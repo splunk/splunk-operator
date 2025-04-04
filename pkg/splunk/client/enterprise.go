@@ -948,6 +948,7 @@ func (c *SplunkClient) RestartSplunk() error {
 }
 
 // GetUpgradeSearchMetrics query the search head for upgrade search metrics.
+// todo: adjust UpgradeMetrics struct to the result of endpoint
 func (c *SplunkClient) GetUpgradeSearchMetrics() (*UpgradeMetrics, error) {
     var metrics UpgradeMetrics
 
