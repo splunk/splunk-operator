@@ -571,6 +571,8 @@ type PhaseInfo struct {
 
 type UpgradeStrategy struct {
 	WaitForHistSearchDomain            bool `json:"waitForHistSearchDrain,omitempty"`
+	WaitTillSearch					   bool `json:"waitTillSearch,omitempty"`
+	RetryFlag                          bool `json:"retryFlag,omitempty"`
 	EnableSearchRestartOnRemoteFailure bool `json:"enableSearchRestartOnRemoteFailure,omitempty"`
 }
 
