@@ -70,6 +70,9 @@ type ClusterManagerStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Vault enablement status
+	VaultEnabled *bool `json:"vaultEnabled,omitempty"`
 }
 
 // BundlePushInfo Indicates if bundle push required

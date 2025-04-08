@@ -53,6 +53,9 @@ type LicenseMasterStatus struct {
 
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
+
+	// Vault enablement status
+	VaultEnabled *bool `json:"vaultEnabled,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

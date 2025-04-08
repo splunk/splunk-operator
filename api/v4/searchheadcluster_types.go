@@ -128,6 +128,9 @@ type SearchHeadClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Vault enablement status
+	VaultEnabled *bool `json:"vaultEnabled,omitempty"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster

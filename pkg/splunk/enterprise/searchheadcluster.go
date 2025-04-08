@@ -220,6 +220,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 	cr.Status.Phase = phase
+	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
@@ -473,7 +474,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
 
 	// Check if a recycle of shc pods is necessary(due to shc_secret mismatch with namespace scoped secret)
-	if !mgr.vaultIntegration.Enable {
+	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && !mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && !*mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable == *mgr.cr.Status.VaultEnabled) {
 		err = ApplyShcSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
@@ -586,7 +587,7 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 
 	var adminPwd string
 	var err error
-	if mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable {
+	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && *mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")

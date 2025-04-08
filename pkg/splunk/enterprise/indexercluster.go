@@ -247,6 +247,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 	cr.Status.Phase = phase
+	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -511,6 +512,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 	}
 	cr.Status.Phase = phase
+	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -615,7 +617,7 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 
 	var adminPwd string
 	var err error
-	if cr.Spec.VaultIntegration.Enable {
+	if (cr.Status.VaultEnabled == nil && cr.Spec.VaultIntegration.Enable) || (cr.Status.VaultEnabled != nil && *cr.Status.VaultEnabled && cr.Spec.VaultIntegration.Enable != *cr.Status.VaultEnabled) {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, c, &cr.Spec.VaultIntegration, "password")
 		if err != nil {
 			return err
@@ -831,8 +833,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	// Get the podExecClient with empty targetPodName.
 	// This will be set inside ApplyIdxcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
-
-	if !mgr.cr.Spec.VaultIntegration.Enable {
+	if (mgr.cr.Status.VaultEnabled == nil && !mgr.cr.Spec.VaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && !*mgr.cr.Status.VaultEnabled && mgr.cr.Spec.VaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
 		// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
 		err = ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
@@ -943,7 +944,7 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 
 	var adminPwd string
 	var err error
-	if mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable {
+	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && *mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
@@ -982,7 +983,7 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 
 	var adminPwd string
 	var err error
-	if mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable {
+	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && *mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
