@@ -13,11 +13,13 @@ repositoryID: The ID of the Artifact Hub repository where the packages will be p
 owners: # (optional, used to claim repository ownership)
   - name: Splunk Support
     email: support@splunk.com
-  - name: Gaurav Gupta
-    email: gaurav@splunk.com
   - name: Vivek Reddy
     email: vivekr@splunk.com
-  - name: Sirish Mohan
-    email: smohan@splunk.com
-  - name: Arjun Kondur
-    email: akondur@splunk.com
+  - name: Raizel Lieberman
+    email: rlieberman@splunk.com
+  - name: Patryk Wasielewski
+    email: patrykw@splunk.com
+  - name: Igor Grzankowski
+    email: igorg@splunk.com
+  - name: Kasia Kozioł
+    email: kkoziol@splunk.com

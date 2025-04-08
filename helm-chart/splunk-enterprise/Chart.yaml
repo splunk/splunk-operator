@@ -25,8 +25,14 @@ appVersion: "2.7.1"
 maintainers:
   - name: Vivek Reddy
     email: vivekr@splunk.com
-  - name: Arjun Kondur
-    email: akondur@splunk.com
+  - name: Raizel Lieberman
+    email: rlieberman@splunk.com
+  - name: Patryk Wasielewski
+    email: patrykw@splunk.com
+  - name: Igor Grzankowski
+    email: igorg@splunk.com
+  - name: Kasia Kozioł
+    email: kkoziol@splunk.com
 dependencies:
 - name: splunk-operator
   version: "2.7.1"
