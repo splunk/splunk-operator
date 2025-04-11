@@ -1066,6 +1066,9 @@ var _ = Describe("s1appfw test", func() {
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
+			// Allow time for update to take effect
+			time.Sleep(1 * time.Second)
+
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 

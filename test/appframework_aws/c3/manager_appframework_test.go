@@ -427,6 +427,9 @@ var _ = Describe("c3appfw test", func() {
 			err = deployment.UpdateCR(ctx, idxc)
 			Expect(err).To(Succeed(), "Failed upgrade Indexer Cluster image")
 
+			// Allow time for update to take effect
+			time.Sleep(1 * time.Second)
+
 			// Ensure Cluster Manager goes to Ready phase
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
