@@ -160,22 +160,22 @@ BASE_IMAGE_VERSION ?= d16d4445b1567f29449fba3b6d2bc37db467dc3067d33e940477e55aec
 
 docker-buildx:
 	@if [ -z "$(IMG)" ]; then \
-		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
-		exit 1; \
-	fi; \
-	  -docker buildx create --name project-v3-builder --use || true \
-	if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
-		DOCKERFILE="Dockerfile.distroless"; \
-		BUILD_TAG="$(IMG)-distroless"; \
-	else \
-		DOCKERFILE="Dockerfile"; \
-		BUILD_TAG="$(IMG)"; \
-	fi; \
-	docker buildx build --push --platform="$(PLATFORMS)" \
-		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
-		--build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
-		--tag "$$BUILD_TAG" -f "$$DOCKERFILE" .
-	- docker buildx rm project-v3-builder || true
+            echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+            exit 1; \
+        fi; \
+        - docker buildx create --name project-v3-builder --use || true; \
+        if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
+            DOCKERFILE="Dockerfile.distroless"; \
+            BUILD_TAG="$(IMG)-distroless"; \
+        else \
+            DOCKERFILE="Dockerfile"; \
+            BUILD_TAG="$(IMG)"; \
+        fi; \
+        docker buildx build --push --platform="$(PLATFORMS)" \
+            --build-arg BASE_IMAGE="$(BASE_IMAGE)" \
+            --build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
+            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
+        - docker buildx rm project-v3-builder || true
 
 
 
