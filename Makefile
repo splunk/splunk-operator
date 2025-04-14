@@ -163,7 +163,7 @@ docker-buildx:
 		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
 		exit 1; \
 	fi; \
-	- docker buildx create --name project-v3-builder \
+	  docker buildx create --name project-v3-builder \
       docker buildx use project-v3-builder
 	if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
 		DOCKERFILE="Dockerfile.distroless"; \
@@ -176,7 +176,7 @@ docker-buildx:
 		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
 		--build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
 		--tag "$$BUILD_TAG" -f "$$DOCKERFILE" .
-	- docker buildx rm project-v3-builder
+	docker buildx rm project-v3-builder
 
 
 
