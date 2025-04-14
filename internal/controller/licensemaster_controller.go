@@ -14,16 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/internal/controller/common"
 	"time"
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	common "github.com/splunk/splunk-operator/controllers/common"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,15 +39,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// IndexerClusterReconciler reconciles a IndexerCluster object
-type IndexerClusterReconciler struct {
+// LicenseMasterReconciler reconciles a LicenseMaster object
+type LicenseMasterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=indexerclusters/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=licensemasters/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -64,21 +64,21 @@ type IndexerClusterReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the IndexerCluster object against the actual cluster state, and then
+// the LicenseMaster object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileCounters.With(getPrometheusLabels(req, "IndexerCluster")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "IndexerCluster")
+func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	reconcileCounters.With(getPrometheusLabels(req, "LicenseMaster")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("indexercluster", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("licensemaster", req.NamespacedName)
 
-	// Fetch the IndexerCluster
-	instance := &enterpriseApi.IndexerCluster{}
+	// Fetch the LicenseMaster
+	instance := &enterpriseApiV3.LicenseMaster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -89,20 +89,20 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load indexer cluster data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load license manager data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.IndexerClusterPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApiV3.LicenseMasterPausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyIndexerCluster(ctx, r.Client, instance)
+	result, err := ApplyLicenseMaster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -110,59 +110,44 @@ func (r *IndexerClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return result, err
 }
 
-// ApplyIndexerCluster adding to handle unit test case
-var ApplyIndexerCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IndexerCluster) (reconcile.Result, error) {
-	// IdxCluster can be supported by two CRD types for CM
-	if len(instance.Spec.ClusterManagerRef.Name) > 0 {
-		return enterprise.ApplyIndexerClusterManager(ctx, client, instance)
-	}
-	return enterprise.ApplyIndexerCluster(ctx, client, instance)
+// ApplyLicenseMaster adding to handle unit test case
+var ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+	return enterprise.ApplyLicenseMaster(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.IndexerCluster{}).
+		For(&enterpriseApiV3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
-			common.ConfigMapChangedPredicate(),
-			common.ClusterManagerChangedPredicate(),
-			common.ClusterMasterChangedPredicate(),
+			common.CrdChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.IndexerCluster{},
+				OwnerType:    &enterpriseApiV3.LicenseMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.IndexerCluster{},
-			}).
-		Watches(&source.Kind{Type: &corev1.Pod{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApi.IndexerCluster{},
+				OwnerType:    &enterpriseApiV3.LicenseMaster{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.IndexerCluster{},
+				OwnerType:    &enterpriseApiV3.LicenseMaster{},
 			}).
-		Watches(&source.Kind{Type: &enterpriseApi.ClusterManager{}},
+		Watches(&source.Kind{Type: &corev1.Pod{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApi.IndexerCluster{},
-			}).
-		Watches(&source.Kind{Type: &enterpriseApiV3.ClusterMaster{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApi.IndexerCluster{},
+				OwnerType:    &enterpriseApiV3.LicenseMaster{},
 			}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,

@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// SplunkController is used to represent common interfaces of Splunk controllers
+// SplunkController is used to represent common interfaces of Splunk controller
 type SplunkController interface {
 
 	// GetInstance returns an instance of the custom resource managed by the controller

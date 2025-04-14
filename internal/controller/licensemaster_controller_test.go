@@ -1,17 +1,17 @@
-package controllers
+package controller
 
 import (
 	"context"
 	"fmt"
+	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("ClusterMaster Controller", func() {
+var _ = Describe("LicenseMaster Controller", func() {
 
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
@@ -32,60 +32,56 @@ var _ = Describe("ClusterMaster Controller", func() {
 
 	})
 
-	Context("ClusterMaster Management failed", func() {
+	Context("LicenseMaster Management", func() {
 
-		It("Get ClusterMaster custom resource should fail", func() {
-			namespace := "ns-splunk-cmaster-1"
-			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
+		It("Get LicenseMaster custom resource should failed", func() {
+			namespace := "ns-splunk-lmaster-1"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			// check when resource not found
-			_, err := GetClusterMaster("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("clustermasters.enterprise.splunk.com \"test\" not found"))
+			_, err := GetLicenseMaster("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("licensemasters.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
-	})
 
-	Context("ClusterMaster Management with annotations", func() {
-
-		It("Create ClusterMaster custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-cmaster-2"
-			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
+		It("Create LicenseMaster custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-lmaster-2"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = ""
-			CreateClusterMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			ssSpec, _ := GetClusterMaster("test", nsSpecs.Name)
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
+			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			ssSpec, _ := GetLicenseMaster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			ssSpec.Status.Phase = "Ready"
-			UpdateClusterMaster(ssSpec, enterpriseApi.PhaseReady)
-			DeleteClusterMaster("test", nsSpecs.Name)
-			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
-		})
-	})
-	Context("ClusterMaster Management", func() {
-		It("Create ClusterMaster custom resource should succeeded", func() {
-			namespace := "ns-splunk-cmaster-3"
-			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
-				return reconcile.Result{}, nil
-			}
-			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
-			annotations := make(map[string]string)
-			CreateClusterMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteClusterMaster("test", nsSpecs.Name)
+			UpdateLicenseMaster(ssSpec, enterpriseApi.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
+		It("Create LicenseMaster custom resource should succeeded", func() {
+			namespace := "ns-splunk-lmaster-3"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
+				return reconcile.Result{}, nil
+			}
+
+			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
+			annotations := make(map[string]string)
+			CreateLicenseMaster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteLicenseMaster("test", nsSpecs.Name)
+			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
+		})
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-cmaster-4"
-			ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
+			namespace := "ns-splunk-lmaster-4"
+			ApplyLicenseMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.LicenseMaster) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -93,7 +89,7 @@ var _ = Describe("ClusterMaster Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := ClusterMasterReconciler{
+			instance := LicenseMasterReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -107,18 +103,20 @@ var _ = Describe("ClusterMaster Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 			// create resource first and then reconcile for the first time
-			ssSpec := testutils.NewClusterMaster("test", namespace, "image")
+			ssSpec := testutils.NewLicenseMaster("test", namespace, "image")
 			Expect(c.Create(ctx, ssSpec)).Should(Succeed())
 			// reconcile with updated annotations for pause
 			annotations := make(map[string]string)
-			annotations[enterpriseApiV3.ClusterMasterPausedAnnotation] = ""
+			annotations[enterpriseApiV3.LicenseMasterPausedAnnotation] = ""
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
 			_, err = instance.Reconcile(ctx, request)
+			Expect(err).ToNot(HaveOccurred())
 			// reconcile after removing annotations for pause
 			annotations = map[string]string{}
 			ssSpec.Annotations = annotations
 			Expect(c.Update(ctx, ssSpec)).Should(Succeed())
+			_, err = instance.Reconcile(ctx, request)
 			// reconcile after adding delete timestamp
 			Expect(err).ToNot(HaveOccurred())
 			ssSpec.DeletionTimestamp = &metav1.Time{}
@@ -129,13 +127,13 @@ var _ = Describe("ClusterMaster Controller", func() {
 	})
 })
 
-func GetClusterMaster(name string, namespace string) (*enterpriseApiV3.ClusterMaster, error) {
+func GetLicenseMaster(name string, namespace string) (*enterpriseApiV3.LicenseMaster, error) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	By("Expecting ClusterMaster custom resource to be created successfully")
-	ss := &enterpriseApiV3.ClusterMaster{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	err := k8sClient.Get(context.Background(), key, ss)
 	if err != nil {
 		return nil, err
@@ -143,17 +141,17 @@ func GetClusterMaster(name string, namespace string) (*enterpriseApiV3.ClusterMa
 	return ss, err
 }
 
-func CreateClusterMaster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApiV3.ClusterMaster {
+func CreateLicenseMaster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ssSpec := testutils.NewClusterMaster(name, namespace, "image")
+	ssSpec := testutils.NewLicenseMaster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting ClusterMaster custom resource to be created successfully")
-	ss := &enterpriseApiV3.ClusterMaster{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -168,19 +166,19 @@ func CreateClusterMaster(name string, namespace string, annotations map[string]s
 	return ss
 }
 
-func UpdateClusterMaster(instance *enterpriseApiV3.ClusterMaster, status enterpriseApi.Phase) *enterpriseApiV3.ClusterMaster {
+func UpdateLicenseMaster(instance *enterpriseApiV3.LicenseMaster, status enterpriseApi.Phase) *enterpriseApiV3.LicenseMaster {
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	ssSpec := testutils.NewClusterMaster(instance.Name, instance.Namespace, "image")
+	ssSpec := testutils.NewLicenseMaster(instance.Name, instance.Namespace, "image")
 	ssSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), ssSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	By("Expecting ClusterMaster custom resource to be created successfully")
-	ss := &enterpriseApiV3.ClusterMaster{}
+	By("Expecting LicenseMaster custom resource to be created successfully")
+	ss := &enterpriseApiV3.LicenseMaster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ss)
 		if status != "" {
@@ -195,15 +193,15 @@ func UpdateClusterMaster(instance *enterpriseApiV3.ClusterMaster, status enterpr
 	return ss
 }
 
-func DeleteClusterMaster(name string, namespace string) {
+func DeleteLicenseMaster(name string, namespace string) {
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
-	By("Expecting ClusterMaster Deleted successfully")
+	By("Expecting LicenseMaster Deleted successfully")
 	Eventually(func() error {
-		ssys := &enterpriseApiV3.ClusterMaster{}
+		ssys := &enterpriseApiV3.LicenseMaster{}
 		_ = k8sClient.Get(context.Background(), key, ssys)
 		err := k8sClient.Delete(context.Background(), ssys)
 		return err

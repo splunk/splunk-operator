@@ -19,16 +19,16 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
+COPY cmd/main.go cmd/main.go
 COPY api/ api/
-COPY controllers/ controllers/
+COPY internal/controller/ internal/controller/
 COPY pkg/ pkg/
 COPY tools/ tools/
 COPY hack hack/
 
 # Build
 # TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}

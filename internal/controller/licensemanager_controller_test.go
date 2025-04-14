@@ -1,15 +1,15 @@
-package controllers
+package controller
 
 import (
 	"context"
 	"fmt"
+	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"time"
 
-	"github.com/splunk/splunk-operator/controllers/testutils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 

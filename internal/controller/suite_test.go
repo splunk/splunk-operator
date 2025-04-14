@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
@@ -63,7 +63,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	By("bootstrapping test environment")
 
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -94,7 +94,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	//+kubebuilder:scaffold:scheme
 
-	// Create New Manager for controllers
+	// Create New Manager for controller
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: clientgoscheme.Scheme,
 	})

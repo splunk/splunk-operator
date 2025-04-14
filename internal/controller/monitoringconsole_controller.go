@@ -14,16 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/internal/controller/common"
 	"time"
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	common "github.com/splunk/splunk-operator/controllers/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,15 +39,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// ClusterMasterReconciler reconciles a ClusterMaster object
-type ClusterMasterReconciler struct {
+// MonitoringConsoleReconciler reconciles a MonitoringConsole object
+type MonitoringConsoleReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=clustermasters/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=monitoringconsoles/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -64,22 +64,20 @@ type ClusterMasterReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the ClusterMaster object against the actual cluster state, and then
+// the MonitoringConsole object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req, "ClusterMaster")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterMaster")
-
+func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	reconcileCounters.With(getPrometheusLabels(req, "MonitoringConsole")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "MonitoringConsole")
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("clustermaster", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("monitoringconsole", req.NamespacedName)
 
-	// Fetch the ClusterMaster
-	instance := &enterpriseApiV3.ClusterMaster{}
+	// Fetch the MonitoringConsole
+	instance := &enterpriseApi.MonitoringConsole{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -90,20 +88,20 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load cluster manager data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load monitoring console data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.ClusterManagerPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.MonitoringConsolePausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyClusterMaster(ctx, r.Client, instance)
+	result, err := ApplyMonitoringConsole(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -111,45 +109,59 @@ func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return result, err
 }
 
-// ApplyClusterMaster adding to handle unit test case
-var ApplyClusterMaster = func(ctx context.Context, client client.Client, instance *enterpriseApiV3.ClusterMaster) (reconcile.Result, error) {
-	return enterprise.ApplyClusterMaster(ctx, client, instance)
+// ApplyMonitoringConsole adding to handle unit test case
+var ApplyMonitoringConsole = func(ctx context.Context, client client.Client, instance *enterpriseApi.MonitoringConsole) (reconcile.Result, error) {
+	return enterprise.ApplyMonitoringConsole(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApiV3.ClusterMaster{}).
+		For(&enterpriseApi.MonitoringConsole{}).
 		WithEventFilter(predicate.Or(
 			predicate.GenerationChangedPredicate{},
 			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
-			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
 		)).
 		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
-			}).
-		Watches(&source.Kind{Type: &corev1.Pod{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
 		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
 			&handler.EnqueueRequestForOwner{
 				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
 			}).
+		Watches(&source.Kind{Type: &corev1.Pod{}},
+			&handler.EnqueueRequestForOwner{
+				IsController: false,
+				OwnerType:    &enterpriseApi.MonitoringConsole{},
+			}).
+		Watches(&source.Kind{Type: &enterpriseApi.Standalone{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApiV3.LicenseMaster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApi.LicenseManager{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApi.IndexerCluster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApi.SearchHeadCluster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApiV3.ClusterMaster{}},
+			&handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &enterpriseApi.ClusterManager{}},
+			&handler.EnqueueRequestForObject{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
