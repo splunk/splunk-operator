@@ -17,7 +17,6 @@ package controller
 
 import (
 	"context"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,17 +59,17 @@ func AddToManager(mgr manager.Manager, splctrl SplunkController, c client.Client
 	}
 
 	// Watch for changes to primary custom resource
-	err = ctrl.Watch(&source.Kind{Type: instance}, &handler.EnqueueRequestForObject{})
+	err = ctrl.Watch(source.Kind(mgr.GetCache(), instance), &handler.EnqueueRequestForObject{})
+	//err = ctrl.Watch(&source.Kind{Type: instance}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to secondary resources
 	for _, t := range splctrl.GetWatchTypes() {
-		err = ctrl.Watch(&source.Kind{Type: t}, &handler.EnqueueRequestForOwner{
-			IsController: false,
-			OwnerType:    instance,
-		})
+		err = ctrl.Watch(
+			source.Kind(mgr.GetCache(), t),
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), t))
 		if err != nil {
 			return err
 		}

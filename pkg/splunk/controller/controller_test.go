@@ -18,7 +18,10 @@ package controller
 import (
 	"context"
 	"errors"
+	"k8s.io/client-go/kubernetes/scheme"
 	"net/http"
+	ctrl2 "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -35,12 +38,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	//"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -125,14 +126,18 @@ var _ manager.Manager = &MockManager{}
 // MockManager is used to test methods that involve the Kubernetes manager
 type MockManager struct{}
 
+func (mgr MockManager) GetHTTPClient() *http.Client {
+	return http.DefaultClient
+}
+
 // Add for MockManager just returns nil
 func (mgr MockManager) Add(r manager.Runnable) error {
 	return mgr.SetFields(r)
 }
 
 // GetControllerOptions returns controller global configuration options.
-func (mgr MockManager) GetControllerOptions() v1alpha1.ControllerConfigurationSpec {
-	return v1alpha1.ControllerConfigurationSpec{}
+func (mgr MockManager) GetControllerOptions() config.Controller {
+	return config.Controller{}
 }
 
 func (mgr MockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
@@ -143,11 +148,18 @@ func (mgr MockManager) Elected() <-chan struct{} {
 	return nil
 }
 
-// SetFields for MockManager just returns nil
 func (mgr MockManager) SetFields(i interface{}) error {
-	if _, err := inject.InjectorInto(mgr.SetFields, i); err != nil {
-		return err
+	// Example: If the object is expected to have a logger, set it here
+	if loggerSetter, ok := i.(interface{ SetLogger(logr.Logger) }); ok {
+		loggerSetter.SetLogger(mgr.GetLogger())
 	}
+
+	// Example: Set a client if the object requires it
+	if clientSetter, ok := i.(interface{ SetClient(client.Client) }); ok {
+		clientSetter.SetClient(mgr.GetClient())
+	}
+
+	// Add other dependencies similarly as needed
 	return nil
 }
 
@@ -214,10 +226,19 @@ func (mgr MockManager) GetAPIReader() client.Reader {
 }
 
 // GetWebhookServer returns a webhook.Server
-func (mgr MockManager) GetWebhookServer() *webhook.Server {
-	s := webhook.Server{}
+func (mgr MockManager) GetWebhookServer() webhook.Server {
+	s := webhook.NewServer(webhook.Options{
+		Host:         "",
+		Port:         0,
+		CertDir:      "",
+		CertName:     "",
+		KeyName:      "",
+		ClientCAName: "",
+		TLSOpts:      nil,
+		WebhookMux:   nil,
+	})
 	mgr.SetFields(&s)
-	return &s
+	return s
 }
 
 // NewMockManager returns a new instance of a MockManager
@@ -228,8 +249,10 @@ func NewMockManager() manager.Manager {
 func TestAddToManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctrl := newMockController()
-	mgr := NewMockManager()
-	err := AddToManager(mgr, ctrl, c)
+	mgr, err := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
+		Scheme: scheme.Scheme,
+	})
+	err = AddToManager(mgr, ctrl, c)
 	if err != nil {
 		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
 	}

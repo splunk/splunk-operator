@@ -52,7 +52,7 @@ BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.26.0
+ENVTEST_K8S_VERSION = 1.29.3
 
 ignore-not-found ?= True
 
@@ -164,6 +164,7 @@ docker-buildx:
             exit 1; \
         fi; \
         - docker buildx create --name project-v3-builder --use || true; \
+        - docker buildx use project-v3-builder \
         if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
             BUILD_TAG="$(IMG)-distroless"; \
@@ -205,7 +206,7 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v4.5.5
+KUSTOMIZE_VERSION ?= v5.3.0
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
@@ -400,3 +401,9 @@ setup/ginkgo:
 	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
 	@echo Installing gomega
 	@go get github.com/onsi/gomega/...
+
+.PHONY: build-installer
+build-installer: manifests generate kustomize
+	mkdir -p dist
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/install.yaml
