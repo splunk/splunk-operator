@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -107,9 +108,10 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	options := ctrl.Options{
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "270bec8c.splunk.com",
@@ -205,7 +207,7 @@ func main() {
 // Note that these endpoints meant to be sensitive and shouldn't be exposed publicly.
 func customSetupEndpoints(pprofActive bool, mgr manager.Manager) error {
 	if pprofActive {
-		if err := debug.RegisterEndpoint(mgr.AddMetricsExtraHandler, nil); err != nil {
+		if err := debug.RegisterEndpoint(mgr.AddMetricsServerExtraHandler, nil); err != nil {
 			setupLog.Error(err, "Unable to register pprof endpoint")
 			return err
 		}
