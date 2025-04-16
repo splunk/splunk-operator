@@ -18,7 +18,7 @@ By installing `splunk-operator-cluster.yaml` Operator will watch all the namespa
 
 ```
 wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-cluster.yaml
-kubectl apply -f splunk-operator-cluster.yaml
+kubectl apply -f splunk-operator-cluster.yaml --server-side
 ```
 
 ## Install operator to watch multiple namespaces
@@ -48,7 +48,7 @@ In order to install operator with restrictive permission to watch only single na
 
 ```
 wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-namespace.yaml
-kubectl apply -f splunk-operator-namespace.yaml
+kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
 
 ## Private Registries

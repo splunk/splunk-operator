@@ -33,7 +33,7 @@ wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator
 ​
 3. Upgrade the Splunk Operator.​
 ```
-kubectl apply -f splunk-operator-namespace.yaml --server-side  --force-conflicts
+kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
 ​
 After applying the yaml, a new operator pod will be created and the existing operator pod will be terminated. Example:

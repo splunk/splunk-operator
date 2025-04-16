@@ -4,8 +4,14 @@ description: A Helm chart for the Splunk Operator for Kubernetes
 maintainers:
   - name: Vivek Reddy
     email: vivekr@splunk.com
-  - name: Arjun Kondur
-    email: akondur@splunk.com
+  - name: Raizel Lieberman
+    email: rlieberman@splunk.com
+  - name: Patryk Wasielewski
+    email: patrykw@splunk.com
+  - name: Igor Grzankowski
+    email: igorg@splunk.com
+  - name: Kasia Kozioł
+    email: kkoziol@splunk.com
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
