@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // ClusterMasterReconciler reconciles a ClusterMaster object
@@ -121,8 +120,8 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApiV3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
+			common.GenerationChangedPredicate(),
+			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
@@ -130,26 +129,34 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
 		)).
-		Watches(&source.Kind{Type: &appsv1.StatefulSet{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
-			}).
-		Watches(&source.Kind{Type: &corev1.Secret{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
-			}).
-		Watches(&source.Kind{Type: &corev1.Pod{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
-			}).
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
-			&handler.EnqueueRequestForOwner{
-				IsController: false,
-				OwnerType:    &enterpriseApiV3.ClusterMaster{},
-			}).
+		Watches(&appsv1.StatefulSet{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&appsv1.StatefulSet{},
+				handler.OnlyControllerOwner(),
+			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&corev1.Secret{},
+				handler.OnlyControllerOwner(),
+			)).
+		Watches(&corev1.Pod{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&corev1.Pod{},
+				handler.OnlyControllerOwner(),
+			)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&corev1.ConfigMap{},
+				handler.OnlyControllerOwner(),
+			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).

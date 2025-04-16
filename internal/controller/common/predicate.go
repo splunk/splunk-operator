@@ -27,6 +27,34 @@ func LabelChangedPredicate() predicate.Predicate {
 	return err
 }
 
+// GenerationChangedPredicate .
+func GenerationChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetGeneration(), e.ObjectNew.GetGeneration())
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
+// AnnotationChangedPredicate .
+func AnnotationChangedPredicate() predicate.Predicate {
+	err := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Evaluates to false if the object has been confirmed deleted.
+			return !e.DeleteStateUnknown
+		},
+	}
+	return err
+}
+
 // SecretChangedPredicate .
 func SecretChangedPredicate() predicate.Predicate {
 	err := predicate.Funcs{
@@ -183,45 +211,44 @@ func ResourceFailedPredicate() predicate.Predicate {
 	return err
 }
 
-// CrdChangedPredicate .
+// CrdChangedPredicate with generics support
 func CrdChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			// This update is in fact a Delete event, process it
-			if _, ok := e.ObjectNew.(*crdv1.CustomResourceDefinition); !ok {
+			newObj, ok := e.ObjectNew.(*crdv1.CustomResourceDefinition)
+			oldObj, okOld := e.ObjectOld.(*crdv1.CustomResourceDefinition)
+
+			// Ensure both objects are valid CRDs
+			if !ok || !okOld {
 				return false
 			}
 
-			if e.ObjectNew.GetDeletionGracePeriodSeconds() != nil {
+			// Check if the object is marked for deletion
+			if newObj.GetDeletionGracePeriodSeconds() != nil {
 				return true
 			}
 
-			// if old and new data is the same, don't reconcile
-			newObj, ok := e.ObjectNew.DeepCopyObject().(*crdv1.CustomResourceDefinition)
-			if !ok {
-				return false
-			}
-			oldObj, ok := e.ObjectOld.DeepCopyObject().(*crdv1.CustomResourceDefinition)
-			if !ok {
-				return false
-			}
-			if !stringInSlice(newObj.Name, []string{"clustermasters.enterprise.splunk.com",
+			// Process only specific CRD names
+			if !stringInSlice(newObj.Name, []string{
+				"clustermasters.enterprise.splunk.com",
 				"indexerclusters.enterprise.splunk.com",
 				"licensemasters.enterprise.splunk.com",
 				"licensemanagers.enterprise.splunk.com",
 				"monitoringconsoles.enterprise.splunk.com",
 				"searchheadclusters.enterprise.splunk.com",
-				"standalones.enterprise.splunk.com"}) {
+				"standalones.enterprise.splunk.com",
+			}) {
 				return false
 			}
+
+			// Compare specifications to determine changes
 			return !cmp.Equal(newObj.Spec, oldObj.Spec)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			// Evaluates to false if the object has been confirmed deleted.
+			// Return true if the object's deletion state is unknown
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // ClusterManagerChangedPredicate .
