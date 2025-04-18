@@ -174,3 +174,11 @@ extraManifests: []
 #    spec:
 #      securityPolicy:
 #        name: "gcp-cloud-armor-policy-test"
+
+# Additional envs to the splunk-operator container
+extraEnvs: []
+# extraEnvs
+#  - name: POD_IP
+#    valueFrom:
+#      fieldRef:
+#        fieldPath: status.podIP
