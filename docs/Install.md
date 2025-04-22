@@ -34,6 +34,8 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
           value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-current-at-splunk-com"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -71,6 +73,8 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
           value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-current-at-splunk-com"
         - name: POD_NAME
           valueFrom:
             fieldRef:

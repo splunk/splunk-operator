@@ -397,6 +397,8 @@ spec:
                   value: docker.io/splunk/splunk:9.4.0
                 - name: OPERATOR_NAME
                   value: splunk-operator
+                - name: SPLUNK_GENERAL_TERMS
+                  value: ""
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:

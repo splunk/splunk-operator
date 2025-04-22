@@ -107,6 +107,8 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
           value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-current-at-splunk-com"
         - name: POD_NAME
           valueFrom:
             fieldRef:

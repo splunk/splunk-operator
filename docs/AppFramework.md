@@ -692,6 +692,8 @@ spec:
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
           value: "docker.io/splunk/splunk:9.4.0"
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-current-at-splunk-com"
 
       volumes:
       - name: app-staging
