@@ -247,7 +247,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 	}
 	cr.Status.Phase = phase
-	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -512,7 +511,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 	}
 	cr.Status.Phase = phase
-	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
@@ -577,6 +575,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+
 	return result, nil
 }
 
@@ -614,15 +613,27 @@ func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseAp
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
 func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, cmPodName string, podExecClient splutil.PodExecClientImpl) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("SetClusterMaintenanceMode")
+
+	// Describe pod
+	pod := &corev1.Pod{}
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cmPodName}
+	err := c.Get(ctx, namespacedName, pod)
+	if err != nil {
+		scopedLog.Error(err, "Couldn't describe SHC pod")
+	}
 
 	var adminPwd string
-	var err error
-	if (cr.Status.VaultEnabled == nil && cr.Spec.VaultIntegration.Enable) || (cr.Status.VaultEnabled != nil && *cr.Status.VaultEnabled && cr.Spec.VaultIntegration.Enable != *cr.Status.VaultEnabled) {
+	vaultEnabledLabel, _ := strconv.ParseBool(pod.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
+		scopedLog.Info("SetClusterMaintenanceMode Vault")
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, c, &cr.Spec.VaultIntegration, "password")
 		if err != nil {
 			return err
 		}
 	} else {
+		scopedLog.Info("SetClusterMaintenanceMode Secret")
 		// Retrieve admin password from Pod
 		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, c, cmPodName, cr.GetNamespace(), "password")
 		if err != nil {
@@ -830,16 +841,22 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		return enterpriseApi.PhaseError, err
 	}
 
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("Update")
+
 	// Get the podExecClient with empty targetPodName.
 	// This will be set inside ApplyIdxcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
-	if (mgr.cr.Status.VaultEnabled == nil && !mgr.cr.Spec.VaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && !*mgr.cr.Status.VaultEnabled && mgr.cr.Spec.VaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
+	vaultEnabledLabel, _ := strconv.ParseBool(statefulSet.Spec.Template.ObjectMeta.Labels["vault-enabled"])
+	if !vaultEnabledLabel {
 		// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
+		scopedLog.Info("Update Secret")
 		err = ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
 	} else {
+		scopedLog.Info("Update Vault")
 		err = ApplyIdxcVaultSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
@@ -942,9 +959,17 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
 
+	// Describe pod
+	pod := &corev1.Pod{}
+	namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: memberName}
+	err := mgr.c.Get(ctx, namespacedName, pod)
+	if err != nil {
+		scopedLog.Error(err, "Couldn't describe SHC pod")
+	}
+
 	var adminPwd string
-	var err error
-	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && *mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
+	vaultEnabledLabel, _ := strconv.ParseBool(pod.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
@@ -981,9 +1006,17 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(cm, managerIdxcName, false))
 
+	// Describe sts
+	sts := &appsv1.StatefulSet{}
+	namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: GetSplunkStatefulsetName(cm, managerIdxcName)}
+	err := mgr.c.Get(ctx, namespacedName, sts)
+	if err != nil {
+		scopedLog.Error(err, "Couldn't describe SHC sts")
+	}
+
 	var adminPwd string
-	var err error
-	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && *mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
+	vaultEnabledLabel, _ := strconv.ParseBool(sts.Spec.Template.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")

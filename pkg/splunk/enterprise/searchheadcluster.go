@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -220,7 +221,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 	cr.Status.Phase = phase
-	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	var finalResult *reconcile.Result
 	if cr.Status.DeployerPhase == enterpriseApi.PhaseReady {
@@ -474,7 +474,8 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
 
 	// Check if a recycle of shc pods is necessary(due to shc_secret mismatch with namespace scoped secret)
-	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && !mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && !*mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable == *mgr.cr.Status.VaultEnabled) {
+	vaultEnabledLabel, _ := strconv.ParseBool(statefulSet.Spec.Template.ObjectMeta.Labels["vault-enabled"])
+	if !vaultEnabledLabel {
 		err = ApplyShcSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
@@ -546,6 +547,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 
 	case "": // this can happen after the member has already been recycled and we're just waiting for state to update
 		mgr.log.Info("Member has empty Status", "memberName", memberName)
+		// Updating Vault enablement status of given pod
 		return false, nil
 	}
 
@@ -581,13 +583,21 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 	// Get Pod Name
 	memberName := GetSplunkStatefulsetPodName(SplunkSearchHead, mgr.cr.GetName(), n)
 
+	// Describe pod
+	pod := &corev1.Pod{}
+	namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: memberName}
+	err := mgr.c.Get(ctx, namespacedName, pod)
+	if err != nil {
+		scopedLog.Error(err, "Couldn't describe SHC pod")
+	}
+
 	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, mgr.cr.GetName(), true)))
 
 	var adminPwd string
-	var err error
-	if (mgr.cr.Status.VaultEnabled == nil && mgr.vaultIntegration != nil && mgr.vaultIntegration.Enable) || (mgr.cr.Status.VaultEnabled != nil && *mgr.cr.Status.VaultEnabled && mgr.vaultIntegration.Enable != *mgr.cr.Status.VaultEnabled) {
+	vaultEnabledLabel, _ := strconv.ParseBool(pod.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
 		if err != nil {
 			scopedLog.Error(err, "Couldn't retrieve the admin password from Pod")

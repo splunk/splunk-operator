@@ -627,6 +627,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	for k, v := range selectLabels {
 		labels[k] = v
 	}
+	labels["vault-enabled"] = strconv.FormatBool(spec.VaultIntegration.Enable)
 
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),

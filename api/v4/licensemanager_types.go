@@ -55,9 +55,6 @@ type LicenseManagerStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
-
-	// Vault enablement status
-	VaultEnabled *bool `json:"vaultEnabled,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

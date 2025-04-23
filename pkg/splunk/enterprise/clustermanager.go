@@ -211,7 +211,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 	cr.Status.Phase = phase
-	cr.Status.VaultEnabled = &cr.Spec.VaultIntegration.Enable
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
