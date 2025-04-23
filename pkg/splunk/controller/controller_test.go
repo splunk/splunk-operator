@@ -126,6 +126,10 @@ var _ manager.Manager = &MockManager{}
 // MockManager is used to test methods that involve the Kubernetes manager
 type MockManager struct{}
 
+func (mgr MockManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
+
 func (mgr MockManager) GetHTTPClient() *http.Client {
 	return http.DefaultClient
 }
