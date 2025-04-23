@@ -2045,5 +2045,5 @@ func validateSplunkGeneralTerms() error {
 	if os.Getenv("SPLUNK_GENERAL_TERMS") == "--accept-current-at-splunk-com" {
 		return nil
 	}
-	return fmt.Errorf("SPLUNK_GENERAL_TERMS must be set to \"--accept-current-at-splunk-com\". Update the environment variable in the splunk-operator-config configMap and reapply the configuration")
+	return fmt.Errorf("SPLUNK_GENERAL_TERMS environment variable must be set to \"--accept-current-at-splunk-com\". Update the splunk-operator-controller-manager deployment")
 }
