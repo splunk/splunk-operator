@@ -627,13 +627,11 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 	var adminPwd string
 	vaultEnabledLabel, _ := strconv.ParseBool(pod.ObjectMeta.Labels["vault-enabled"])
 	if vaultEnabledLabel {
-		scopedLog.Info("SetClusterMaintenanceMode Vault")
 		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, c, &cr.Spec.VaultIntegration, "password")
 		if err != nil {
 			return err
 		}
 	} else {
-		scopedLog.Info("SetClusterMaintenanceMode Secret")
 		// Retrieve admin password from Pod
 		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, c, cmPodName, cr.GetNamespace(), "password")
 		if err != nil {
@@ -841,22 +839,17 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 		return enterpriseApi.PhaseError, err
 	}
 
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("Update")
-
 	// Get the podExecClient with empty targetPodName.
 	// This will be set inside ApplyIdxcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
 	vaultEnabledLabel, _ := strconv.ParseBool(statefulSet.Spec.Template.ObjectMeta.Labels["vault-enabled"])
 	if !vaultEnabledLabel {
 		// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
-		scopedLog.Info("Update Secret")
 		err = ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
 	} else {
-		scopedLog.Info("Update Vault")
 		err = ApplyIdxcVaultSecret(ctx, mgr, desiredReplicas, podExecClient)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
