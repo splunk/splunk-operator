@@ -22,8 +22,8 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -138,6 +138,15 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getLicenseManagerURL(cr, &cr.Spec.CommonSplunkSpec))
 	if err != nil {
 		return result, err
+	}
+
+	if cr.Spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
+		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}

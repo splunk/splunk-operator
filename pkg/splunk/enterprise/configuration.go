@@ -627,6 +627,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	for k, v := range selectLabels {
 		labels[k] = v
 	}
+	labels["vault-enabled"] = strconv.FormatBool(spec.VaultIntegration.Enable)
 
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
@@ -733,6 +734,31 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 }
 
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
+// updateSplunkPodTemplateWithConfig updates the given PodTemplateSpec with the configuration
+// specified in the CommonSplunkSpec and other parameters.
+//
+// Parameters:
+// - ctx: The context for the operation.
+// - client: The controller client used for interacting with Kubernetes resources.
+// - podTemplateSpec: The PodTemplateSpec to be updated.
+// - cr: The custom resource object containing metadata.
+// - spec: The CommonSplunkSpec containing the configuration details.
+// - instanceType: The type of Splunk instance (e.g., Standalone, Indexer, etc.).
+// - extraEnv: Additional environment variables to be added to the containers.
+// - secretToMount: The name of the secret to be mounted.
+//
+// The function performs the following updates:
+// - Adds custom ports to Splunk containers based on the ServiceTemplate specification.
+// - Adds custom volumes and volume mounts to Splunk containers, excluding the Monitoring Console (MC).
+// - Prepares and sets the SPLUNK_DEFAULTS_URL environment variable based on various defaults URLs.
+// - Injects Vault secrets and adds a secret monitor sidecar container if Vault integration is enabled.
+// - Adds a secret volume to the PodTemplateSpec if Vault integration is not enabled.
+// - Adds a ConfigMap volume for inline defaults if specified.
+// - Updates the PodTemplateSpec annotations with the resource version of the ConfigMap to trigger pod recycling on changes.
+// - Adds a ConfigMap volume for SmartStore configuration if applicable and updates annotations for standalone instances.
+// - Sets the security context for the PodTemplateSpec.
+// - Prepares and sets various environment variables for the Splunk containers, including licensing and cluster manager URLs.
+// - Updates the containers in the PodTemplateSpec with the specified resources, probes, environment variables, and security context.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
 	reqLogger := log.FromContext(ctx)
@@ -764,14 +790,29 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
-	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
-	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
-	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
-		Secret: &corev1.SecretVolumeSource{
-			SecretName:  secretToMount,
-			DefaultMode: &secretVolDefaultMode,
-		},
-	})
+	// prepare defaults variable
+	splunkDefaults := "/mnt/splunk-secrets/default.yml"
+	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
+	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
+	}
+	if spec.DefaultsURL != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
+	}
+	if spec.Defaults != "" {
+		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
+	}
+
+	if !spec.VaultIntegration.Enable {
+		// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
+		secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+		addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  secretToMount,
+				DefaultMode: &secretVolDefaultMode,
+			},
+		})
+	}
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
 	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
@@ -840,19 +881,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
 	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec)
 	startupProbe := getStartupProbe(ctx, cr, instanceType, spec)
-
-	// prepare defaults variable
-	splunkDefaults := "/mnt/splunk-secrets/default.yml"
-	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
-	if spec.DefaultsURLApps != "" && instanceType != SplunkIndexer && instanceType != SplunkSearchHead {
-		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURLApps, splunkDefaults)
-	}
-	if spec.DefaultsURL != "" {
-		splunkDefaults = fmt.Sprintf("%s,%s", spec.DefaultsURL, splunkDefaults)
-	}
-	if spec.Defaults != "" {
-		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
-	}
 
 	// prepare container env variables
 	role := instanceType.ToRole()

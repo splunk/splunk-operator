@@ -116,6 +116,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
@@ -159,6 +160,15 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if err != nil {
 		eventPublisher.Warning(ctx, "getIndexerStatefulSet", fmt.Sprintf("get indexer stateful set failed %s", err.Error()))
 		return result, err
+	}
+
+	if cr.Spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
+		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	// Note:
@@ -416,6 +426,15 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
+	if cr.Spec.VaultIntegration.Enable {
+		//The InjectVaultSecret function is responsible for injecting secrets from HashiCorp Vault into the specified pod template.
+		splclient.InjectVaultSecret(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		err := splclient.CheckAndRestartStatefulSet(ctx, client, statefulSet, &cr.Spec.VaultIntegration)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// Note:
 	// This is a fix for CSPL-1880. Splunk enterprise 9.0.0 fails when we migrate from 8.2.6.
 	// Splunk 9.0.0 bundle push uses encryption while transferring data. If any of the
@@ -556,6 +575,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if !result.Requeue {
 		result.RequeueAfter = 0
 	}
+
 	return result, nil
 }
 
@@ -566,20 +586,22 @@ var VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, clie
 
 // indexerClusterPodManager is used to manage the pods within an indexer cluster
 type indexerClusterPodManager struct {
-	c               splcommon.ControllerClient
-	log             logr.Logger
-	cr              *enterpriseApi.IndexerCluster
-	secrets         *corev1.Secret
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+	c                splcommon.ControllerClient
+	log              logr.Logger
+	cr               *enterpriseApi.IndexerCluster
+	secrets          *corev1.Secret
+	newSplunkClient  func(managementURI, username, password string) *splclient.SplunkClient
+	vaultIntegration *enterpriseApi.VaultIntegration
 }
 
 // newIndexerClusterPodManager function to create pod manager this is added to write unit test case
 var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
 	return indexerClusterPodManager{
-		log:             log,
-		cr:              cr,
-		secrets:         secret,
-		newSplunkClient: newSplunkClient,
+		log:              log,
+		cr:               cr,
+		secrets:          secret,
+		newSplunkClient:  newSplunkClient,
+		vaultIntegration: &cr.Spec.VaultIntegration,
 	}
 }
 
@@ -591,10 +613,30 @@ func (mgr *indexerClusterPodManager) getMonitoringConsoleClient(cr *enterpriseAp
 
 // SetClusterMaintenanceMode enables/disables cluster maintenance mode
 func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, enable bool, cmPodName string, podExecClient splutil.PodExecClientImpl) error {
-	// Retrieve admin password from Pod
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, c, cmPodName, cr.GetNamespace(), "password")
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("SetClusterMaintenanceMode")
+
+	// Describe pod
+	pod := &corev1.Pod{}
+	namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cmPodName}
+	err := c.Get(ctx, namespacedName, pod)
 	if err != nil {
-		return err
+		scopedLog.Error(err, "Couldn't describe SHC pod")
+	}
+
+	var adminPwd string
+	vaultEnabledLabel, _ := strconv.ParseBool(pod.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
+		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, c, &cr.Spec.VaultIntegration, "password")
+		if err != nil {
+			return err
+		}
+	} else {
+		// Retrieve admin password from Pod
+		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, c, cmPodName, cr.GetNamespace(), "password")
+		if err != nil {
+			return err
+		}
 	}
 
 	var command string
@@ -800,10 +842,18 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	// Get the podExecClient with empty targetPodName.
 	// This will be set inside ApplyIdxcSecret
 	podExecClient := splutil.GetPodExecClient(mgr.c, mgr.cr, "")
-	// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
-	err = ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient)
-	if err != nil {
-		return enterpriseApi.PhaseError, err
+	vaultEnabledLabel, _ := strconv.ParseBool(statefulSet.Spec.Template.ObjectMeta.Labels["vault-enabled"])
+	if !vaultEnabledLabel {
+		// Check if a recycle of idxc pods is necessary(due to idxc_secret mismatch with CM)
+		err = ApplyIdxcSecret(ctx, mgr, desiredReplicas, podExecClient)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
+	} else {
+		err = ApplyIdxcVaultSecret(ctx, mgr, desiredReplicas, podExecClient)
+		if err != nil {
+			return enterpriseApi.PhaseError, err
+		}
 	}
 
 	// update CR status with IDXC information
@@ -902,16 +952,33 @@ func (mgr *indexerClusterPodManager) getClient(ctx context.Context, n int32) *sp
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
 		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, mgr.cr.GetName(), true)))
 
-	// Retrieve admin password from Pod
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	// Describe pod
+	pod := &corev1.Pod{}
+	namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: memberName}
+	err := mgr.c.Get(ctx, namespacedName, pod)
 	if err != nil {
-		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+		scopedLog.Error(err, "Couldn't describe SHC pod")
+	}
+
+	var adminPwd string
+	vaultEnabledLabel, _ := strconv.ParseBool(pod.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
+		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
+		if err != nil {
+			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
+		}
+	} else {
+		// Retrieve admin password from Pod
+		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+		if err != nil {
+			scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+		}
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
-// getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager
+// getClusterManagerClient for indexerClusterPodManager returns a SplunkClient for cluster manager.
 func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context) *splclient.SplunkClient {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("indexerClusterPodManager.getClusterManagerClient")
@@ -932,11 +999,28 @@ func (mgr *indexerClusterPodManager) getClusterManagerClient(ctx context.Context
 	// Get Fully Qualified Domain Name
 	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(), GetSplunkServiceName(cm, managerIdxcName, false))
 
-	// Retrieve admin password for Pod
-	podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
-	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, podName, mgr.cr.GetNamespace(), "password")
+	// Describe sts
+	sts := &appsv1.StatefulSet{}
+	namespacedName := types.NamespacedName{Namespace: mgr.cr.GetNamespace(), Name: GetSplunkStatefulsetName(cm, managerIdxcName)}
+	err := mgr.c.Get(ctx, namespacedName, sts)
 	if err != nil {
-		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+		scopedLog.Error(err, "Couldn't describe SHC sts")
+	}
+
+	var adminPwd string
+	vaultEnabledLabel, _ := strconv.ParseBool(sts.Spec.Template.ObjectMeta.Labels["vault-enabled"])
+	if vaultEnabledLabel {
+		adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
+		if err != nil {
+			scopedLog.Error(err, "Couldn't retrieve the admin password from vault")
+		}
+	} else {
+		// Retrieve admin password for Pod
+		podName := fmt.Sprintf("splunk-%s-%s-%s", managerIdxcName, cm, "0")
+		adminPwd, err = splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, podName, mgr.cr.GetNamespace(), "password")
+		if err != nil {
+			scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+		}
 	}
 
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
@@ -1039,6 +1123,91 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	// truncate any extra peers that we didn't check (leftover from scale down)
 	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
 		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
+	}
+
+	return nil
+}
+
+// ApplyIdxcVaultSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
+func ApplyIdxcVaultSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
+	var adminPwd string
+	var version string
+	var err error
+
+	adminPwd, err = splclient.GetSpecificSecretTokenFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
+	if err != nil {
+		mgr.log.Error(err, "Couldn't retrieve the admin password from vault")
+	}
+	version, err = splclient.GetSpecificSecretTokenVersionFromVault(ctx, mgr.c, mgr.vaultIntegration, "password")
+	if err != nil {
+		mgr.log.Error(err, "Couldn't retrieve the admin password from vault")
+	}
+
+	// If namespace scoped secret revision is the same ignore
+	if len(mgr.cr.Status.NamespaceSecretResourceVersion) == 0 {
+		// First time, set resource version in CR
+		mgr.log.Info("Setting CrStatusNamespaceSecretResourceVersion for the first time")
+		mgr.cr.Status.NamespaceSecretResourceVersion = version
+		return nil
+	} else if mgr.cr.Status.NamespaceSecretResourceVersion == version {
+		// If resource version hasn't changed don't return
+		return nil
+	}
+
+	mgr.log.Info("Namespaced scoped secret revision has changed")
+
+	// Retrieve idxc_secret password from secret data
+	nsIdxcSecret := adminPwd
+
+	// Loop over all indexer pods and get individual pod's idxc password
+	for i := int32(0); i <= replicas-1; i++ {
+		// Enable maintenance mode
+		if len(mgr.cr.Status.IndexerSecretChanged) == 0 && !mgr.cr.Status.MaintenanceMode {
+			var managerIdxcName string
+			var cmPodName string
+			if len(mgr.cr.Spec.ClusterManagerRef.Name) > 0 {
+				managerIdxcName = mgr.cr.Spec.ClusterManagerRef.Name
+				cmPodName = fmt.Sprintf("splunk-%s-cluster-manager-%s", managerIdxcName, "0")
+			} else if len(mgr.cr.Spec.ClusterMasterRef.Name) > 0 {
+				managerIdxcName = mgr.cr.Spec.ClusterMasterRef.Name
+				cmPodName = fmt.Sprintf("splunk-%s-cluster-master-%s", managerIdxcName, "0")
+			} else {
+				return errors.New("empty cluster manager reference")
+			}
+			podExecClient.SetTargetPodName(ctx, cmPodName)
+			err = SetClusterMaintenanceMode(ctx, mgr.c, mgr.cr, true, cmPodName, podExecClient)
+			if err != nil {
+				return err
+			}
+			mgr.log.Info("Set CM in maintenance mode")
+		}
+
+		// Get client for indexer Pod
+		idxcClient := mgr.getClient(ctx, i)
+
+		// Change idxc secret key
+		err = idxcClient.SetIdxcSecret(nsIdxcSecret)
+		if err != nil {
+			return err
+		}
+		mgr.log.Info("Changed idxc secret")
+
+		// Restart splunk instance on pod
+		err = idxcClient.RestartSplunk()
+		if err != nil {
+			return err
+		}
+		mgr.log.Info("Restarted splunk")
+
+		// Keep a track of all the secrets on pods to change their idxc secret below
+		mgr.cr.Status.IdxcPasswordChangedSecrets[version] = true
+
+		// Set the idxc_secret changed flag to true
+		if i < int32(len(mgr.cr.Status.IndexerSecretChanged)) {
+			mgr.cr.Status.IndexerSecretChanged[i] = true
+		} else {
+			mgr.cr.Status.IndexerSecretChanged = append(mgr.cr.Status.IndexerSecretChanged, true)
+		}
 	}
 
 	return nil

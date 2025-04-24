@@ -200,7 +200,7 @@ func PodExecCommand(ctx context.Context, c splcommon.ControllerClient, podName s
 	streamOptions.Stdout = stdout
 	streamOptions.Stderr = stderr
 
-	err = exec.Stream(*streamOptions)
+	err = exec.StreamWithContext(ctx, *streamOptions)
 
 	return stdout.String(), stderr.String(), err
 }

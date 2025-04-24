@@ -156,5 +156,215 @@ spec:
       ...
 ```
 
-## Support for Hashicorp Vault in Splunk Operator Deployment
-TODO
+## Support for HashiCorp Vault in Splunk Operator Deployment
+
+The Splunk Operator for Kubernetes now offers native support for HashiCorp Vault to manage and inject secrets into Splunk Enterprise deployments. This integration provides a secure and centralized method to handle sensitive information, complementing the existing global Kubernetes secret object approach.
+
+**Note:** This integration relies on the Vault Agent Injector mechanism. It requires that a Vault Agent is present within the Pod for secret injection and that a Vault Operator is running in your Kubernetes cluster to manage Vault interactions.
+
+### How Vault Integration Works with Password Management
+
+When Vault integration is enabled in the Splunk Custom Resource (CR), the operator will:
+
+1. **Leverage Vault for Secrets:**  
+   Instead of solely relying on the global Kubernetes secret object, the operator can retrieve secret tokens directly from a HashiCorp Vault server. This is particularly useful for managing sensitive tokens such as the default administrator password, HEC token, and various `pass4Symmkey` values.
+
+2. **Vault Agent Injector and Automated Secret Injection:**  
+   - The Splunk Operator adds specific annotations to Splunk Pods upon their creation or update.
+   - The Vault Agent Injector, running as part of the Vault ecosystem in your Kubernetes cluster, detects these annotations and:
+     - Injects a Vault Agent sidecar container into the Pod.
+     - The Vault Agent sidecar authenticates with Vault using the Kubernetes service account token.
+     - It then fetches necessary secret tokens (e.g., `hec_token`, `password`, `pass4Symmkey`, `idxc_secret`, `shc_secret`) from the specified Vault path.
+     - The agent injects these secrets into the Pod at runtime, typically by writing them to a shared volume mounted at `/mnt/splunk-secrets`.
+   - The primary Splunk container accesses these secrets from the mounted volume, avoiding hardcoding or manual handling of credentials.
+
+3. **Secret Update Detection and Pod Restarts:**  
+   - The operator continuously checks Vault for updates or changes in secret versions.
+   - If a secret changes (for example, a password is updated), the operator will automatically:
+     - Update annotations on the affected StatefulSet to reflect new secret versions.
+     - Trigger a rolling restart of the impacted Pods.
+   - This ensures that Splunk Enterprise always operates with the latest secrets from Vault without manual intervention.
+
+### Configuring Vault Integration
+
+To configure HashiCorp Vault for your Splunk deployment, update your Splunk CR to include the `vaultIntegration` section as follows:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: standalone
+spec:
+  serviceAccount: splunk-service-account
+  vaultIntegration:
+    enable: true                     # Enable Vault support
+    address: "http://vault.vault.svc.cluster.local:8200"  # Vault server address
+    role: "splunk-role"              # Vault role for Kubernetes authentication
+    secretPath: "secret/data/splunk" # Base path in Vault for Splunk secrets
+    operatorRole: "splunk-role"      # Vault role used by the Splunk operator if not given it will use above role
+```
+
+**Key Configuration Fields:**
+- **enable:** Set to `true` to activate Vault integration.
+- **address:** The URL of your Vault server.
+- **role:** The Vault role used for Kubernetes-based authentication.
+- **secretPath:** The base path in Vault where Splunk-related secrets are stored.
+
+### Prerequisites and Best Practices
+
+- **Vault Server Setup:**
+  - Ensure your Vault server is accessible from the Kubernetes cluster.
+  - Configure the Kubernetes authentication method in Vault and set up a role that grants access to the necessary secret paths.
+
+- **Vault Agent Injector and Vault Operator:**
+  - The Vault Agent Injector must be installed and configured in your Kubernetes cluster.
+  - A Vault Operator should be running to manage interactions with the Vault server, including deploying Vault Agents into Pods for secret injection.
+
+- **Permissions:**
+  - The Kubernetes service account used by the Splunk Operator must have permissions to read its own service account token for Vault authentication.
+  - Vault policies associated with the specified role should grant read access to secrets stored under the defined `secretPath`.
+
+- **Security Considerations:**
+  - Use proper Vault policies to enforce least-privilege access.
+  - Ensure secure network connectivity between your Kubernetes cluster and the Vault server.
+  - Regularly audit and rotate credentials in Vault as part of your security best practices.
+
+### Benefits of Using Vault Integration for Password Management
+
+- **Centralized Secret Management:**  
+  Secrets are managed centrally in Vault, reducing reliance on distributed Kubernetes secrets and simplifying credential rotation.
+
+- **Enhanced Security:**  
+  Secrets are fetched securely at runtime using a Vault Agent, minimizing exposure and mitigating the risk of secrets being stored in plain text within Kubernetes objects.
+
+- **Automated Updates:**  
+  The operator automatically detects changes in Vault secrets and restarts affected Pods to apply updates, ensuring Splunk always runs with current credentials.
+
+---
+
+### Example: Vault Setup & Configuration for Splunk and Splunk Operator
+
+Below is an example README document that details setting up Vault, configuring secrets, and mapping service accounts and namespaces for both the Splunk Enterprise deployment and the Splunk Operator. This example demonstrates how to configure a single Vault role (`splunk-role`) for both the Splunk pod (using `splunk-service-account` in the `test` namespace) and the Splunk operator pod (using `splunk-operator-controller-manager` in the `splunk-operator` namespace).
+
+#### Prerequisites
+
+- **Vault Installation:**  
+  Vault must be installed and accessible at `http://vault.vault.svc.cluster.local:8200`.
+  
+- **Kubernetes Cluster:**  
+  Ensure your cluster is running and that Kubernetes authentication is enabled in Vault.
+
+- **Service Accounts & Namespaces:**
+  - **Splunk Pod:**  
+    Uses the service account `splunk-service-account` in the namespace (e.g., `test`).
+  - **Splunk Operator Pod:**  
+    Uses the service account `splunk-operator-controller-manager` in the `splunk-operator` namespace.
+
+- **Vault KV Engine:**  
+  Ensure the KV secrets engine is mounted at `secret/` with version 2 enabled.
+
+#### Step 1: Enable and Configure Kubernetes Authentication in Vault
+
+1. **Enable Kubernetes Auth Method:**
+   ```bash
+   vault auth enable kubernetes
+   ```
+
+2. **Configure the Auth Method:**
+   ```bash
+   vault write auth/kubernetes/config \
+       token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+       kubernetes_host="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT" \
+       kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+   ```
+
+#### Step 2: Create a Vault Policy for Splunk Secrets
+
+Create a policy file (`splunk-policy.hcl`) with the following content:
+
+```hcl
+path "secret/data/splunk/*" {
+  capabilities = ["read", "list"]
+}
+```
+
+Load the policy into Vault:
+
+```bash
+vault policy write splunk-policy splunk-policy.hcl
+```
+
+#### Step 3: Create a Vault Role for Both Splunk and Splunk Operator
+
+Create a single role that includes both service accounts and namespaces:
+
+```bash
+vault write auth/kubernetes/role/splunk-role \
+    bound_service_account_names=splunk-service-account,splunk-operator-controller-manager \
+    bound_service_account_namespaces=test,splunk-operator \
+    policies=splunk-policy \
+    ttl=1h
+```
+
+*Note: Replace `test` with the actual namespace for Splunk.*
+
+#### Step 4: Store the Splunk Secret in Vault
+
+Store the Splunk secret (e.g., the default administrator password):
+
+```bash
+vault kv put secret/splunk password="your-secret-password"
+```
+
+#### Step 5: Deploy the Splunk Custom Resource
+
+Deploy your Splunk CR with Vault integration enabled:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: standalone
+spec:
+  serviceAccount: splunk-service-account
+  vaultIntegration:
+    enable: true
+    address: "http://vault.vault.svc.cluster.local:8200"
+    role: "splunk-role"
+    secretPath: "secret/data/splunk"
+    operatorRole: "splunk-role"
+```
+
+#### Step 6: Verify the Configuration
+
+**Testing Authentication from the Splunk Operator Pod:**
+
+Log into the Splunk operator pod and run:
+
+```bash
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"jwt\": \"${TOKEN}\", \"role\": \"splunk-role\"}" \
+  http://vault.vault.svc.cluster.local:8200/v1/auth/kubernetes/login
+```
+
+A successful response returns a JSON object containing a Vault client token.
+
+**Testing Secret Access:**
+
+Using the obtained client token, read the secret:
+
+```bash
+curl -H "X-Vault-Token: <your-client-token>" \
+     http://vault.vault.svc.cluster.local:8200/v1/secret/data/splunk
+```
+
+The response should include your secret data under the `data` field.
+
+#### Conclusion
+
+This example demonstrates how to set up Vault with Kubernetes authentication for both the Splunk Enterprise deployment and the Splunk Operator. By following these steps, administrators can ensure that:
+
+- The Splunk instance (using `splunk-service-account` in the designated namespace) securely accesses its secrets.
+- The Splunk Operator (using `splunk-operator-controller-manager` in the `splunk-operator` namespace) can authenticate with Vault to monitor for secret updates and trigger pod restarts when necessary.
