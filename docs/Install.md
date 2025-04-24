@@ -35,7 +35,7 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: SPLUNK_GENERAL_TERMS
-          value: "--accept-current-at-splunk-com"
+          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -52,6 +52,30 @@ In order to install operator with restrictive permission to watch only single na
 wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-namespace.yaml
 kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
+
+## Install Operator to Accept the Splunk General Terms
+
+Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operator` namespace, set `SPLUNK_GENERAL_TERMS` field to the required value "--accept-current-at-splunk-com"
+
+```yaml
+...
+        env:
+        - name: WATCH_NAMESPACE
+          value: "namespace1,namespace2"
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: splunk/splunk:9.4.0
+        - name: OPERATOR_NAME
+          value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-current-at-splunk-com"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+...
+```
+
 
 ## Private Registries
 
@@ -74,7 +98,7 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: SPLUNK_GENERAL_TERMS
-          value: "--accept-current-at-splunk-com"
+          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -140,6 +164,8 @@ Since distroless images do not contain a shell, debugging may require additional
                  value: ""
                - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
                  value: splunk/splunk:9.4.0
+               - name: SPLUNK_GENERAL_TERMS
+                 value: ""
            - name: sok-debug
              image: ubuntu:20.04  # Use any lightweight image with a shell
              command: ["/bin/bash", "-c", "tail -f /dev/null"]

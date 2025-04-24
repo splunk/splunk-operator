@@ -590,7 +590,7 @@ NOTE: If an app source name needs to be changed, make sure the name change is pe
     | ClusterManager    | cluster, local                         | Yes                   |
     | SearchHeadCluster | cluster, local                         | Yes                   |
     | Standalone        | local                                  | Yes                   |
-    | LicenceManager    | local                                  | Yes                   |
+    | LicenseManager    | local                                  | Yes                   |
     | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 
@@ -693,7 +693,7 @@ spec:
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
           value: "docker.io/splunk/splunk:9.4.0"
         - name: SPLUNK_GENERAL_TERMS
-          value: "--accept-current-at-splunk-com"
+          value: ""
 
       volumes:
       - name: app-staging

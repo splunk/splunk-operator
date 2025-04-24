@@ -46,7 +46,6 @@
 #   OPERATOR_NAME: '"splunk-operator"'
 #   RELATED_IMAGE_SPLUNK_ENTERPRISE: splunk/splunk:latest
 #   WATCH_NAMESPACE: "add namespace here"
-#   SPLUNK_GENERAL_TERMS: ""
 # kind: ConfigMap
 # metadata:
 #   labels:

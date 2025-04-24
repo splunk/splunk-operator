@@ -16,6 +16,11 @@ SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk:edge"
 # add namespace to this
 WATCH_NAMESPACE ?= ""
 
+# SPLUNK_GENERAL_TERMS is used for the mandatory acknowledgment mechanism for 
+# the Splunk General Terms (SGT) https://www.splunk.com/en_us/legal/splunk-general-terms.html).
+# The value must be manually set to "--accept-current-at-splunk-com"
+SPLUNK_GENERAL_TERMS ?= ""
+
 # NAMESPACE defines default namespace where operator will be installed
 NAMESPACE ?= "splunk-operator"
 
@@ -190,7 +195,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl apply --server-side --force-conflicts -f -
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl apply --server-side --force-conflicts -f -
 	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/$(ENVIRONMENT)/kustomization.yaml
@@ -345,7 +350,7 @@ generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8
 	$(SED) "s/ClusterRole/Role/g"  config/rbac/role.yaml
 	$(SED) "s/ClusterRole/Role/g"  config/rbac/role_binding.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-namespace.yaml
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-namespace.yaml
 	$(SED) "s/Role/ClusterRole/g"  config/rbac/role.yaml
 	$(SED) "s/Role/ClusterRole/g"  config/rbac/role_binding.yaml
 
@@ -360,7 +365,7 @@ generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s 
 	$(SED) "s/WATCH_NAMESPACE_VALUE/\"${WATCH_NAMESPACE}\"/g"  config/default/kustomization.yaml
 	$(SED) "s/SPLUNK_GENERAL_TERMS_VALUE/\"${SPLUNK_GENERAL_TERMS}\"/g"  config/default/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 
 generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster
 	echo "artifacts generation complete"

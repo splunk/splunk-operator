@@ -30,6 +30,8 @@ wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install.
 
+a. **NOTE** The `SPLUNK_GENERAL_TERMS` environment variable is set to an empty string by default. This will need to be manually updated to the value of "--accept-current-at-splunk-com". If you do not update this in the yaml file, you can update the splunk-operator-controller-manager deployment directly.
+
 ​
 3. Upgrade the Splunk Operator.​
 ```
@@ -108,7 +110,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: SPLUNK_GENERAL_TERMS
-          value: "--accept-current-at-splunk-com"
+          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -118,6 +120,29 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
 ```
 ​
 If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image.
+
+## Configuring Operator to Accept the Splunk General Terms
+
+Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the value "--accept-current-at-splunk-com" in the splunk-operator-controller-manager deployment, pass the `SPLUNK_GENERAL_TERMS` parameter with the required value to the `make deploy` command, or update the value in the Splunk Operator installation file from the release on GitHub.
+
+```yaml
+...
+        env:
+        - name: WATCH_NAMESPACE
+          value: "splunk-operator"
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: splunk/splunk:9.4.0
+        - name: OPERATOR_NAME
+          value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-current-at-splunk-com"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+...
+```
 
 ## Verify Upgrade is Successful
 ​
