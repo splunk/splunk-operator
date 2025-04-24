@@ -610,6 +610,9 @@ func (mgr *searchHeadClusterPodManager) getClient(ctx context.Context, n int32) 
 		}
 	}
 
+	scopedLog.Info(fmt.Sprintf("vaultEnabledLabel: %v", vaultEnabledLabel))
+	scopedLog.Info(fmt.Sprintf("vaultEnabledLabel adminPwd: %v", adminPwd))
+
 	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
@@ -648,7 +651,7 @@ func (mgr *searchHeadClusterPodManager) updateStatus(ctx context.Context, statef
 		} else {
 			mgr.log.Error(err, "Unable to retrieve search head cluster member info", "memberName", memberName)
 		}
-
+		
 		if err == nil && !gotCaptainInfo {
 			// try querying captain api; note that this should work on any node
 			captainInfo, err := GetSearchHeadCaptainInfo(ctx, mgr, n)
