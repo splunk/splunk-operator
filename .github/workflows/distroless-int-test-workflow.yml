@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - CSPL_3357_configmap
 jobs:
   build-operator-image-distroless:
     runs-on: ubuntu-latest

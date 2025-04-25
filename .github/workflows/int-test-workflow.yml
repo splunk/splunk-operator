@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL_3357_configmap
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
