@@ -120,7 +120,7 @@ metadata:
     operators.operatorframework.io/builder: operator-sdk-v1.31.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.7.1
+  name: splunk-operator.v2.8.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -515,5 +515,5 @@ spec:
   relatedImages:
   - image: docker.io/splunk/splunk:9.4.1
     name: splunk-enterprise
-  replaces: splunk-operator.v2.7.0
-  version: 2.7.1
+  replaces: splunk-operator.v2.7.1
+  version: 2.8.0
