@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v4
+kind: IngestionCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: ingestioncluster
+    app.kubernetes.io/instance: ingestioncluster-sample
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: splunk-operator
+  name: ingestioncluster-sample
+spec:
+  # TODO(user): Add fields here

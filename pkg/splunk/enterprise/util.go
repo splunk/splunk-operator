@@ -323,6 +323,16 @@ func getStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 	}
 }
 
+// getIngestionClusterExtraEnv returns extra environment variables used by monitoring console
+func getIngestionClusterExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "SPLUNK_STANDALONE_URL", // FIXME
+			Value: GetSplunkStatefulsetUrls(cr.GetNamespace(), SplunkStandalone, cr.GetName(), replicas, false),
+		},
+	}
+}
+
 // getLicenseManagerURL returns URL of license manager
 func getLicenseManagerURL(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) []corev1.EnvVar {
 	if spec.LicenseManagerRef.Name != "" {
