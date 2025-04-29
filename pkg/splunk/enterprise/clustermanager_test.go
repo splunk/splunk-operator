@@ -43,6 +43,7 @@ import (
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestApplyClusterManager(t *testing.T) {
@@ -1416,9 +1417,16 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	ctx := context.TODO()
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	// Create License Manager
 	lm := enterpriseApi.LicenseManager{
@@ -1495,7 +1503,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	// now the statefulset image in spec is updated to splunk2
 	ApplyLicenseManager(ctx, client, &lm)
 
-	// now the statefulset and license manager both should be in ready state
+	// should be status ready now
 	ApplyLicenseManager(ctx, client, &lm)
 
 	clusterManager := &enterpriseApi.ClusterManager{}
@@ -1564,9 +1572,16 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	}
 	lm.Spec.Image = "splunk/splunk:latest"
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	// Create the instances
 	client.Create(ctx, lm)
