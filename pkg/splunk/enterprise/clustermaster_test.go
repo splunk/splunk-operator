@@ -1120,6 +1120,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
 	builder := fake.NewClientBuilder().
 		WithScheme(sch).
@@ -1128,7 +1129,9 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{}).
+		WithStatusSubresource(&enterpriseApiV3.LicenseMaster{})
 	c := builder.Build()
 	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()

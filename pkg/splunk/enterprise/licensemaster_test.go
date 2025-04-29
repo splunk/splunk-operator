@@ -818,6 +818,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
 	builder := fake.NewClientBuilder().
 		WithScheme(sch).
@@ -826,7 +827,9 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithStatusSubresource(&enterpriseApiV3.LicenseMaster{}).
+		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{})
 	c := builder.Build()
 	ctx := context.TODO()
 
