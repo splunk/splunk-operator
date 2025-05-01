@@ -225,6 +225,7 @@ For examples on configuring the Ingress controller to accept data from Forwarder
 ## Password Management 
 
 In Kubernetes, sensitive information such as passwords, OAuth tokens, and ssh keys should be stored using the Secrets objects. Learn how to manage your passwords for Splunk Enterprise deployments in: [Password Management](https://github.com/splunk/splunk-operator/blob/main/docs/PasswordManagement.md)
+
 ## Using a FIPS 140-3 Enabled Cluster
 
 The Splunk Operator for Kubernetes is fully certified to run on FIPS 140-3 compliant clusters. No modifications to the provided container images are required. To get started, simply create a Kubernetes cluster with FIPS-compliant nodes and follow the standard [installation guide](https://github.com/splunk/splunk-operator/blob/main/docs/Install.md) to deploy the operator.
