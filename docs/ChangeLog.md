@@ -4,6 +4,8 @@
 
 * This is the 2.8.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
 
+* CSPL-3586 - Certify FIPS 140-3 Compliance
+
 * CSPL-3624 - Update Helm Charts for 2.8.0 Support
 
 * CSPL-3673 - Github Issue #1157: Failed to install the operator - CRD metadata.annotations too long
