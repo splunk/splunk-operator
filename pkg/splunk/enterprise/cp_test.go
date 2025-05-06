@@ -116,7 +116,7 @@ func TestRecursiveTarSrcAllDir(t *testing.T) {
 		path = fmt.Sprintf("/tmp/src3/a/b/filename-%d.txt", i)
 		err = os.WriteFile(path, []byte("Hello"), 0755)
 		if err != nil {
-			t.Errorf(fmt.Sprintf("Unable to write file: %v", err))
+			t.Errorf("Unable to write file: %v", err)
 		}
 		path = fmt.Sprintf("/tmp/src3/a/b/c/filename-%d.txt", i)
 		err = os.WriteFile(path, []byte("Hello"), 0755)
