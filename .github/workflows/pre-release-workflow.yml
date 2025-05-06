@@ -238,7 +238,7 @@ jobs:
         git checkout go.sum
         git checkout go.mod
         git checkout bundle.Dockerfile
-        git checkout bundle/metdata/annotations.yaml
+        git checkout bundle/metadata/annotations.yaml
         git status
 
     - name: Create Pull Request
