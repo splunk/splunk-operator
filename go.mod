@@ -1,6 +1,6 @@
 module github.com/splunk/splunk-operator
 
-go 1.23.0
+go 1.24.2
 
 require (
 	cloud.google.com/go/storage v1.30.1
