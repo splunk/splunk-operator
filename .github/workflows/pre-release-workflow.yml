@@ -210,6 +210,22 @@ jobs:
         replace: "\"spec\": {}"
         include: "bundle/manifests/splunk-operator.clusterserviceversion.yaml"
 
+    - name: Update Splunk Operator Release Version in bundle
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
+        exclude: "index.yaml"
+        include: "**.yaml"
+
+    - name: Update Replaced Splunk Operator Version in bundle
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "replaces:.*"
+        replace: "replaces: splunk-operator.v${{ github.event.inputs.old_operator_version }}"
+        exclude: "index.yaml"
+        include: "**.yaml"
+
     - name: Reset Splunk Enterprise Image in kustomization.yaml
       uses: jacobtomlinson/gha-find-replace@v3
       with:
