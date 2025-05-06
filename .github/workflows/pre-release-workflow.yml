@@ -141,6 +141,14 @@ jobs:
         exclude: "ChangeLog.md"
         include: "**.md"
 
+    - name: Update Splunk Operator Version in Dockerfile
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
+        include: "Dockerfile"
+
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
       uses: jacobtomlinson/gha-find-replace@v3
@@ -172,14 +180,6 @@ jobs:
         replace: "${{ github.event.inputs.new_enterprise_version }} or later"
         exclude: "ChangeLog.md"
         include: "**.md"
-
-    - name: Update Splunk Enterprise Image in Dockerfile
-      if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@v3
-      with:
-        find: "${{ github.event.inputs.old_enterprise_version }}"
-        replace: "${{ github.event.inputs.new_enterprise_version }}"
-        include: "Dockerfile"
 
     - name: Install Operator SDK
       run: |
