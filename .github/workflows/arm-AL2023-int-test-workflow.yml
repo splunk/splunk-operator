@@ -1,9 +1,6 @@
 name: Arm AL2023 Integration Test WorkFlow
 on:
-  push:
-    branches:
-      - develop
-      - main
+  workflow_dispatch:
 jobs:
   build-operator-image-arm-al2023:
     runs-on: ubuntu-latest

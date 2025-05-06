@@ -1,9 +1,6 @@
 name: Arm Ubuntu Integration Test WorkFlow Ubuntu
 on:
-  push:
-    branches:
-      - develop
-      - main
+  workflow_dispatch:
 jobs:
   build-operator-image-arm-ubuntu:
     runs-on: ubuntu-latest

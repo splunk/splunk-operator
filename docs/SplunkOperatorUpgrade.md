@@ -25,7 +25,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 1. Download the latest Splunk Operator installation yaml file.
 ​
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.8.0/splunk-operator-namespace.yaml
 ```
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install.
@@ -33,7 +33,7 @@ wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator
 ​
 3. Upgrade the Splunk Operator.​
 ```
-kubectl apply -f splunk-operator-namespace.yaml --server-side  --force-conflicts
+kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
 ​
 After applying the yaml, a new operator pod will be created and the existing operator pod will be terminated. Example:
@@ -48,7 +48,7 @@ If a Splunk Operator release changes the custom resource (CRD) API version, the 
 
 ### Upgrading Splunk Enterprise Docker Image with the Operator Upgrade
 
-Splunk Operator follows the upgrade path steps mentioned in [Splunk documentation](https://docs.splunk.com/Documentation/Splunk/9.3.2/Installation/HowtoupgradeSplunk). If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image. To follow the best practices described under the [General Process to Upgrade the Splunk Enterprise], a recommeded upgrade path is followed while initiating pod restarts of different Splunk Instances. At each step, if a particular CR instance exists, a certain flow is imposed to ensure that each instance is updated in the correct order. After an instance is upgraded, the Operator verifies if the upgrade was successful and all the components are working as expected. If any unexpected behaviour is detected, the process is terminated.
+Splunk Operator follows the upgrade path steps mentioned in [Splunk documentation](https://docs.splunk.com/Documentation/Splunk/9.4.0/Installation/HowtoupgradeSplunk). If a Splunk Operator release includes an updated Splunk Enterprise Docker image, the operator upgrade will also initiate pod restart using the latest Splunk Enterprise Docker image. To follow the best practices described under the [General Process to Upgrade the Splunk Enterprise], a recommeded upgrade path is followed while initiating pod restarts of different Splunk Instances. At each step, if a particular CR instance exists, a certain flow is imposed to ensure that each instance is updated in the correct order. After an instance is upgraded, the Operator verifies if the upgrade was successful and all the components are working as expected. If any unexpected behaviour is detected, the process is terminated.
 
 If a Splunk Operator release changes the custom resource (CRD) API version, the administrator is responsible for updating their Custom Resource specification to reference the latest CRD API version.
 
@@ -104,7 +104,7 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
         - name: WATCH_NAMESPACE
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-          value: splunk/splunk:9.3.2
+          value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: POD_NAME
@@ -139,7 +139,7 @@ To verify that a new Splunk Enterprise Docker image was applied to a pod, you ca
 ​
 ```bash
 kubectl get pods splunk-<crname>-monitoring-console-0 -o yaml | grep -i image
-image: splunk/splunk:9.3.2
+image: splunk/splunk:9.4.0
 imagePullPolicy: IfNotPresent
 ```
 ## Splunk Enterprise Cluster upgrade

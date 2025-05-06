@@ -3,10 +3,6 @@ description: File any requests related to ingestion under this template
 title: "Ingestion: "
 labels:
   - ingestion
-assignees:
-  - vebken-splunk
-  - mgaldino-splunk
-  - vivekr-splunk
 
 body:
   - type: dropdown

@@ -113,13 +113,15 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-namespace.yaml --server-side  --force-conflicts
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.8.0/splunk-operator-namespace.yaml --server-side
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.7.0/splunk-operator-cluster.yaml --server-side  --force-conflicts
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.8.0/splunk-operator-cluster.yaml --server-side
 ```
+
+The reason for appending `--server-side` to the apply command is that some of the CRDs are getting too long according to the CRD standards. There are no real implications caused by this.
 
 The [Advanced Installation Instructions](Install.md) page offers guidance for advanced configurations, including the use of private image registries, installation at cluster scope, and installing the Splunk Operator as a user who is not a Kubernetes administrator. Users of Red Hat OpenShift should review the [Red Hat OpenShift](OpenShift.md) page.
 

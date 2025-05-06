@@ -541,7 +541,12 @@ get_current_deployment() {
 			fi
 
       # Updates CR to use new version (v4)
-      convert_CR_version ${updated_name} ${CR} ${CR_NAME}
+	  if [[ "${CR}" == "MonitoringConsole" ]]; then
+		cp ${original_name} ${updated_name}
+		convert_CR_version ${updated_name} ${CR} ${CR_NAME}
+	  else
+		convert_CR_version ${updated_name} ${CR} ${CR_NAME}
+	  fi
 
 			# Validate the updated CR is valid
 			dry_run ${updated_name}
@@ -554,6 +559,20 @@ get_current_deployment() {
 		echo "WARNING - No CRs found, check if the namespace used is correct"
 	fi
 
+}
+
+# Migrate apps from master-app to manager-app directory
+migrate_appframework_dirs() {
+	PODS=$(kubectl get pod -n ${NS} | grep -i 'cluster-manager' | awk '{print $1}')
+	command="find /opt/splunk/etc/master-apps -mindepth 1 -maxdepth 1 ! -name '_cluster' -exec mv {} /opt/splunk/etc/manager-apps/ \;"
+
+	for pod in ${PODS}; do
+		echo "Executing command ${command} on pod=${pod}"
+		kubectl -n ${NS} exec -i ${pod} -- /bin/bash -c "${command}"
+		if [[ "$?" -ne 0 ]]; then
+			echo "Failed to execute command ${command} on pod=${pod}"
+		fi
+	done
 }
 
 # Driver for Migration Mode
@@ -629,6 +648,8 @@ apply_new_CRs() {
 			fi
 		fi
 	done
+	
+	migrate_appframework_dirs
 
 	# Disable maintenance mode in all CMs migrated
 	for CM in "${to_disable_maint_mode[@]}"; do
