@@ -125,11 +125,11 @@ scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...
 
-vet: setup/ginkgo ## Run go vet against code.
+vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util .internal/controller/
 
 
 ##@ Build
