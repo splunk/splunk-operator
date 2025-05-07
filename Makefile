@@ -164,7 +164,7 @@ docker-buildx:
             exit 1; \
         fi; \
         - docker buildx create --name project-v3-builder --use || true; \
-        - docker buildx use project-v3-builder \
+        - docker buildx use project-v3-builder; \
         if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
             BUILD_TAG="$(IMG)-distroless"; \
