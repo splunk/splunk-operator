@@ -164,6 +164,9 @@ splunkOperator:
 # - mountPath:
 #   name:
 
+  # Mandatory acknowledgment mechanism for the Splunk General Terms (SGT) 
+  splunkGeneralTerms: ""
+
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []
 # extraManifests:

@@ -297,6 +297,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 }
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-current-at-splunk-com")
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterManager{
