@@ -11,7 +11,7 @@ Starting with the 3.0.0 release, there is now a mandatory acknowledgment mechani
 
 ## How does this affect existing deployments?
 
-Existing deployments of the Splunk Operator for Kubernetes will not be affected until you upgrade to version 3.0.0 or later, which includes support for Splunk Enterprise version 10.x. Adding `SPLUNK_GENERAL_TERMS` environment variable to any existing deployments on versions below 3.0.0 is not necessary and will not be used in any way.
+Existing deployments of the Splunk Operator for Kubernetes will not be affected until you upgrade to version 3.0.0 or later, which includes support for the next Splunk Enterprise version. Adding `SPLUNK_GENERAL_TERMS` environment variable to any existing deployments on versions below 3.0.0 is not necessary and will not be used in any way.
 
 ## How to plan for a migration?
 

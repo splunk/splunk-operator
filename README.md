@@ -132,7 +132,7 @@ If you want operator to use specific version of splunk instance, then you must p
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge"
 ```
 
-Starting with operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the value "--accept-current-at-splunk-com" in the splunk-operator-controller-manager deployment, or you can pass the `SPLUNK_GENERAL_TERMS` parameter with the required value to the `make deploy` command
+Starting with operator version 3.0.0, which includes support for the next Splunk Enterprise version, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the value "--accept-current-at-splunk-com" in the splunk-operator-controller-manager deployment, or you can pass the `SPLUNK_GENERAL_TERMS` parameter with the required value to the `make deploy` command
 
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge" SPLUNK_GENERAL_TERMS="--accept-current-at-splunk-com"

@@ -55,7 +55,7 @@ kubectl apply -f splunk-operator-namespace.yaml --server-side
 
 ## Install Operator to Accept the Splunk General Terms
 
-Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operator` namespace, set `SPLUNK_GENERAL_TERMS` field to the required value "--accept-current-at-splunk-com"
+Starting with Operator version 3.0.0, which includes support for the next Splunk Enterprise version, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operator` namespace, set `SPLUNK_GENERAL_TERMS` field to the required value "--accept-current-at-splunk-com"
 
 ```yaml
 ...

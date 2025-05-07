@@ -17,7 +17,7 @@ SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk:edge"
 WATCH_NAMESPACE ?= ""
 
 # SPLUNK_GENERAL_TERMS is used for the mandatory acknowledgment mechanism for 
-# the Splunk General Terms (SGT) https://www.splunk.com/en_us/legal/splunk-general-terms.html).
+# the Splunk General Terms (SGT) https://www.splunk.com/en_us/legal/splunk-general-terms.html.
 # The value must be manually set to "--accept-current-at-splunk-com"
 SPLUNK_GENERAL_TERMS ?= ""
 
