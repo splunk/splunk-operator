@@ -1,5 +1,5 @@
 # Default environment is default
-ENVIRONMENT=${1:-default}
+ENVIRONMENT ?=default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
