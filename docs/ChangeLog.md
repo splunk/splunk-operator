@@ -10,7 +10,7 @@
 
 * CSPL-3673 - Github Issue #1157: Failed to install the operator - CRD metadata.annotations too long
 
-* CSPL-3590 - DUE April 24: Vulnerability Fix: github.com/golang-jwt/jwt/v5, golang.org/x/net
+* CSPL-3590 - Vulnerability Fix: github.com/golang-jwt/jwt/v5, golang.org/x/net
 
 * CSPL-3674 - Github Readme Updates
 
@@ -18,7 +18,7 @@
 
 * CSPL-3499 - Fix Segmentation Fault in Splunk Operator Due to App Volume Name Change
 
-* CSPL-3547 - Support Amazon Agamotto Appframework migration to manager-app
+* CSPL-3547 - Support Appframework migration to manager-app
 
 * CSPL-3529 - Disable ARM AL2023 tests for develop builds
 
@@ -30,9 +30,9 @@
 
 * CSPL-3518 - Task for Github Issue  #1211 Splunk Operator: Why force ClusterIP and ignore k8s default field in service template
 
-* CSPL-3460 - DUE APRIL 5: Container Scan: Upgrade google.golang.org/grpc from v1.49.0 to 1.58.3, 1.57.1, 1.56.3 for splunk/splunk-operator
+* CSPL-3460 - Container Scan: Upgrade google.golang.org/grpc from v1.49.0 to 1.58.3, 1.57.1, 1.56.3 for splunk/splunk-operator
 
-* CSPL-3435 - Support Amazon Agomotto team with Migration (Bias language migration)
+* CSPL-3435 - Support with Bias language migration
 
 * CSPL-3434 - Update base image to ubi-minimal
 
