@@ -128,6 +128,9 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 		return result, err
 	}
 
+	// Smart Store secrets get created manually and should not be managed by the Operator
+	DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore, SplunkClusterManager)
+
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
@@ -154,7 +157,6 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, &cr.Spec.SmartStore, SplunkClusterManager)
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
