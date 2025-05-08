@@ -75,7 +75,7 @@ type IngestionClusterStatus struct {
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=IngestionClusters,scope=Namespaced,shortName=stdaln
+// +kubebuilder:resource:path=ingestionclusters,scope=Namespaced,shortName=ing
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of ingestion clsuter instances"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired ingest cluster instances"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready ingestion cluster instances"

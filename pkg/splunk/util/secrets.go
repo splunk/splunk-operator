@@ -488,6 +488,8 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType == "hec_token" {
 			current.Data[tokenType] = generateHECToken()
+		} else if tokenType == "cookie_secret" {
+			current.Data[tokenType], _ = splcommon.GenerateCookieSecret()
 		} else {
 			current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
 		}

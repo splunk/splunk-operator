@@ -142,6 +142,7 @@ const (
 
 	splunkwebPort = "splunkweb"
 	splunkdPort   = "splunkd"
+	oauthPorxyPort   = "oauth"
 	s2sPort       = "s2s"
 	hecPort       = "hec"
 

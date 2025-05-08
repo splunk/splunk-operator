@@ -419,6 +419,7 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 	result := map[string]int{
 		GetPortName(splunkwebPort, protoHTTP): 8000,
 		GetPortName(splunkdPort, protoHTTPS):  8089,
+		GetPortName(oauthPorxyPort, protoHTTP):  4180,
 	}
 
 	switch instanceType {
@@ -685,6 +686,8 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 			},
 		},
 	}
+
+	splctrl.AddOauthProxySideCar(ctx, &statefulSet.Spec.Template.Spec, cr.GetName())
 
 	// Add storage volumes
 	err = addStorageVolumes(ctx, cr, client, spec, statefulSet, labels)
@@ -1011,6 +1014,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	privileged := false
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
+		if podTemplateSpec.Spec.Containers[idx].Name != "splunk" {
+			continue
+		}
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
 		podTemplateSpec.Spec.Containers[idx].LivenessProbe = livenessProbe
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe

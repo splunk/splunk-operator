@@ -270,6 +270,7 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	if smartStoreConfigMap != nil {
 		setupInitContainer(&ss.Spec.Template, cr.Spec.Image, cr.Spec.ImagePullPolicy, commandForStandaloneSmartstore, cr.Spec.CommonSplunkSpec.EtcVolumeStorageConfig.EphemeralStorage)
 	}
+	
 
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)

@@ -18,6 +18,7 @@ package controller
 import (
 	"context"
 	"reflect"
+	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -166,6 +167,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		}
 	}
 
+	AddOauthProxySideCar(ctx, revised, name)	
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Containers) != len(revised.Containers) {
 		scopedLog.Info("Pod Container counts differ",
@@ -175,6 +177,9 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		result = true
 	} else {
 		for idx := range current.Containers {
+			if current.Containers[idx].Name != "splunk" {
+				continue
+			}
 			// check Image
 			if current.Containers[idx].Image != revised.Containers[idx].Image {
 				scopedLog.Info("Pod Container Images differ",
@@ -248,6 +253,63 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 	}
 
 	return result
+}
+
+func AddOauthProxySideCar(ctx context.Context, revised *corev1.PodSpec, name string) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("MergePodUpdates").WithValues("name", name)
+	found := false
+	for idx := range revised.Containers {
+		if revised.Containers[idx].Name == "oauth-proxy" {
+			found = true
+		}
+		
+	}	
+	if !found {
+		saiaEndpoint := os.Getenv("SAIA_ENDPOINT")
+		if saiaEndpoint == "" {
+			saiaEndpoint = "http://saia-api.sais.svc.cluster.local:4180" // default value
+		}
+		oidcIssuerEndpoint := os.Getenv("OIDC_ISSUER_ENDPOINT")
+		if oidcIssuerEndpoint == "" {
+			oidcIssuerEndpoint = "http://hydra.sso.svc.cluster.local:4444" // default value
+		}
+
+		oauthProxyContainer := corev1.Container{
+			Name:  "oauth-proxy",
+			Image: "quay.io/oauth2-proxy/oauth2-proxy:latest",
+			Args: []string{
+				"--provider=oidc",
+				"--oidc-issuer-url=" + oidcIssuerEndpoint,
+				"--oidc-jwks-url=" + oidcIssuerEndpoint + ".well-known/jwks.json",
+				"--client-id=splunk-proxy",
+				"--client-secret-file=/etc/oauth2/client-secret",
+				"--redirect-url=" + saiaEndpoint,
+				"--upstream=http://127.0.0.1:8080",    // or your app port
+				"--http-address=0.0.0.0:4180",
+				"--skip-auth-preflight=true",
+				"--skip-provider-button=true",
+				"--pass-access-token=true",
+				"--pass-authorization-header=true",
+				"--set-authorization-header=true",
+			},
+			Ports: []corev1.ContainerPort{
+				{
+					ContainerPort: 4180,
+					Name:          "oauth-proxy",
+				},
+			},
+		}
+		for _, container := range revised.Containers {
+			if container.Name == "splunk" {
+				oauthProxyContainer.VolumeMounts = container.VolumeMounts
+				break
+			}
+		}
+		revised.Containers = append(revised.Containers, oauthProxyContainer)
+		scopedLog.Info("Added oauth2-proxy container to pod spec")
+		found = true
+	}
 }
 
 // SortStatefulSetSlices sorts required slices in a statefulSet
