@@ -577,6 +577,8 @@ Here is a typical App framework configuration in a Custom Resource definition:
 
 `appSources` defines the name and scope of the appSource, the remote storage volume, and its location.
 
+NOTE: If an app source name needs to be changed, make sure the name change is persisted across the app framework spec and CR status. The Splunk Operator should automatically update the app path in the CR and on the pod on the next reconciliation.
+
 * `name` uniquely identifies the App source configuration within a CR. This used locally by the Operator to identify the App source.
 * `scope` defines the scope of the app to be installed.
   * If the scope is `local`, the apps will be installed and run locally on the pod referred to by the CR.
@@ -672,7 +674,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.7.1"
+        image: "docker.io/splunk/splunk-operator:2.8.0"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging

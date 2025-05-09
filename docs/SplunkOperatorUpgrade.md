@@ -25,7 +25,7 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 1. Download the latest Splunk Operator installation yaml file.
 ​
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.8.0/splunk-operator-namespace.yaml
 ```
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install.
@@ -33,7 +33,7 @@ wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator
 ​
 3. Upgrade the Splunk Operator.​
 ```
-kubectl apply -f splunk-operator-namespace.yaml --server-side  --force-conflicts
+kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
 ​
 After applying the yaml, a new operator pod will be created and the existing operator pod will be terminated. Example:

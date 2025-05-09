@@ -6,7 +6,7 @@ ENVIRONMENT=${1:-default}
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 2.5.2
+VERSION ?= 2.8.0
 
 # SPLUNK_ENTERPRISE_IMAGE defines the splunk docker tag that is used as default image.
 SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk:edge"
@@ -150,13 +150,13 @@ docker-push: ## Push docker image with the manager.
 # IMG is a mandatory argument to specify the image name
 # Defaults:
 #   Build Platform: linux/amd64
-#   Build Base OS: registry.access.redhat.com/ubi8/ubi
-#   Build Base OS Version: 8.10
+#   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal@sha256
+#   Build Base OS Version: b2a1bec3dfbc7a14a1d84d98934dfe8fdde6eb822a211286601cf109cbccb075 (corresponds to tag 8.10-1255)
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64
-BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi
-BASE_IMAGE_VERSION ?= 8.10
+BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal@sha256
+BASE_IMAGE_VERSION ?= b2a1bec3dfbc7a14a1d84d98934dfe8fdde6eb822a211286601cf109cbccb075
 
 docker-buildx:
 	@if [ -z "$(IMG)" ]; then \
