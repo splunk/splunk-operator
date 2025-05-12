@@ -112,9 +112,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 	}
 
-	// Smart Store secrets get created manually and should not be managed by the Operator
-	DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkSearchHead)
-
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
@@ -133,6 +130,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 				return result, err
 			}
 		}
+
+		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
