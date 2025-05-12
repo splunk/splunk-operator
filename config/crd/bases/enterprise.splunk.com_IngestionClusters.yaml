@@ -4,31 +4,44 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: licensemasters.enterprise.splunk.com
+  name: IngestionClusters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: LicenseMaster
-    listKind: LicenseMasterList
-    plural: licensemasters
+    kind: IngestionCluster
+    listKind: IngestionClusterList
+    plural: IngestionClusters
     shortNames:
-    - lm
-    singular: licensemaster
+    - stdaln
+    singular: ingestioncluster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of license manager
+    - description: Status of ingestion clsuter instances
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of license manager
+    - description: Number of desired ingest cluster instances
+      jsonPath: .status.replicas
+      name: Desired
+      type: integer
+    - description: Current number of ready ingestion cluster instances
+      jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - description: Age of ingestion cluster resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v3
+    - description: Auxillary message describing CR status
+      jsonPath: .status.message
+      name: Message
+      type: string
+    name: v4
     schema:
       openAPIV3Schema:
-        description: LicenseMaster is the Schema for a Splunk Enterprise license master.
+        description: Standalone is the Schema for a Splunk Enterprise ingestion cluster
+          instances.
         properties:
           apiVersion:
             description: |-
@@ -48,8 +61,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: LicenseMasterSpec defines the desired state of a Splunk Enterprise
-              license manager.
+            description: IngestionClusterSpec defines the desired state of IngestionCluster
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -818,7 +830,7 @@ spec:
                     type: object
                 type: object
               appRepo:
-                description: Splunk enterprise App repository. Specifies remote App
+                description: Splunk Enterprise App repository. Specifies remote App
                   location and scope for Splunk App management
                 properties:
                   appInstallPeriodSeconds:
@@ -1439,6 +1451,10 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              replicas:
+                description: Number of standalone pods
+                format: int32
+                type: integer
               resources:
                 description: resource requirements for the pod containers
                 properties:
@@ -3867,8 +3883,7 @@ spec:
                 type: array
             type: object
           status:
-            description: LicenseMasterStatus defines the observed state of a Splunk
-              Enterprise license manager.
+            description: IngestionClusterStatus defines the observed state of IngestionCluster
             properties:
               appContext:
                 description: App Framework Context
@@ -4151,8 +4166,11 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
+              message:
+                description: Auxillary message describing CR status
+                type: string
               phase:
-                description: current phase of the license manager
+                description: current phase of the standalone instances
                 enum:
                 - Pending
                 - Ready
@@ -4162,6 +4180,22 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              readyReplicas:
+                description: current number of ready standalone instances
+                format: int32
+                type: integer
+              replicas:
+                description: number of desired standalone instances
+                format: int32
+                type: integer
+              resourceRevMap:
+                additionalProperties:
+                  type: string
+                description: Resource Revision tracker
+                type: object
+              selector:
+                description: selector for pods, used by HorizontalPodAutoscaler
+                type: string
               telAppInstalled:
                 description: Telemetry App installation flag
                 type: boolean
@@ -4170,4 +4204,8 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        labelSelectorPath: .status.selector
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
       status: {}
