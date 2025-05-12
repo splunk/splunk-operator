@@ -5,7 +5,6 @@ on:
     branches:
       - develop
       - main
-      - CSPL-3704_smartstore_secret_deletion
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
