@@ -98,6 +98,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 				return result, err
 			}
 		}
+
 		// If this is the last of its kind getting deleted,
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
@@ -108,9 +109,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkLicenseManager)
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkLicenseManager)
 
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {

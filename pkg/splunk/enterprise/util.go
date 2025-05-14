@@ -786,14 +786,10 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource
-func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, instanceType InstanceType) error {
+func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForResources").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	if smartstore != nil {
-		_ = DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, smartstore)
-	}
 
 	// Delete references to Default secret object
 	defaultSecretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
@@ -838,7 +834,7 @@ func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcomm
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
-		if volume.SecretRef != "" {
+		if volume.SecretRef != "" && volume.SecretRef != splcommon.GetNamespaceScopedSecretName(cr.GetNamespace()) {
 			_, err = splutil.RemoveSecretOwnerRef(ctx, client, volume.SecretRef, cr)
 			if err == nil {
 				scopedLog.Info("Removed references for Secret Object", "secret", volume.SecretRef)
