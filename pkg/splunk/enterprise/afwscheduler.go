@@ -28,7 +28,7 @@ import (
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
