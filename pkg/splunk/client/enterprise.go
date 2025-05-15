@@ -73,6 +73,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 	if err != nil {
 		return err
 	}
+
 	//default set flag to false and the check response code
 	expectedStatusFlag := false
 	for i := 0; i < len(expectedStatus); i++ {
@@ -82,7 +83,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 		}
 	}
 	if !expectedStatusFlag {
-		return fmt.Errorf("response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
+		return fmt.Errorf("response code=%d from %s; want %d; full response %v, response body: %v", response.StatusCode, request.URL, expectedStatus, response, response.Body)
 	}
 	if obj == nil {
 		return nil
