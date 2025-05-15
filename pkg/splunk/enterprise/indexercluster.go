@@ -822,7 +822,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
 func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
 	// first, decommission indexer peer with enforceCounts=true; this will rebalance buckets across other peers
-	complete, err := mgr.decommission(ctx, n, true)
+	complete, err := mgr.decommission(ctx, n, false)
 	if err != nil {
 		return false, err
 	}
@@ -837,7 +837,7 @@ func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int
 
 // PrepareRecycle for indexerClusterPodManager prepares indexer pod to be recycled for updates; it returns true when ready
 func (mgr *indexerClusterPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
-	return mgr.decommission(ctx, n, false)
+	return mgr.decommission(ctx, n, true)
 }
 
 // FinishRecycle for indexerClusterPodManager completes recycle event for indexer pod; it returns true when complete
