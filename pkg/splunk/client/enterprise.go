@@ -24,8 +24,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/go-resty/resty/v2"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -33,6 +33,35 @@ import (
 // It is used to mock alternative implementations used for testing.
 type SplunkHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
+}
+
+// RestyClientWrapper is a wrapper around resty.Client to implement SplunkHTTPClient interface
+type RestyClientWrapper struct {
+	*resty.Client
+}
+
+// Do sends an HTTP request and returns an HTTP response, implementing the SplunkHTTPClient interface
+func (r *RestyClientWrapper) Do(req *http.Request) (*http.Response, error) {
+	restyReq := r.R()
+	restyReq.Method = req.Method
+	restyReq.URL = req.URL.String()
+	restyReq.Body = req.Body
+	restyReq.Header = req.Header
+
+	resp, err := restyReq.Send()
+	if err != nil {
+		return nil, err
+	}
+
+	httpResp := &http.Response{
+		Status:        resp.Status(),
+		StatusCode:    resp.StatusCode(),
+		Body:          io.NopCloser(strings.NewReader(resp.String())),
+		Header:        resp.Header(),
+		ContentLength: resp.Size(),
+	}
+
+	return httpResp, nil
 }
 
 // SplunkClient is a simple object used to send HTTP REST API requests
@@ -50,18 +79,35 @@ type SplunkClient struct {
 	Client SplunkHTTPClient
 }
 
+// UpgradeMetrics holds search metrics for a search head during upgrade.
+type UpgradeMetrics struct {
+	ShortSearchSuccess int `json:"short_search_success"`
+	ShortSearchFailure int `json:"short_search_failure"`
+	TotalSearchSuccess int `json:"total_search_success"`
+	TotalSearchFailure int `json:"total_search_failure"`
+}
+
 // NewSplunkClient returns a new SplunkClient object initialized with a username and password.
 func NewSplunkClient(managementURI, username, password string) *SplunkClient {
+	client := &RestyClientWrapper{
+		Client: resty.New().
+			SetBaseURL(managementURI).
+			SetBasicAuth(username, password).
+			SetRetryCount(3).
+			SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}),
+	}
+
 	return &SplunkClient{
 		ManagementURI: managementURI,
 		Username:      username,
 		Password:      password,
-		Client: &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
-			},
-		},
+		Client:        client,
+		//Client: &http.Client{
+		//	Timeout: 5 * time.Second,
+		//	Transport: &http.Transport{
+		//		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // don't verify ssl certs
+		//	},
+		//},
 	}
 }
 
@@ -934,4 +980,76 @@ func (c *SplunkClient) RestartSplunk() error {
 	}
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
+}
+
+// GetUpgradeSearchMetrics uses Resty to query the search head for upgrade search metrics.
+func (c *SplunkClient) GetUpgradeSearchMetrics() (*UpgradeMetrics, error) {
+	resp, err := c.Client.(*RestyClientWrapper).R().
+		SetResult(&UpgradeMetrics{}).
+		Get("/services/search/metrics")
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, fmt.Errorf("error fetching upgrade metrics: %s", resp.Status())
+	}
+	metrics, ok := resp.Result().(*UpgradeMetrics)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse upgrade metrics")
+	}
+	return metrics, nil
+}
+
+// InitShcUpgrade calls the endpoint to display the upgrade banner.
+func (c *SplunkClient) InitShcUpgrade() error {
+	resp, err := c.Client.(*RestyClientWrapper).R().
+		Post("/services/shcluster/captain/control/control/upgrade-init")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("error initiating SHC upgrade: %s", resp.Status())
+	}
+	return nil
+}
+
+// FinalizeShcUpgrade calls the endpoint to remove the upgrade banner.
+func (c *SplunkClient) FinalizeShcUpgrade() error {
+	resp, err := c.Client.(*RestyClientWrapper).R().
+		Post("/services/shcluster/captain/control/control/upgrade-finalize")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("error finalizing SHC upgrade: %s", resp.Status())
+	}
+	return nil
+}
+
+// SetManualDetentionMode puts the search head into manual detention mode.
+func (c *SplunkClient) SetManualDetentionMode() error {
+	resp, err := c.Client.(*RestyClientWrapper).R().
+		SetBody(map[string]bool{"mode": true}).
+		Post("/servicesNS/admin/search/shcluster/member/control/control/set_manual_detention")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("error setting manual detention mode: %s", resp.Status())
+	}
+	return nil
+}
+
+// UnsetManualDetentionMode removes the search head from manual detention mode.
+func (c *SplunkClient) UnsetManualDetentionMode() error {
+	resp, err := c.Client.(*RestyClientWrapper).R().
+		SetBody(map[string]bool{"mode": false}).
+		Post("/servicesNS/admin/search/shcluster/member/control/control/set_manual_detention")
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("error unsetting manual detention mode: %s", resp.Status())
+	}
+	return nil
 }
