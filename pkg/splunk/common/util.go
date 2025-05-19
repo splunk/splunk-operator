@@ -17,24 +17,18 @@ package common
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func init() {
-	// seed random number generator for splunk secret generation
-	rand.Seed(time.Now().UnixNano())
-}
 
 // AsOwner returns an object to use for Kubernetes resource ownership references.
 func AsOwner(cr MetaObject, isController bool) metav1.OwnerReference {
@@ -98,12 +92,125 @@ func GetServiceFQDN(namespace string, name string) string {
 	)
 }
 
+// SecretBytes is the string with characters allowed to
+// m is number of characters to generate
+// b is they byte array to modify (which already exist)
+func GenerateSecretPartWithComplexity(SecretBytes string, m int, b []byte) error {
+	j := 0
+	k := 0
+	length := len(b)
+	if m > 0 {
+		//fmt.Printf("trying to generate %d characters in GenerateSecretPartWithComplexity\n", m)
+		brokeEarly := false
+		for i := 1; i < m+1; i++ {
+			maxtry := 100
+			for j = 1; j < maxtry; j++ {
+				// we try a random position from 0 to length-1 where length is secret size
+				// Use crypto/rand to get a secure random index
+				var indexByte [1]byte
+				_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
+				if err != nil {
+					return err
+					//return nil, err
+				}
+				// compute the random position number
+				k = int(indexByte[0]) % length
+				//fmt.Printf("k=%d,j=%d,i=%d\n", k, j, i)
+				if b[k] == 0 {
+					_, err = rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
+					if err != nil {
+						return err
+						//return nil, err
+					}
+					// this was not yet assigned a value
+					b[k] = SecretBytes[int(indexByte[0])%len(SecretBytes)]
+					//fmt.Printf("assigning value b[%d]=%d\n", k, b[k])
+					brokeEarly = true
+					break
+				} else {
+					//fmt.Printf("position k %d already used will try another position\n ", k)
+				}
+			}
+		}
+		if brokeEarly {
+			//fmt.Printf("generation ended succesfully \n")
+		} else {
+			//fmt.Printf("generation was not completed after %d maxtry, something is wrong\n", m)
+			return fmt.Errorf("generation was not completed after %d maxtry, something is wrong\n", m)
+		}
+	} else if m == 0 {
+		//fmt.Println("no complexity requirement for this type")
+	} else {
+		//fmt.Println("incorrect value for minimal complexity, ignoring")
+		return fmt.Errorf("incorrect value for minimal complexity, ignoring")
+	}
+	return nil
+}
+
+func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal int, minspecial int) ([]byte, error) {
+	//fmt.Println("in Generate Secrets With Complexity")
+	//     fmt.Println(SecretBytes)
+	b := make([]byte, n)
+	if n < minlower+minupper+mindecimal+minspecial {
+		fmt.Printf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
+		//fmt.Errorf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d", n, minlower, minupper, mindecimal, minspecial)
+		// b is empty here FIXME handle this error and refuse to continue deploying like this as the configuration is impossible
+		return b, fmt.Errorf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
+	} else {
+		//fmt.Printf("password length and complexity requirements are OK length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
+
+	}
+	GenerateSecretPartWithComplexity(SecretBytesLower, minlower, b)
+	GenerateSecretPartWithComplexity(SecretBytesUpper, minupper, b)
+	GenerateSecretPartWithComplexity(SecretBytesDecimal, mindecimal, b)
+	GenerateSecretPartWithComplexity(SecretBytesSpecial, minspecial, b)
+	// check
+	//println("checking distribution after Complexity before last step")
+	//for i := range b {
+	//		if b[i] == 0 {
+	//			print("0 ")
+	//		} else {
+	//			print("X ")
+	//		}
+	//	}
+	//println("")
+	// complete gaps
+	for i := range b {
+		if b[i] == 0 {
+			// we try a random position from 0 to length-1 where length is secret size
+			// Use crypto/rand to get a secure random index
+			var indexByte [1]byte
+			_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
+			if err != nil {
+				return b, err
+				//return nil, err
+			}
+
+			b[i] = SecretBytesComplete[int(indexByte[0])%len(SecretBytesComplete)]
+		}
+	}
+	return b, nil
+}
+
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
 func GenerateSecret(SecretBytes string, n int) []byte {
+	//	fmt.Println("in Generate Secrets")
+	//	fmt.Println(SecretBytes)
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = SecretBytes[rand.Int63()%int64(len(SecretBytes))]
+		//b[i] = SecretBytes[rand.Int63()%int64(len(SecretBytes))]
+		// Use crypto/rand to get a secure random index
+		var indexByte [1]byte
+		_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
+		if err != nil {
+			return nil
+			//return nil, err
+		}
+		b[i] = SecretBytes[int(indexByte[0])%len(SecretBytes)]
+		//		fmt.Print("b=", i, b[i], int(b[i]))
 	}
+	//	fmt.Println("")
+	//	fmt.Println("in Generate Secrets end")
 	return b
 }
 
