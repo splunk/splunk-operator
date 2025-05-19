@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -98,11 +99,11 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
-func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string) (corev1.PersistentVolumeClaim, error) {
+func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string, adminManagedPV bool) (corev1.PersistentVolumeClaim, error) {
 	var storageCapacity resource.Quantity
 	var err error
-
-	storageClassName := ""
+	var storageClassName string
+	var	volumeClaim corev1.PersistentVolumeClaim
 
 	// Depending on the volume type, determine storage capacity and storage class name(if configured)
 	if volumeType == splcommon.EtcVolumeStorage {
@@ -110,40 +111,57 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 		if err != nil {
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "etcStorage", err)
 		}
-		if spec.EtcVolumeStorageConfig.StorageClassName != "" {
-			storageClassName = spec.EtcVolumeStorageConfig.StorageClassName
-		}
+		storageClassName = spec.EtcVolumeStorageConfig.StorageClassName
 	} else if volumeType == splcommon.VarVolumeStorage {
 		storageCapacity, err = splcommon.ParseResourceQuantity(spec.VarVolumeStorageConfig.StorageCapacity, splcommon.DefaultVarVolumeStorageCapacity)
 		if err != nil {
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "varStorage", err)
 		}
-		if spec.VarVolumeStorageConfig.StorageClassName != "" {
-			storageClassName = spec.VarVolumeStorageConfig.StorageClassName
-		}
+		storageClassName = spec.VarVolumeStorageConfig.StorageClassName
 	}
 
-	// Create a persistent volume claim
-	volumeClaim := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
-			Namespace: cr.GetNamespace(),
-			Labels:    labels,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: storageCapacity,
+	volumeClaim.Spec.StorageClassName = &storageClassName
+
+	if adminManagedPV {
+		volumeClaim = corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
+				Namespace: cr.GetNamespace(),
+				Labels:    labels,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageCapacity,
+					},
+				},
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app.kubernetes.io/name": labels["app.kubernetes.io/name"],
+						"app.kubernetes.io/instance": labels["app.kubernetes.io/instance"],
+					},
 				},
 			},
-		},
+		}
+	} else {
+		volumeClaim = corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
+				Namespace: cr.GetNamespace(),
+				Labels:    labels,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageCapacity,
+					},
+				},
+			},
+		}
 	}
-
-	// Assign storage class name if specified
-	if storageClassName != "" {
-		volumeClaim.Spec.StorageClassName = &storageClassName
-	}
+	
 	return volumeClaim, nil
 }
 
@@ -483,7 +501,16 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string, volumeType string) error {
 	// prepare and append persistent volume claims if storage is not ephemeral
 	var err error
-	volumeClaimTemplate, err := getSplunkVolumeClaims(cr, spec, labels, volumeType)
+	var adminManagedPV bool
+
+	annotations := cr.GetAnnotations()
+
+	// determine if CR's PVs are managed by an admin
+	if value, ok := annotations["enterprise.splunk.com/admin-managed-pv"]; ok && strings.ToLower(value) == "true" {
+		adminManagedPV = true
+	}
+
+	volumeClaimTemplate, err := getSplunkVolumeClaims(cr, spec, labels, volumeType, adminManagedPV)
 	if err != nil {
 		return err
 	}
