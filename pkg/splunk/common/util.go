@@ -110,6 +110,7 @@ func GenerateSecretPartWithComplexity(SecretBytes string, m int, b []byte) error
 				var indexByte [1]byte
 				_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
 				if err != nil {
+					// note : we may lack entropy and be running out of randomness
 					return err
 					//return nil, err
 				}
@@ -119,6 +120,7 @@ func GenerateSecretPartWithComplexity(SecretBytes string, m int, b []byte) error
 				if b[k] == 0 {
 					_, err = rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
 					if err != nil {
+						// note : we may lack entropy and be running out of randomness
 						return err
 						//return nil, err
 					}
