@@ -100,7 +100,6 @@ func GenerateSecretPartWithComplexity(SecretBytes string, m int, b []byte) error
 	k := 0
 	length := len(b)
 	if m > 0 {
-		//fmt.Printf("trying to generate %d characters in GenerateSecretPartWithComplexity\n", m)
 		brokeEarly := false
 		for i := 1; i < m+1; i++ {
 			maxtry := 100
@@ -112,21 +111,17 @@ func GenerateSecretPartWithComplexity(SecretBytes string, m int, b []byte) error
 				if err != nil {
 					// note : we may lack entropy and be running out of randomness
 					return err
-					//return nil, err
 				}
 				// compute the random position number
 				k = int(indexByte[0]) % length
-				//fmt.Printf("k=%d,j=%d,i=%d\n", k, j, i)
 				if b[k] == 0 {
 					_, err = rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
 					if err != nil {
 						// note : we may lack entropy and be running out of randomness
 						return err
-						//return nil, err
 					}
 					// this was not yet assigned a value
 					b[k] = SecretBytes[int(indexByte[0])%len(SecretBytes)]
-					//fmt.Printf("assigning value b[%d]=%d\n", k, b[k])
 					brokeEarly = true
 					break
 				} else {
@@ -137,26 +132,21 @@ func GenerateSecretPartWithComplexity(SecretBytes string, m int, b []byte) error
 		if brokeEarly {
 			//fmt.Printf("generation ended succesfully \n")
 		} else {
-			//fmt.Printf("generation was not completed after %d maxtry, something is wrong\n", m)
 			return fmt.Errorf("generation was not completed after %d maxtry, something is wrong\n", m)
 		}
 	} else if m == 0 {
 		//fmt.Println("no complexity requirement for this type")
 	} else {
-		//fmt.Println("incorrect value for minimal complexity, ignoring")
 		return fmt.Errorf("incorrect value for minimal complexity, ignoring")
 	}
 	return nil
 }
 
 func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal int, minspecial int) ([]byte, error) {
-	//fmt.Println("in Generate Secrets With Complexity")
-	//     fmt.Println(SecretBytes)
 	b := make([]byte, n)
 	if n < minlower+minupper+mindecimal+minspecial {
 		fmt.Printf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
-		//fmt.Errorf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d", n, minlower, minupper, mindecimal, minspecial)
-		// b is empty here FIXME handle this error and refuse to continue deploying like this as the configuration is impossible
+		// b is empty here , we return error and expect caller to check for it
 		return b, fmt.Errorf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
 	} else {
 		//fmt.Printf("password length and complexity requirements are OK length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
@@ -166,16 +156,6 @@ func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal 
 	GenerateSecretPartWithComplexity(SecretBytesUpper, minupper, b)
 	GenerateSecretPartWithComplexity(SecretBytesDecimal, mindecimal, b)
 	GenerateSecretPartWithComplexity(SecretBytesSpecial, minspecial, b)
-	// check
-	//println("checking distribution after Complexity before last step")
-	//for i := range b {
-	//		if b[i] == 0 {
-	//			print("0 ")
-	//		} else {
-	//			print("X ")
-	//		}
-	//	}
-	//println("")
 	// complete gaps
 	for i := range b {
 		if b[i] == 0 {
@@ -185,7 +165,6 @@ func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal 
 			_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
 			if err != nil {
 				return b, err
-				//return nil, err
 			}
 
 			b[i] = SecretBytesComplete[int(indexByte[0])%len(SecretBytesComplete)]
@@ -196,23 +175,16 @@ func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal 
 
 // GenerateSecret returns a randomly generated sequence of text that is n bytes in length.
 func GenerateSecret(SecretBytes string, n int) []byte {
-	//	fmt.Println("in Generate Secrets")
-	//	fmt.Println(SecretBytes)
 	b := make([]byte, n)
 	for i := range b {
-		//b[i] = SecretBytes[rand.Int63()%int64(len(SecretBytes))]
 		// Use crypto/rand to get a secure random index
 		var indexByte [1]byte
 		_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
 		if err != nil {
 			return nil
-			//return nil, err
 		}
 		b[i] = SecretBytes[int(indexByte[0])%len(SecretBytes)]
-		//		fmt.Print("b=", i, b[i], int(b[i]))
 	}
-	//	fmt.Println("")
-	//	fmt.Println("in Generate Secrets end")
 	return b
 }
 
