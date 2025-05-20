@@ -441,6 +441,24 @@ metadata:
   annotations:
     enterprise.splunk.com/admin-managed-pv: "true"
 ```
+##### PV label values
+In order to prepare labels for CR's persistent volumes you need to know values beforehand
+Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
+| Customer Resource Definition | app.kubernetes.io/name value |
+| ----------- | --------- |
+| clustermanager.enterprise.splunk.com | cluster-manager |
+| indexercluster.enterprise.splunk.com | indexer-cluster |
+| licensemaster.enterprise.splunk.com | license-master |
+| monitoringconsole.enterprise.splunk.com | monitoring-console |
+| searchheadcluster.enterprise.splunk.com | search-head |
+| standalone.enterprise.splunk.com | standalone |
+
+`app.kubernetes.io/instance` value consist of three elements concatenated with hyphens
+1. "splunk"
+2. provided by admin CR name
+3. CRD kind name
+
+For example `clusterManager` CR named "test" will have set `app.kubernetes.io/instance` as `splunk-test-cluster-manager`
 
 #### Container Logs
 The Splunk Enterprise CRDs deploy Splunkd in Kubernetes pods running [docker-splunk](https://github.com/splunk/docker-splunk) container images. Adding a couple of environment variables to the CR spec as follows produces `detailed container logs`:
