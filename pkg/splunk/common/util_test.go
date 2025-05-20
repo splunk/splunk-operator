@@ -235,7 +235,7 @@ func TestGenerateSecretWithComplexity(t *testing.T) {
 	test(8, 2, 2, 2, 2)
 }
 
-func TestGenerateSecretWithTooMuchComplexity(t *testing.T) {
+func TestErrorGenerateSecretWithTooMuchComplexity(t *testing.T) {
 	testneg := func(n int, minlower int, minupper int, mindecimal int, minspecial int) {
 		var err error
 		_, err = GenerateSecretWithComplexity(n, minlower, minupper, mindecimal, minspecial)

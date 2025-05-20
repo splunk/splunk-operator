@@ -460,7 +460,10 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 				if tokenType == "hec_token" {
 					current.Data[tokenType] = generateHECToken()
 				} else {
-					current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+					current.Data[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+					if err != nil {
+						return nil, err
+					}
 				}
 				updateNeeded = true
 			}
@@ -489,9 +492,10 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 		if tokenType == "hec_token" {
 			current.Data[tokenType] = generateHECToken()
 		} else {
-			//current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
 			current.Data[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
-			println("err=", err)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
