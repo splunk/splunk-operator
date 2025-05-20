@@ -67,3 +67,28 @@ Define namespace of release and allow for namespace override
 {{- define "splunk-enterprise.namespace" -}}
 {{- default .Release.Namespace .Values.namespaceOverride }}
 {{- end }}
+
+{{/*
+Define the list of Cluster Maaster internal URI used for multisite config
+*/}}
+{{- define "cmlist" -}}
+{{- if and .Values.existingClusterManager .Values.existingClusterManager.name }}
+{{- $cm_name = printf "splunk-%s-cluster-manager-service" .Values.existingClusterManager.name -}}
+{{- else }}
+{{- $cm_name := list -}}
+{{- range default (default (until 1)) .Values.sva.m4.totalCluster }}
+{{- $cm_name = printf "splunk-%s-cluster-manager-service" .name | append $cm_name -}}
+{{- end -}}
+{{- join ","  $cm_name }}
+{{- end }}
+{{- end -}}
+
+
+{{/*
+Return the first value from the list of indexer clusters to be configured for outputs.conf
+*/}}
+{{- define "cm_name_first" -}}
+{{- with (first .Values.sva.m4.totalCluster) }}
+{{- .name  }}
+{{- end }}
+{{- end -}}

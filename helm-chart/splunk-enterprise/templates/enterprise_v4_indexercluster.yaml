@@ -2,12 +2,14 @@
 apiVersion: v1
 kind: List
 items:
+{{- range default (default (until 1)) .Values.sva.m4.totalCluster }}
+{{ $cmname := .name }}
 {{- range default (default (until 1) .Values.sva.c3.indexerClusters) .Values.sva.m4.indexerClusters }}
 - apiVersion:  enterprise.splunk.com/v4
   kind: IndexerCluster
   metadata:
   {{- if or $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
-    name: {{ .name }}
+    name: {{ $cmname }}-}{{ .name }}
   {{- else if $.Values.indexerCluster.enabled }}
     name: {{ $.Values.indexerCluster.name }}
   {{- end }}
@@ -35,7 +37,7 @@ items:
     {{- end }}
   {{- else if or $.Values.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
     clusterManagerRef:
-      name: {{ $.Values.clusterManager.name }}
+      name: {{ $cmname }}
     {{- if $.Values.clusterManager.namespaceOverride }}
       namespace: {{ $.Values.clusterManager.namespaceOverride }}
     {{- end }}
@@ -93,7 +95,7 @@ items:
     {{- end }}
     defaults: |-
       splunk:
-        multisite_master: splunk-{{ $cm_name }}-cluster-manager-service
+        multisite_master: splunk-{{ $cmname }}-cluster-manager-service
         site: {{ .site }}
   {{- else if $.Values.indexerCluster.defaults }}
     defaults: |-
@@ -163,5 +165,6 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
