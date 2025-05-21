@@ -29,7 +29,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: "{{ $config.kindName }}-{{ $.Release.Name }}-etc-pv-{{ $i }}"
+  name: "{{ $config.kindName }}-{{ $.Release.Name }}-var-pv-{{ $i }}"
   labels:
     app.kubernetes.io/name: {{ $config.kindName }}
     app.kubernetes.io/instance: {{ printf "splunk-%s-%s" $config.name $config.kindName }}
