@@ -1,19 +1,19 @@
-{{- if .Values.licenseManager.enabled }}
+{{- if .Values.customResources.licenseManager.enabled }}
 apiVersion:  enterprise.splunk.com/v4
 kind: LicenseManager
 metadata:
-  name: {{ .Values.licenseManager.name }}
-  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.licenseManager.namespaceOverride }}
-{{- with .Values.licenseManager.additionalLabels }}
+  name: {{ .Values.customResources.licenseManager.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.customResources.licenseManager.namespaceOverride }}
+{{- with .Values.customResources.licenseManager.additionalLabels }}
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.licenseManager.additionalAnnotations }}
+{{- with .Values.customResources.licenseManager.additionalAnnotations }}
   annotations:
 {{ toYaml . | indent 4 }}
   {{- end }}
 spec:
-{{- with .Values.licenseManager.appRepo }}
+{{- with .Values.customResources.licenseManager.appRepo }}
   appRepo:
 {{ toYaml . | indent 4 }}
 {{- end }}
@@ -23,11 +23,11 @@ spec:
   {{- if .Values.existingClusterManager.namespace }}
     namespace: {{ .Values.existingClusterManager.namespace }}
   {{- end }}
-{{- else if or .Values.clusterManager.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+{{- else if or .Values.customResources.clusterManager.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
   clusterManagerRef:
-    name: {{ .Values.clusterManager.name }}
-  {{- if .Values.clusterManager.namespaceOverride }}
-    namespace: {{ .Values.clusterManager.namespaceOverride }}
+    name: {{ .Values.customResources.clusterManager.name }}
+  {{- if .Values.customResources.clusterManager.namespaceOverride }}
+    namespace: {{ .Values.customResources.clusterManager.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if .Values.existingMonitoringConsole }}
@@ -36,11 +36,11 @@ spec:
   {{- if .Values.existingMonitoringConsole.namespace }}
     namespace: {{ .Values.existingMonitoringConsole.namespace }}
   {{- end }}
-{{- else if .Values.monitoringConsole.enabled }}
+{{- else if .Values.customResources.monitoringConsole.enabled }}
   monitoringConsoleRef:
-    name: {{ .Values.monitoringConsole.name }}
-  {{- if .Values.monitoringConsole.namespaceOverride }}
-    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+    name: {{ .Values.customResources.monitoringConsole.name }}
+  {{- if .Values.customResources.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.customResources.monitoringConsole.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if .Values.image.repository }}
@@ -53,75 +53,75 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.licenseManager.volumes }}
+{{- with .Values.customResources.licenseManager.volumes }}
   volumes:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.licenseUrl }}
-  licenseUrl: {{ .Values.licenseManager.licenseUrl }}
+{{- if .Values.customResources.licenseManager.licenseUrl }}
+  licenseUrl: {{ .Values.customResources.licenseManager.licenseUrl }}
 {{- end }}
-{{- if .Values.licenseManager.defaultsUrl }}
-  defaultsUrl: {{ .Values.licenseManager.defaultsUrl }}
+{{- if .Values.customResources.licenseManager.defaultsUrl }}
+  defaultsUrl: {{ .Values.customResources.licenseManager.defaultsUrl }}
 {{- end }}
-{{- if .Values.licenseManager.defaults }}
+{{- if .Values.customResources.licenseManager.defaults }}
   defaults: |-
-{{ toYaml .Values.licenseManager.defaults | indent 4 }}
+{{ toYaml .Values.customResources.licenseManager.defaults | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.defaultsUrlApps }}
-  defaultsUrlApps: {{ .Values.licenseManager.defaultsUrlApps }}
+{{- if .Values.customResources.licenseManager.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.customResources.licenseManager.defaultsUrlApps }}
 {{- end }}
-{{- with .Values.licenseManager.extraEnv }}
+{{- with .Values.customResources.licenseManager.extraEnv }}
   extraEnv:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.livenessInitialDelaySeconds }}
-  livenessInitialDelaySeconds: {{ .Values.licenseManager.livenessInitialDelaySeconds }}
+{{- if .Values.customResources.licenseManager.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.customResources.licenseManager.livenessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.licenseManager.readinessInitialDelaySeconds }}
-  readinessInitialDelaySeconds: {{ .Values.licenseManager.readinessInitialDelaySeconds }}
+{{- if .Values.customResources.licenseManager.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.customResources.licenseManager.readinessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.licenseManager.startupProbe }}
+{{- if .Values.customResources.licenseManager.startupProbe }}
   startupProbe:
-{{ toYaml .Values.licenseManager.startupProbe | indent 4 }}
+{{ toYaml .Values.customResources.licenseManager.startupProbe | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.livenessProbe }}
+{{- if .Values.customResources.licenseManager.livenessProbe }}
   livenessProbe:
-{{ toYaml .Values.licenseManager.livenessProbe | indent 4 }}
+{{ toYaml .Values.customResources.licenseManager.livenessProbe | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.readinessProbe }}
+{{- if .Values.customResources.licenseManager.readinessProbe }}
   readinessProbe:
-{{ toYaml .Values.licenseManager.readinessProbe | indent 4 }}
+{{ toYaml .Values.customResources.licenseManager.readinessProbe | indent 4 }}
 {{- end }}
-{{- with .Values.licenseManager.etcVolumeStorageConfig }}
+{{- with .Values.customResources.licenseManager.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.licenseManager.varVolumeStorageConfig }}
+{{- with .Values.customResources.licenseManager.varVolumeStorageConfig }}
   varVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.licenseManager.resources }}
+{{- with .Values.customResources.licenseManager.resources }}
   resources:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.serviceAccount }}
-  serviceAccount: {{ .Values.licenseManager.serviceAccount }}
+{{- if .Values.customResources.licenseManager.serviceAccount }}
+  serviceAccount: {{ .Values.customResources.licenseManager.serviceAccount }}
 {{- end }}
-{{- with .Values.licenseManager.serviceTemplate }}
+{{- with .Values.customResources.licenseManager.serviceTemplate }}
   serviceTemplate:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.licenseManager.tolerations }}
+{{- with .Values.customResources.licenseManager.tolerations }}
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.licenseManager.topologySpreadConstraints }}
-{{- with .Values.licenseManager.topologySpreadConstraints }}
+{{- if .Values.customResources.licenseManager.topologySpreadConstraints }}
+{{- with .Values.customResources.licenseManager.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- end }}
-{{- with .Values.licenseManager.affinity }}
+{{- with .Values.customResources.licenseManager.affinity }}
   affinity:
 {{ toYaml . | indent 4 }}
 {{- end }}

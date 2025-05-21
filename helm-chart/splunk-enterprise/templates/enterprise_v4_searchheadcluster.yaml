@@ -1,4 +1,4 @@
-{{- if or .Values.searchHeadCluster.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+{{- if or .Values.customResources.searchHeadCluster.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
 apiVersion: v1
 kind: List
 items:
@@ -8,23 +8,23 @@ items:
   metadata:
   {{- if or $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
     name: {{ .name }}
-  {{- else if $.Values.searchHeadCluster.enabled }}
-    name: {{ $.Values.searchHeadCluster.name }}
+  {{- else if $.Values.customResources.searchHeadCluster.enabled }}
+    name: {{ $.Values.customResources.searchHeadCluster.name }}
   {{- end }}
-    namespace: {{ default $.Release.Namespace $.Values.searchHeadCluster.namespaceOverride }}
-  {{- with $.Values.searchHeadCluster.additionalLabels }}
+    namespace: {{ default $.Release.Namespace $.Values.customResources.searchHeadCluster.namespaceOverride }}
+  {{- with $.Values.customResources.searchHeadCluster.additionalLabels }}
     labels:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.additionalAnnotations }}
+  {{- with $.Values.customResources.searchHeadCluster.additionalAnnotations }}
     annotations:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
-  {{- if $.Values.searchHeadCluster.replicaCount }}
-    replicas: {{ $.Values.searchHeadCluster.replicaCount }}
+  {{- if $.Values.customResources.searchHeadCluster.replicaCount }}
+    replicas: {{ $.Values.customResources.searchHeadCluster.replicaCount }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.appRepo }}
+  {{- with $.Values.customResources.searchHeadCluster.appRepo }}
     appRepo: 
 {{ toYaml . | indent 6 }}
   {{- end }}
@@ -34,11 +34,11 @@ items:
     {{- if $.Values.existingClusterManager.namespace }}
       namespace: {{ $.Values.existingClusterManager.namespace }}
     {{- end }}
-  {{- else if or $.Values.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
+  {{- else if or $.Values.customResources.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
     clusterManagerRef:
-      name: {{ $.Values.clusterManager.name }}
-    {{- if $.Values.clusterManager.namespaceOverride }}
-      namespace: {{ $.Values.clusterManager.namespaceOverride }}
+      name: {{ $.Values.customResources.clusterManager.name }}
+    {{- if $.Values.customResources.clusterManager.namespaceOverride }}
+      namespace: {{ $.Values.customResources.clusterManager.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.existingLicenseManager }}
@@ -47,11 +47,11 @@ items:
     {{- if $.Values.existingLicenseManager.namespace }}
       namespace: {{ $.Values.existingLicenseManager.namespace }}
     {{- end }}
-  {{- else if or $.Values.licenseManager.enabled }}
+  {{- else if or $.Values.customResources.licenseManager.enabled }}
     licenseManagerRef:
-      name: {{ $.Values.licenseManager.name }}
-    {{- if $.Values.licenseManager.namespaceOverride }}
-      namespace: {{ $.Values.licenseManager.namespaceOverride }}
+      name: {{ $.Values.customResources.licenseManager.name }}
+    {{- if $.Values.customResources.licenseManager.namespaceOverride }}
+      namespace: {{ $.Values.customResources.licenseManager.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.existingMonitoringConsole }}
@@ -60,11 +60,11 @@ items:
     {{- if $.Values.existingMonitoringConsole.namespace }}
       namespace: {{ $.Values.existingMonitoringConsole.namespace }}
     {{- end }}
-  {{- else if $.Values.monitoringConsole.enabled }}
+  {{- else if $.Values.customResources.monitoringConsole.enabled }}
     monitoringConsoleRef:
-      name: {{ $.Values.monitoringConsole.name }}
-    {{- if $.Values.monitoringConsole.namespaceOverride }}
-      namespace: {{ $.Values.monitoringConsole.namespaceOverride }}
+      name: {{ $.Values.customResources.monitoringConsole.name }}
+    {{- if $.Values.customResources.monitoringConsole.namespaceOverride }}
+      namespace: {{ $.Values.customResources.monitoringConsole.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.image.repository }}
@@ -77,18 +77,18 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.volumes }}
+  {{- with $.Values.customResources.searchHeadCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.licenseUrl }}
-    licenseUrl: {{ $.Values.searchHeadCluster.licenseUrl }}
+  {{- if $.Values.customResources.searchHeadCluster.licenseUrl }}
+    licenseUrl: {{ $.Values.customResources.searchHeadCluster.licenseUrl }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.defaultsUrl }}
-    defaultsUrl: {{ $.Values.searchHeadCluster.defaultsUrl }}
+  {{- if $.Values.customResources.searchHeadCluster.defaultsUrl }}
+    defaultsUrl: {{ $.Values.customResources.searchHeadCluster.defaultsUrl }}
   {{- end }}
   {{- if $.Values.sva.m4.enabled }}
-    {{- $cm_name := $.Values.clusterManager.name -}}
+    {{- $cm_name := $.Values.customResources.clusterManager.name -}}
     {{- if and $.Values.existingClusterManager $.Values.existingClusterManager.name }}
       {{- $cm_name = $.Values.existingClusterManager.name -}}
     {{- end }}
@@ -96,60 +96,60 @@ items:
       splunk:
         multisite_master: splunk-{{ $cm_name }}-cluster-manager-service
         site: {{ .site }}
-  {{- else if $.Values.searchHeadCluster.defaults }}
+  {{- else if $.Values.customResources.searchHeadCluster.defaults }}
     defaults: |-
-{{ toYaml $.Values.searchHeadCluster.defaults | indent 6 }}
+{{ toYaml $.Values.customResources.searchHeadCluster.defaults | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.defaultsUrlApps }}
-    defaultsUrlApps: {{ $.Values.searchHeadCluster.defaultsUrlApps }}
+  {{- if $.Values.customResources.searchHeadCluster.defaultsUrlApps }}
+    defaultsUrlApps: {{ $.Values.customResources.searchHeadCluster.defaultsUrlApps }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.extraEnv }}
+  {{- with $.Values.customResources.searchHeadCluster.extraEnv }}
     extraEnv:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.livenessInitialDelaySeconds }}
-    livenessInitialDelaySeconds: {{ $.Values.searchHeadCluster.livenessInitialDelaySeconds }}
+  {{- if $.Values.customResources.searchHeadCluster.livenessInitialDelaySeconds }}
+    livenessInitialDelaySeconds: {{ $.Values.customResources.searchHeadCluster.livenessInitialDelaySeconds }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
-    readinessInitialDelaySeconds: {{ $.Values.searchHeadCluster.readinessInitialDelaySeconds }}
+  {{- if $.Values.customResources.searchHeadCluster.readinessInitialDelaySeconds }}
+    readinessInitialDelaySeconds: {{ $.Values.customResources.searchHeadCluster.readinessInitialDelaySeconds }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.startupProbe }}
+  {{- if $.Values.customResources.searchHeadCluster.startupProbe }}
     startupProbe:
-{{ toYaml $.Values.searchHeadCluster.startupProbe | indent 6 }}
+{{ toYaml $.Values.customResources.searchHeadCluster.startupProbe | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.livenessProbe }}
+  {{- if $.Values.customResources.searchHeadCluster.livenessProbe }}
     livenessProbe:
-{{ toYaml $.Values.searchHeadCluster.livenessProbe | indent 6 }}
+{{ toYaml $.Values.customResources.searchHeadCluster.livenessProbe | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.readinessProbe }}
+  {{- if $.Values.customResources.searchHeadCluster.readinessProbe }}
     readinessProbe:
-{{ toYaml $.Values.searchHeadCluster.readinessProbe | indent 6 }}
+{{ toYaml $.Values.customResources.searchHeadCluster.readinessProbe | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.etcVolumeStorageConfig }}
+  {{- with $.Values.customResources.searchHeadCluster.etcVolumeStorageConfig }}
     etcVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.varVolumeStorageConfig }}
+  {{- with $.Values.customResources.searchHeadCluster.varVolumeStorageConfig }}
     varVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.resources }}
+  {{- with $.Values.customResources.searchHeadCluster.resources }}
     resources:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.serviceAccount }}
-    serviceAccount: {{ $.Values.searchHeadCluster.serviceAccount }}
+  {{- if $.Values.customResources.searchHeadCluster.serviceAccount }}
+    serviceAccount: {{ $.Values.customResources.searchHeadCluster.serviceAccount }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.serviceTemplate }}
+  {{- with $.Values.customResources.searchHeadCluster.serviceTemplate }}
     serviceTemplate:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.searchHeadCluster.tolerations }}
+  {{- with $.Values.customResources.searchHeadCluster.tolerations }}
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.searchHeadCluster.topologySpreadConstraints }}
-  {{- with $.Values.searchHeadCluster.topologySpreadConstraints }}
+  {{- if $.Values.customResources.searchHeadCluster.topologySpreadConstraints }}
+  {{- with $.Values.customResources.searchHeadCluster.topologySpreadConstraints }}
     topologySpreadConstraints:
 {{ toYaml . | indent 6 }}
   {{- end }}
@@ -165,7 +165,7 @@ items:
               values:
               - {{ .zone }}
   {{- else }}
-    {{- with $.Values.searchHeadCluster.affinity }}
+    {{- with $.Values.customResources.searchHeadCluster.affinity }}
     affinity:
 {{ toYaml . | indent 6 }}
     {{- end }}

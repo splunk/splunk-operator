@@ -1,0 +1,53 @@
+{{- range $section, $config := .Values.customResources }}
+{{- if $config.enablePersistentVolume }}
+{{- range $i := until (int (default 1 $config.replicaCount)) }}
+
+{{- if $config.persistence.etc }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: "{{ $config.kindName }}-{{ $.Release.Name }}-etc-pv-{{ $i }}"
+  labels:
+    app.kubernetes.io/name: {{ $config.kindName }}
+    app.kubernetes.io/instance: {{ printf "splunk-%s-%s" $config.name $config.kindName }}
+spec:
+  capacity: 
+    storage: {{ $config.persistence.etc.size | default "10Gi" }} # Default size if not set
+  accessModes:
+  {{- toYaml $config.persistence.etc.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: {{ $config.persistence.etc.reclaimPolicy }}
+  {{- if $config.persistence.etc.storageClass }}
+  storageClassName: {{ $config.persistence.etc.storageClass }}
+  {{- end }}
+  {{- if $config.persistence.etc.providerConfig }}
+  {{- toYaml $config.persistence.etc.providerConfig | nindent 2 }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if $config.persistence.var }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: "{{ $config.kindName }}-{{ $.Release.Name }}-etc-pv-{{ $i }}"
+  labels:
+    app.kubernetes.io/name: {{ $config.kindName }}
+    app.kubernetes.io/instance: {{ printf "splunk-%s-%s" $config.name $config.kindName }}
+spec:
+  capacity:
+    storage: {{ $config.persistence.var.size | default "100Gi" }} # Default size if not set
+  accessModes:
+  {{- toYaml $config.persistence.var.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: {{ $config.persistence.var.reclaimPolicy }}
+  {{- if $config.persistence.var.storageClass }}
+  storageClassName: {{ $config.persistence.var.storageClass }}
+  {{- end }}
+  {{- if $config.persistence.var.providerConfig }}
+  {{- toYaml $config.persistence.var.providerConfig | nindent 2 }}
+  {{- end }}
+---
+{{- end }}
+
+{{- end }}
+{{- end }}
+{{- end }}
