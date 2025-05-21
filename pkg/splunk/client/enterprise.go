@@ -627,7 +627,7 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 	}
 	expectedStatus := []int{200}
 	err = c.Do(request, expectedStatus, nil)
-	if err!= nil && strings.Contains(err.Error(), "decommission already requested") {
+	if err != nil && strings.Contains(err.Error(), "decommission already requested") {
 		err = nil
 	}
 	return err
