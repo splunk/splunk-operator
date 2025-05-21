@@ -32,6 +32,15 @@ const (
 	// SecretBytes used to generate Splunk secrets
 	SecretBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+	// SecretBytes with complexity used to generate Splunk secrets with complexity
+	SecretBytesLower   = "abcdefghijklmnopqrstuvwxyz"
+	SecretBytesUpper   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	SecretBytesDecimal = "0123456789"
+	// we dont use $ here to prevent secret starting with this as this is used by Splunk to identify obfuscated one
+	SecretBytesSpecial = "-*&%#@,.;:/?[]{}+=-_<>"
+	// version with all possible characters use to complete after we have match minimal complexity
+	SecretBytesComplete = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-*&%#@,.;:/?[]{}+=-_<>"
+
 	// HexBytes used to generate random hexadecimal strings (e.g. HEC tokens)
 	HexBytes = "ABCDEF01234567890"
 

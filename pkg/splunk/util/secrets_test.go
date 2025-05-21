@@ -723,7 +723,10 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	}
 
 	// Update namespace scoped secret with new admin password
-	namespacescopedsecret.Data["password"] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+	namespacescopedsecret.Data["password"], err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
 	err = UpdateResource(context.TODO(), c, namespacescopedsecret)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -798,7 +801,10 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 	secretData := make(map[string][]byte)
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType != "hec_token" {
-			secretData[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+			secretData[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+			if err != nil {
+				t.Errorf(err.Error())
+			}
 		}
 	}
 
@@ -943,6 +949,16 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	// Partially baked "splunk-secrets" object(applies to empty as well)
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	password, err := splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf("Error Generating Password With Complexity")
+		// FIXME : should we return here ?
+	}
+	pass4, err := splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf("Error Generating Password With Complexity")
+		// FIXME : should we return here ?
+	}
 
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -950,8 +966,8 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 			Namespace: "test",
 		},
 		Data: map[string][]byte{
-			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4Symmkey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"password":     password,
+			"pass4Symmkey": pass4,
 		},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
@@ -959,6 +975,26 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	// Fully baked splunk-secrets object
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
+	password, err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf("Error Generating Password With Complexity")
+		// FIXME : should we return here ?
+	}
+	pass4, err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf("Error Generating Password With Complexity")
+		// FIXME : should we return here ?
+	}
+	idxc_secret, err := splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf("Error Generating Password With Complexity")
+		// FIXME : should we return here ?
+	}
+	shc_secret, err := splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+	if err != nil {
+		t.Errorf("Error Generating Password With Complexity")
+		// FIXME : should we return here ?
+	}
 
 	secret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -967,10 +1003,10 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 		},
 		Data: map[string][]byte{
 			"hec_token":    generateHECToken(),
-			"password":     splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"pass4SymmKey": splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"idxc_secret":  splcommon.GenerateSecret(splcommon.SecretBytes, 24),
-			"shc_secret":   splcommon.GenerateSecret(splcommon.SecretBytes, 24),
+			"password":     password,
+			"pass4SymmKey": pass4,
+			"idxc_secret":  idxc_secret,
+			"shc_secret":   shc_secret,
 		},
 	}
 	spltest.ReconcileTester(t, "TestApplyNamespaceScopedSecretObject", "test", "test", createCalls, updateCalls, reconcile, false, &secret)
@@ -985,7 +1021,7 @@ func TestApplyNamespaceScopedSecretObject(t *testing.T) {
 	c.Create(ctx, &negSecret)
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
-	_, err := ApplyNamespaceScopedSecretObject(ctx, c, negSecret.GetNamespace())
+	_, err = ApplyNamespaceScopedSecretObject(ctx, c, negSecret.GetNamespace())
 	if err == nil {
 		t.Errorf("Expected error")
 	}
