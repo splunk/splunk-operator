@@ -9,7 +9,7 @@ ENVIRONMENT=${1:-default}
 VERSION ?= 2.8.0
 
 # SPLUNK_ENTERPRISE_IMAGE defines the splunk docker tag that is used as default image.
-SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk:edge"
+SPLUNK_ENTERPRISE_IMAGE ?= "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64"
 
 # WATCH_NAMESPACE defines if its clusterwide operator or namespace specific
 # by default we leave it as clusterwide if it has to be namespace specific,
