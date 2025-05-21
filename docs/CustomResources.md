@@ -447,7 +447,9 @@ Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
 | Customer Resource Definition | app.kubernetes.io/name value |
 | ----------- | --------- |
 | clustermanager.enterprise.splunk.com | cluster-manager |
+| clustermaster.enterprise.splunk.com | cluster-master |
 | indexercluster.enterprise.splunk.com | indexer-cluster |
+| licensemanager.enterprise.splunk.com | license-manager |
 | licensemaster.enterprise.splunk.com | license-master |
 | monitoringconsole.enterprise.splunk.com | monitoring-console |
 | searchheadcluster.enterprise.splunk.com | search-head |
