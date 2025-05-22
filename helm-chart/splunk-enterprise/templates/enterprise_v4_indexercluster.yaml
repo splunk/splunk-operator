@@ -1,4 +1,4 @@
-{{- if or .Values.indexerCluster.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+{{- if or .Values.customResources.indexerCluster.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
 apiVersion: v1
 kind: List
 items:
@@ -8,24 +8,24 @@ items:
   metadata:
   {{- if or $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
     name: {{ .name }}
-  {{- else if $.Values.indexerCluster.enabled }}
-    name: {{ $.Values.indexerCluster.name }}
+  {{- else if $.Values.customResources.indexerCluster.enabled }}
+    name: {{ $.Values.customResources.indexerCluster.name }}
   {{- end }}
-    namespace: {{ default $.Release.Namespace $.Values.indexerCluster.namespaceOverride }}
-  {{- with $.Values.indexerCluster.additionalLabels }}
+    namespace: {{ default $.Release.Namespace $.Values.customResources.indexerCluster.namespaceOverride }}
+  {{- with $.Values.customResources.indexerCluster.additionalLabels }}
     labels:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.additionalAnnotations }}
+  {{- with $.Values.customResources.indexerCluster.additionalAnnotations }}
     annotations:
 {{ toYaml . | indent 6 }}
   {{- end }}
   spec:
-  {{- if $.Values.indexerCluster.serviceAccount }}
-    serviceAccount: {{ $.Values.indexerCluster.serviceAccount }}
+  {{- if $.Values.customResources.indexerCluster.serviceAccount }}
+    serviceAccount: {{ $.Values.customResources.indexerCluster.serviceAccount }}
   {{- end }}
-  {{- if $.Values.indexerCluster.replicaCount }}
-    replicas: {{ $.Values.indexerCluster.replicaCount }}
+  {{- if $.Values.customResources.indexerCluster.replicaCount }}
+    replicas: {{ $.Values.customResources.indexerCluster.replicaCount }}
   {{- end }}
   {{- if $.Values.existingClusterManager }}
     clusterManagerRef:
@@ -33,11 +33,11 @@ items:
     {{- if $.Values.existingClusterManager.namespace }}
       namespace: {{ $.Values.existingClusterManager.namespace }}
     {{- end }}
-  {{- else if or $.Values.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
+  {{- else if or $.Values.customResources.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
     clusterManagerRef:
-      name: {{ $.Values.clusterManager.name }}
-    {{- if $.Values.clusterManager.namespaceOverride }}
-      namespace: {{ $.Values.clusterManager.namespaceOverride }}
+      name: {{ $.Values.customResources.clusterManager.name }}
+    {{- if $.Values.customResources.clusterManager.namespaceOverride }}
+      namespace: {{ $.Values.customResources.clusterManager.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.existingLicenseManager }}
@@ -46,11 +46,11 @@ items:
     {{- if $.Values.existingLicenseManager.namespace }}
       namespace: {{ $.Values.existingLicenseManager.namespace }}
     {{- end }}
-  {{- else if $.Values.licenseManager.enabled }}
+  {{- else if $.Values.customResources.licenseManager.enabled }}
     licenseManagerRef:
-      name: {{ $.Values.licenseManager.name }}
-    {{- if $.Values.licenseManager.namespaceOverride }}
-      namespace: {{ $.Values.licenseManager.namespaceOverride }}
+      name: {{ $.Values.customResources.licenseManager.name }}
+    {{- if $.Values.customResources.licenseManager.namespaceOverride }}
+      namespace: {{ $.Values.customResources.licenseManager.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.existingMonitoringConsole }}
@@ -59,11 +59,11 @@ items:
     {{- if $.Values.existingMonitoringConsole.namespace }}
       namespace: {{ $.Values.existingMonitoringConsole.namespace }}
     {{- end }}
-  {{- else if $.Values.monitoringConsole.enabled }}
+  {{- else if $.Values.customResources.monitoringConsole.enabled }}
     monitoringConsoleRef:
-      name: {{ $.Values.monitoringConsole.name }}
-    {{- if $.Values.monitoringConsole.namespaceOverride }}
-      namespace: {{ $.Values.monitoringConsole.namespaceOverride }}
+      name: {{ $.Values.customResources.monitoringConsole.name }}
+    {{- if $.Values.customResources.monitoringConsole.namespaceOverride }}
+      namespace: {{ $.Values.customResources.monitoringConsole.namespaceOverride }}
     {{- end }}
   {{- end }}
   {{- if $.Values.image.repository }}
@@ -76,18 +76,18 @@ items:
     imagePullSecrets:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.volumes }}
+  {{- with $.Values.customResources.indexerCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.indexerCluster.licenseUrl }}
-    licenseUrl: {{ $.Values.indexerCluster.licenseUrl }}
+  {{- if $.Values.customResources.indexerCluster.licenseUrl }}
+    licenseUrl: {{ $.Values.customResources.indexerCluster.licenseUrl }}
   {{- end }}
-  {{- if $.Values.indexerCluster.defaultsUrl }}
-    defaultsUrl: {{ $.Values.indexerCluster.defaultsUrl }}
+  {{- if $.Values.customResources.indexerCluster.defaultsUrl }}
+    defaultsUrl: {{ $.Values.customResources.indexerCluster.defaultsUrl }}
   {{- end }}
   {{- if $.Values.sva.m4.enabled }}
-    {{- $cm_name := $.Values.clusterManager.name -}}
+    {{- $cm_name := $.Values.customResources.clusterManager.name -}}
     {{- if $.Values.existingClusterManager }}
       {{- $cm_name = $.Values.existingClusterManager.name -}}
     {{- end }}
@@ -95,54 +95,54 @@ items:
       splunk:
         multisite_master: splunk-{{ $cm_name }}-cluster-manager-service
         site: {{ .site }}
-  {{- else if $.Values.indexerCluster.defaults }}
+  {{- else if $.Values.customResources.indexerCluster.defaults }}
     defaults: |-
-{{ toYaml $.Values.indexerCluster.defaults | indent 6 }}
+{{ toYaml $.Values.customResources.indexerCluster.defaults | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.extraEnv }}
+  {{- with $.Values.customResources.indexerCluster.extraEnv }}
     extraEnv:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- if $.Values.indexerCluster.livenessInitialDelaySeconds }}
-    livenessInitialDelaySeconds: {{ $.Values.indexerCluster.livenessInitialDelaySeconds }}
+  {{- if $.Values.customResources.indexerCluster.livenessInitialDelaySeconds }}
+    livenessInitialDelaySeconds: {{ $.Values.customResources.indexerCluster.livenessInitialDelaySeconds }}
   {{- end }}
-  {{- if $.Values.indexerCluster.readinessInitialDelaySeconds }}
-    readinessInitialDelaySeconds: {{ $.Values.indexerCluster.readinessInitialDelaySeconds }}
+  {{- if $.Values.customResources.indexerCluster.readinessInitialDelaySeconds }}
+    readinessInitialDelaySeconds: {{ $.Values.customResources.indexerCluster.readinessInitialDelaySeconds }}
   {{- end }}
-  {{- if $.Values.indexerCluster.startupProbe }}
+  {{- if $.Values.customResources.indexerCluster.startupProbe }}
     startupProbe:
-{{ toYaml $.Values.indexerCluster.startupProbe | indent 6 }}
+{{ toYaml $.Values.customResources.indexerCluster.startupProbe | indent 6 }}
   {{- end }}
-  {{- if $.Values.indexerCluster.livenessProbe }}
+  {{- if $.Values.customResources.indexerCluster.livenessProbe }}
     livenessProbe:
-{{ toYaml $.Values.indexerCluster.livenessProbe | indent 6 }}
+{{ toYaml $.Values.customResources.indexerCluster.livenessProbe | indent 6 }}
   {{- end }}
-  {{- if $.Values.indexerCluster.readinessProbe }}
+  {{- if $.Values.customResources.indexerCluster.readinessProbe }}
     readinessProbe:
-{{ toYaml $.Values.indexerCluster.readinessProbe | indent 6 }}
+{{ toYaml $.Values.customResources.indexerCluster.readinessProbe | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.etcVolumeStorageConfig }}
+  {{- with $.Values.customResources.indexerCluster.etcVolumeStorageConfig }}
     etcVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.varVolumeStorageConfig }}
+  {{- with $.Values.customResources.indexerCluster.varVolumeStorageConfig }}
     varVolumeStorageConfig:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.resources }}
+  {{- with $.Values.customResources.indexerCluster.resources }}
     resources:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.serviceTemplate }}
+  {{- with $.Values.customResources.indexerCluster.serviceTemplate }}
     serviceTemplate:
 {{ toYaml . | indent 6 }}
   {{- end }}
-  {{- with $.Values.indexerCluster.tolerations }}
+  {{- with $.Values.customResources.indexerCluster.tolerations }}
     tolerations:
 {{ toYaml . | indent 6 }}
   {{- end }}
-{{- if $.Values.indexerCluster.topologySpreadConstraints }}
-  {{- with $.Values.indexerCluster.topologySpreadConstraints }}
+{{- if $.Values.customResources.indexerCluster.topologySpreadConstraints }}
+  {{- with $.Values.customResources.indexerCluster.topologySpreadConstraints }}
     topologySpreadConstraints:
 {{ toYaml . | indent 6 }}
 {{- end }}
@@ -158,7 +158,7 @@ items:
               values:
               - {{ .zone }}
   {{- else }}
-    {{- with $.Values.indexerCluster.affinity }}
+    {{- with $.Values.customResources.indexerCluster.affinity }}
     affinity:
 {{ toYaml . | indent 6 }}
     {{- end }}

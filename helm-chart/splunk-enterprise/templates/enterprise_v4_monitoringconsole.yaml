@@ -1,19 +1,19 @@
-{{- if .Values.monitoringConsole.enabled }}
+{{- if .Values.customResources.monitoringConsole.enabled }}
 apiVersion:  enterprise.splunk.com/v4
 kind: MonitoringConsole
 metadata:
-  name: {{ .Values.monitoringConsole.name }}
-  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.monitoringConsole.namespaceOverride }}
-{{- with .Values.monitoringConsole.additionalLabels }}
+  name: {{ .Values.customResources.monitoringConsole.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.customResources.monitoringConsole.namespaceOverride }}
+{{- with .Values.customResources.monitoringConsole.additionalLabels }}
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.monitoringConsole.additionalAnnotations }}
+{{- with .Values.customResources.monitoringConsole.additionalAnnotations }}
   annotations:
 {{ toYaml . | indent 4 }}
 {{- end }}
 spec:
-{{- with .Values.monitoringConsole.appRepo }}
+{{- with .Values.customResources.monitoringConsole.appRepo }}
   appRepo: 
 {{ toYaml . | indent 4 }}
 {{- end }}
@@ -23,11 +23,11 @@ spec:
   {{- if .Values.existingClusterManager.namespace }}
     namespace: {{ .Values.existingClusterManager.namespace }}
   {{- end }}
-{{- else if or .Values.clusterManager.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
+{{- else if or .Values.customResources.clusterManager.enabled .Values.sva.c3.enabled .Values.sva.m4.enabled }}
   clusterManagerRef:
-    name: {{ .Values.clusterManager.name }}
-  {{- if .Values.clusterManager.namespaceOverride }}
-    namespace: {{ .Values.clusterManager.namespaceOverride }}
+    name: {{ .Values.customResources.clusterManager.name }}
+  {{- if .Values.customResources.clusterManager.namespaceOverride }}
+    namespace: {{ .Values.customResources.clusterManager.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if .Values.existingLicenseManager }}
@@ -36,11 +36,11 @@ spec:
   {{- if .Values.existingLicenseManager.namespace }}
     namespace: {{ .Values.existingLicenseManager.namespace }}
   {{- end }}
-{{- else if .Values.licenseManager.enabled }}
+{{- else if .Values.customResources.licenseManager.enabled }}
   licenseManagerRef:
-    name: {{ .Values.licenseManager.name }}
-  {{- if .Values.licenseManager.namespaceOverride }}
-    namespace: {{ .Values.licenseManager.namespaceOverride }}
+    name: {{ .Values.customResources.licenseManager.name }}
+  {{- if .Values.customResources.licenseManager.namespaceOverride }}
+    namespace: {{ .Values.customResources.licenseManager.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if .Values.image.repository }}
@@ -53,75 +53,75 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.monitoringConsole.volumes }}      
+{{- with .Values.customResources.monitoringConsole.volumes }}
   volumes:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.licenseUrl }}
-  licenseUrl: {{ .Values.monitoringConsole.licenseUrl }}
+{{- if .Values.customResources.monitoringConsole.licenseUrl }}
+  licenseUrl: {{ .Values.customResources.monitoringConsole.licenseUrl }}
 {{- end }}
-{{- if .Values.monitoringConsole.defaultsUrl }}
-  defaultsUrl: {{ .Values.monitoringConsole.defaultsUrl }}
+{{- if .Values.customResources.monitoringConsole.defaultsUrl }}
+  defaultsUrl: {{ .Values.customResources.monitoringConsole.defaultsUrl }}
 {{- end }}
-{{- if .Values.monitoringConsole.defaults }}
+{{- if .Values.customResources.monitoringConsole.defaults }}
   defaults: |-
-{{ toYaml .Values.monitoringConsole.defaults | indent 4 }}
+{{ toYaml .Values.customResources.monitoringConsole.defaults | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.defaultsUrlApps }}
-  defaultsUrlApps: {{ .Values.monitoringConsole.defaultsUrlApps }}
+{{- if .Values.customResources.monitoringConsole.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.customResources.monitoringConsole.defaultsUrlApps }}
 {{- end }}
-{{- with .Values.monitoringConsole.extraEnv }}
+{{- with .Values.customResources.monitoringConsole.extraEnv }}
   extraEnv:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.livenessInitialDelaySeconds }}
-  livenessInitialDelaySeconds: {{ .Values.monitoringConsole.livenessInitialDelaySeconds }}
+{{- if .Values.customResources.monitoringConsole.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.customResources.monitoringConsole.livenessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.monitoringConsole.readinessInitialDelaySeconds }}
-  readinessInitialDelaySeconds: {{ .Values.monitoringConsole.readinessInitialDelaySeconds }}
+{{- if .Values.customResources.monitoringConsole.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.customResources.monitoringConsole.readinessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.monitoringConsole.startupProbe }}
+{{- if .Values.customResources.monitoringConsole.startupProbe }}
   startupProbe:
-{{ toYaml .Values.monitoringConsole.startupProbe | indent 4 }}
+{{ toYaml .Values.customResources.monitoringConsole.startupProbe | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.livenessProbe }}
+{{- if .Values.customResources.monitoringConsole.livenessProbe }}
   livenessProbe:
-{{ toYaml .Values.monitoringConsole.livenessProbe | indent 4 }}
+{{ toYaml .Values.customResources.monitoringConsole.livenessProbe | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.readinessProbe }}
+{{- if .Values.customResources.monitoringConsole.readinessProbe }}
   readinessProbe:
-{{ toYaml .Values.monitoringConsole.readinessProbe | indent 4 }}
+{{ toYaml .Values.customResources.monitoringConsole.readinessProbe | indent 4 }}
 {{- end }}
-{{- with .Values.monitoringConsole.etcVolumeStorageConfig }}
+{{- with .Values.customResources.monitoringConsole.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.monitoringConsole.varVolumeStorageConfig }}
+{{- with .Values.customResources.monitoringConsole.varVolumeStorageConfig }}
   varVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.monitoringConsole.resources }}
+{{- with .Values.customResources.monitoringConsole.resources }}
   resources:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.serviceAccount }}
-  serviceAccount: {{ .Values.monitoringConsole.serviceAccount }}
+{{- if .Values.customResources.monitoringConsole.serviceAccount }}
+  serviceAccount: {{ .Values.customResources.monitoringConsole.serviceAccount }}
 {{- end }}
-{{- with .Values.monitoringConsole.serviceTemplate }}
+{{- with .Values.customResources.monitoringConsole.serviceTemplate }}
   serviceTemplate:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.monitoringConsole.tolerations }}
+{{- with .Values.customResources.monitoringConsole.tolerations }}
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.monitoringConsole.topologySpreadConstraints }}
-{{- with .Values.monitoringConsole.topologySpreadConstraints }}
+{{- if .Values.customResources.monitoringConsole.topologySpreadConstraints }}
+{{- with .Values.customResources.monitoringConsole.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- end }}
-{{- with .Values.monitoringConsole.affinity }}
+{{- with .Values.customResources.monitoringConsole.affinity }}
   affinity:
 {{ toYaml . | indent 4 }}
 {{- end }}

@@ -1,31 +1,31 @@
-{{- if or .Values.standalone.enabled .Values.sva.s1.enabled }}
+{{- if or .Values.customResources.standalone.enabled .Values.sva.s1.enabled }}
 apiVersion:  enterprise.splunk.com/v4
 kind: Standalone
 metadata:
-  name: {{ .Values.standalone.name }}
-  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.standalone.namespaceOverride }}
-{{- with .Values.standalone.additionalLabels }}
+  name: {{ .Values.customResources.standalone.name }}
+  namespace: {{ default (include "splunk-enterprise.namespace" . ) .Values.customResources.standalone.namespaceOverride }}
+{{- with .Values.customResources.standalone.additionalLabels }}
   labels:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.additionalAnnotations }}
+{{- with .Values.customResources.standalone.additionalAnnotations }}
   annotations:
 {{ toYaml . | indent 4 }}
 {{- end }}
 spec:
-{{- if .Values.standalone.serviceAccount }}
-  serviceAccount: {{ .Values.standalone.serviceAccount }}
+{{- if .Values.customResources.standalone.serviceAccount }}
+  serviceAccount: {{ .Values.customResources.standalone.serviceAccount }}
 {{- end }}
 {{- if and .Values.sva.s1.enabled .Values.sva.s1.standalones }}
   replicas: {{ .Values.sva.s1.standalones }}
-{{- else if and .Values.standalone.enabled .Values.standalone.replicaCount }}
-  replicas: {{ .Values.standalone.replicaCount }}
+{{- else if and .Values.customResources.standalone.enabled .Values.customResources.standalone.replicaCount }}
+  replicas: {{ .Values.customResources.standalone.replicaCount }}
 {{- end }}
-{{- with .Values.standalone.appRepo }}
+{{- with .Values.customResources.standalone.appRepo }}
   appRepo:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.smartstore }}
+{{- with .Values.customResources.standalone.smartstore }}
   smartstore:
 {{ toYaml . | indent 4 }}
 {{- end }}
@@ -35,11 +35,11 @@ spec:
   {{- if .Values.existingClusterManager.namespace }}
     namespace: {{ .Values.existingClusterManager.namespace }}
   {{- end }}
-{{- else if .Values.clusterManager.enabled }}
+{{- else if .Values.customResources.clusterManager.enabled }}
   clusterManagerRef:
-    name: {{ .Values.clusterManager.name }}
-  {{- if .Values.clusterManager.namespaceOverride }}
-    namespace: {{ .Values.clusterManager.namespaceOverride }}
+    name: {{ .Values.customResources.clusterManager.name }}
+  {{- if .Values.customResources.clusterManager.namespaceOverride }}
+    namespace: {{ .Values.customResources.clusterManager.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if and .Values.existingLicenseManager .Values.existingLicenseManager.name }}
@@ -48,11 +48,11 @@ spec:
   {{- if .Values.existingLicenseManager.namespace }}
     namespace: {{ .Values.existingLicenseManager.namespace }}
   {{- end }}
-{{- else if .Values.licenseManager.enabled }}
+{{- else if .Values.customResources.licenseManager.enabled }}
   licenseManagerRef:
-    name: {{ .Values.licenseManager.name }}
-  {{- if .Values.licenseManager.namespaceOverride }}
-    namespace: {{ .Values.licenseManager.namespaceOverride }}
+    name: {{ .Values.customResources.licenseManager.name }}
+  {{- if .Values.customResources.licenseManager.namespaceOverride }}
+    namespace: {{ .Values.customResources.licenseManager.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if and .Values.existingMonitoringConsole .Values.existingMonitoringConsole.name }}
@@ -61,11 +61,11 @@ spec:
   {{- if .Values.existingMonitoringConsole.namespace }}
     namespace: {{ .Values.existingMonitoringConsole.namespace }}
   {{- end }}
-{{- else if .Values.monitoringConsole.enabled }}
+{{- else if .Values.customResources.monitoringConsole.enabled }}
   monitoringConsoleRef:
-    name: {{ .Values.monitoringConsole.name }}
-  {{- if .Values.monitoringConsole.namespaceOverride }}
-    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+    name: {{ .Values.customResources.monitoringConsole.name }}
+  {{- if .Values.customResources.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.customResources.monitoringConsole.namespaceOverride }}
   {{- end }}
 {{- end }}
 {{- if .Values.image.repository }}
@@ -78,72 +78,72 @@ spec:
   imagePullSecrets:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.volumes }}
+{{- with .Values.customResources.standalone.volumes }}
   volumes:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.standalone.licenseUrl }}
-  licenseUrl: {{ .Values.standalone.licenseUrl }}
+{{- if .Values.customResources.standalone.licenseUrl }}
+  licenseUrl: {{ .Values.customResources.standalone.licenseUrl }}
 {{- end }}
-{{- if .Values.standalone.defaultsUrl }}
-  defaultsUrl: {{ .Values.standalone.defaultsUrl }}
+{{- if .Values.customResources.standalone.defaultsUrl }}
+  defaultsUrl: {{ .Values.customResources.standalone.defaultsUrl }}
 {{- end }}
-{{- if .Values.standalone.defaults }}
+{{- if .Values.customResources.standalone.defaults }}
   defaults: |-
-{{ toYaml .Values.standalone.defaults | indent 4 }}
+{{ toYaml .Values.customResources.standalone.defaults | indent 4 }}
 {{- end }}
-{{- if .Values.standalone.defaultsUrlApps }}
-  defaultsUrlApps: {{ .Values.standalone.defaultsUrlApps }}
+{{- if .Values.customResources.standalone.defaultsUrlApps }}
+  defaultsUrlApps: {{ .Values.customResources.standalone.defaultsUrlApps }}
 {{- end }}
-{{- with .Values.standalone.extraEnv }}
+{{- with .Values.customResources.standalone.extraEnv }}
   extraEnv:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.standalone.livenessInitialDelaySeconds }}
-  livenessInitialDelaySeconds: {{ .Values.standalone.livenessInitialDelaySeconds }}
+{{- if .Values.customResources.standalone.livenessInitialDelaySeconds }}
+  livenessInitialDelaySeconds: {{ .Values.customResources.standalone.livenessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.standalone.readinessInitialDelaySeconds }}
-  readinessInitialDelaySeconds: {{ .Values.standalone.readinessInitialDelaySeconds }}
+{{- if .Values.customResources.standalone.readinessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ .Values.customResources.standalone.readinessInitialDelaySeconds }}
 {{- end }}
-{{- if .Values.standalone.startupProbe }}
+{{- if .Values.customResources.standalone.startupProbe }}
   startupProbe:
-{{ toYaml .Values.standalone.startupProbe | indent 4 }}
+{{ toYaml .Values.customResources.standalone.startupProbe | indent 4 }}
 {{- end }}
-{{- if .Values.standalone.livenessProbe }}
+{{- if .Values.customResources.standalone.livenessProbe }}
   livenessProbe:
-{{ toYaml .Values.standalone.livenessProbe | indent 4 }}
+{{ toYaml .Values.customResources.standalone.livenessProbe | indent 4 }}
 {{- end }}
-{{- if .Values.standalone.readinessProbe }}
+{{- if .Values.customResources.standalone.readinessProbe }}
   readinessProbe:
-{{ toYaml .Values.standalone.readinessProbe | indent 4 }}
+{{ toYaml .Values.customResources.standalone.readinessProbe | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.etcVolumeStorageConfig }}
+{{- with .Values.customResources.standalone.etcVolumeStorageConfig }}
   etcVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.varVolumeStorageConfig }}
+{{- with .Values.customResources.standalone.varVolumeStorageConfig }}
   varVolumeStorageConfig:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.resources }}
+{{- with .Values.customResources.standalone.resources }}
   resources:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.serviceTemplate }}
+{{- with .Values.customResources.standalone.serviceTemplate }}
   serviceTemplate:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- with .Values.standalone.tolerations }}
+{{- with .Values.customResources.standalone.tolerations }}
   tolerations:
 {{ toYaml . | indent 4 }}
 {{- end }}
-{{- if .Values.standalone.topologySpreadConstraints }}
-{{- with .Values.standalone.topologySpreadConstraints }}
+{{- if .Values.customResources.standalone.topologySpreadConstraints }}
+{{- with .Values.customResources.standalone.topologySpreadConstraints }}
   topologySpreadConstraints:
 {{ toYaml . | indent 4 }}
 {{- end }}
 {{- end }}
-{{- with .Values.standalone.affinity }}
+{{- with .Values.customResources.standalone.affinity }}
   affinity:
 {{ toYaml . | indent 4 }}
 {{- end }}

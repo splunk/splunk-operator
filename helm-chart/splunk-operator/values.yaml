@@ -1,21 +1,17 @@
 splunk-operator:
   enabled: true
-
 # Splunk image
 image:
   repository: docker.io/splunk/splunk:9.4.1
-
 # The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC
 # authorization against the Kubernetes API.
 # reference: https://github.com/brancz/kube-rbac-proxy
 kubeRbacProxy:
-
   # Specify kube-rbac-proxy image
   image:
     repository: gcr.io/kubebuilder/kube-rbac-proxy
     pullPolicy: IfNotPresent
     tag: "v0.13.1"
-
   # Set resource requests and limits for kube-rbac-proxy container
   resources:
     limits:
@@ -24,39 +20,28 @@ kubeRbacProxy:
     requests:
       cpu: 5m
       memory: 64Mi
-
-
 # Splunk Operator configurations
 splunkOperator:
-
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
   image:
     repository: docker.io/splunk/splunk-operator:2.8.0
     pullPolicy: IfNotPresent
-
   # Set image pull secrets to pull image from a private registry
   imagePullSecrets: []
-
   # Give operator cluster-wide access, otherwise access is limited to operator namespace
   clusterWideAccess: true
-
   # List namespaces to be watched by Splunk Operator e.x "namespace1,namespace2", must have cluster-wide access
   # Default watches the entire cluster
   watchNamespaces: ""
-
   # Add labels to Splunk Operator deployment
   labels: {}
-
   # Add annotations to Splunk Operator deployment
   annotations: {}
-
   # Add pod annotations to Splunk Operator deployment pod
   podAnnotations: {}
-
   # Add pod labels to Splunk Operator deployment pod
   podLabels: {}
-
   # Set security context for manager container, default ensures that no child process of manager can gain more privileges than manager
   # reference: https://kubernetes.io/docs/concepts/security/pod-security-policy/#privilege-escalation
   containerSecurityContext:
@@ -70,7 +55,6 @@ splunkOperator:
         - "NET_BIND_SERVICE"
     seccompProfile:
       type: "RuntimeDefault"
-
   # Set security context for Splunk Operator pod
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#podsecuritycontext-v1-core
   securityContext:
@@ -78,13 +62,11 @@ splunkOperator:
     fsGroup: 1001
     runAsNonRoot: true
     fsGroupChangePolicy: "OnRootMismatch"
-
   # Set usage of host networking and namespace
   # reference: https://kubernetes.io/docs/concepts/security/pod-security-policy/#host-namespaces
   hostNetwork: false
   hostPID: false
   hostIPC: false
-
   # Define liveness probe to check if manager container is running
   # reference: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#types-of-probe
   livenessProbe:
@@ -93,7 +75,6 @@ splunkOperator:
       port: 8081
     initialDelaySeconds: 15
     periodSeconds: 20
-
   # Define readiness probe to check if manager container is ready for requests
   # reference: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#types-of-probe
   readinessProbe:
@@ -102,7 +83,6 @@ splunkOperator:
       port: 8081
     initialDelaySeconds: 5
     periodSeconds: 10
-
   # Define splunk operator manager service ports
   # reference: https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/
   service:
@@ -116,7 +96,6 @@ splunkOperator:
   #   port: 8080
   #   protocol: TCP
   #   targetPort: 8080
-
   # Set resource requests and limits for manager container
   resources:
     limits:
@@ -125,27 +104,21 @@ splunkOperator:
     requests:
       cpu: 1000m
       memory: 2000Mi
-
   # Specify nodes that can schedule the Splunk Operator pod
   # reference: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
   nodeSelector: {}
-
   # Specify Splunk Operator pod tolerations
   # reference: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
-
   # Define affinity scheduling rules
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#affinity-v1-core
   affinity: {}
-
   # Set duration in seconds the pod needs to terminate gracefully
   # reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#pod-v1-core
   terminationGracePeriodSeconds: 10
-
   # Set storageClassName for the PersistentVolumeClaim
   persistentVolumeClaim:
     storageClassName: ""
-
   # Specify volumes for Splunk Operator pod, append additional volumes to list
   # reference: https://kubernetes.io/docs/concepts/storage/volumes/
   volumes:
@@ -155,7 +128,6 @@ splunkOperator:
 # - name:
 #   persistentVolumeClaim:
 #     claimName:
-
   # Specify volume mounts for the manager container, append additional volume mounts to list
   # reference: https://kubernetes.io/docs/tasks/configure-pod-container/configure-volume-storage/
   volumeMounts:
@@ -163,7 +135,6 @@ splunkOperator:
     name: app-staging
 # - mountPath:
 #   name:
-
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []
 # extraManifests:
@@ -174,7 +145,6 @@ extraManifests: []
 #    spec:
 #      securityPolicy:
 #        name: "gcp-cloud-armor-policy-test"
-
 # Additional envs to the splunk-operator container
 extraEnvs: []
 # extraEnvs
