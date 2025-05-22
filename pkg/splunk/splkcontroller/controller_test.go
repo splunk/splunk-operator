@@ -19,9 +19,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"testing"
+
 	ctrl2 "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/config"
-	"testing"
 
 	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -253,7 +254,7 @@ func TestAddToManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctrl := newMockController()
 	mgr, err := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
-		Scheme: scheme.Scheme,
+		// Scheme: scheme.Scheme,
 	})
 	if err != nil {
 		t.Errorf("TestAddToManager: NewManager() returned %v; want nil", err)
