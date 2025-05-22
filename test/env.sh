@@ -1,7 +1,7 @@
 #!/bin/bash
 
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
-: "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
+: "${SPLUNK_ENTERPRISE_IMAGE:=667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64}"
 : "${CLUSTER_PROVIDER:=eks}"
 : "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
