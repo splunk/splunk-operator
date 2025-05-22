@@ -88,6 +88,7 @@ func newStandalone(name, ns string) *enterpriseApi.Standalone {
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -144,6 +145,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 				LicenseURL: "/mnt/licenses/enterprise.lic",
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 			},
 		},
@@ -181,6 +183,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApiV3.Li
 				LicenseURL: "/mnt/licenses/enterprise.lic",
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 			},
 		},
@@ -227,6 +230,7 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -262,6 +266,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -298,6 +303,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -334,6 +340,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -370,6 +377,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -412,6 +420,7 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -619,6 +628,7 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -688,6 +698,7 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) 
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image: "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
