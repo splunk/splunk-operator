@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	ctrl2 "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"testing"
 
@@ -248,27 +249,30 @@ func NewMockManager() manager.Manager {
 	return MockManager{}
 }
 
-//func TestAddToManager(t *testing.T) {
-//	c := spltest.NewMockClient()
-//	ctrl := newMockController()
-//	mgr, err := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
-//		Scheme: scheme.Scheme,
-//	})
-//	err = AddToManager(mgr, ctrl, c)
-//	if err != nil {
-//		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
-//	}
-//
-//	gvk := metav1.GroupVersionKind{
-//		Kind: "",
-//	}
-//
-//	ctrl.state.instance.SetGroupVersionKind(schema.GroupVersionKind(gvk))
-//	err = AddToManager(mgr, ctrl, c)
-//	if err == nil {
-//		t.Errorf("TestAddToManager: expected error")
-//	}
-//}
+func TestAddToManager(t *testing.T) {
+	c := spltest.NewMockClient()
+	ctrl := newMockController()
+	mgr, err := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
+		Scheme: scheme.Scheme,
+	})
+	if err != nil {
+		t.Errorf("TestAddToManager: NewManager() returned %v; want nil", err)
+	}
+	err = AddToManager(mgr, ctrl, c)
+	if err != nil {
+		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
+	}
+
+	gvk := metav1.GroupVersionKind{
+		Kind: "",
+	}
+
+	ctrl.state.instance.SetGroupVersionKind(schema.GroupVersionKind(gvk))
+	err = AddToManager(mgr, ctrl, c)
+	if err == nil {
+		t.Errorf("TestAddToManager: expected error")
+	}
+}
 
 func TestReconcile(t *testing.T) {
 	var request reconcile.Request
