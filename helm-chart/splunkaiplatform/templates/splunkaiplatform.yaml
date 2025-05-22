@@ -1,0 +1,47 @@
+# templates/splunkaiplatform.yaml
+{{- if .Capabilities.APIVersions.Has "v4.splunkai/v1" -}}
+apiVersion: v4.splunkai/v1
+kind: SplunkAIPlatform
+metadata:
+  name: {{ include "splunkaiplatform.fullname" . }}
+  labels:
+    {{- include "splunkaiplatform.labels" . | nindent 4 }}
+spec:
+  appsVolume:
+    path: {{ .Values.appsVolume.path | quote }}
+    endpoint: {{ .Values.appsVolume.endpoint | quote }}
+    region: {{ .Values.appsVolume.region | quote }}
+    secretRef: {{ .Values.appsVolume.secretRef | quote }}
+  artifactsVolume:
+    path: {{ .Values.artifactsVolume.path | quote }}
+    endpoint: {{ .Values.artifactsVolume.endpoint | quote }}
+    region: {{ .Values.artifactsVolume.region | quote }}
+    secretRef: {{ .Values.artifactsVolume.secretRef | quote }}
+  headGroupSpec:
+    serviceAccountName: {{ .Values.headGroupSpec.serviceAccountName | quote }}
+    imageRegistry: {{ .Values.headGroupSpec.imageRegistry | quote }}
+    schedulingSpec:
+      nodeSelector: {{ toYaml .Values.headGroupSpec.schedulingSpec.nodeSelector | nindent 6 }}
+      tolerations: {{ toYaml .Values.headGroupSpec.schedulingSpec.tolerations | nindent 6 }}
+      affinity: {{ toYaml .Values.headGroupSpec.schedulingSpec.affinity | nindent 6 }}
+  workerGroupSpec:
+    serviceAccountName: {{ .Values.workerGroupSpec.serviceAccountName | quote }}
+    imageRegistry: {{ .Values.workerGroupSpec.imageRegistry | quote }}
+    gpuConfigs: {{ toYaml .Values.workerGroupSpec.gpuConfigs | nindent 4 }}
+    schedulingSpec:
+      nodeSelector: {{ toYaml .Values.workerGroupSpec.schedulingSpec.nodeSelector | nindent 6 }}
+      tolerations: {{ toYaml .Values.workerGroupSpec.schedulingSpec.tolerations | nindent 6 }}
+      affinity: {{ toYaml .Values.workerGroupSpec.schedulingSpec.affinity | nindent 6 }}
+  defaultAcceleratorType: {{ .Values.defaultAcceleratorType | quote }}
+  sidecars: {{ toYaml .Values.sidecars | nindent 4 }}
+  certificateRef: {{ .Values.certificateRef | quote }}
+  clusterDomain: {{ .Values.clusterDomain | quote }}
+  splunkConfiguration: {{ toYaml .Values.splunkConfiguration | nindent 4 }}
+  weaviate:
+    replicas: {{ .Values.weaviate.replicas }}
+    resources: {{ toYaml .Values.weaviate.resources | nindent 4 }}
+    serviceAccountName: {{ .Values.weaviate.serviceAccountName | quote }}
+    nodeSelector: {{ toYaml .Values.weaviate.nodeSelector | nindent 4 }}
+    tolerations: {{ toYaml .Values.weaviate.tolerations | nindent 4 }}
+    affinity: {{ toYaml .Values.weaviate.affinity | nindent 4 }}
+{{- end -}}

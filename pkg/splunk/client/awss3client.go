@@ -25,6 +25,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -37,6 +38,7 @@ import (
 
 // blank assignment to verify that AWSS3Client implements RemoteDataClient
 var _ RemoteDataClient = &AWSS3Client{}
+var mu = sync.Mutex{}
 
 // SplunkAWSS3Client is an interface to AWS S3 client
 type SplunkAWSS3Client interface {
@@ -187,6 +189,8 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 
 // RegisterAWSS3Client will add the corresponding function pointer to the map
 func RegisterAWSS3Client() {
+	mu.Lock()
+	defer mu.Unlock()
 	wrapperObject := GetRemoteDataClientWrapper{GetRemoteDataClient: NewAWSS3Client, GetInitFunc: InitAWSClientWrapper}
 	RemoteDataClientsMap["aws"] = wrapperObject
 }

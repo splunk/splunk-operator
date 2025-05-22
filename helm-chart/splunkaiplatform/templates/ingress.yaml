@@ -1,0 +1,37 @@
+# templates/ingress.yaml
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "splunkaiplatform.fullname" . }}-ingress
+  labels:
+    {{- include "splunkaiplatform.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "splunkaiplatform.fullname" $. }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }} 
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName | quote }}
+    {{- end }}
+  {{- end }}
+{{- end }}

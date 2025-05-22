@@ -13,4 +13,7 @@ resources:
 - enterprise_v4_searchheadcluster.yaml
 - enterprise_v4_clustermanager.yaml
 - enterprise_v4_licensemanager.yaml
+- enterprise_v4_ingestioncluster.yaml
+- enterprise_v4_splunkaiplatform.yaml
+- enterprise_v4_splunkaiassistant.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
