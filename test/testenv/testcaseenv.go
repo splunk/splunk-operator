@@ -162,7 +162,7 @@ func (testenv *TestCaseEnv) setup() error {
 		}
 	}
 	testenv.initialized = true
-	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace)
+	testenv.Log.Info("testenv initialized.\n", "namespace", testenv.namespace, "splunkImage", testenv.splunkImage)
 	return nil
 }
 
