@@ -247,7 +247,7 @@ customResources:
     kindName: indexer-cluster
     additionalLabels: {}
     additionalAnnotations: {}
-    replicaCount: 2
+    replicaCount: 1
     volumes: []
     licenseUrl: ""
     defaultsUrl: ""
@@ -437,7 +437,7 @@ customResources:
     #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
     #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
   monitoringConsole:
-    enabled: true
+    enabled: false
     name: "mc"
     namespaceOverride: ""
     kindName: monitoring-console
