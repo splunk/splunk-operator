@@ -43,10 +43,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	//"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
 //log := log.WithValues("controller")
@@ -257,7 +253,7 @@ func TestAddToManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctrl := newMockController()
 	mgr, err := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
-		Scheme: scheme.Scheme,
+		Scheme: &runtime.Scheme{},
 	})
 	if err != nil {
 		t.Errorf("TestAddToManager: NewManager() returned %v; want nil", err)
