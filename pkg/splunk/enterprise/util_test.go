@@ -3216,7 +3216,7 @@ func TestGetCurrentImage(t *testing.T) {
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
+					Image:           "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64",
 				},
 				Volumes: []corev1.Volume{},
 			},

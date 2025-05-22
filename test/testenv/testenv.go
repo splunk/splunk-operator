@@ -43,7 +43,7 @@ const (
 	defaultOperatorInstallation = "false"
 
 	defaultOperatorImage = "splunk/splunk-operator"
-	defaultSplunkImage   = "splunk/splunk:latest"
+	defaultSplunkImage   = "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64"
 
 	// defaultTestTimeout is the max timeout in seconds before async test failed.
 	defaultTestTimeout = 1000000

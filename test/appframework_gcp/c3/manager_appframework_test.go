@@ -335,7 +335,7 @@ var _ = Describe("c3appfw test", func() {
 
 			// Upload V1 apps to Gcs for Monitoring Console
 			oldImage := "Refer to RELATED_SPLUNK_IMAGE_ENTERPRISE"
-			newImage := "splunk/splunk:latest"
+			newImage := "667741767953.dkr.ecr.us-west-2.amazonaws.com/arm-based/2.8.0:splunk-9.4.2-rhel-arm64"
 
 			lm, err := deployment.DeployLicenseManager(ctx, deployment.GetName())
 			cm, err := deployment.DeployClusterManager(ctx, deployment.GetName(), lm.GetName(), "", "")
