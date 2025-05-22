@@ -73,6 +73,7 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 	if err != nil {
 		return err
 	}
+
 	//default set flag to false and the check response code
 	expectedStatusFlag := false
 	for i := 0; i < len(expectedStatus); i++ {
@@ -81,8 +82,10 @@ func (c *SplunkClient) Do(request *http.Request, expectedStatus []int, obj inter
 			break
 		}
 	}
+
 	if !expectedStatusFlag {
-		return fmt.Errorf("response code=%d from %s; want %d", response.StatusCode, request.URL, expectedStatus)
+		respBody, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("response code=%d from %s; want %d; err: %s", response.StatusCode, request.URL, expectedStatus, string(respBody))
 	}
 	if obj == nil {
 		return nil
@@ -623,7 +626,11 @@ func (c *SplunkClient) DecommissionIndexerClusterPeer(enforceCounts bool) error 
 		return err
 	}
 	expectedStatus := []int{200}
-	return c.Do(request, expectedStatus, nil)
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil && strings.Contains(err.Error(), "decommission already requested") {
+		err = nil
+	}
+	return err
 }
 
 // BundlePush pushes the Cluster manager apps bundle to all the indexer peers
