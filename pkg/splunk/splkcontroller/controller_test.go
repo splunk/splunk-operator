@@ -252,13 +252,13 @@ func NewMockManager() manager.Manager {
 
 func TestAddToManager(t *testing.T) {
 	c := spltest.NewMockClient()
-	_ := newMockController()
-	_, _ := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
+	ctrl := newMockController()
+	mgr, _ := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
 		Scheme: scheme.Scheme,
 	})
-	//t.Logf("Manager: %+v", mgr)
-	//t.Logf("Controller: %+v", ctrl)
-	//t.Logf("Client: %+v", c)
+	t.Logf("Manager: %+v", mgr)
+	t.Logf("Controller: %+v", ctrl)
+	t.Logf("Client: %+v", c)
 	//if err != nil {
 	//	t.Errorf("TestAddToManager: NewManager() returned %v; want nil", err)
 	//}
