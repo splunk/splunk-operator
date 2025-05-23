@@ -34,7 +34,7 @@ var AppInfo = map[string]map[string]string{
 	"Splunk_TA_stream":                  {"V1": "7.3.0", "V2": "7.4.0", "filename": "splunk-add-on-for-stream-forwarders.tgz"},
 	"splunk_app_db_connect":             {"V1": "3.5.0", "V2": "3.5.1", "filename": "splunk-db-connect.tgz"},
 	"Splunk_Security_Essentials":        {"V1": "3.3.2", "V2": "3.3.3", "filename": "splunk-security-essentials.tgz"},
-	"SplunkEnterpriseSecuritySuite":     {"V1": "6.4.0", "V2": "6.4.1", "filename": "splunk-enterprise-security.spl"},
+	"SplunkEnterpriseSecuritySuite":     {"V1": "7.3.2", "V2": "8.0.2", "filename": "splunk-enterprise-security-8.spl"},
 	"Splunk_TA_ForIndexers":             {"V1": "1.0.0", "V2": "1.0.0", "filename": "TA_ForIndexers.spl"},
 	"test_app":                          {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app.tgz"},
 	"test_app2":                         {"V1": "1.0.0", "V2": "1.0.0", "filename": "test_app2.tgz"},
