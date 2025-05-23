@@ -18,9 +18,7 @@ package splkcontroller
 import (
 	"context"
 	"errors"
-	"k8s.io/client-go/kubernetes/scheme"
 	"net/http"
-	ctrl2 "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"testing"
 
@@ -253,10 +251,10 @@ func NewMockManager() manager.Manager {
 func TestAddToManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctrl := newMockController()
-	mgr, _ := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
-		Scheme: scheme.Scheme,
-	})
-	t.Logf("Manager: %+v", mgr)
+	//mgr, _ := ctrl2.NewManager(ctrl2.GetConfigOrDie(), ctrl2.Options{
+	//	Scheme: scheme.Scheme,
+	//})
+	//t.Logf("Manager: %+v", mgr)
 	t.Logf("Controller: %+v", ctrl)
 	t.Logf("Client: %+v", c)
 	//if err != nil {
