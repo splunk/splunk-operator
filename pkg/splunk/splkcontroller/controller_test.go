@@ -259,20 +259,20 @@ func TestAddToManager(t *testing.T) {
 	if err != nil {
 		t.Errorf("TestAddToManager: NewManager() returned %v; want nil", err)
 	}
-	err = AddToManager(mgr, ctrl, c)
-	if err != nil {
-		t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
+	// err = AddToManager(mgr, ctrl, c)
+	// if err != nil {
+	// 	t.Errorf("TestAddToManager: AddToManager() returned %v; want nil", err)
+	// }
+
+	gvk := metav1.GroupVersionKind{
+		Kind: "",
 	}
 
-	// gvk := metav1.GroupVersionKind{
-	// 	Kind: "",
-	// }
-
-	// ctrl.state.instance.SetGroupVersionKind(schema.GroupVersionKind(gvk))
-	// err = AddToManager(mgr, ctrl, c)
-	// if err == nil {
-	// 	t.Errorf("TestAddToManager: expected error")
-	// }
+	ctrl.state.instance.SetGroupVersionKind(schema.GroupVersionKind(gvk))
+	err = AddToManager(mgr, ctrl, c)
+	if err == nil {
+		t.Errorf("TestAddToManager: expected error")
+	}
 }
 
 func TestReconcile(t *testing.T) {
