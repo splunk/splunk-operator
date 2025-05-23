@@ -52,7 +52,7 @@ BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.26.0
+ENVTEST_K8S_VERSION = 1.31.0
 
 ignore-not-found ?= True
 
@@ -125,20 +125,20 @@ scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...
 
-vet: setup/ginkgo ## Run go vet against code.
+vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --keep-separate-coverprofiles --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	go build -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	go run ./cmd/main.go
 
 docker-build: #test ## Build docker image with the manager.
 	docker build -t ${IMG} .
@@ -160,20 +160,23 @@ BASE_IMAGE_VERSION ?= b2a1bec3dfbc7a14a1d84d98934dfe8fdde6eb822a211286601cf109cb
 
 docker-buildx:
 	@if [ -z "$(IMG)" ]; then \
-		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
-		exit 1; \
-	fi; \
-	if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
-		DOCKERFILE="Dockerfile.distroless"; \
-		BUILD_TAG="$(IMG)-distroless"; \
-	else \
-		DOCKERFILE="Dockerfile"; \
-		BUILD_TAG="$(IMG)"; \
-	fi; \
-	docker buildx build --push --platform="$(PLATFORMS)" \
-		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
-		--build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
-		--tag "$$BUILD_TAG" -f "$$DOCKERFILE" .
+            echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+            exit 1; \
+        fi; \
+        	docker buildx create --name project-v3-builder --use || true; \
+        	docker buildx use project-v3-builder; \
+        if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
+            DOCKERFILE="Dockerfile.distroless"; \
+            BUILD_TAG="$(IMG)-distroless"; \
+        else \
+            DOCKERFILE="Dockerfile"; \
+            BUILD_TAG="$(IMG)"; \
+        fi; \
+        docker buildx build --push --platform="$(PLATFORMS)" \
+            --build-arg BASE_IMAGE="$(BASE_IMAGE)" \
+            --build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
+            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
+        - docker buildx rm project-v3-builder || true
 
 
 
@@ -203,7 +206,7 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v4.5.5
+KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
@@ -253,7 +256,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.23.0/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.24.2/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
@@ -398,3 +401,9 @@ setup/ginkgo:
 	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
 	@echo Installing gomega
 	@go get github.com/onsi/gomega/...
+
+.PHONY: build-installer
+build-installer: manifests generate kustomize
+	mkdir -p dist
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/install.yaml

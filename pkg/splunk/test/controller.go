@@ -306,6 +306,14 @@ type MockClient struct {
 	InduceErrorKind map[string]error
 }
 
+func (c MockClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
+}
+
+func (c MockClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return true, nil
+}
+
 // RESTMapper wrapper for REST Client
 // FIXME
 func (c MockClient) RESTMapper() meta.RESTMapper {
