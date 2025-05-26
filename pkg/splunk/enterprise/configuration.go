@@ -105,15 +105,22 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 	var storageClassName string
 	var	volumeClaim corev1.PersistentVolumeClaim
 
-	// Depending on the volume type, determine storage capacity and storage class name(if configured)
-	if volumeType == splcommon.EtcVolumeStorage {
-		storageCapacity, err = splcommon.ParseResourceQuantity(spec.EtcVolumeStorageConfig.StorageCapacity, splcommon.DefaultEtcVolumeStorageCapacity)
+	switch volumeType {
+	case splcommon.EtcVolumeStorage:
+		storageCapacity, err = splcommon.ParseResourceQuantity(
+			spec.EtcVolumeStorageConfig.StorageCapacity,
+			splcommon.DefaultEtcVolumeStorageCapacity,
+		)
 		if err != nil {
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "etcStorage", err)
 		}
 		storageClassName = spec.EtcVolumeStorageConfig.StorageClassName
-	} else if volumeType == splcommon.VarVolumeStorage {
-		storageCapacity, err = splcommon.ParseResourceQuantity(spec.VarVolumeStorageConfig.StorageCapacity, splcommon.DefaultVarVolumeStorageCapacity)
+
+	case splcommon.VarVolumeStorage:
+		storageCapacity, err = splcommon.ParseResourceQuantity(
+			spec.VarVolumeStorageConfig.StorageCapacity,
+			splcommon.DefaultVarVolumeStorageCapacity,
+		)
 		if err != nil {
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "varStorage", err)
 		}
