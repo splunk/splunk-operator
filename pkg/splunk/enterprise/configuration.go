@@ -166,9 +166,13 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 						corev1.ResourceStorage: storageCapacity,
 					},
 				},
-				StorageClassName: &storageClassName,
 			},
 		}
+
+		if storageClassName != "" {
+			volumeClaim.Spec.StorageClassName = &storageClassName
+		}
+
 	}
 	
 	return volumeClaim, nil
