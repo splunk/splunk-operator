@@ -2,7 +2,7 @@
 # Overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variable in Splunk Operator manager container
 image:
   repository: ""
-  imagePullPolicy: ""
+  imagePullPolicy: "IfNotPresent"
   imagePullSecrets: []
 
 # Deploy Splunk Operator chart

@@ -141,6 +141,14 @@ jobs:
         exclude: "ChangeLog.md"
         include: "**.md"
 
+    - name: Update Splunk Operator Version in Dockerfile
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
+        include: "Dockerfile"
+
     - name: Update Splunk Enterprise Image in operator.yaml
       if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
       uses: jacobtomlinson/gha-find-replace@v3
@@ -195,10 +203,42 @@ jobs:
        mv splunk-enterprise-${{ github.event.inputs.new_operator_version }}.tgz docs/
        helm repo index --url https://splunk.github.io/splunk-operator/ docs/
 
-    - name: Reset go.mod and go.sum before creating Pull Request
+    - name: Set spec fields to {} in bundle
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "\"spec\": null"
+        replace: "\"spec\": {}"
+        include: "bundle/manifests/splunk-operator.clusterserviceversion.yaml"
+
+    - name: Update Splunk Operator Release Version in bundle
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
+        exclude: "index.yaml"
+        include: "**.yaml"
+
+    - name: Update Replaced Splunk Operator Version in bundle
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "replaces:.*"
+        replace: "replaces: splunk-operator.v${{ github.event.inputs.old_operator_version }}"
+        exclude: "index.yaml"
+        include: "**.yaml"
+
+    - name: Reset Splunk Enterprise Image in kustomization.yaml
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "docker.io/splunk/splunk:${{ github.event.inputs.new_enterprise_version }}"
+        replace: "SPLUNK_ENTERPRISE_IMAGE"
+        include: "config/default/kustomization.yaml"
+
+    - name: Reset files before creating Pull Request
       run: |
         git checkout go.sum
         git checkout go.mod
+        git checkout bundle.Dockerfile
+        git checkout bundle/metadata/annotations.yaml
         git status
 
     - name: Create Pull Request
