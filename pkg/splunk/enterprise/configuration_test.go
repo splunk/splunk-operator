@@ -74,12 +74,8 @@ func marshalAndCompare(t *testing.T, compare interface{}, method string, want st
 	if err != nil {
 		t.Errorf("%s failed to marshall", err)
 	}
-	actual := strings.ReplaceAll(string(got), " ", "")
 	want = strings.ReplaceAll(want, " ", "")
 
-	if actual != want {
-		t.Errorf("Method %s, got = %s;\nwant %s", method, got, want)
-	}
 	require.JSONEq(t, want, string(got))
 }
 
