@@ -253,8 +253,9 @@ func NewMockManager() manager.Manager {
 func TestAddToManager(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctrl := newMockController()
-	cfg, err := ctrl2.GetConfig()
-	mgr, err := ctrl2.NewManager(cfg, ctrl2.Options{
+	cfg := rest.Config{}
+
+	mgr, err := ctrl2.NewManager(&cfg, ctrl2.Options{
 		Scheme: scheme.Scheme,
 	})
 	err = AddToManager(mgr, ctrl, c)
