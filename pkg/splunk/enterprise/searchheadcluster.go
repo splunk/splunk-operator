@@ -131,7 +131,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkSearchHead)
+		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
+
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
