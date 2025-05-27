@@ -40,6 +40,8 @@ const (
 	SecretBytesSpecial = "-*&%#@,.;:/?[]{}+=-_<>"
 	// version with all possible characters use to complete after we have match minimal complexity
 	SecretBytesComplete = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-*&%#@,.;:/?[]{}+=-_<>"
+	// version when complexity disabled
+	SecretBytesSimple = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	// HexBytes used to generate random hexadecimal strings (e.g. HEC tokens)
 	HexBytes = "ABCDEF01234567890"

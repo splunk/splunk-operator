@@ -154,18 +154,9 @@ func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal 
 		fmt.Printf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
 		// b is empty here , we return error and expect caller to check for it
 		return b, fmt.Errorf("password length and complexity requirements are incompatible length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
-	} else {
-		//fmt.Printf("password length and complexity requirements are OK length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
-
-	}
-	GenerateSecretPartWithComplexity(SecretBytesLower, minlower, b)
-	GenerateSecretPartWithComplexity(SecretBytesUpper, minupper, b)
-	GenerateSecretPartWithComplexity(SecretBytesDecimal, mindecimal, b)
-	GenerateSecretPartWithComplexity(SecretBytesSpecial, minspecial, b)
-	// complete gaps
-	for i := range b {
-		if b[i] == 0 {
-			// we try a random position from 0 to length-1 where length is secret size
+	} else if minlower+minupper+mindecimal+minspecial == 0 {
+		// disable complexity , we also use SecretBytesNormal instead of SecretBytesComplete
+		for i := range b {
 			// Use crypto/rand to get a secure random index
 			var indexByte [1]byte
 			_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
@@ -173,7 +164,28 @@ func GenerateSecretWithComplexity(n int, minlower int, minupper int, mindecimal 
 				return b, err
 			}
 
-			b[i] = SecretBytesComplete[int(indexByte[0])%len(SecretBytesComplete)]
+			b[i] = SecretBytesSimple[int(indexByte[0])%len(SecretBytesSimple)]
+		}
+	} else {
+		//fmt.Printf("password length and complexity requirements are OK length=%d, minlower=%d , minupper=%d, mindecimal=%d, minspecial=%d\n", n, minlower, minupper, mindecimal, minspecial)
+
+		GenerateSecretPartWithComplexity(SecretBytesLower, minlower, b)
+		GenerateSecretPartWithComplexity(SecretBytesUpper, minupper, b)
+		GenerateSecretPartWithComplexity(SecretBytesDecimal, mindecimal, b)
+		GenerateSecretPartWithComplexity(SecretBytesSpecial, minspecial, b)
+		// complete gaps
+		for i := range b {
+			if b[i] == 0 {
+				// we try a random position from 0 to length-1 where length is secret size
+				// Use crypto/rand to get a secure random index
+				var indexByte [1]byte
+				_, err := rand.Read(indexByte[0:1]) // 0:1 turn array into slice to be used with Read and the function will put the random value in indexByte[0]
+				if err != nil {
+					return b, err
+				}
+
+				b[i] = SecretBytesComplete[int(indexByte[0])%len(SecretBytesComplete)]
+			}
 		}
 	}
 	return b, nil
