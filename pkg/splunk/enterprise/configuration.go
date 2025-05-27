@@ -153,8 +153,6 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			},
 		}
 	} else {
-		volumeClaim.Spec.StorageClassName = &storageClassName
-
 		volumeClaim = corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
@@ -168,6 +166,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 						corev1.ResourceStorage: storageCapacity,
 					},
 				},
+				StorageClassName: &storageClassName,
 			},
 		}
 	}
