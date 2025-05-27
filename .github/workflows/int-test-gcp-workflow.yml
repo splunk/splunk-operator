@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - CSPL_3584
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest

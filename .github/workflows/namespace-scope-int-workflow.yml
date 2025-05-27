@@ -2,6 +2,9 @@ name: Namespace-scope Operator Integration Test WorkFlow
 on:
   schedule:
     - cron: "0 02 * * WED,SUN"
+  push:
+    branches:
+      - CSPL_3584
 jobs:
   int-tests:
     strategy:
