@@ -1427,6 +1427,66 @@ func TestAddStorageVolumes(t *testing.T) {
 		t.Errorf("Unable to idenitfy incorrect VarVolumeStorageConfig resource quantity")
 	}
 
+	// test if adminManagedPV logic works
+
+	labels = map[string]string{
+		"app.kubernetes.io/component": "indexer",
+		"app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/name": "cluster-manager",
+	}
+
+	// adjust CR annotations
+	cr = enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "CM",
+			Namespace: "test",
+			Annotations: map[string]string{
+				"enterprise.splunk.com/admin-managed-pv": "true",
+			},
+			Labels: labels,
+		},
+	}
+
+	spec = &enterpriseApi.CommonSplunkSpec{
+		EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+			StorageCapacity:  "35Gi",
+			StorageClassName: "gp2",
+		},
+		VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
+			StorageCapacity:  "25Gi",
+			StorageClassName: "gp2",
+		},
+	}
+
+	// add labels and annotations to the statefulset configuration
+	statefulSet = &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "StatefulSet",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: cr.GetNamespace(),
+			Annotations: cr.GetAnnotations(),
+			Labels: cr.GetLabels(),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Image: "test",
+							Name:  "splunk",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	test(`{"apiVersion":"apps/v1","kind":"StatefulSet","metadata":{"annotations":{"enterprise.splunk.com/admin-managed-pv":"true"},"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"test-statefulset","namespace":"test"},"spec":{"replicas":1,"selector":null,"serviceName":"","template":{"metadata":{"creationTimestamp":null},"spec":{"containers":[{"image":"test","name":"splunk","resources":{},"volumeMounts":[{"mountPath":"/opt/splunk/etc","name":"pvc-etc"},{"mountPath":"/opt/splunk/var","name":"pvc-var"},{"mountPath":"/mnt/probes","name":"splunk-test-probe-configmap"}]}],"volumes":[{"configMap":{"defaultMode":365,"name":"splunk-test-probe-configmap"},"name":"splunk-test-probe-configmap"}]}},"updateStrategy":{},"volumeClaimTemplates":[{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"pvc-etc","namespace":"test"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"35Gi"}},"selector":{"matchLabels":{"app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/name":"cluster-manager"}}},"status":{}},{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"cluster-manager"},"name":"pvc-var","namespace":"test"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"25Gi"}},"selector":{"matchLabels":{"app.kubernetes.io/instance":"splunk-CM-cluster-manager","app.kubernetes.io/name":"cluster-manager"}}},"status":{}}]},"status":{"availableReplicas":0,"replicas":0}}`)
 }
 
 func TestGetVolumeSourceMountFromConfigMapData(t *testing.T) {
