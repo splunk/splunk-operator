@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	splkcontroller "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"os"
@@ -43,7 +44,6 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"github.com/splunk/splunk-operator/pkg/config"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -108,7 +108,7 @@ func main() {
 	// Logging setup
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	options := ctrl.Options{
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Metrics: metricsserver.Options{
 			BindAddress:    metricsAddr,
 			FilterProvider: filters.WithAuthenticationAndAuthorization,
@@ -119,22 +119,23 @@ func main() {
 		LeaderElectionID:       "270bec8c.splunk.com",
 		LeaseDuration:          &leaseDuration,
 		RenewDeadline:          &renewDeadline,
-	}
+	})
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), config.ManagerOptionsWithNamespaces(setupLog, options))
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	if err = (&splkcontroller.ClusterMasterReconciler{
+	if err = (&splkcontroller.ClusterManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
+		fmt.Printf(" error - %v", err)
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.ClusterManagerReconciler{
+	fmt.Printf("%v", err)
+	if err = (&splkcontroller.ClusterMasterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
