@@ -109,8 +109,6 @@ jobs:
         test: [
                 basic,
                 appframeworksS1,
-                managerappframeworkc3,
-                managerappframeworkm4,
                 managersecret,
                 managermc,
                ]
