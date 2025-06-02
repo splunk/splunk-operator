@@ -103,7 +103,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 	var storageCapacity resource.Quantity
 	var err error
 	var storageClassName string
-	var	volumeClaim corev1.PersistentVolumeClaim
+	var volumeClaim corev1.PersistentVolumeClaim
 
 	// Depending on the volume type, determine storage capacity and storage class name (if configured)
 	switch volumeType {
@@ -139,14 +139,14 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-				Resources: corev1.ResourceRequirements{
+				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceStorage: storageCapacity,
 					},
 				},
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"app.kubernetes.io/name": labels["app.kubernetes.io/name"],
+						"app.kubernetes.io/name":     labels["app.kubernetes.io/name"],
 						"app.kubernetes.io/instance": labels["app.kubernetes.io/instance"],
 					},
 				},
