@@ -567,7 +567,7 @@ func TestRemoveOwenerReferencesForSecretObjectsReferredBySmartstoreVolumes(t *te
 	}
 
 	// Smartstore volume config with non-existing secret objects
-	err = DeleteOwnerReferencesForResources(ctx, client, &cr, &cr.Spec.SmartStore, SplunkClusterMaster)
+	err = DeleteOwnerReferencesForResources(ctx, client, &cr, SplunkClusterMaster)
 	if err == nil {
 		t.Errorf("Should report an error, when the secret objects doesn't exist")
 	}
