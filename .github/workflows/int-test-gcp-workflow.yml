@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - cspl-3702-fix-script-variables-int-tests
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
