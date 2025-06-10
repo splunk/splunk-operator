@@ -22,23 +22,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SplunkAIPlatform is the Schema for the SplunkAIPlatform API
+// AIPlatform is the Schema for the AIPlatform API
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=splunkaiplatforms,scope=Namespaced,shortName=spai
+// +kubebuilder:resource:path=aiplatforms,scope=Namespaced,shortName=spai
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-type SplunkAIPlatform struct {
+type AIPlatform struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SplunkAIPlatformSpec   `json:"spec,omitempty"`
-	Status SplunkAIPlatformStatus `json:"status,omitempty"`
+	Spec   AIPlatformSpec   `json:"spec,omitempty"`
+	Status AIPlatformStatus `json:"status,omitempty"`
 }
 
-// SplunkAIPlatformSpec defines the desired state
-type SplunkAIPlatformSpec struct {
+// AIPlatformSpec defines the desired state
+type AIPlatformSpec struct {
 	AppsVolume      AiVolumeSpec `json:"appsVolume,omitempty"`
 	ArtifactsVolume AiVolumeSpec `json:"artifactsVolume,omitempty"`
 
@@ -58,7 +58,8 @@ type SplunkAIPlatformSpec struct {
 	// SplunkConfiguration instance reference
 	SplunkConfiguration SplunkConfiguration `json:"splunkConfiguration,omitempty"`
 
-	Weaviate WeaviateSpec `json:"weaviate,omitempty"`
+	Weaviate       WeaviateSpec     `json:"weaviate,omitempty"`
+	SchedulingSpec `json:",inline"` // inlines NodeSelector, Tolerations, Affinity
 }
 
 type WeaviateSpec struct {
@@ -144,7 +145,7 @@ type SidecarConfig struct {
 
 type AiVolumeSpec struct {
 	// Remote volume URI in the format s3://bucketname/<path prefix>
-	Path string `json:"path"`
+	Path string `json:"path"` // s3://bucketname/<path prefix> or gs://bucketname/<path prefix> or azure://containername/<path prefix>
 
 	// optional override endpoint (only really needed for S3-compatible like MinIO)
 	Endpoint string `json:"endpoint,omitempty"`
@@ -156,8 +157,8 @@ type AiVolumeSpec struct {
 	SecretRef string `json:"secretRef"`
 }
 
-// SplunkAIPlatformStatus defines observed state
-type SplunkAIPlatformStatus struct {
+// AIPlatformStatus defines observed state
+type AIPlatformStatus struct {
 	RayServiceName      string              `json:"rayServiceName,omitempty"`
 	VectorDbServiceName string              `json:"vectorDbServiceName,omitempty"`
 	RayServiceStatus    rayv1.ServiceStatus `json:"rayServiceStatus,omitempty"`
@@ -166,12 +167,12 @@ type SplunkAIPlatformStatus struct {
 }
 
 // +kubebuilder:object:root=true
-type SplunkAIPlatformList struct {
+type AIPlatformList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []SplunkAIPlatform `json:"items"`
+	Items           []AIPlatform `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&SplunkAIPlatform{}, &SplunkAIPlatformList{})
+	SchemeBuilder.Register(&AIPlatform{}, &AIPlatformList{})
 }

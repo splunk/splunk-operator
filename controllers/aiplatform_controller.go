@@ -1,4 +1,4 @@
-// controllers/splunkaiplatform_controller.go
+// controllers/aiplatform_controller.go
 
 // SPDX-License-Identifier: Apache-2.0
 package controllers
@@ -15,9 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=splunkaiplatforms,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=splunkaiplatforms/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=splunkaiplatforms/finalizers,verbs=update
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=aiplatforms,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=aiplatforms/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=aiplatforms/finalizers,verbs=update
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=opentelemetry.io,resources=opentelemetrycollectors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
@@ -34,15 +34,15 @@ import (
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;get;list;watch;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;get;list;watch;update;patch;delete
 
-// SplunkAIPlatformReconciler reconciles a SplunkAIPlatform
-type SplunkAIPlatformReconciler struct {
+// AIPlatformReconciler reconciles a AIPlatform
+type AIPlatformReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
-func (r *SplunkAIPlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	p := &enterpriseApi.SplunkAIPlatform{}
+func (r *AIPlatformReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	p := &enterpriseApi.AIPlatform{}
 	if err := r.Get(ctx, req.NamespacedName, p); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -51,7 +51,7 @@ func (r *SplunkAIPlatformReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 // --- 8️⃣ reconcileStatus: update CR status/conditions ---
-func (r *SplunkAIPlatformReconciler) reconcileStatus(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (r *AIPlatformReconciler) reconcileStatus(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	p.Status.ObservedGeneration = p.Generation
 	cond := metav1.Condition{
 		Type:               "Ready",
@@ -65,8 +65,8 @@ func (r *SplunkAIPlatformReconciler) reconcileStatus(ctx context.Context, p *ent
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *SplunkAIPlatformReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AIPlatformReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.SplunkAIPlatform{}).
+		For(&enterpriseApi.AIPlatform{}).
 		Complete(r)
 }

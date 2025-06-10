@@ -43,6 +43,7 @@ import (
 	"github.com/splunk/splunk-operator/controllers"
 	debug "github.com/splunk/splunk-operator/controllers/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
+
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -187,18 +188,18 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
-	if err = (&controllers.SplunkAIPlatformReconciler{
+	if err = (&controllers.AIPlatformReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SplunkAIPlatform")
+		setupLog.Error(err, "unable to create controller", "controller", "AIPlatform")
 		os.Exit(1)
 	}
-	if err = (&controllers.SplunkAIAssistantReconciler{
+	if err = (&controllers.AIServiceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SplunkAIAssistant")
+		setupLog.Error(err, "unable to create controller", "controller", "AIService")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

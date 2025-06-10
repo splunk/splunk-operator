@@ -491,7 +491,7 @@ const TestDefaultApplicationsYaml = `applications:
           SECRETS_FILE_PATH: /home/ray/secrets.json`
 
 // --- 5️⃣ ReconcileApplicationsConfigMap: bootstrap user‐editable apps fragment ---
-func (b *Builder) ReconcileApplicationsConfigMap(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (b *Builder) ReconcileApplicationsConfigMap(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 		Name:      p.Name + "-applications",
 		Namespace: p.Namespace,

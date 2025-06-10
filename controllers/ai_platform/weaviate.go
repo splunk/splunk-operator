@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func (r *AIPlatformReconciler) ReconcileWeaviateDatabaseStatus(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (r *AIPlatformReconciler) ReconcileWeaviateDatabaseStatus(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	// 1️⃣ Fetch the up-to-date StatefulSet for Weaviate
 	sts := &appsv1.StatefulSet{}
 	key := types.NamespacedName{Namespace: p.Namespace, Name: fmt.Sprintf("%s-weaviate", p.Name)}
@@ -49,7 +49,7 @@ func (r *AIPlatformReconciler) ReconcileWeaviateDatabaseStatus(ctx context.Conte
 }
 
 // ReconcileWeaviateDatabase manages ServiceAccount, StatefulSet, and Service for Weaviate
-func (r *AIPlatformReconciler) ReconcileWeaviateDatabase(ctx context.Context, instance *enterpriseApi.SplunkAIPlatform) error {
+func (r *AIPlatformReconciler) ReconcileWeaviateDatabase(ctx context.Context, instance *enterpriseApi.AIPlatform) error {
 	// Resolve Weaviate image from env
 	weaviateImage := os.Getenv("RELATED_IMAGE_WEAVIATE")
 	if weaviateImage == "" {

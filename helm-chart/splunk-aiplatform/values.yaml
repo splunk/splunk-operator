@@ -1,12 +1,12 @@
 # values.yaml
-# Default values for splunkaiplatform.
+# Default values for aiplatform.
 # Users can override these (e.g. via --values) to configure both the CR and the Ingress.
 
 # Metadata overrides:
 nameOverride: ""
 fullnameOverride: ""
 
-# --- SplunkAIPlatform CR spec ---
+# --- AIPlatform CR spec ---
 appsVolume:
   path: "s3://my-bucket/apps"
   region: "us-west-2"
@@ -61,7 +61,7 @@ weaviate:
   tolerations: []
   affinity: {}
 
-# --- Service for exposing the SplunkAIPlatform API or UI ---
+# --- Service for exposing the AIPlatform API or UI ---
 service:
   type: ClusterIP
   port: 8080

@@ -119,7 +119,7 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
-  kind: SplunkAIPlatform
+  kind: AIPlatform
   path: github.com/splunk/splunk-operator/api/v4
   version: v4
 - api:
@@ -128,7 +128,7 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
-  kind: SplunkAIAssistant
+  kind: AIAssistant
   path: github.com/splunk/splunk-operator/api/v4
   version: v4
 version: "3"

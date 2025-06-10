@@ -84,6 +84,8 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - aiplatforms
+  - aiservices
   - clustermanagers
   - clustermasters
   - indexerclusters
@@ -91,8 +93,6 @@ rules:
   - licensemasters
   - monitoringconsoles
   - searchheadclusters
-  - splunkaiassistants
-  - splunkaiplatforms
   - standalones
   verbs:
   - create
@@ -105,6 +105,8 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - aiplatforms/finalizers
+  - aiservices/finalizers
   - clustermanagers/finalizers
   - clustermasters/finalizers
   - indexerclusters/finalizers
@@ -112,14 +114,14 @@ rules:
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
   - searchheadclusters/finalizers
-  - splunkaiassistants/finalizers
-  - splunkaiplatforms/finalizers
   - standalones/finalizers
   verbs:
   - update
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - aiplatforms/status
+  - aiservices/status
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
@@ -127,8 +129,6 @@ rules:
   - licensemasters/status
   - monitoringconsoles/status
   - searchheadclusters/status
-  - splunkaiassistants/status
-  - splunkaiplatforms/status
   - standalones/status
   verbs:
   - get

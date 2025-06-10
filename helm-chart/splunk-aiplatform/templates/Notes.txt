@@ -1,6 +1,6 @@
 # templates/NOTES.txt
-1. Your SplunkAIPlatform custom resource has been created:
-   kubectl get splunkaiplatform {{ include "splunkaiplatform.fullname" . }}
+1. Your AIPlatform custom resource has been created:
+   kubectl get aiplatform {{ include "aiplatform.fullname" . }}
 
 2. If you enabled Ingress:
    * Host: {{ (index .Values.ingress.hosts 0).host }}

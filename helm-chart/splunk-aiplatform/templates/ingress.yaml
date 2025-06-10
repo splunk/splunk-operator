@@ -3,9 +3,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "splunkaiplatform.fullname" . }}-ingress
+  name: {{ include "aiplatform.fullname" . }}-ingress
   labels:
-    {{- include "splunkaiplatform.labels" . | nindent 4 }}
+    {{- include "aiplatform.labels" . | nindent 4 }}
   annotations:
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
 spec:
@@ -19,7 +19,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "splunkaiplatform.fullname" $. }}
+                name: {{ include "aiplatform.fullname" $. }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}

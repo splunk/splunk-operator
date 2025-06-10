@@ -7,7 +7,7 @@
 1. Key concepts and terminology
 2. Prerequisites needed before you begin
 3. How to install the Splunk Operator
-4. Understanding the custom resources: **SplunkAIPlatform** and **SplunkAIAssistant**
+4. Understanding the custom resources: **AIPlatform** and **AIService**
 5. Field-by-field explanation of each resource spec
 6. Sample YAML manifests you can use right away
 7. Step-by-step deployment instructions
@@ -20,7 +20,7 @@
 
 * **Kubernetes**: A system to run containerized applications.
 * **Operator**: A Kubernetes controller that simplifies deployment and management of applications.
-* **Custom Resource Definition (CRD)**: A way to extend Kubernetes with new object types, like `SplunkAIPlatform`.
+* **Custom Resource Definition (CRD)**: A way to extend Kubernetes with new object types, like `AIPlatform`.
 * **Ray**: A framework for distributed computing (used here for AI workloads).
 * **Weaviate**: A vector database for storing AI embeddings.
 * **Sidecar**: An extra container that runs alongside your main application container to add functionality (logging, metrics, etc.).
@@ -76,7 +76,7 @@ To grant pods access to your object storage buckets (`s3://`, `gcs://`, `azure:/
       aadpodidentitybinding: my-azure-identity-binding
   ```
 
-Use this ServiceAccount in your `SplunkAIPlatform.spec.headGroupSpec.serviceAccountName` and `workerGroupSpec.serviceAccountName`, as well as in `SplunkAIAssistant.spec.serviceAccountName`.
+Use this ServiceAccount in your `AIPlatform.spec.headGroupSpec.serviceAccountName` and `workerGroupSpec.serviceAccountName`, as well as in `AIService.spec.serviceAccountName`.
 
 ---
 
@@ -118,14 +118,14 @@ We introduce two new CRDs:
 
 | CRD Name          | Short Name | Purpose                                              |
 | ----------------- | ---------- | ---------------------------------------------------- |
-| SplunkAIPlatform  | spai       | Runs distributed AI jobs on a Ray cluster + Weaviate |
-| SplunkAIAssistant | (none)     | Middleware service between Splunk UI and AI Platform |
+| AIPlatform  | spai       | Runs distributed AI jobs on a Ray cluster + Weaviate |
+| AIService | (none)     | Middleware service between Splunk UI and AI Platform |
 
 These CRDs let you tell the operator how to create and manage AI workloads.
 
 ---
 
-### 4. SplunkAIPlatform Spec Explained
+### 4. AIPlatform Spec Explained
 
 Below is a simplified table of key fields. All fields are optional unless marked **required**.
 
@@ -144,7 +144,7 @@ Below is a simplified table of key fields. All fields are optional unless marked
 
 ---
 
-### 5. SplunkAIAssistant Spec Explained
+### 5. AIService Spec Explained
 
 This CR connects the Splunk UI, AI Platform, and Weaviate.
 
@@ -153,7 +153,7 @@ This CR connects the Splunk UI, AI Platform, and Weaviate.
 | `taskVolume.path`     | yes       | Storage URI (e.g., `s3://bucket/tasks`)                     |
 | `SplunkConfiguration` | yes       | Splunk endpoint, token, and secret                          |
 | `VectorDbUrl`         | yes       | URL to your Weaviate service (e.g., `http://weaviate:8080`) |
-| `SplunkAIPlatformRef` | yes       | Link to the `SplunkAIPlatform` resource that you created    |
+| `AIPlatformRef` | yes       | Link to the `AIPlatform` resource that you created    |
 | `replicas`            | no        | Number of middleware pods (default: 1)                      |
 | `serviceAccountName`  | no        | Kubernetes service account for the assistant pods           |
 | `Metrics.enabled`     | no        | Turn on Prometheus metrics scraping                         |
@@ -165,7 +165,7 @@ This CR connects the Splunk UI, AI Platform, and Weaviate.
 
 Copy these manifests into files and apply them; then customize for your environment.
 
-#### 6.1 SplunkAIPlatform Example
+#### 6.1 AIPlatform Example
 
 ````yaml
 apiVersion: cert-manager.io/v1
@@ -202,7 +202,7 @@ spec:
     secretName: root-secret
 ---
 apiVersion: enterprise.splunk.com/v4
-kind: SplunkAIPlatform
+kind: AIPlatform
 metadata:
   name: model-endpoints-vivekr
   namespace: test
@@ -360,7 +360,7 @@ spec:
         effect: NoSchedule
 ```yaml
 apiVersion: v4.splunk.cloud/v1
-kind: SplunkAIPlatform
+kind: AIPlatform
 metadata:
   name: my-ai-platform
 spec:
@@ -386,7 +386,7 @@ spec:
     replicas: 1
 ````
 
-#### 6.2 SplunkAIAssistant Example
+#### 6.2 AIService Example
 
 ````yaml
 apiVersion: cert-manager.io/v1
@@ -399,7 +399,7 @@ spec:
 
 ---
 apiVersion: enterprise.splunk.com/v4
-kind: SplunkAIAssistant
+kind: AIService
 metadata:
   name: my-ai-assistant
   namespace: test
@@ -414,10 +414,10 @@ spec:
     crNamespace: test
 
   # 2) Point to your AI platform (which also sets VectorDbUrl for you)
-  # splunkAIPlatformRef:
+  # aiPlatformRef:
   #   name: example-ai-platform
   #   namespace: test
-  splunkAIPlatformUrl: model-endpoints-vivekr-head-svc.test.svc.cluster.local:8000
+  aiPlatformUrl: model-endpoints-vivekr-head-svc.test.svc.cluster.local:8000
   vectorDbUrl: model-endpoints-vivekr-weaviate.test.svc.cluster.local
 
   # 3) Deploy two replicas
@@ -467,7 +467,7 @@ spec:
 
 ```yaml
 apiVersion: v4.splunk.cloud/v1
-kind: SplunkAIAssistant
+kind: AIService
 metadata:
   name: my-ai-assistant
 spec:
@@ -479,8 +479,8 @@ spec:
     secretRef:
       name: splunk-secret
   VectorDbUrl: http://my-ai-platform-ray-service:8080
-  SplunkAIPlatformRef:
-    kind: SplunkAIPlatform
+  AIPlatformRef:
+    kind: AIPlatform
     name: my-ai-platform
   replicas: 1
 ````
@@ -492,8 +492,8 @@ spec:
 1. **Apply CRDs**
 
    ```bash
-   kubectl apply -f config/crd/bases/v4.splunk.cloud_splunkaiplatforms.yaml
-   kubectl apply -f config/crd/bases/v4.splunk.cloud_splunkaiassistants.yaml
+   kubectl apply -f config/crd/bases/v4.splunk.cloud_aiplatforms.yaml
+   kubectl apply -f config/crd/bases/v4.splunk.cloud_aiservices.yaml
    ```
 2. **Create Secrets** for Splunk credentials and storage access
 3. **Deploy the AI Platform**
@@ -514,7 +514,7 @@ spec:
 6. **Check Readiness**
 
    ```bash
-   kubectl wait --for=condition=Ready splunkaiassistant/my-ai-assistant --timeout=5m
+   kubectl wait --for=condition=Ready aiservice/my-ai-assistant --timeout=5m
    ```
 
 ---

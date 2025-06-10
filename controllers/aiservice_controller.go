@@ -56,9 +56,9 @@ func init() {
 	metrics.Registry.MustRegister(reconcileHistogram)
 }
 
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=splunkaiassistants,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=splunkaiassistants/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=splunkaiassistants/finalizers,verbs=update
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=aiservices,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=aiservices/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=aiservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=opentelemetry.io,resources=opentelemetrycollectors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
@@ -69,20 +69,20 @@ func init() {
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=podmonitors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 
-// SplunkAIAssistantReconciler reconciles a SplunkAIAssistant object
-type SplunkAIAssistantReconciler struct {
+// AIServiceReconciler reconciles a AIService object
+type AIServiceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
 // Reconcile runs reconciliation stages for the CR.
-func (r *SplunkAIAssistantReconciler) Reconcile(
+func (r *AIServiceReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	ai := &enterpriseApi.SplunkAIAssistant{}
+	ai := &enterpriseApi.AIService{}
 	if err := r.Get(ctx, req.NamespacedName, ai); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -96,9 +96,9 @@ func (r *SplunkAIAssistantReconciler) Reconcile(
 
 	stages := []struct {
 		name string
-		fn   func(context.Context, *enterpriseApi.SplunkAIAssistant) error
+		fn   func(context.Context, *enterpriseApi.AIService) error
 	}{
-		{"Validate", r.validateSplunkAIAssistant},
+		{"Validate", r.validateAIService},
 		{"ServiceAccount", r.reconcileServiceAccount},
 		{"FluentBitConfig", r.reconcileFluentBitConfig},
 		{"Certificate", r.reconcileCertificate},
@@ -128,7 +128,7 @@ func (r *SplunkAIAssistantReconciler) Reconcile(
 			cond.Message = err.Error()
 			//r.Recorder.Event(ai, corev1.EventTypeWarning, stage.name+"Failed", err.Error())
 		} else {
-		//		r.Recorder.Event(ai, corev1.EventTypeNormal, stage.name+"Succeeded", "stage succeeded")
+			//		r.Recorder.Event(ai, corev1.EventTypeNormal, stage.name+"Succeeded", "stage succeeded")
 		}
 		conditions = append(conditions, cond)
 		if err != nil {
@@ -149,11 +149,11 @@ func (r *SplunkAIAssistantReconciler) Reconcile(
 }
 
 // SetupWithManager registers the controller and owned resources.
-func (r *SplunkAIAssistantReconciler) SetupWithManager(
+func (r *AIServiceReconciler) SetupWithManager(
 	mgr ctrl.Manager,
 ) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.SplunkAIAssistant{}).
+		For(&enterpriseApi.AIService{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&certmanagerv1.Certificate{}).
 		Owns(&batchv1.Job{}).
@@ -163,35 +163,35 @@ func (r *SplunkAIAssistantReconciler) SetupWithManager(
 		Complete(r)
 }
 
-// validateSplunkAIAssistant ensures required fields are set and defaults.
-func (r *SplunkAIAssistantReconciler) validateSplunkAIAssistant(
+// validateAIService ensures required fields are set and defaults.
+func (r *AIServiceReconciler) validateAIService(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	if os.Getenv("RELATED_IMAGE_POST_INSTALL_HOOK") == "" {
 		return fmt.Errorf("RELATED_IMAGE_POST_INSTALL_HOOK must be set")
 	}
-	// Populate URLs from SplunkAIPlatformRef if provided
-	if ai.Spec.SplunkAIPlatformRef.Name != "" {
-		plat := &enterpriseApi.SplunkAIPlatform{}
+	// Populate URLs from AIPlatformRef if provided
+	if ai.Spec.AIPlatformRef.Name != "" {
+		plat := &enterpriseApi.AIPlatform{}
 		if err := r.Get(
 			ctx,
-			client.ObjectKey{Namespace: ai.Namespace, Name: ai.Spec.SplunkAIPlatformRef.Name},
+			client.ObjectKey{Namespace: ai.Namespace, Name: ai.Spec.AIPlatformRef.Name},
 			plat,
 		); err != nil {
-			return fmt.Errorf("fetching SplunkAIPlatform: %w", err)
+			return fmt.Errorf("fetching AIPlatform: %w", err)
 		}
-		ai.Spec.SplunkAIPlatformUrl = fmt.Sprintf("%s.%s.svc.%s:8000", plat.Status.RayServiceName, ai.Spec.SplunkAIPlatformRef.Namespace, "cluster.local")
-		ai.Spec.VectorDbUrl = fmt.Sprintf("%s.%s.svc.%s", plat.Status.VectorDbServiceName, ai.Spec.SplunkAIPlatformRef.Namespace, "cluster.local")
+		ai.Spec.AIPlatformUrl = fmt.Sprintf("%s.%s.svc.%s:8000", plat.Status.RayServiceName, ai.Spec.AIPlatformRef.Namespace, "cluster.local")
+		ai.Spec.VectorDbUrl = fmt.Sprintf("%s.%s.svc.%s", plat.Status.VectorDbServiceName, ai.Spec.AIPlatformRef.Namespace, "cluster.local")
 	}
-	if ai.Spec.SplunkAIPlatformRef.Name == "" && ai.Spec.SplunkAIPlatformUrl == "" {
+	if ai.Spec.AIPlatformRef.Name == "" && ai.Spec.AIPlatformUrl == "" {
 		return fmt.Errorf(
-			"either SplunkAIPlatformRef.Name or SplunkAIPlatformUrl must be set",
+			"either AIPlatformRef.Name or AIPlatformUrl must be set",
 		)
 	}
-	if ai.Spec.SplunkAIPlatformUrl == "" && ai.Spec.VectorDbUrl == "" {
+	if ai.Spec.AIPlatformUrl == "" && ai.Spec.VectorDbUrl == "" {
 		return fmt.Errorf(
-			"either SplunkAIPlatformUrl or VectorDbUrl must be set",
+			"either AIPlatformUrl or VectorDbUrl must be set",
 		)
 	}
 	// Default resources
@@ -217,9 +217,9 @@ func (r *SplunkAIAssistantReconciler) validateSplunkAIAssistant(
 }
 
 // reconcileServiceAccount creates or reuses a ServiceAccount.
-func (r *SplunkAIAssistantReconciler) reconcileServiceAccount(
+func (r *AIServiceReconciler) reconcileServiceAccount(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	if ai.Spec.ServiceAccountName == "" {
 
@@ -246,9 +246,9 @@ func (r *SplunkAIAssistantReconciler) reconcileServiceAccount(
 }
 
 // reconcileCertificate manages cert-manager Certificate for mTLS.
-func (r *SplunkAIAssistantReconciler) reconcileCertificate(
+func (r *AIServiceReconciler) reconcileCertificate(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	if !ai.Spec.MTLS.Enabled || ai.Spec.MTLS.Termination != "operator" {
 		return nil
@@ -286,9 +286,9 @@ func (r *SplunkAIAssistantReconciler) reconcileCertificate(
 }
 
 // reconcilePostInstallHook creates and watches the schema setup Job.
-func (r *SplunkAIAssistantReconciler) reconcilePostInstallHook(
+func (r *AIServiceReconciler) reconcilePostInstallHook(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	hookImage := os.Getenv("RELATED_IMAGE_POST_INSTALL_HOOK")
 	if ai.Spec.VectorDbUrl == "" {
@@ -354,9 +354,9 @@ func (r *SplunkAIAssistantReconciler) reconcilePostInstallHook(
 }
 
 // reconcileSAIADeployment ensures the main Deployment exists and is configured.
-func (r *SplunkAIAssistantReconciler) reconcileSAIADeployment(
+func (r *AIServiceReconciler) reconcileSAIADeployment(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	// Build volumes
 	volumes := []corev1.Volume{
@@ -400,16 +400,16 @@ func (r *SplunkAIAssistantReconciler) reconcileSAIADeployment(
 
 	// Add required env variables
 	extraEnv := []corev1.EnvVar{
-		{Name: "IAC_URL", Value: "test.iac.url"}, //FIXME remove this
+		{Name: "IAC_URL", Value: "test.iac.url"},                   //FIXME remove this
 		{Name: "API_GATEWAY_HOST", Value: "test.api.gateway.host"}, //FIXME remove this
-		{Name: "SCPAUTH_SECRET_PATH", Value: "stest-secret-path"}, //FIXME remove this
-		{Name: "AUTH_PROVIDER", Value: "scp"}, // FIXME remove this
-		{Name: "ENABLE_AUTHZ", Value: "false"}, //FIXME remove this
+		{Name: "SCPAUTH_SECRET_PATH", Value: "stest-secret-path"},  //FIXME remove this
+		{Name: "AUTH_PROVIDER", Value: "scp"},                      // FIXME remove this
+		{Name: "ENABLE_AUTHZ", Value: "false"},                     //FIXME remove this
 		{Name: "FEATURE_CONFIG_FILE_LOCATION", Value: "/etc/config/features_config.yaml"},
-		{Name: "PLATFORM_URL", Value: ai.Spec.SplunkAIPlatformUrl},
-		{Name: "PLATFORM_VERSION", Value: "0.3.0"}, // TODO : make this configurable
-		{Name: "SAIA_API_VERSION", Value: "0.3.1"}, // TODO : make this configurable
-		{Name: "TASK_RUNNER_BACKUP_ENABLED", Value: "false"}, // TODO : make this configurable
+		{Name: "PLATFORM_URL", Value: ai.Spec.AIPlatformUrl},
+		{Name: "PLATFORM_VERSION", Value: "0.3.0"},                                                   // TODO : make this configurable
+		{Name: "SAIA_API_VERSION", Value: "0.3.1"},                                                   // TODO : make this configurable
+		{Name: "TASK_RUNNER_BACKUP_ENABLED", Value: "false"},                                         // TODO : make this configurable
 		{Name: "TELEMETRY_ENV", Value: "prod"},                                                       // TODO: make this configurable
 		{Name: "TELEMETRY_REGION", Value: "region-us-west-2"},                                        // TODO: make this configurable
 		{Name: "TELEMETRY_TENANT", Value: "test"},                                                    // TODO: make this configurable
@@ -517,9 +517,9 @@ func (r *SplunkAIAssistantReconciler) reconcileSAIADeployment(
 }
 
 // reconcileSAIAService ensures the Service for SAIA is created/updated. // remove me
-func (r *SplunkAIAssistantReconciler) reconcileSAIAService(
+func (r *AIServiceReconciler) reconcileSAIAService(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	ports := []corev1.ServicePort{
 		{Name: "http", Port: 8080, TargetPort: intstr.FromInt(8080)},
@@ -581,9 +581,9 @@ func (r *SplunkAIAssistantReconciler) reconcileSAIAService(
 }
 
 // reconcileServiceMonitor creates a Prometheus ServiceMonitor if metrics are enabled.
-func (r *SplunkAIAssistantReconciler) reconcileServiceMonitor(
+func (r *AIServiceReconciler) reconcileServiceMonitor(
 	ctx context.Context,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	if !ai.Spec.Metrics.Enabled {
 		return nil
@@ -606,10 +606,8 @@ func (r *SplunkAIAssistantReconciler) reconcileServiceMonitor(
 	return err
 }
 
-
-
 // reconcileFluentBitConfig ensures the FluentBit sidecar ConfigMap exists and is up-to-date // remove me
-func (r *SplunkAIAssistantReconciler)  reconcileFluentBitConfig(ctx context.Context, p *enterpriseApi.SplunkAIAssistant) error {
+func (r *AIServiceReconciler) reconcileFluentBitConfig(ctx context.Context, p *enterpriseApi.AIService) error {
 	// Retrieve the secret reference from SplunkConfiguration
 	secret := &corev1.Secret{}
 	secretKey := types.NamespacedName{
@@ -654,73 +652,72 @@ func (r *SplunkAIAssistantReconciler)  reconcileFluentBitConfig(ctx context.Cont
 	return nil
 }
 
-func (r *SplunkAIAssistantReconciler)  AddFluentBitSidecar(podSpec *corev1.PodSpec, ai *enterpriseApi.SplunkAIAssistant) {
+func (r *AIServiceReconciler) AddFluentBitSidecar(podSpec *corev1.PodSpec, ai *enterpriseApi.AIService) {
 	// Add FluentBit sidecar if enabled and not already present
 
-		found := false
-		for _, container := range podSpec.Containers {
-			if container.Name == "fluentbit" {
-				found = true
-				break
-			}
+	found := false
+	for _, container := range podSpec.Containers {
+		if container.Name == "fluentbit" {
+			found = true
+			break
 		}
-		if !found {
-			podSpec.Containers = append(podSpec.Containers, corev1.Container{
-				Name:  "fluentbit",
-				Image: "fluent/fluent-bit:1.9.6",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
+	}
+	if !found {
+		podSpec.Containers = append(podSpec.Containers, corev1.Container{
+			Name:  "fluentbit",
+			Image: "fluent/fluent-bit:1.9.6",
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("128Mi"),
 				},
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						MountPath: "/fluent-bit/etc/parser.conf",
-						SubPath:   "parser.conf",
-						Name:      "fluentbit-config",
-					},
-					{
-						MountPath: "/fluent-bit/etc/fluent-bit.conf",
-						SubPath:   "fluent-bit.conf",
-						Name:      "fluentbit-config",
-					},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("128Mi"),
 				},
-			})
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					MountPath: "/fluent-bit/etc/parser.conf",
+					SubPath:   "parser.conf",
+					Name:      "fluentbit-config",
+				},
+				{
+					MountPath: "/fluent-bit/etc/fluent-bit.conf",
+					SubPath:   "fluent-bit.conf",
+					Name:      "fluentbit-config",
+				},
+			},
+		})
 
+	}
+	found = false
+	for _, volume := range podSpec.Volumes {
+		if volume.Name == "fluentbit-config" {
+			found = true
+			break
 		}
-		found = false
-		for _, volume := range podSpec.Volumes {
-			if volume.Name == "fluentbit-config" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-				Name: "fluentbit-config",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf("%s-fluentbit-config", ai.Name),
-						},
+	}
+	if !found {
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: "fluentbit-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: fmt.Sprintf("%s-fluentbit-config", ai.Name),
 					},
 				},
-			})
-		}
+			},
+		})
+	}
 }
 
-
 // createOrUpdateConfigMap is a helper to create or patch a ConfigMap // remove me
-func (r *SplunkAIAssistantReconciler) createOrUpdateConfigMap(
+func (r *AIServiceReconciler) createOrUpdateConfigMap(
 	ctx context.Context,
 	name string,
 	data map[string]string,
-	ai *enterpriseApi.SplunkAIAssistant,
+	ai *enterpriseApi.AIService,
 ) error {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

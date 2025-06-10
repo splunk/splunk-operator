@@ -27,11 +27,11 @@ type Builder struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	ai       *enterpriseApi.SplunkAIPlatform
+	ai       *enterpriseApi.AIPlatform
 }
 
-// New returns a new Builder for the given SplunkAIPlatform instance.
-func New(client client.Client, scheme *runtime.Scheme, recorder record.EventRecorder, ai *enterpriseApi.SplunkAIPlatform) *Builder {
+// New returns a new Builder for the given AIPlatform instance.
+func New(client client.Client, scheme *runtime.Scheme, recorder record.EventRecorder, ai *enterpriseApi.AIPlatform) *Builder {
 	return &Builder{
 		Client:   client,
 		ai:       ai,
@@ -41,7 +41,7 @@ func New(client client.Client, scheme *runtime.Scheme, recorder record.EventReco
 }
 
 // Reconcile orchestrates individual sidecar reconcilers
-func (s *Builder) Reconcile(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (s *Builder) Reconcile(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	if err := s.reconcileFluentBitConfig(ctx, p); err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (s *Builder) Reconcile(ctx context.Context, p *enterpriseApi.SplunkAIPlatfo
 }
 
 // reconcileFluentBitConfig ensures the FluentBit sidecar ConfigMap exists and is up-to-date
-func (r *Builder) reconcileFluentBitConfig(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (r *Builder) reconcileFluentBitConfig(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	if !p.Spec.Sidecars.FluentBit {
 		return nil
 	}
@@ -209,7 +209,7 @@ func (s *Builder) createOrUpdateConfigMap(
 }
 
 // reconcileEnvoyConfig ensures the Envoy sidecar ConfigMap exists and is up-to-date
-func (s *Builder) reconcileEnvoyConfig(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (s *Builder) reconcileEnvoyConfig(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	if !p.Spec.Sidecars.Envoy {
 		return nil
 	}
@@ -223,7 +223,7 @@ func (s *Builder) reconcileEnvoyConfig(ctx context.Context, p *enterpriseApi.Spl
 
 // reconcileOpenTelemetryCollector ensures an Otel Collector CR exists in sidecar mode
 // using YAML→JSON conversion and CreateOrUpdate for idempotency.
-func (s *Builder) reconcileOpenTelemetryCollector(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (s *Builder) reconcileOpenTelemetryCollector(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	if !p.Spec.Sidecars.Otel {
 		return nil
 	}
@@ -288,7 +288,7 @@ func (s *Builder) reconcileOpenTelemetryCollector(ctx context.Context, p *enterp
 
 // reconcileOtelConfigMap bootstraps a `<CR>-otel-config` ConfigMap on first create.
 // If the user edits the ConfigMap later, those changes are preserved.
-func (s *Builder) reconcileOtelConfigMap(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (s *Builder) reconcileOtelConfigMap(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling OpenTelemetry ConfigMap")
 
@@ -316,7 +316,7 @@ func (s *Builder) reconcileOtelConfigMap(ctx context.Context, p *enterpriseApi.S
 }
 
 // renderOtelConf builds the OpenTelemetry Collector config map data.
-func (s *Builder) renderOtelConf(ctx context.Context, cr *enterpriseApi.SplunkAIPlatform) map[string]interface{} {
+func (s *Builder) renderOtelConf(ctx context.Context, cr *enterpriseApi.AIPlatform) map[string]interface{} {
 	secret := &corev1.Secret{}
 	key := types.NamespacedName{Name: cr.Spec.SplunkConfiguration.SecretRef.Name, Namespace: cr.Namespace}
 	if err := s.Client.Get(ctx, key, secret); err != nil {
@@ -434,7 +434,7 @@ func renderParserConf() string {
 `
 }
 
-// renderEnvoyConf generates the Envoy configuration for the given SplunkAIPlatform.
+// renderEnvoyConf generates the Envoy configuration for the given AIPlatform.
 func renderEnvoyConf() string {
 	return `
     static_resources:

@@ -14,8 +14,8 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
 
-// Validate checks required fields and backfills defaults on the SplunkAIPlatform spec.
-func (r *AIPlatformReconciler) validate(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+// Validate checks required fields and backfills defaults on the AIPlatform spec.
+func (r *AIPlatformReconciler) validate(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	// Required volume paths
 	if p.Spec.AppsVolume.Path == "" {
 		return fmt.Errorf("AppsVolume.Path is required")

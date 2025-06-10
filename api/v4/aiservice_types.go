@@ -25,28 +25,28 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// SplunkAIAssistantSpec defines the desired state of SplunkAIAssistant
-type SplunkAIAssistantSpec struct {
+// AIServiceSpec defines the desired state of AIService
+type AIServiceSpec struct {
 	// SplunkConfiguration instance reference
 	TaskVolume          AiVolumeSpec           `json:"taskVolume,omitempty"`
 	SplunkConfiguration SplunkConfiguration    `json:"splunkConfiguration,omitempty"`
 	VectorDbUrl         string                 `json:"vectorDbUrl"`
-	SplunkAIPlatformUrl string                 `json:"splunkAIPlatformUrl,omitempty"`
-	SplunkAIPlatformRef corev1.ObjectReference `json:"splunkAIPlatformRef,omitempty"`
+	AIPlatformUrl       string                 `json:"aiPlatformUrl,omitempty"`
+	AIPlatformRef       corev1.ObjectReference `json:"aiPlatformRef,omitempty"`
 	Replicas            int32                  `json:"replicas,omitempty"`
 	ServiceAccountName  string                 `json:"serviceAccountName,omitempty"`
 	//Port specifies the default port for the service
-	Port        int32                       `json:"port,omitempty" default:"80"`
-	Env         map[string]string           `json:"env,omitempty"`
-	Tolerations []corev1.Toleration         `json:"tolerations,omitempty"`
+	Port        int32               `json:"port,omitempty" default:"80"`
+	Env         map[string]string   `json:"env,omitempty"`
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 	// node affinity configuraiton
-	Affinity    corev1.Affinity             `json:"affinity,omitempty"`
+	Affinity corev1.Affinity `json:"affinity,omitempty"`
 	// resources k8s resources cpu, memory
-	Resources   corev1.ResourceRequirements `json:"resources,omitempty"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	// metrics configuration
-	Metrics     MetricsConfig               `json:"metrics,omitempty"`
+	Metrics MetricsConfig `json:"metrics,omitempty"`
 	// mtls configuration
-	MTLS        MTLSConfig                  `json:"mtls,omitempty"`
+	MTLS MTLSConfig `json:"mtls,omitempty"`
 	// ServiceTemplate is a template used to create Kubernetes services
 	ServiceTemplate corev1.Service `json:"serviceTemplate"`
 }
@@ -72,8 +72,8 @@ type MTLSConfig struct {
 	Termination string `json:"termination,omitempty"` // "operator" or "mesh"
 }
 
-// SplunkAIAssistantStatus defines the observed state of SplunkAIAssistant
-type SplunkAIAssistantStatus struct {
+// AIServiceStatus defines the observed state of AIService
+type AIServiceStatus struct {
 	SchemaJobId        string             `json:"schemaJobId,omitempty"`
 	VectorDbStatus     string             `json:"vectorDbStatus,omitempty"`
 	PlatformStatus     string             `json:"platformStatus,omitempty"`
@@ -81,30 +81,30 @@ type SplunkAIAssistantStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
 }
 
-// SplunkAIAssistant is the Schema for the splunkaiassistants API
+// AIService is the Schema for the aiservices API
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=splunkaiassistants,scope=Namespaced,shortName=saia
+// +kubebuilder:resource:path=aiservices,scope=Namespaced,shortName=saia
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-type SplunkAIAssistant struct {
+type AIService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SplunkAIAssistantSpec   `json:"spec,omitempty"`
-	Status SplunkAIAssistantStatus `json:"status,omitempty"`
+	Spec   AIServiceSpec   `json:"spec,omitempty"`
+	Status AIServiceStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// SplunkAIAssistantList contains a list of SplunkAIAssistant
-type SplunkAIAssistantList struct {
+// AIServiceList contains a list of AIService
+type AIServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []SplunkAIAssistant `json:"items"`
+	Items           []AIService `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&SplunkAIAssistant{}, &SplunkAIAssistantList{})
+	SchemeBuilder.Register(&AIService{}, &AIServiceList{})
 }

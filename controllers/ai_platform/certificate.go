@@ -12,7 +12,7 @@ import (
 )
 
 // --- 2️⃣ reconcileCertificate: issue a cert-manager Certificate for mTLS ---
-func (r *AIPlatformReconciler) reconcileCertificate(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (r *AIPlatformReconciler) reconcileCertificate(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	certName := p.Name + "-tls"
 	cert := &certmanagerv1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{

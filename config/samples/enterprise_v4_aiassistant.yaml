@@ -1,12 +1,12 @@
 apiVersion: enterprise.splunk.com/v4
-kind: SplunkAIPlatform
+kind: AIService
 metadata:
   labels:
-    app.kubernetes.io/name: splunkaiplatform
-    app.kubernetes.io/instance: splunkaiplatform-sample
+    app.kubernetes.io/name: aiservice
+    app.kubernetes.io/instance: aiservice-sample
     app.kubernetes.io/part-of: splunk-operator
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: splunk-operator
-  name: splunkaiplatform-sample
+  name: aiservice-sample
 spec:
   # TODO(user): Add fields here

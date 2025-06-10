@@ -1,27 +1,31 @@
-# permissions for end users to view splunkaiplatforms.
+# permissions for end users to edit aiservices.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: clusterrole
-    app.kubernetes.io/instance: splunkaiplatform-viewer-role
+    app.kubernetes.io/instance: aiservice-editor-role
     app.kubernetes.io/component: rbac
     app.kubernetes.io/created-by: splunk-operator
     app.kubernetes.io/part-of: splunk-operator
     app.kubernetes.io/managed-by: kustomize
-  name: splunkaiplatform-viewer-role
+  name: aiservice-editor-role
 rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - splunkaiplatforms
+  - aiservices
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - splunkaiplatforms/status
+  - aiservices/status
   verbs:
   - get

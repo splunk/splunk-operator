@@ -11,7 +11,7 @@ import (
 )
 
 // ReconcilePodMonitor ensures PodMonitors for head and worker pods are created or updated
-func (s *Builder) reconcilePodMonitor(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (s *Builder) reconcilePodMonitor(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	if !p.Spec.Sidecars.PrometheusOperator {
 		return nil
 	}
@@ -121,7 +121,7 @@ func (s *Builder) reconcilePodMonitor(ctx context.Context, p *enterpriseApi.Splu
 }
 
 // reconcilePrometheusRule ensures the PrometheusRule CR is created or updated
-func (s *Builder) reconcilePrometheusRule(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (s *Builder) reconcilePrometheusRule(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	promRule := &unstructured.Unstructured{}
 	promRule.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "monitoring.coreos.com",

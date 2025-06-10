@@ -1,11 +1,11 @@
-# templates/splunkaiplatform.yaml
+# templates/aiplatform.yaml
 {{- if .Capabilities.APIVersions.Has "v4.splunkai/v1" -}}
 apiVersion: v4.splunkai/v1
-kind: SplunkAIPlatform
+kind: AIPlatform
 metadata:
-  name: {{ include "splunkaiplatform.fullname" . }}
+  name: {{ include "aiplatform.fullname" . }}
   labels:
-    {{- include "splunkaiplatform.labels" . | nindent 4 }}
+    {{- include "aiplatform.labels" . | nindent 4 }}
 spec:
   appsVolume:
     path: {{ .Values.appsVolume.path | quote }}

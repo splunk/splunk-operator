@@ -31,16 +31,14 @@ import (
 
 // Builder encapsulates RayService generation logic.
 type Builder struct {
-	ai *enterpriseApi.SplunkAIPlatform
+	ai *enterpriseApi.AIPlatform
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
-
-
-// New returns a new Builder for the given SplunkAIPlatform instance.
-func New(ai *enterpriseApi.SplunkAIPlatform, client client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *Builder {
+// New returns a new Builder for the given AIPlatform instance.
+func New(ai *enterpriseApi.AIPlatform, client client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *Builder {
 	return &Builder{
 		ai:       ai,
 		Client:   client,
@@ -50,7 +48,7 @@ func New(ai *enterpriseApi.SplunkAIPlatform, client client.Client, scheme *runti
 }
 
 // --- 7️⃣ ReconcileRayService: build & create/update the RayService CR ---
-func (b *Builder) ReconcileRayService(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (b *Builder) ReconcileRayService(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	logger := log.FromContext(ctx) // Define logger
 	rs := b.Build()
 
@@ -109,7 +107,7 @@ func (b *Builder) ReconcileRayService(ctx context.Context, p *enterpriseApi.Splu
 	})
 }
 
-func (b *Builder) ReconcileRayAutoscalerRBAC(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (b *Builder) ReconcileRayAutoscalerRBAC(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	logger := log.FromContext(ctx)
 	saName := p.Spec.HeadGroupSpec.ServiceAccountName
 	if saName == "" {
@@ -119,7 +117,7 @@ func (b *Builder) ReconcileRayAutoscalerRBAC(ctx context.Context, p *enterpriseA
 
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "ray-autoscaler",
+			Name:      "ray-autoscaler",
 			Namespace: p.Namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -138,7 +136,7 @@ func (b *Builder) ReconcileRayAutoscalerRBAC(ctx context.Context, p *enterpriseA
 
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "ray-autoscaler-binding-" + p.Namespace + "-" + saName,
+			Name:      "ray-autoscaler-binding-" + p.Namespace + "-" + saName,
 			Namespace: p.Namespace,
 		},
 		Subjects: []rbacv1.Subject{
@@ -164,7 +162,7 @@ func (b *Builder) ReconcileRayAutoscalerRBAC(ctx context.Context, p *enterpriseA
 
 func (b *Builder) ReconcileRayServiceStatus(
 	ctx context.Context,
-	p *enterpriseApi.SplunkAIPlatform,
+	p *enterpriseApi.AIPlatform,
 ) error {
 	// 1️⃣ fetch the up-to-date RayService
 	rs := &rayv1.RayService{}
@@ -443,23 +441,23 @@ func SetImageRegistry(key, defaultValue string) string {
 	return defaultValue
 }
 
-func buildWorkerAnnotationsAndLabels(splunkAIPlatform *enterpriseApi.SplunkAIPlatform, cfg enterpriseApi.GPUConfig) (map[string]string, map[string]string) {
+func buildWorkerAnnotationsAndLabels(aiPlatform *enterpriseApi.AIPlatform, cfg enterpriseApi.GPUConfig) (map[string]string, map[string]string) {
 	annotations := make(map[string]string)
 	labels := make(map[string]string)
 
 	// Example: propagate tier and GPU type as labels/annotations
 	annotations["gpu-tier"] = cfg.Tier
 	labels["gpu-tier"] = cfg.Tier
-	if splunkAIPlatform.Annotations != nil {
-		for k, v := range splunkAIPlatform.Annotations {
+	if aiPlatform.Annotations != nil {
+		for k, v := range aiPlatform.Annotations {
 			if strings.Contains(k, "last-applied-configuration") {
 				continue
 			}
 			annotations[k] = v
 		}
 	}
-	if splunkAIPlatform.Labels != nil {
-		for k, v := range splunkAIPlatform.Labels {
+	if aiPlatform.Labels != nil {
+		for k, v := range aiPlatform.Labels {
 			if strings.Contains(k, "last-applied-configuration") {
 				continue
 			}
@@ -470,8 +468,8 @@ func buildWorkerAnnotationsAndLabels(splunkAIPlatform *enterpriseApi.SplunkAIPla
 	annotations["prometheus.io/port"] = "8080"
 	annotations["prometheus.io/scheme"] = "http"
 	annotations["ray.io/overwrite-container-cmd"] = "true"
-	if splunkAIPlatform.Spec.Sidecars.Otel {
-		annotations["sidecar.opentelemetry.io/inject"] = fmt.Sprintf("%s-otel-coll", splunkAIPlatform.Name)
+	if aiPlatform.Spec.Sidecars.Otel {
+		annotations["sidecar.opentelemetry.io/inject"] = fmt.Sprintf("%s-otel-coll", aiPlatform.Name)
 		annotations["sidecar.opentelemetry.io/auto-instrument"] = "true"
 	}
 
@@ -480,21 +478,21 @@ func buildWorkerAnnotationsAndLabels(splunkAIPlatform *enterpriseApi.SplunkAIPla
 	return annotations, labels
 }
 
-func buildHeadAnnotationsAndLabels(splunkAIPlatform *enterpriseApi.SplunkAIPlatform) (map[string]string, map[string]string) {
+func buildHeadAnnotationsAndLabels(aiPlatform *enterpriseApi.AIPlatform) (map[string]string, map[string]string) {
 	annotations := make(map[string]string)
 	labels := make(map[string]string)
 
 	// Example: propagate tier and GPU type as labels/annotations
-	if splunkAIPlatform.Annotations != nil {
-		for k, v := range splunkAIPlatform.Annotations {
+	if aiPlatform.Annotations != nil {
+		for k, v := range aiPlatform.Annotations {
 			if strings.Contains(k, "last-applied-configuration") {
 				continue
 			}
 			annotations[k] = v
 		}
 	}
-	if splunkAIPlatform.Labels != nil {
-		for k, v := range splunkAIPlatform.Labels {
+	if aiPlatform.Labels != nil {
+		for k, v := range aiPlatform.Labels {
 			if strings.Contains(k, "last-applied-configuration") {
 				continue
 			}
@@ -506,8 +504,8 @@ func buildHeadAnnotationsAndLabels(splunkAIPlatform *enterpriseApi.SplunkAIPlatf
 	annotations["prometheus.io/scheme"] = "http"
 	annotations["ray.io/overwrite-container-cmd"] = "true"
 
-	if splunkAIPlatform.Spec.Sidecars.Otel {
-		annotations["sidecar.opentelemetry.io/inject"] = fmt.Sprintf("%s-otel-coll", splunkAIPlatform.Name)
+	if aiPlatform.Spec.Sidecars.Otel {
+		annotations["sidecar.opentelemetry.io/inject"] = fmt.Sprintf("%s-otel-coll", aiPlatform.Name)
 		annotations["sidecar.opentelemetry.io/auto-instrument"] = "true"
 	}
 

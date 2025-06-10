@@ -18,7 +18,7 @@ import (
 	syaml "sigs.k8s.io/yaml"
 )
 
-func (b *Builder) ReconcileServeConfigMap(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) error {
+func (b *Builder) ReconcileServeConfigMap(ctx context.Context, p *enterpriseApi.AIPlatform) error {
 	log := log.FromContext(ctx) // Define logger
 
 	// 2️⃣ List actual artifacts in storage

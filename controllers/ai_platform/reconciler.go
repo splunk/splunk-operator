@@ -16,13 +16,13 @@ import (
 )
 
 type AIPlatformReconciler struct {
-	p *enterpriseApi.SplunkAIPlatform
+	p *enterpriseApi.AIPlatform
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
 
-func New(p *enterpriseApi.SplunkAIPlatform, client client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *AIPlatformReconciler {
+func New(p *enterpriseApi.AIPlatform, client client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *AIPlatformReconciler {
 	return &AIPlatformReconciler{
 		p:        p,
 		Client:   client,
@@ -31,12 +31,12 @@ func New(p *enterpriseApi.SplunkAIPlatform, client client.Client, scheme *runtim
 	}
 }
 
-func (r *AIPlatformReconciler) Reconcile(ctx context.Context, p *enterpriseApi.SplunkAIPlatform) (reconcile.Result, error) {
+func (r *AIPlatformReconciler) Reconcile(ctx context.Context, p *enterpriseApi.AIPlatform) (reconcile.Result, error) {
 
 	var conditions []metav1.Condition
 	defer func() {
 		// Fetch the latest version of the CR before updating the status
-		latest := &enterpriseApi.SplunkAIPlatform{}
+		latest := &enterpriseApi.AIPlatform{}
 		namespacedName := client.ObjectKey{Namespace: p.Namespace, Name: p.Name}
 		if err := r.Get(ctx, namespacedName, latest); err != nil {
 			log.FromContext(ctx).Error(err, "failed to fetch latest CR")
@@ -52,7 +52,7 @@ func (r *AIPlatformReconciler) Reconcile(ctx context.Context, p *enterpriseApi.S
 
 	stages := []struct {
 		name string
-		fn   func(context.Context, *enterpriseApi.SplunkAIPlatform) error
+		fn   func(context.Context, *enterpriseApi.AIPlatform) error
 	}{
 		{"Validate", r.validate},
 		{"ApplicationsConfigMap", raybuilder.ReconcileApplicationsConfigMap},
