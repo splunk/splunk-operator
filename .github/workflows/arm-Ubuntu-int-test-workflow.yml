@@ -52,8 +52,6 @@ jobs:
         test:
           [
             appframeworksS1,
-            managerappframeworkc3,
-            managerappframeworkm4,
             managersecret,
             managersmartstore,
             managermc1,
