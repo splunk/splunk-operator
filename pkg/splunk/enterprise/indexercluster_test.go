@@ -1477,7 +1477,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 	mclient.AddHandler(wantRequest1, 200, string(response1), nil)
 	mclient.AddHandler(wantRequest2, 200, string(response2), nil)
 
-	// mock the verify RF peer funciton
+	// mock the verify RF peer function
 	VerifyRFPeers = func(ctx context.Context, mgr indexerClusterPodManager, client splcommon.ControllerClient) error {
 		return nil
 	}
