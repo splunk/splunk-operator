@@ -28,6 +28,7 @@ import (
 // AIServiceSpec defines the desired state of AIService
 type AIServiceSpec struct {
 	// SplunkConfiguration instance reference
+	Version 		   string                 `json:"version,omitempty"`
 	TaskVolume          AiVolumeSpec           `json:"taskVolume,omitempty"`
 	SplunkConfiguration SplunkConfiguration    `json:"splunkConfiguration,omitempty"`
 	VectorDbUrl         string                 `json:"vectorDbUrl"`

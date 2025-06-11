@@ -39,8 +39,19 @@ type AIPlatform struct {
 
 // AIPlatformSpec defines the desired state
 type AIPlatformSpec struct {
+
+	Volume      AiVolumeSpec `json:"volume,omitempty"`
+	// s3://bucket/artifacts
+	// s3://bucket/tasks - get rid of this
+
 	AppsVolume      AiVolumeSpec `json:"appsVolume,omitempty"`
 	ArtifactsVolume AiVolumeSpec `json:"artifactsVolume,omitempty"`
+
+	Features:
+	   // saia-spl
+	      serviceAccountName string `json:"serviceAccountName,omitempty"`
+	   // saia-sec
+		  serviceAccountName string `json:"serviceAccountName,omitempty"`
 
 	HeadGroupSpec          HeadGroupSpec   `json:"headGroupSpec,omitempty"`
 	WorkerGroupSpec        WorkerGroupSpec `json:"workerGroupSpec,omitempty"`
@@ -59,7 +70,9 @@ type AIPlatformSpec struct {
 	SplunkConfiguration SplunkConfiguration `json:"splunkConfiguration,omitempty"`
 
 	Weaviate       WeaviateSpec     `json:"weaviate,omitempty"`
+	weaviateStorage PersistentVolumeClaim `json:"storage,omitempty"`
 	SchedulingSpec `json:",inline"` // inlines NodeSelector, Tolerations, Affinity
+	Ingress       `json:",inline"`
 }
 
 type WeaviateSpec struct {
