@@ -33,6 +33,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var StabilizationDuration = time.Second * 5
+
 // PodDetailsStruct captures output of kubectl get pods podname -o json
 type PodDetailsStruct struct {
 	Spec struct {
@@ -80,6 +82,9 @@ func VerifyMonitoringConsoleReady(ctx context.Context, deployment *Deployment, m
 
 		return monitoringConsole.Status.Phase
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// Stabilization period
+	time.Sleep(StabilizationDuration)
 
 	// In a steady state, we should stay in Ready and not flip-flop around
 	gomega.Consistently(func() enterpriseApi.Phase {
