@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
           splunk_image_repository_tag:
-            description: 'Splunk AL2023-based Docker Image repository and image tag (e.g. repository-name:tag)'
+            description: 'Splunk Ubuntu-based Docker Image repository and image tag (e.g. repository-name:tag)'
             required: true
 jobs:
   build-operator-image-arm-ubuntu:
