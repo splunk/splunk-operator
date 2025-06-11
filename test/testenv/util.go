@@ -72,7 +72,7 @@ func RandomDNSName(n int) string {
 }
 
 // newStandalone creates and initializes CR for Standalone Kind
-func newStandalone(name, ns string) *enterpriseApi.Standalone {
+func newStandalone(name, ns, splunkImage string) *enterpriseApi.Standalone {
 
 	new := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -88,6 +88,7 @@ func newStandalone(name, ns string) *enterpriseApi.Standalone {
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				Volumes: []corev1.Volume{},
 			},
@@ -115,7 +116,7 @@ func newStandaloneWithGivenSpec(name, ns string, spec enterpriseApi.StandaloneSp
 	return &new
 }
 
-func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.LicenseManager {
+func newLicenseManager(name, ns, licenseConfigMapName, splunkImage string) *enterpriseApi.LicenseManager {
 	new := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseManager",
@@ -144,6 +145,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 				LicenseURL: "/mnt/licenses/enterprise.lic",
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 			},
 		},
@@ -152,7 +154,7 @@ func newLicenseManager(name, ns, licenseConfigMapName string) *enterpriseApi.Lic
 	return &new
 }
 
-func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApiV3.LicenseMaster {
+func newLicenseMaster(name, ns, licenseConfigMapName, splunkImage string) *enterpriseApiV3.LicenseMaster {
 	new := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
@@ -181,6 +183,7 @@ func newLicenseMaster(name, ns, licenseConfigMapName string) *enterpriseApiV3.Li
 				LicenseURL: "/mnt/licenses/enterprise.lic",
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 			},
 		},
@@ -208,7 +211,7 @@ func swapLicenseManager(name string, licenseManagerName string) (string, string)
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApi.ClusterManager {
+func newClusterManager(name, ns, licenseManagerName, ansibleConfig, splunkImage string) *enterpriseApi.ClusterManager {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
@@ -227,6 +230,7 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -243,7 +247,7 @@ func newClusterManager(name, ns, licenseManagerName string, ansibleConfig string
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string) *enterpriseApiV3.ClusterMaster {
+func newClusterMaster(name, ns, licenseManagerName, ansibleConfig, splunkImage string) *enterpriseApiV3.ClusterMaster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
@@ -262,6 +266,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -278,7 +283,7 @@ func newClusterMaster(name, ns, licenseManagerName string, ansibleConfig string)
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterManager {
+func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName, ansibleConfig, splunkImage string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApi.ClusterManager {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
@@ -298,6 +303,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -314,7 +320,7 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName string, ansi
 }
 
 // newClusterManager creates and initialize the CR for ClusterManager Kind
-func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApiV3.ClusterMaster {
+func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfig, splunkImage string, smartstorespec enterpriseApi.SmartStoreSpec) *enterpriseApiV3.ClusterMaster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
@@ -334,6 +340,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -350,7 +357,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName string, ansib
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef string, ansibleConfig string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string) *enterpriseApi.IndexerCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -370,6 +377,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -392,7 +400,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 	return &new
 }
 
-func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string, ansibleConfig string) *enterpriseApi.SearchHeadCluster {
+func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName, ansibleConfig, splunkImage string) *enterpriseApi.SearchHeadCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -412,6 +420,7 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName string
 				Volumes: []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -601,7 +610,7 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 }
 
 // newStandaloneWithLM creates and initializes CR for Standalone Kind with License Manager
-func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterpriseApi.Standalone {
+func newStandaloneWithLM(name, ns, licenseManagerName, splunkImage string) *enterpriseApi.Standalone {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 
@@ -619,6 +628,7 @@ func newStandaloneWithLM(name, ns string, licenseManagerName string) *enterprise
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -670,7 +680,7 @@ func newStandaloneWithSpec(name, ns string, spec enterpriseApi.StandaloneSpec) *
 }
 
 // newMonitoringConsoleSpec returns MC Spec with given name, namespace and license manager Ref
-func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) *enterpriseApi.MonitoringConsole {
+func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *enterpriseApi.MonitoringConsole {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, LicenseManagerRef)
 
@@ -688,6 +698,7 @@ func newMonitoringConsoleSpec(name string, ns string, LicenseManagerRef string) 
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
+					Image:           splunkImage,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,

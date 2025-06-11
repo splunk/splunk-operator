@@ -185,7 +185,11 @@ func init() {
 
 	flag.StringVar(&specifiedLicenseFilePath, "license-file", "", "Enterprise license file to use")
 	flag.StringVar(&specifiedOperatorImage, "operator-image", defaultOperatorImage, "Splunk Operator image to use")
-	flag.StringVar(&specifiedSplunkImage, "splunk-image", defaultSplunkImage, "Splunk Enterprise (splunkd) image to use")
+	if os.Getenv("GRAVITON_TESTING") == "true" {
+		flag.StringVar(&specifiedSplunkImage, "splunk-image", os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), "Splunk Enterprise (splunkd) image to use")
+	} else {
+		flag.StringVar(&specifiedSplunkImage, "splunk-image", defaultSplunkImage, "Splunk Enterprise (splunkd) image to use")
+	}
 	flag.BoolVar(&specifiedSkipTeardown, "skip-teardown", false, "True to skip tearing down the test env after use")
 	flag.IntVar(&SpecifiedTestTimeout, "test-timeout", defaultTestTimeout, "Max test timeout in seconds to use")
 	flag.StringVar(&specifiedCommitHash, "commit-hash", "", "commit hash string to use as part of the name")
@@ -199,7 +203,11 @@ func (testenv *TestEnv) GetKubeClient() client.Client {
 
 // NewDefaultTestEnv creates a default test environment
 func NewDefaultTestEnv(name string) (*TestEnv, error) {
-	return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
+	if os.Getenv("GRAVITON_TESTING") == "true" {
+		return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), specifiedLicenseFilePath)
+	} else {
+		return NewTestEnv(name, specifiedCommitHash, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
+	}
 }
 
 // NewTestEnv creates a new test environment to run tests againsts

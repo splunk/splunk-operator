@@ -1,12 +1,16 @@
 name: Arm AL2023 Integration Test WorkFlow
 on:
   workflow_dispatch:
+    inputs:
+      splunk_image_ecr_uri:
+        description: 'ECR URI of Splunk AL2023-based Docker Image'
+        required: true
 jobs:
   build-operator-image-arm-al2023:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ github.event.inputs.splunk_image_ecr_uri }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
@@ -67,8 +71,8 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ github.event.inputs.splunk_image_ecr_uri }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ github.event.inputs.splunk_image_ecr_uri }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
@@ -86,6 +90,7 @@ jobs:
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
       ARM64: "true"
+      GRAVITON_TESTING: "true"
     steps:
       - name: Set Test Cluster Name
         run: |

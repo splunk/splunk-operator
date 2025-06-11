@@ -280,6 +280,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					MonitoringConsoleRef: corev1.ObjectReference{
