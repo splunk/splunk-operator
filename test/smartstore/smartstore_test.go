@@ -294,6 +294,7 @@ var _ = Describe("Smartstore test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					EtcVolumeStorageConfig: enterpriseApi.StorageClassSpec{
@@ -330,6 +331,7 @@ var _ = Describe("Smartstore test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					VarVolumeStorageConfig: enterpriseApi.StorageClassSpec{
