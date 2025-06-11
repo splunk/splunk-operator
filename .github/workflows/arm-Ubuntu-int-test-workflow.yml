@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ github.event.inputs.splunk_image_repository_tag }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
@@ -71,8 +71,8 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ github.event.inputs.splunk_image_repository_tag }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ github.event.inputs.splunk_image_repository_tag }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
