@@ -1,4 +1,9 @@
 name: Arm AL2023 Integration Test WorkFlow
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  pull-requests: write
 on:
   workflow_dispatch:
     inputs:
