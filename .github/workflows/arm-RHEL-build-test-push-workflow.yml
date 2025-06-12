@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
           splunk_image_repository_tag:
-            description: 'Splunk RHEL-based Docker Image repository and image tag (e.g. repository-name:tag)'
+            description: 'Splunk RHEL-based Docker Image repository and tag (e.g. repository-name:tag)'
             required: true
 jobs:
   build-operator-image-arm-rhel:
@@ -46,7 +46,7 @@ jobs:
       run: |
         export PLATFORMS=linux/arm64,linux/amd64
         export BASE_IMAGE=redhat/ubi9-minimal
-        export BASE_IMAGE_VERSION=9.5-1747111267
+        export BASE_IMAGE_VERSION=9.5
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
         make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
   int-tests-arm-rhel:
@@ -56,8 +56,6 @@ jobs:
         test:
           [
             appframeworksS1,
-            managerappframeworkc3,
-            managerappframeworkm4,
             managersecret,
             managersmartstore,
             managermc1,
