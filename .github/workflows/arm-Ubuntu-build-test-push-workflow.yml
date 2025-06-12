@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       splunk_image_repository_tag:
-        description: 'Splunk Ubuntu-based Docker Image repository and image tag (e.g. repository-name:tag)'
+        description: 'Splunk Ubuntu-based Docker Image repository and tag (e.g. repository-name:tag)'
         required: true
 jobs:
   check-formating:

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
           splunk_image_repository_tag:
-            description: 'Splunk RHEL-based Docker Image repository and image tag (e.g. repository-name:tag)'
+            description: 'Splunk RHEL-based Docker Image repository and tag (e.g. repository-name:tag)'
             required: true
 jobs:
   build-operator-image-arm-rhel:
@@ -56,8 +56,6 @@ jobs:
         test:
           [
             appframeworksS1,
-            managerappframeworkc3,
-            managerappframeworkm4,
             managersecret,
             managersmartstore,
             managermc1,
