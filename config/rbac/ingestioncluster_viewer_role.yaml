@@ -1,0 +1,27 @@
+# permissions for end users to view ingestionclusters.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: ingestioncluster-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: splunk-operator
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: ingestioncluster-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - ingestionclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - ingestionclusters/status
+  verbs:
+  - get
