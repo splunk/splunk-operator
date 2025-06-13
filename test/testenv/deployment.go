@@ -150,7 +150,7 @@ func (d *Deployment) Teardown() error {
 
 // DeployStandalone deploys a standalone splunk enterprise instance on the specified testenv
 func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef string, LicenseManager string) (*enterpriseApi.Standalone, error) {
-	standalone := newStandalone(name, d.testenv.namespace)
+	standalone := newStandalone(name, d.testenv.namespace, d.testenv.splunkImage)
 
 	// If license file specified, deploy License Manager
 	if LicenseManager != "" && d.testenv.licenseFilePath != "" {
@@ -177,7 +177,7 @@ func (d *Deployment) DeployStandalone(ctx context.Context, name string, mcRef st
 // DeployMonitoringConsole deploys MC instance on specified testenv,
 // LicenseManagerRef is optional, pass empty string if MC should not be attached to a LM
 func (d *Deployment) DeployMonitoringConsole(ctx context.Context, name string, LicenseManagerRef string) (*enterpriseApi.MonitoringConsole, error) {
-	mc := newMonitoringConsoleSpec(name, d.testenv.namespace, LicenseManagerRef)
+	mc := newMonitoringConsoleSpec(name, d.testenv.namespace, LicenseManagerRef, d.testenv.splunkImage)
 	deployed, err := d.deployCR(ctx, name, mc)
 	if err != nil {
 		return nil, err
@@ -333,7 +333,7 @@ func (d *Deployment) DeployLicenseManager(ctx context.Context, name string) (*en
 		return nil, fmt.Errorf("no license file path specified")
 	}
 
-	lm := newLicenseManager(name, d.testenv.namespace, d.testenv.licenseCMName)
+	lm := newLicenseManager(name, d.testenv.namespace, d.testenv.licenseCMName, d.testenv.splunkImage)
 	deployed, err := d.deployCR(ctx, name, lm)
 	if err != nil {
 		return nil, err
@@ -351,7 +351,7 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 		return nil, fmt.Errorf("no license file path specified")
 	}
 
-	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName)
+	lm := newLicenseMaster(name, d.testenv.namespace, d.testenv.licenseCMName, d.testenv.splunkImage)
 	deployed, err := d.deployCR(ctx, name, lm)
 	if err != nil {
 		return nil, err
@@ -365,7 +365,7 @@ func (d *Deployment) DeployLicenseMaster(ctx context.Context, name string) (*ent
 // DeployClusterManager deploys the cluster manager
 func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.ClusterManager, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name, "LicenseRef", LicenseManagerName)
-	cm := newClusterManager(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
+	cm := newClusterManager(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, d.testenv.splunkImage)
 	if mcRef != "" {
 		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -385,7 +385,7 @@ func (d *Deployment) DeployClusterManager(ctx context.Context, name, LicenseMana
 // DeployClusterMaster deploys the cluster manager
 func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-master", "name", name, "LicenseRef", LicenseManagerName)
-	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig)
+	cm := newClusterMaster(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, d.testenv.splunkImage)
 	if mcRef != "" {
 		cm.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -405,7 +405,7 @@ func (d *Deployment) DeployClusterMaster(ctx context.Context, name, LicenseManag
 // DeployClusterManagerWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
 func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApi.ClusterManager, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
-	cm := newClusterManagerWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
+	cm := newClusterManagerWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, d.testenv.splunkImage, smartstorespec)
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
@@ -417,9 +417,9 @@ func (d *Deployment) DeployClusterManagerWithSmartStoreIndexes(ctx context.Conte
 }
 
 // DeployClusterMasterWithSmartStoreIndexes deploys the cluster manager with smartstore indexes
-func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName string, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApiV3.ClusterMaster, error) {
+func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Context, name, LicenseManagerName, ansibleConfig string, smartstorespec enterpriseApi.SmartStoreSpec) (*enterpriseApiV3.ClusterMaster, error) {
 	d.testenv.Log.Info("Deploying cluster-manager", "name", name)
-	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, smartstorespec)
+	cm := newClusterMasterWithGivenIndexes(name, d.testenv.namespace, LicenseManagerName, ansibleConfig, d.testenv.splunkImage, smartstorespec)
 	deployed, err := d.deployCR(ctx, name, cm)
 	if err != nil {
 		return nil, err
@@ -433,7 +433,7 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 // DeployIndexerCluster deploys the indexer cluster
 func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
-	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig)
+	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
@@ -447,7 +447,7 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseMana
 // DeploySearchHeadCluster deploys a search head cluster
 func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterManagerRef, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)
-	sh := newSearchHeadCluster(name, d.testenv.namespace, ClusterManagerRef, LicenseManagerName, ansibleConfig)
+	sh := newSearchHeadCluster(name, d.testenv.namespace, ClusterManagerRef, LicenseManagerName, ansibleConfig, d.testenv.splunkImage)
 	if mcRef != "" {
 		sh.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -889,7 +889,7 @@ func (d *Deployment) DeployStandaloneWithLMaster(ctx context.Context, name strin
 		LicenseManager = name
 	}
 
-	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager)
+	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager, d.testenv.splunkImage)
 	if mcRef != "" {
 		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -916,7 +916,7 @@ func (d *Deployment) DeployStandaloneWithLM(ctx context.Context, name string, mc
 		LicenseManager = name
 	}
 
-	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager)
+	standalone := newStandaloneWithLM(name, d.testenv.namespace, LicenseManager, d.testenv.splunkImage)
 	if mcRef != "" {
 		standalone.Spec.MonitoringConsoleRef = corev1.ObjectReference{
 			Name: mcRef,
@@ -946,6 +946,7 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(ctx context.Context
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "IfNotPresent",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 		},
@@ -1143,6 +1144,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1169,6 +1171,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
@@ -1219,6 +1222,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
@@ -1245,6 +1249,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
@@ -1309,6 +1314,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1349,6 +1355,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
@@ -1411,6 +1418,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
@@ -1451,6 +1459,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
@@ -1499,6 +1508,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1524,6 +1534,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
@@ -1569,6 +1580,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
@@ -1594,6 +1606,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
@@ -1653,6 +1666,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1692,6 +1706,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
@@ -1751,6 +1766,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
@@ -1790,6 +1806,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 			Spec: enterpriseApi.Spec{
 				ImagePullPolicy: "Always",
+				Image:           d.testenv.splunkImage,
 			},
 			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
