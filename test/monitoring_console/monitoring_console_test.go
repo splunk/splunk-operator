@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/onsi/ginkgo/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -44,7 +45,7 @@ var _ = Describe("Monitoring Console test", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if CurrentGinkgoTestDescription().Failed {
+		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 
