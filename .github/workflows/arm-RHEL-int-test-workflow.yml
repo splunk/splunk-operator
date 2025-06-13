@@ -1,4 +1,4 @@
-name: Arm Ubuntu Integration Test WorkFlow Ubuntu
+name: ARM RHEL Integration Test WorkFlow
 permissions:
   contents: read
   packages: write
@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
           splunk_image_repository_tag:
-            description: 'Splunk Ubuntu-based Docker Image repository and tag (e.g. repository-name:tag)'
+            description: 'Splunk RHEL-based Docker Image repository and tag (e.g. repository-name:tag)'
             required: true
 jobs:
-  build-operator-image-arm-ubuntu:
+  build-operator-image-arm-rhel:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
@@ -50,11 +50,11 @@ jobs:
     - name: Build and push Splunk Operator Image
       run: |
         export PLATFORMS=linux/arm64,linux/amd64
-        export BASE_IMAGE=ubuntu
-        export BASE_IMAGE_VERSION=24.10
+        export BASE_IMAGE=redhat/ubi9-minimal
+        export BASE_IMAGE_VERSION=9.5
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
         make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
-  int-tests-arm-ubuntu:
+  int-tests-arm-rhel:
     strategy:
       fail-fast: false
       matrix:
@@ -70,7 +70,7 @@ jobs:
             managerdeletecr,
           ]
     runs-on: ubuntu-latest
-    needs: build-operator-image-arm-ubuntu
+    needs: build-operator-image-arm-rhel
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
@@ -203,10 +203,3 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-      #- name: Test Report
-      #  uses: dorny/test-reporter@v1
-      #  if: success() || failure()    # run this step even if previous step failed
-      #  with:
-      #    name: Integration Tests          # Name of the check run which will be created
-      #    path: inttest-*.xml         # Path to test results
-      #    reporter: jest-junit        # Format of test results

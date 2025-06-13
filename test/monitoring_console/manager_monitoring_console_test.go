@@ -92,6 +92,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					MonitoringConsoleRef: corev1.ObjectReference{
@@ -190,6 +191,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					MonitoringConsoleRef: corev1.ObjectReference{
@@ -235,6 +237,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("2"),
@@ -341,6 +344,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					MonitoringConsoleRef: corev1.ObjectReference{
@@ -529,6 +533,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					MonitoringConsoleRef: corev1.ObjectReference{
@@ -972,6 +977,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 					MonitoringConsoleRef: corev1.ObjectReference{
@@ -1013,6 +1019,7 @@ var _ = Describe("Monitoring Console test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
 								"cpu":    resource.MustParse("2"),
