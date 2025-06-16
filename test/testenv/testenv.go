@@ -52,7 +52,7 @@ const (
 	defaultTestTimeout = 1000000
 
 	// PollInterval specifies the polling interval
-	PollInterval = time.Millisecond / 2
+	PollInterval = time.Millisecond / 10
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
