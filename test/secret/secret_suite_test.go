@@ -25,7 +25,7 @@ import (
 
 const (
 	// PollInterval specifies the polling interval
-	PollInterval = 0.5 * time.Millisecond
+	PollInterval = time.Millisecond / 2
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
