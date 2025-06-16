@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -51,7 +52,7 @@ const (
 	defaultTestTimeout = 1000000
 
 	// PollInterval specifies the polling interval
-	PollInterval = 10 * time.Millisecond
+	PollInterval = 1 * time.Millisecond
 
 	// ConsistentPollInterval is the interval to use to consistently check a state is stable
 	ConsistentPollInterval = 200 * time.Millisecond
