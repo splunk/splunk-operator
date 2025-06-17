@@ -61,7 +61,6 @@ func AddToManager(mgr manager.Manager, splctrl SplunkController, c client.Client
 	err = ctrl.Watch(
 		source.Kind(mgr.GetCache(), instance, &handler.TypedEnqueueRequestForObject[splcommon.MetaObject]{}),
 	)
-	//err = ctrl.Watch(&source.Kind{Type: instance}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
