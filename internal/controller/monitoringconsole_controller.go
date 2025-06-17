@@ -132,28 +132,24 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&appsv1.StatefulSet{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.Secret{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.ConfigMap{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.Pod{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&enterpriseApi.Standalone{},
 			&handler.EnqueueRequestForObject{}).

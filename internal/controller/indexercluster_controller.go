@@ -138,42 +138,36 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&appsv1.StatefulSet{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.Secret{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.Pod{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.ConfigMap{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&enterpriseApi.ClusterManager{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&enterpriseApi.ClusterManager{},
-				handler.OnlyControllerOwner(),
 			)).
 		Watches(&enterpriseApiV3.ClusterMaster{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&enterpriseApiV3.ClusterMaster{},
-				handler.OnlyControllerOwner(),
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,

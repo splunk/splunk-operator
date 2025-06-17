@@ -152,7 +152,6 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&corev1.ConfigMap{},
-				handler.OnlyControllerOwner(),
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
