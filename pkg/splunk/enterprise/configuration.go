@@ -417,9 +417,9 @@ func getSplunkDefaults(identifier, namespace string, instanceType InstanceType, 
 // getSplunkPorts returns a map of ports to use for Splunk instances.
 func getSplunkPorts(instanceType InstanceType) map[string]int {
 	result := map[string]int{
-		GetPortName(splunkwebPort, protoHTTP): 8000,
-		GetPortName(splunkdPort, protoHTTPS):  8089,
-		GetPortName(oauthPorxyPort, protoHTTP):  4180,
+		GetPortName(splunkwebPort, protoHTTP):  8000,
+		GetPortName(splunkdPort, protoHTTPS):   8089,
+		GetPortName(oauthPorxyPort, protoHTTP): 4180,
 	}
 
 	switch instanceType {

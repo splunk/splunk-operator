@@ -17,18 +17,18 @@ package common
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"math/rand"
 	"os"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
-	"encoding/hex"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func init() {
@@ -110,13 +110,13 @@ func GenerateSecret(SecretBytes string, n int) []byte {
 // GenerateCookieSecret returns a 32-byte ASCII slice (hex) suitable
 // for passing directly to --cookie-secret.
 func GenerateCookieSecret() ([]byte, error) {
-    raw := make([]byte, 16)                // 16 raw bytes
-    if _, err := rand.Read(raw); err != nil {
-        return nil, fmt.Errorf("unable to read random bytes: %w", err)
-    }
-    // hex.EncodeToString(raw) is 32 ASCII chars (0–9a–f), so len=32
-    hexStr := hex.EncodeToString(raw)
-    return []byte(hexStr), nil
+	raw := make([]byte, 16) // 16 raw bytes
+	if _, err := rand.Read(raw); err != nil {
+		return nil, fmt.Errorf("unable to read random bytes: %w", err)
+	}
+	// hex.EncodeToString(raw) is 32 ASCII chars (0–9a–f), so len=32
+	hexStr := hex.EncodeToString(raw)
+	return []byte(hexStr), nil
 }
 
 // SortContainerPorts returns a sorted list of Kubernetes ContainerPorts.

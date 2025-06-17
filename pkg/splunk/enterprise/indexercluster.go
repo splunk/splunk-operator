@@ -96,6 +96,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, err
 	}
 
+	err = ApplyIndexerConfig(ctx, client, cr)
+	if err != nil {
+		scopedLog.Error(err, "create or update ingestion config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplyIngestionConfig", fmt.Sprintf("create or update ingestion config failed with error %s", err.Error()))
+		return result, err
+	}
+
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      cr.Spec.ClusterManagerRef.Name,
@@ -557,6 +564,20 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		result.RequeueAfter = 0
 	}
 	return result, nil
+}
+
+func ApplyIndexerConfig(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) error {
+	reqLogger := log.FromContext(ctx).WithName("ApplyIndexingConfig")
+	scopedLog := reqLogger.WithValues("cr", cr.GetName())
+
+	// merge bus config into defaults
+	updatedDefaultsYAML, err := MergeBusAndPipelines(ctx, cr.Spec.Defaults, &cr.Spec.PullBus, "indexer")
+	if err != nil {
+		return fmt.Errorf("merge bus into defaults: %w", err)
+	}
+	cr.Spec.Defaults = updatedDefaultsYAML
+	scopedLog.Info("Updated ingestion configuration successfully")
+	return nil
 }
 
 // VerifyRFPeers function pointer to mock

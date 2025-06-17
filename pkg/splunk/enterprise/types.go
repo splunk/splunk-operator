@@ -220,6 +220,25 @@ type localScopePlaybookContext struct {
 	podExecClient splutil.PodExecClientImpl
 }
 
+// DefaultSpec mirrors the top-level of default.yml
+type DefaultSpec struct {
+	Splunk struct {
+		Conf []ConfEntry `yaml:"conf"`
+	} `yaml:"splunk"`
+}
+
+// Each ConfEntry represents one “- key: X” block under splunk.conf
+type ConfEntry struct {
+	Key   string    `yaml:"key"`
+	Value ConfValue `yaml:"value"`
+}
+
+// ConfValue holds the directory and the actual content map for that key
+type ConfValue struct {
+	Directory string                            `yaml:"directory,omitempty"`
+	Content   map[string]map[string]interface{} `yaml:"content"`
+}
+
 // ToString returns a string for a given InstanceType
 func (instanceType InstanceType) ToString() string {
 	return string(instanceType)

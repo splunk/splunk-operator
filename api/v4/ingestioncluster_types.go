@@ -37,8 +37,125 @@ type IngestionClusterSpec struct {
 	// Number of standalone pods
 	Replicas int32 `json:"replicas"`
 
+	PushBus BusSpec `json:"pushBus,omitempty"`
+
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+}
+
+// BusType enumerates the supported message bus providers.
+// +kubebuilder:default="sqs"
+type BusType string
+
+const (
+	BusTypeSQS        BusType = "sqs"
+	BusTypeKafka      BusType = "kafka"
+	BusTypePubSub     BusType = "pubsub"
+	BusTypeServiceBus BusType = "servicebus"
+)
+
+// BusSpec is the union of all supported bus provider configurations.
+type BusSpec struct {
+	// Type of bus – drives which sub-config is populated
+	// +kubebuilder:validation:Enum=sqs;kafka;pubsub;servicebus
+	// +kubebuilder:default=sqs
+	Type BusType `json:"type"`
+
+	// AWS SQS configuration. Required if Type == BusTypeSQS
+	// +optional
+	SQS *SQSBusConfig `json:"sqs,omitempty"`
+
+	// Apache Kafka configuration. Required if Type == BusTypeKafka
+	// +optional
+	Kafka *KafkaBusConfig `json:"kafka,omitempty"`
+
+	// GCP Pub/Sub configuration. Required if Type == BusTypePubSub
+	// +optional
+	PubSub *PubSubBusConfig `json:"pubsub,omitempty"`
+
+	// Azure Service Bus configuration. Required if Type == BusTypeServiceBus
+	// +optional
+	ServiceBus *ServiceBusBusConfig `json:"servicebus,omitempty"`
+}
+
+// SQSBusConfig holds AWS SQS-specific settings.
+type SQSBusConfig struct {
+	QueueName string `json:"queueName"`
+	// how to encode the messages on the wire (e.g. s2s, json)
+	// +optional
+	// +kubebuilder:default="s2s"
+	EncodingFormat    string            `json:"encodingFormat,omitempty"`
+	AuthRegion        string            `json:"authRegion"`
+	Endpoint          string            `json:"endpoint"`
+	AccessKeyRef      SecretKeyRef      `json:"accessKeyRef"`
+	SecretKeyRef      SecretKeyRef      `json:"secretKeyRef"`
+	LargeMessageStore LargeMessageStore `json:"largeMessageStore,omitempty"`
+	// +kubebuilder:default=""
+	DeadLetterQueueName string `json:"deadLetterQueueName,omitempty"`
+	// +kubebuilder:default=3
+	MaxRetriesPerPart int `json:"maxRetriesPerPart,omitempty"`
+	// +kubebuilder:default="max_count"
+	RetryPolicy string `json:"retryPolicy,omitempty"`
+	// +kubebuilder:default="4s"
+	SendInterval string `json:"sendInterval,omitempty"`
+}
+
+// KafkaBusConfig holds Apache Kafka-specific settings.
+type KafkaBusConfig struct {
+	Brokers []string `json:"brokers"`
+	Topic   string   `json:"topic"`
+	// +optional
+	TLSSecretRef *SecretKeyRef `json:"tlsSecretRef,omitempty"`
+	// +optional
+	SASLSecretRef *SecretKeyRef `json:"saslSecretRef,omitempty"`
+	// add further Kafka parameters as needed
+}
+
+// PubSubBusConfig holds GCP Pub/Sub-specific settings.
+type PubSubBusConfig struct {
+	Project      string         `json:"project"`
+	Topic        string         `json:"topic"`
+	Subscription string         `json:"subscription"`
+	Auth         PubSubAuthSpec `json:"auth"`
+}
+
+// PubSubAuthSpec defines authentication for Pub/Sub.
+type PubSubAuthSpec struct {
+	// +kubebuilder:validation:Enum=keyFile
+	// +kubebuilder:default="keyFile"
+	Type          string       `json:"type"`
+	KeyFileSecret SecretKeyRef `json:"keyFileSecret"`
+}
+
+// ServiceBusBusConfig holds Azure Service Bus-specific settings.
+type ServiceBusBusConfig struct {
+	Namespace string `json:"namespace"`
+	QueueName string `json:"queueName"`
+	// +kubebuilder:default="Amqp"
+	TransportType string         `json:"transportType,omitempty"`
+	Auth          ServiceBusAuth `json:"auth"`
+}
+
+// ServiceBusAuth defines authentication for Azure Service Bus.
+type ServiceBusAuth struct {
+	// +kubebuilder:validation:Enum=connectionString
+	// +kubebuilder:default="connectionString"
+	Type                   string       `json:"type"`
+	ConnectionStringSecret SecretKeyRef `json:"connectionStringSecret"`
+}
+
+// SecretKeyRef is a reference to a key within a Kubernetes Secret.
+type SecretKeyRef struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
+
+// LargeMessageStore holds S3 or blob store settings for large messages.
+type LargeMessageStore struct {
+	// +kubebuilder:default=""
+	Endpoint string `json:"endpoint,omitempty"`
+	// +kubebuilder:default=""
+	Path string `json:"path,omitempty"`
 }
 
 // IngestionClusterStatus defines the observed state of IngestionCluster

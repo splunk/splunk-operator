@@ -17,8 +17,8 @@ package controller
 
 import (
 	"context"
-	"reflect"
 	"os"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -167,7 +167,7 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		}
 	}
 
-	AddOauthProxySideCar(ctx, revised, name)	
+	AddOauthProxySideCar(ctx, revised, name)
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
 	if len(current.Containers) != len(revised.Containers) {
 		scopedLog.Info("Pod Container counts differ",
@@ -263,8 +263,8 @@ func AddOauthProxySideCar(ctx context.Context, revised *corev1.PodSpec, name str
 		if revised.Containers[idx].Name == "oauth-proxy" {
 			found = true
 		}
-		
-	}	
+
+	}
 	if !found {
 		saiaEndpoint := os.Getenv("SAIA_ENDPOINT")
 		if saiaEndpoint == "" {
@@ -285,7 +285,7 @@ func AddOauthProxySideCar(ctx context.Context, revised *corev1.PodSpec, name str
 				"--client-id=splunk-proxy",
 				"--client-secret-file=/etc/oauth2/client-secret",
 				"--redirect-url=" + saiaEndpoint,
-				"--upstream=http://127.0.0.1:8080",    // or your app port
+				"--upstream=http://127.0.0.1:8080", // or your app port
 				"--http-address=0.0.0.0:4180",
 				"--skip-auth-preflight=true",
 				"--skip-provider-button=true",

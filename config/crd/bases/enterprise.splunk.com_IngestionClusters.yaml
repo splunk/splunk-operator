@@ -1411,6 +1411,162 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              pushBus:
+                description: BusSpec is the union of all supported bus provider configurations.
+                properties:
+                  kafka:
+                    description: Apache Kafka configuration. Required if Type == BusTypeKafka
+                    properties:
+                      brokers:
+                        items:
+                          type: string
+                        type: array
+                      saslSecretRef:
+                        description: SecretKeyRef is a reference to a key within a
+                          Kubernetes Secret.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        type: object
+                      tlsSecretRef:
+                        description: SecretKeyRef is a reference to a key within a
+                          Kubernetes Secret.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        type: object
+                      topic:
+                        type: string
+                    type: object
+                  pubsub:
+                    description: GCP Pub/Sub configuration. Required if Type == BusTypePubSub
+                    properties:
+                      auth:
+                        description: PubSubAuthSpec defines authentication for Pub/Sub.
+                        properties:
+                          keyFileSecret:
+                            description: SecretKeyRef is a reference to a key within
+                              a Kubernetes Secret.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                            type: object
+                          type:
+                            default: keyFile
+                            enum:
+                            - keyFile
+                            type: string
+                        type: object
+                      project:
+                        type: string
+                      subscription:
+                        type: string
+                      topic:
+                        type: string
+                    type: object
+                  servicebus:
+                    description: Azure Service Bus configuration. Required if Type
+                      == BusTypeServiceBus
+                    properties:
+                      auth:
+                        description: ServiceBusAuth defines authentication for Azure
+                          Service Bus.
+                        properties:
+                          connectionStringSecret:
+                            description: SecretKeyRef is a reference to a key within
+                              a Kubernetes Secret.
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                type: string
+                            type: object
+                          type:
+                            default: connectionString
+                            enum:
+                            - connectionString
+                            type: string
+                        type: object
+                      namespace:
+                        type: string
+                      queueName:
+                        type: string
+                      transportType:
+                        default: Amqp
+                        type: string
+                    type: object
+                  sqs:
+                    description: AWS SQS configuration. Required if Type == BusTypeSQS
+                    properties:
+                      accessKeyRef:
+                        description: SecretKeyRef is a reference to a key within a
+                          Kubernetes Secret.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        type: object
+                      authRegion:
+                        type: string
+                      deadLetterQueueName:
+                        default: ""
+                        type: string
+                      encodingFormat:
+                        default: s2s
+                        description: how to encode the messages on the wire (e.g.
+                          s2s, json)
+                        type: string
+                      endpoint:
+                        type: string
+                      largeMessageStore:
+                        description: LargeMessageStore holds S3 or blob store settings
+                          for large messages.
+                        properties:
+                          endpoint:
+                            default: ""
+                            type: string
+                          path:
+                            default: ""
+                            type: string
+                        type: object
+                      maxRetriesPerPart:
+                        default: 3
+                        type: integer
+                      queueName:
+                        type: string
+                      retryPolicy:
+                        default: max_count
+                        type: string
+                      secretKeyRef:
+                        description: SecretKeyRef is a reference to a key within a
+                          Kubernetes Secret.
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        type: object
+                      sendInterval:
+                        default: 4s
+                        type: string
+                    type: object
+                  type:
+                    default: sqs
+                    description: Type of bus – drives which sub-config is populated
+                    enum:
+                    - sqs
+                    - kafka
+                    - pubsub
+                    - servicebus
+                    type: string
+                type: object
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe

@@ -140,11 +140,11 @@ const (
 	// port names and templates and protocols
 	portNameTemplateStr = "%s-%s"
 
-	splunkwebPort = "splunkweb"
-	splunkdPort   = "splunkd"
-	oauthPorxyPort   = "oauth"
-	s2sPort       = "s2s"
-	hecPort       = "hec"
+	splunkwebPort  = "splunkweb"
+	splunkdPort    = "splunkd"
+	oauthPorxyPort = "oauth"
+	s2sPort        = "s2s"
+	hecPort        = "hec"
 
 	protoHTTP  = "http"
 	protoHTTPS = "https"

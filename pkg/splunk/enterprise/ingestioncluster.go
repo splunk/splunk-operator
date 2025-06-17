@@ -19,15 +19,18 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"gopkg.in/yaml.v2"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	//"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -95,6 +98,13 @@ func ApplyIngestionCluster(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+		return result, err
+	}
+
+	err = ApplyIngestionConfig(ctx, client, cr)
+	if err != nil {
+		scopedLog.Error(err, "create or update ingestion config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplyIngestionConfig", fmt.Sprintf("create or update ingestion config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -240,6 +250,246 @@ func ApplyIngestionCluster(ctx context.Context, client splcommon.ControllerClien
 	return result, nil
 }
 
+func ApplyIngestionConfig(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestionCluster) error {
+	reqLogger := log.FromContext(ctx).WithName("ApplyIngestionConfig")
+	scopedLog := reqLogger.WithValues("cr", cr.GetName())
+
+	// merge bus config into defaults
+	updatedDefaultsYAML, err := MergeBusAndPipelines(ctx, cr.Spec.Defaults, &cr.Spec.PushBus, "ingester")
+	if err != nil {
+		return fmt.Errorf("merge bus into defaults: %w", err)
+	}
+	cr.Spec.Defaults = updatedDefaultsYAML
+	scopedLog.Info("Updated ingestion configuration successfully")
+	return nil
+}
+
+// MergeBusAndPipelines parses the given defaultsYAML, injects the smartbus stanza
+// (outputs or inputs) for the given role, and appends the correct default-mode.conf.
+// Role must be either "ingester" or "indexer".
+func MergeBusAndPipelines(ctx context.Context, defaultsYAML string, bus *enterpriseApi.BusSpec, role string) (string, error) {
+	// 1) Unmarshal existing defaults
+	var spec DefaultSpec
+	if err := yaml.Unmarshal([]byte(defaultsYAML), &spec); err != nil {
+		return "", fmt.Errorf("failed to parse defaults.yml: %w", err)
+	}
+
+	// 2) Build the provider section
+	sectionName, sectionMap, err := buildSectionFromBus(ctx, bus)
+	if err != nil {
+		return "", err
+	}
+
+	// 3) Determine which .conf to inject into
+	var confKey string
+	switch role {
+	case "ingester":
+		confKey = "outputs" // outputs.conf
+	case "indexer":
+		confKey = "inputs" // inputs.conf
+	default:
+		return "", fmt.Errorf("unknown role %q", role)
+	}
+
+	upsertConfSection(ctx, &spec, confKey, sectionName, sectionMap)
+
+	// 4) Inject default-mode.conf for the role
+	switch role {
+	case "ingester":
+		upsertDefaultModeConfIngester(ctx, &spec)
+	case "indexer":
+		upsertDefaultModeConfIndexer(ctx, &spec)
+	}
+
+	// 5) Marshal back to YAML
+	out, err := yaml.Marshal(&spec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal updated defaults: %w", err)
+	}
+	return string(out), nil
+}
+
+// buildSectionFromBus handles each provider in turn
+func buildSectionFromBus(ctx context.Context, bus *enterpriseApi.BusSpec) (string, map[string]interface{}, error) {
+	switch bus.Type {
+	case enterpriseApi.BusTypeSQS:
+		if bus.SQS == nil {
+			return "", nil, fmt.Errorf("bus.Type is sqs but .SQS is nil")
+		}
+		return buildSQSSection(ctx, bus.SQS)
+	case enterpriseApi.BusTypeKafka:
+		if bus.Kafka == nil {
+			return "", nil, fmt.Errorf("bus.Type is kafka but .Kafka is nil")
+		}
+		return buildKafkaSection(ctx, bus.Kafka)
+	case enterpriseApi.BusTypePubSub:
+		if bus.PubSub == nil {
+			return "", nil, fmt.Errorf("bus.Type is pubsub but .PubSub is nil")
+		}
+		return buildPubSubSection(ctx, bus.PubSub)
+	case enterpriseApi.BusTypeServiceBus:
+		if bus.ServiceBus == nil {
+			return "", nil, fmt.Errorf("bus.Type is servicebus but .ServiceBus is nil")
+		}
+		return buildServiceBusSection(ctx, bus.ServiceBus)
+	default:
+		return "", nil, fmt.Errorf("unsupported BusType %q", bus.Type)
+	}
+}
+
+// ——— provider‐specific builders ———————————————————————
+
+func buildSQSSection(ctx context.Context, s *enterpriseApi.SQSBusConfig) (string, map[string]interface{}, error) {
+	name := fmt.Sprintf("remote_queue:%s", s.QueueName)
+	enc := s.EncodingFormat
+	if enc == "" {
+		enc = "s2s"
+	}
+	maxRt := s.MaxRetriesPerPart
+	if maxRt == 0 {
+		maxRt = 3
+	}
+	rp := s.RetryPolicy
+	if rp == "" {
+		rp = "max_count"
+	}
+	si := s.SendInterval
+	if si == "" {
+		si = "4s"
+	}
+
+	return name, map[string]interface{}{
+		"remote_queue.type":                                        "sqs_smartbus",
+		"remote_queue.sqs_smartbus.encoding_format":                enc,
+		"remote_queue.sqs_smartbus.auth_region":                    s.AuthRegion,
+		"remote_queue.sqs_smartbus.endpoint":                       s.Endpoint,
+		"remote_queue.sqs_smartbus.large_message_store.endpoint":   s.LargeMessageStore.Endpoint,
+		"remote_queue.sqs_smartbus.large_message_store.path":       s.LargeMessageStore.Path,
+		"remote_queue.sqs_smartbus.dead_letter_queue.name":         s.DeadLetterQueueName,
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part": maxRt,
+		"remote_queue.sqs_smartbus.retry_policy":                   rp,
+		"remote_queue.sqs_smartbus.send_interval":                  si,
+	}, nil
+}
+
+func buildKafkaSection(ctx context.Context, k *enterpriseApi.KafkaBusConfig) (string, map[string]interface{}, error) {
+	name := fmt.Sprintf("remote_queue:%s", k.Topic)
+	return name, map[string]interface{}{
+		"remote_queue.type":                   "kafka_smartbus",
+		"remote_queue.kafka_smartbus.brokers": strings.Join(k.Brokers, ","),
+		"remote_queue.kafka_smartbus.topic":   k.Topic,
+		// add TLS/SASL placeholders if needed
+	}, nil
+}
+
+func buildPubSubSection(ctx context.Context, p *enterpriseApi.PubSubBusConfig) (string, map[string]interface{}, error) {
+	name := fmt.Sprintf("remote_queue:%s", p.Topic)
+	return name, map[string]interface{}{
+		"remote_queue.type":                         "pubsub_smartbus",
+		"remote_queue.pubsub_smartbus.project":      p.Project,
+		"remote_queue.pubsub_smartbus.topic":        p.Topic,
+		"remote_queue.pubsub_smartbus.subscription": p.Subscription,
+	}, nil
+}
+
+func buildServiceBusSection(ctx context.Context, sb *enterpriseApi.ServiceBusBusConfig) (string, map[string]interface{}, error) {
+	name := fmt.Sprintf("remote_queue:%s", sb.QueueName)
+	tt := sb.TransportType
+	if tt == "" {
+		tt = "Amqp"
+	}
+	return name, map[string]interface{}{
+		"remote_queue.type":                              "servicebus_smartbus",
+		"remote_queue.servicebus_smartbus.namespace":     sb.Namespace,
+		"remote_queue.servicebus_smartbus.queueName":     sb.QueueName,
+		"remote_queue.servicebus_smartbus.transportType": tt,
+	}, nil
+}
+
+// ——— shared upsert logic —————————————————————————————————
+
+func upsertConfSection(ctx context.Context, spec *DefaultSpec, confKey, sectionName string, section map[string]interface{}) {
+	for i, entry := range spec.Splunk.Conf {
+		if entry.Key == confKey {
+			if spec.Splunk.Conf[i].Value.Content == nil {
+				spec.Splunk.Conf[i].Value.Content = make(map[string]map[string]interface{})
+			}
+			if _, exists := spec.Splunk.Conf[i].Value.Content[sectionName]; !exists {
+				spec.Splunk.Conf[i].Value.Content[sectionName] = section
+			}
+			return
+		}
+	}
+	spec.Splunk.Conf = append(spec.Splunk.Conf, ConfEntry{
+		Key: confKey,
+		Value: ConfValue{
+			Directory: "/opt/splunk/etc/system/local",
+			Content:   map[string]map[string]interface{}{sectionName: section},
+		},
+	})
+}
+
+// upsertDefaultModeConfIngester injects all six pipeline stanzas under default-mode.conf
+func upsertDefaultModeConfIngester(ctx context.Context, spec *DefaultSpec) {
+	// build the full content map: sectionName → settings
+	content := map[string]map[string]interface{}{
+		"pipeline:remotequeueruleset": {"disabled": false},
+		"pipeline:ruleset":            {"disabled": true},
+		"pipeline:remotequeuetyping":  {"disabled": false},
+		"pipeline:remotequeueoutput":  {"disabled": false},
+		"pipeline:typing":             {"disabled": true},
+		"pipeline:indexerPipe":        {"disabled": true},
+	}
+
+	// look for existing key
+	for i, entry := range spec.Splunk.Conf {
+		if entry.Key == "default-mode" {
+			spec.Splunk.Conf[i].Value = ConfValue{
+				Directory: "/opt/splunk/etc/system/local",
+				Content:   content,
+			}
+			return
+		}
+	}
+
+	// not found → append
+	spec.Splunk.Conf = append(spec.Splunk.Conf, ConfEntry{
+		Key: "default-mode",
+		Value: ConfValue{
+			Directory: "/opt/splunk/etc/system/local",
+			Content:   content,
+		},
+	})
+}
+
+// Similarly for Indexer (omitting the indexerPipe stanza):
+func upsertDefaultModeConfIndexer(ctx context.Context, spec *DefaultSpec) {
+	content := map[string]map[string]interface{}{
+		"pipeline:remotequeueruleset": {"disabled": false},
+		"pipeline:ruleset":            {"disabled": true},
+		"pipeline:remotequeuetyping":  {"disabled": false},
+		"pipeline:remotequeueoutput":  {"disabled": false},
+		"pipeline:typing":             {"disabled": true},
+	}
+
+	for i, entry := range spec.Splunk.Conf {
+		if entry.Key == "default-mode" {
+			spec.Splunk.Conf[i].Value = ConfValue{
+				Directory: "/opt/splunk/etc/system/local",
+				Content:   content,
+			}
+			return
+		}
+	}
+	spec.Splunk.Conf = append(spec.Splunk.Conf, ConfEntry{
+		Key: "default-mode",
+		Value: ConfValue{
+			Directory: "/opt/splunk/etc/system/local",
+			Content:   content,
+		},
+	})
+}
+
 // getIngestionClusterStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
 func getIngestionClusterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestionCluster) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
@@ -284,4 +534,39 @@ func getIngestionClusterList(ctx context.Context, c splcommon.ControllerClient, 
 	}
 
 	return objectList, nil
+}
+
+// upsertDefaultModeConf ensures a "default-mode" entry with the fixed pipeline stanzas
+// is present in your DefaultSpec. If the key already exists, it will overwrite its content.
+func upsertDefaultModeConf(spec *DefaultSpec) {
+	// 1) Build the content map for default-mode.conf
+	content := map[string]map[string]interface{}{
+		"pipeline:remotequeueruleset": {"disabled": false},
+		"pipeline:ruleset":            {"disabled": true},
+		"pipeline:remotequeuetyping":  {"disabled": false},
+		"pipeline:remotequeueoutput":  {"disabled": false},
+		"pipeline:typing":             {"disabled": true},
+		"pipeline:indexerPipe":        {"disabled": true},
+	}
+
+	// 2) Look for an existing "default-mode" entry
+	for i, entry := range spec.Splunk.Conf {
+		if entry.Key == "default-mode" {
+			// overwrite
+			spec.Splunk.Conf[i].Value = ConfValue{
+				Directory: "/opt/splunk/etc/system/local",
+				Content:   content,
+			}
+			return
+		}
+	}
+
+	// 3) Not found → append a new ConfEntry
+	spec.Splunk.Conf = append(spec.Splunk.Conf, ConfEntry{
+		Key: "default-mode",
+		Value: ConfValue{
+			Directory: "/opt/splunk/etc/system/local",
+			Content:   content,
+		},
+	})
 }
