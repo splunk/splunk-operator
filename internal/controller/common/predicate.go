@@ -15,7 +15,7 @@ import (
 
 // LabelChangedPredicate .
 func LabelChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return !reflect.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels())
 		},
@@ -24,12 +24,11 @@ func LabelChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // GenerationChangedPredicate .
 func GenerationChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return !reflect.DeepEqual(e.ObjectOld.GetGeneration(), e.ObjectNew.GetGeneration())
 		},
@@ -38,12 +37,11 @@ func GenerationChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // AnnotationChangedPredicate .
 func AnnotationChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return !reflect.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 		},
@@ -52,12 +50,11 @@ func AnnotationChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // SecretChangedPredicate .
 func SecretChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if _, ok := e.ObjectNew.(*corev1.Secret); !ok {
 				return false
@@ -84,12 +81,11 @@ func SecretChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // ConfigMapChangedPredicate .
 func ConfigMapChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*corev1.ConfigMap); !ok {
@@ -116,12 +112,11 @@ func ConfigMapChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // StatefulsetChangedPredicate .
 func StatefulsetChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*appsv1.StatefulSet); !ok {
@@ -148,12 +143,11 @@ func StatefulsetChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // PodChangedPredicate .
 func PodChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*corev1.Pod); !ok {
@@ -180,12 +174,11 @@ func PodChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // ResourceFailedPredicate .
 func ResourceFailedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*enterpriseApi.Standalone); !ok {
@@ -208,7 +201,6 @@ func ResourceFailedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // CrdChangedPredicate with generics support
@@ -253,7 +245,7 @@ func CrdChangedPredicate() predicate.Predicate {
 
 // ClusterManagerChangedPredicate .
 func ClusterManagerChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*enterpriseApi.ClusterManager); !ok {
@@ -280,12 +272,11 @@ func ClusterManagerChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 // ClusterMasterChangedPredicate .
 func ClusterMasterChangedPredicate() predicate.Predicate {
-	err := predicate.Funcs{
+	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// This update is in fact a Delete event, process it
 			if _, ok := e.ObjectNew.(*enterpriseApiV3.ClusterMaster); !ok {
@@ -312,7 +303,6 @@ func ClusterMasterChangedPredicate() predicate.Predicate {
 			return !e.DeleteStateUnknown
 		},
 	}
-	return err
 }
 
 func stringInSlice(a string, list []string) bool {

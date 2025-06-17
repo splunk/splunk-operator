@@ -131,7 +131,7 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		fmt.Printf(" error - %v", err)
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
 		os.Exit(1)
 	}
 	fmt.Printf("%v", err)
@@ -139,7 +139,7 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
 	}
 	if err = (&splkcontroller.IndexerClusterReconciler{
