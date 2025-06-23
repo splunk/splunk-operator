@@ -19,7 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	splkcontroller "github.com/splunk/splunk-operator/internal/controller"
+	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"os"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -126,58 +126,58 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&splkcontroller.ClusterManagerReconciler{
+	if err = (&intController.ClusterManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		fmt.Printf(" error - %v", err)
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterManager ")
 		os.Exit(1)
 	}
 	fmt.Printf("%v", err)
-	if err = (&splkcontroller.ClusterMasterReconciler{
+	if err = (&intController.ClusterMasterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterMaster")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.IndexerClusterReconciler{
+	if err = (&intController.IndexerClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "IndexerCluster")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.LicenseMasterReconciler{
+	if err = (&intController.LicenseMasterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseMaster")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.LicenseManagerReconciler{
+	if err = (&intController.LicenseManagerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LicenseManager")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.MonitoringConsoleReconciler{
+	if err = (&intController.MonitoringConsoleReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MonitoringConsole")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.SearchHeadClusterReconciler{
+	if err = (&intController.SearchHeadClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SearchHeadCluster")
 		os.Exit(1)
 	}
-	if err = (&splkcontroller.StandaloneReconciler{
+	if err = (&intController.StandaloneReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
