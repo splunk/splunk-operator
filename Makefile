@@ -153,7 +153,7 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal@sha256
-#   Build Base OS Version: 3b0f20d81f5fc0dfb3f96cbe9912e02959d1e508411e0e46fad52520208a651c (corresponds to tag 8.10-1295.1749680713) trigger
+#   Build Base OS Version: 3b0f20d81f5fc0dfb3f96cbe9912e02959d1e508411e0e46fad52520208a651c (corresponds to tag 8.10-1295.1749680713)
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64
