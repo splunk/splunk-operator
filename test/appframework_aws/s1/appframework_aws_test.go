@@ -1050,11 +1050,9 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
-			appVersion = "V1"
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############ ENABLE MANUAL POLL ############
-			appVersion = "V2"
 			testcaseEnvInst.Log.Info("Get config map for triggering manual update")
 			config, err := testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
 			Expect(err).To(Succeed(), "Unable to get config map for manual poll")
