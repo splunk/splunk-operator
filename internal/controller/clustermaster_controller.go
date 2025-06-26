@@ -120,8 +120,8 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApiV3.ClusterMaster{}).
 		WithEventFilter(predicate.Or(
-			common.GenerationChangedPredicate(),
-			common.AnnotationChangedPredicate(),
+			predicate.GenerationChangedPredicate{},
+			predicate.AnnotationChangedPredicate{},
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
