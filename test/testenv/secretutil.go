@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
@@ -55,10 +56,23 @@ func GetSecretStruct(ctx context.Context, deployment *Deployment, ns string, sec
 func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
+
+	DumpDescribeSecrets(deployment.testenv.GetName())
+
+	DumpGetSecrets(deployment.testenv.GetName())
+
 	err := deployment.UpdateCR(ctx, secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to update secret object")
 	}
+
+	for range 5 {
+		DumpGetSecrets(deployment.testenv.GetName())
+		time.Sleep(5 * time.Second)
+	}
+
+	DumpDescribeSecrets(deployment.testenv.GetName())
+
 	return err
 }
 

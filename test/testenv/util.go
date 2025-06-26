@@ -737,6 +737,24 @@ func DumpGetPods(ns string) []string {
 	return splunkPods
 }
 
+// DumpGetSecrets prints and returns list of pods in the namespace
+func DumpGetSecrets(ns string) []string {
+	var splunkSecrets []string
+
+	output, err := exec.Command("kubectl", "get", "secrets", "-n", ns).Output()
+	if err != nil {
+		return nil
+	}
+	
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk") {
+			splunkSecrets = append(splunkSecrets, strings.Fields(line)[0])
+		}
+	}
+	return splunkSecrets
+}
+
 // DumpDescribePods prints and returns list of pods in the namespace
 func DumpDescribePods(ns string) []string {
 	output, err := exec.Command("kubectl", "describe", "pods", "-n", ns).Output()
@@ -752,6 +770,25 @@ func DumpDescribePods(ns string) []string {
 			splunkPods = append(splunkPods, strings.Fields(line)[0])
 		}
 	}
+	return splunkPods
+}
+
+// DumpDescribeSecrets prints and returns list of secrets in the namespace
+func DumpDescribeSecrets(ns string) []string {
+	var splunkPods []string
+
+	output, err := exec.Command("kubectl", "describe", "secrets", "-n", ns).Output()
+	if err != nil {
+		return nil
+	}
+
+	for _, line := range strings.Split(string(output), "\n") {
+		logf.Log.Info(line)
+		if strings.HasPrefix(line, "splunk") {
+			splunkPods = append(splunkPods, strings.Fields(line)[0])
+		}
+	}
+
 	return splunkPods
 }
 
