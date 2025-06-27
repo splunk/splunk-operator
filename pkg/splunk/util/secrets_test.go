@@ -504,7 +504,7 @@ func TestGetNamespaceScopedSecret(t *testing.T) {
 	// Create namespace scoped secret
 	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// Reconcile tester
@@ -590,7 +590,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 	// Get newer version
 	newversion, err := (strconv.Atoi(splcommon.FirstVersion))
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 	newversion++
 
@@ -604,7 +604,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 	}
 	err = CreateResource(ctx, c, &secretv1)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// Create secret v2
@@ -617,7 +617,7 @@ func TestGetExistingLatestVersionedSecret(t *testing.T) {
 	}
 	err = CreateResource(ctx, c, &secretv2)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// List objects for mock client to pick up
@@ -675,20 +675,20 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	// Get newer version
 	newversion, err := (strconv.Atoi(splcommon.FirstVersion))
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 	newversion++
 
 	// Create namespace scoped secret
 	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// Creates v1
 	v1Secret, err := GetLatestVersionedSecret(ctx, c, nil, "test", versionedSecretIdentifier)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	if v1Secret.GetName() != "splunk-test-secret-v1" {
@@ -711,7 +711,7 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	// Retrieves v1 as there is no change in namespace scoped secret data
 	v1SecretRetr, err := GetLatestVersionedSecret(ctx, c, nil, "test", versionedSecretIdentifier)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	if v1SecretRetr.GetName() != "splunk-test-secret-v1" {
@@ -726,13 +726,13 @@ func TestGetLatestVersionedSecret(t *testing.T) {
 	namespacescopedsecret.Data["password"] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
 	err = UpdateResource(context.TODO(), c, namespacescopedsecret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// Creates v2, due to change in namespace scoped secret data
 	v2Secret, err := GetLatestVersionedSecret(ctx, c, nil, "test", versionedSecretIdentifier)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	if v2Secret.GetName() != "splunk-test-secret-v2" {
@@ -766,12 +766,12 @@ func TestGetSplunkReadableNamespaceScopedSecretData(t *testing.T) {
 	// Create a fully filled namespace scoped secrets object
 	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	splunkReadableData, err := GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
@@ -826,13 +826,13 @@ func TestApplySplunkSecret(t *testing.T) {
 	// Create a fully filled namespace scoped secrets object
 	namespacescopedsecret, err := ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// Get namespaced scoped secret data in splunk readable format
 	namespacescopedsecretData, err := GetSplunkReadableNamespaceScopedSecretData(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// Provide secret data
@@ -1025,6 +1025,6 @@ func TestGetNamespaceScopedSecretByName(t *testing.T) {
 
 	secret, err := GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), secretName)
 	if secret == nil || err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 }

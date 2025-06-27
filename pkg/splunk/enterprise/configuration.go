@@ -907,6 +907,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+		{Name: "SPLUNK_GENERAL_TERMS", Value: "--accept-current-at-splunk-com"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 	}
 

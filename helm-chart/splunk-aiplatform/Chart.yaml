@@ -1,0 +1,23 @@
+# Chart.yaml
+apiVersion: v2
+name: aiplatform
+description: A Helm chart for deploying AIPlatform custom resources
+type: application
+version: 0.1.0
+appVersion: "v4.0.0"
+icon: https://example.com/icon.png
+keywords:
+  - splunk
+  - ai
+  - kuberay
+home: https://github.com/splunk/splunk-operator
+sources:
+  - https://github.com/splunk/splunk-operator
+maintainers:
+  - name: Splunk AI Team
+    email: splunkai@cisco.com
+dependencies:
+- name: splunk-operator
+  version: "2.8.0"
+  repository: "file://splunk-operator/helm-chart/splunk-operator"
+  condition: splunk-operator.enabled

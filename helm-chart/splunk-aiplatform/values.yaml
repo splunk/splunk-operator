@@ -1,0 +1,78 @@
+# values.yaml
+# Default values for aiplatform.
+# Users can override these (e.g. via --values) to configure both the CR and the Ingress.
+
+# Metadata overrides:
+nameOverride: ""
+fullnameOverride: ""
+
+# --- AIPlatform CR spec ---
+appsVolume:
+  path: "s3://my-bucket/apps"
+  region: "us-west-2"
+artifactsVolume:
+  path: "s3://my-bucket"
+  region: "us-west-2"
+
+
+headGroupSpec:
+  serviceAccountName: "default"
+  imageRegistry: ""
+  schedulingSpec:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+workerGroupSpec:
+  serviceAccountName: "default"
+  imageRegistry: ""
+  gpuConfigs: []        # e.g. [{tier: "gpu", minReplicas: 1, ...}]
+  schedulingSpec:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+defaultAcceleratorType: "LS04S"  # e.g. "L40S", "LS04S", "A10G", "A100", "V100"
+
+sidecars:
+  envoy: true
+  fluentBit: true
+  otel: true
+  prometheusOperator: true
+
+certificateRef: ""
+clusterDomain: "cluster.local"
+
+splunkConfiguration:
+  crName: "splunk-standalone"
+  crNamespace: default
+  secretRef:
+    name: "splunk-secret"
+    namespace: default
+  endpoint: "https://splunk.default.svc.cluster.local:8089"
+  token: "splunk-token"  # Optional, if not using secretRef
+
+weaviate:
+  replicas: 1
+  resources: {}
+  serviceAccountName: "default"
+  # inline SchedulingSpec:
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# --- Service for exposing the AIPlatform API or UI ---
+service:
+  type: ClusterIP
+  port: 8080
+
+# --- Ingress settings (fully optional) ---
+ingress:
+  enabled: false
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []   # e.g. [{ hosts: ["chart-example.local"], secretName: "tls-secret" }]

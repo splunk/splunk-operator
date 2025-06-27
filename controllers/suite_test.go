@@ -92,8 +92,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	//+kubebuilder:scaffold:scheme
-
 	// Create New Manager for controllers
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: clientgoscheme.Scheme,

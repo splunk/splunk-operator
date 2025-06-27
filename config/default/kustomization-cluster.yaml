@@ -131,3 +131,17 @@ patches:
         valueFrom:
           fieldRef:
             fieldPath: metadata.name
+      - name: RELATED_IMAGE_RAY_HEAD
+        value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/ml-platform/ray/ray-head:build-5"
+      - name: RELATED_IMAGE_RAY_WORKER
+        value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/ml-platform/ray/ray-worker-gpu:build-6"
+      - name: RELATED_IMAGE_WEAVIATE
+        value: "semitechnologies/weaviate:stable-v1.28-007846a"
+      - name: RELATED_IMAGE_SAIA_API
+        value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/ml-platform/saia/saia-api:build-6"
+      - name: RELATED_IMAGE_POST_INSTALL_HOOK
+        value: "667741767953.dkr.ecr.us-west-2.amazonaws.com/vivek/ml-platform/saia/ai-helm-post-hook:0.0.5"
+      - name: MODEL_VERSION
+        value: "v0.3.14-36-g1549f5a"
+      - name: RAY_VERSION
+        value: "2.44.0"

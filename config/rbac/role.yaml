@@ -14,7 +14,32 @@ rules:
 - apiGroups:
   - apps
   resources:
+  - deployments
   - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
   verbs:
   - create
   - delete
@@ -34,7 +59,6 @@ rules:
   - pods/exec
   - secrets
   - serviceaccounts
-  - services
   - services/finalizers
   verbs:
   - create
@@ -45,8 +69,23 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - deleteR
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - enterprise.splunk.com
   resources:
+  - aiplatforms
+  - aiservices
   - clustermanagers
   - clustermasters
   - indexerclusters
@@ -66,6 +105,8 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - aiplatforms/finalizers
+  - aiservices/finalizers
   - clustermanagers/finalizers
   - clustermasters/finalizers
   - indexerclusters/finalizers
@@ -79,6 +120,8 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - aiplatforms/status
+  - aiservices/status
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
@@ -91,3 +134,69 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - jobs
+  resources:
+  - batch
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - podmonitors
+  - prometheusrules
+  - servicemonitors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - opentelemetry.io
+  resources:
+  - opentelemetrycollectors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ray.io
+  resources:
+  - jobs
+  - rayclusters
+  - rayjobs
+  - rayservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

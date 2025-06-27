@@ -396,7 +396,7 @@ func TestGetStatefulSetByName(t *testing.T) {
 	namespacedName := types.NamespacedName{Namespace: "test", Name: "splunk-test-monitoring-console"}
 	_, err = GetStatefulSetByName(ctx, c, namespacedName)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 }
 

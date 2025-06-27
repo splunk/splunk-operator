@@ -616,14 +616,14 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	// Create namespace scoped secret
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	smartstoreConfigMap := corev1.ConfigMap{
@@ -725,12 +725,12 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	smartstoreConfigMap := corev1.ConfigMap{
@@ -743,7 +743,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	_, err = splctrl.ApplyConfigMap(ctx, client, &smartstoreConfigMap)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
@@ -805,12 +805,12 @@ func TestPushManagerAppsBundle(t *testing.T) {
 
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	err = PushManagerAppsBundle(ctx, client, &current)
@@ -890,7 +890,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err = splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	cm.Kind = "ClusterManager"
@@ -962,7 +962,7 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	// test deletion
@@ -1059,7 +1059,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1208,7 +1208,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")

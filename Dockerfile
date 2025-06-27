@@ -8,7 +8,7 @@ ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal@sha256
 ARG BASE_IMAGE_VERSION=3b0f20d81f5fc0dfb3f96cbe9912e02959d1e508411e0e46fad52520208a651c
 
 # Build the manager binary
-FROM golang:1.23.0 AS builder
+FROM golang:1.24 AS builder
 
 WORKDIR /workspace
 
@@ -90,6 +90,7 @@ COPY LICENSE /licenses/LICENSE-2.0.txt
 COPY tools/k8_probes/livenessProbe.sh /tools/k8_probes/
 COPY tools/k8_probes/readinessProbe.sh /tools/k8_probes/
 COPY tools/k8_probes/startupProbe.sh /tools/k8_probes/
+COPY applications.yaml /home/nonroot/applications.yaml
 
 # Set the user
 USER 1001

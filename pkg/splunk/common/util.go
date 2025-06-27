@@ -268,7 +268,7 @@ func GetLabels(component, name, instanceIdentifier string, partOfIdentifier stri
 					labels[labelTypeMap["instance"]] = fmt.Sprintf("splunk-%s-%s", instanceIdentifier, name)
 				}
 			default:
-				err = fmt.Errorf(fmt.Sprintf("Incorrect label type %s", s))
+				err = fmt.Errorf("incorrect label type %s", s)
 			}
 		}
 	}

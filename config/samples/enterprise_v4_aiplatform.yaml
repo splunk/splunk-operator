@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v4
+kind: AIPlatform
+metadata:
+  labels:
+    app.kubernetes.io/name: aiplatform
+    app.kubernetes.io/instance: aiplatform-sample
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: splunk-operator
+  name: aiplatform-sample
+spec:
+  # TODO(user): Add fields here
