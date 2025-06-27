@@ -119,8 +119,8 @@ func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApiV3.LicenseMaster{}).
 		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
+			common.GenerationChangedPredicate(),
+			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigMapChangedPredicate(),

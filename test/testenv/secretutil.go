@@ -57,8 +57,6 @@ func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, 
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
 
-	DumpDescribeSecrets(deployment.testenv.GetName())
-
 	DumpGetSecrets(deployment.testenv.GetName())
 
 	err := deployment.UpdateCR(ctx, secret)
@@ -66,12 +64,7 @@ func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, 
 		logf.Log.Error(err, "Unable to update secret object")
 	}
 
-	for range 5 {
-		DumpGetSecrets(deployment.testenv.GetName())
-		time.Sleep(5 * time.Second)
-	}
-
-	DumpDescribeSecrets(deployment.testenv.GetName())
+	DumpGetSecrets(deployment.testenv.GetName())
 
 	return err
 }

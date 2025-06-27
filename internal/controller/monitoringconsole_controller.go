@@ -118,8 +118,8 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.MonitoringConsole{}).
 		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
+			common.GenerationChangedPredicate(),
+			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.ConfigMapChangedPredicate(),

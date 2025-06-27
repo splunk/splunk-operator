@@ -118,8 +118,8 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.ClusterManager{}).
 		WithEventFilter(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
+			common.GenerationChangedPredicate(),
+			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
@@ -131,25 +131,25 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.ClusterManager{},
+				&appsv1.StatefulSet{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.ClusterManager{},
+				&corev1.Secret{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.ClusterManager{},
+				&corev1.Pod{},
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.ClusterManager{},
+				&corev1.ConfigMap{},
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,

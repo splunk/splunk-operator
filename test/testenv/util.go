@@ -773,25 +773,6 @@ func DumpDescribePods(ns string) []string {
 	return splunkPods
 }
 
-// DumpDescribeSecrets prints and returns list of secrets in the namespace
-func DumpDescribeSecrets(ns string) []string {
-	var splunkPods []string
-
-	output, err := exec.Command("kubectl", "describe", "secrets", "-n", ns).Output()
-	if err != nil {
-		return nil
-	}
-
-	for _, line := range strings.Split(string(output), "\n") {
-		logf.Log.Info(line)
-		if strings.HasPrefix(line, "splunk") {
-			splunkPods = append(splunkPods, strings.Fields(line)[0])
-		}
-	}
-
-	return splunkPods
-}
-
 // DumpGetTopNodes prints and returns Node load information
 func DumpGetTopNodes() []string {
 	output, err := exec.Command("kubectl", "top", "nodes").Output()

@@ -223,6 +223,7 @@ func CrdChangedPredicate() predicate.Predicate {
 			// Process only specific CRD names
 			if !stringInSlice(newObj.Name, []string{
 				"clustermasters.enterprise.splunk.com",
+				"clustermanagers.enterprise.splunk.com",
 				"indexerclusters.enterprise.splunk.com",
 				"licensemasters.enterprise.splunk.com",
 				"licensemanagers.enterprise.splunk.com",
