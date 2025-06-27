@@ -18,9 +18,10 @@ package controller
 
 import (
 	"context"
+	"time"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
-	"time"
 
 	"github.com/pkg/errors"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
@@ -131,25 +132,25 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&appsv1.StatefulSet{},
+				&enterpriseApi.ClusterManager{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.Secret{},
+				&enterpriseApi.ClusterManager{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.Pod{},
+				&enterpriseApi.ClusterManager{},
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.ConfigMap{},
+				&enterpriseApi.ClusterManager{},
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,

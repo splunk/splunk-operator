@@ -18,9 +18,10 @@ package controller
 
 import (
 	"context"
+	"time"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
-	"time"
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -131,25 +132,25 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&appsv1.StatefulSet{},
+				&enterpriseApi.MonitoringConsole{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.Secret{},
+				&enterpriseApi.MonitoringConsole{},
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.ConfigMap{},
+				&enterpriseApi.MonitoringConsole{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.Pod{},
+				&enterpriseApi.MonitoringConsole{},
 			)).
 		Watches(&enterpriseApi.Standalone{},
 			&handler.EnqueueRequestForObject{}).

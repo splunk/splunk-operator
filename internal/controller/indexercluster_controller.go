@@ -18,9 +18,10 @@ package controller
 
 import (
 	"context"
+	"time"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
-	"time"
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -137,37 +138,37 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&appsv1.StatefulSet{},
+				&enterpriseApi.IndexerCluster{},
 			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.Secret{},
+				&enterpriseApi.IndexerCluster{},
 			)).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.Pod{},
+				&enterpriseApi.IndexerCluster{},
 			)).
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&corev1.ConfigMap{},
+				&enterpriseApi.IndexerCluster{},
 			)).
 		Watches(&enterpriseApi.ClusterManager{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApi.ClusterManager{},
+				&enterpriseApi.IndexerCluster{},
 			)).
 		Watches(&enterpriseApiV3.ClusterMaster{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
-				&enterpriseApiV3.ClusterMaster{},
+				&enterpriseApi.IndexerCluster{},
 			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
