@@ -56,14 +56,10 @@ func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, 
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
 
-	DumpGetSecrets(deployment.testenv.GetName())
-
 	err := deployment.UpdateCR(ctx, secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to update secret object")
 	}
-
-	DumpGetSecrets(deployment.testenv.GetName())
 
 	return err
 }
