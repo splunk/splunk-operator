@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 
