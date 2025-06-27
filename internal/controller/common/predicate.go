@@ -30,7 +30,7 @@ func LabelChangedPredicate() predicate.Predicate {
 func GenerationChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+			return  !reflect.DeepEqual(e.ObjectOld.GetGeneration(), e.ObjectNew.GetGeneration())
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// Evaluates to false if the object has been confirmed deleted.
