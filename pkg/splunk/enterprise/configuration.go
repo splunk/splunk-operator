@@ -38,7 +38,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -103,7 +103,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 	var storageCapacity resource.Quantity
 	var err error
 	var storageClassName string
-	var	volumeClaim corev1.PersistentVolumeClaim
+	var volumeClaim corev1.PersistentVolumeClaim
 
 	// Depending on the volume type, determine storage capacity and storage class name (if configured)
 	switch volumeType {
@@ -139,14 +139,14 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-				Resources: corev1.ResourceRequirements{
+				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceStorage: storageCapacity,
 					},
 				},
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"app.kubernetes.io/name": labels["app.kubernetes.io/name"],
+						"app.kubernetes.io/name":     labels["app.kubernetes.io/name"],
 						"app.kubernetes.io/instance": labels["app.kubernetes.io/instance"],
 					},
 				},
@@ -161,7 +161,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-				Resources: corev1.ResourceRequirements{
+				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceStorage: storageCapacity,
 					},
@@ -174,7 +174,7 @@ func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSp
 		}
 
 	}
-	
+
 	return volumeClaim, nil
 }
 

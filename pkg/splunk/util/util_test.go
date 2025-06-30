@@ -18,6 +18,7 @@ package util
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"os"
 	"reflect"
@@ -47,7 +48,7 @@ var fakePodExecGetConfig = func() (*rest.Config, error) {
 }
 
 // Faking RESTClientForGVK
-var fakePodExecRESTClientForGVK = func(gvk schema.GroupVersionKind, isUnstructured bool, baseConfig *rest.Config, codecs serializer.CodecFactory) (rest.Interface, error) {
+var fakePodExecRESTClientForGVK = func(gvk schema.GroupVersionKind, isUnstructured bool, baseConfig *rest.Config, codecs serializer.CodecFactory, client *http.Client) (rest.Interface, error) {
 	return &fakeRestInterface{}, errors.New("fakeerror")
 }
 
