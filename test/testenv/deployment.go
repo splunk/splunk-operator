@@ -217,7 +217,7 @@ func (d *Deployment) PodExecCommand(ctx context.Context, podName string, cmd []s
 		return "", "", err
 	}
 	//FIXME
-	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme), http.DefaultClient)
 	if err != nil {
 		return "", "", err
 	}
@@ -264,7 +264,7 @@ func (d *Deployment) OperatorPodExecCommand(ctx context.Context, podName string,
 		return "", "", err
 	}
 	//FIXME
-	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme))
+	restClient, err := apiutil.RESTClientForGVK(gvk, false, restConfig, serializer.NewCodecFactory(scheme.Scheme), http.DefaultClient)
 	if err != nil {
 		return "", "", err
 	}

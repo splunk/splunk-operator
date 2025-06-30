@@ -18,7 +18,9 @@ package testenv
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"time"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
@@ -260,8 +262,11 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	metricsAddr := fmt.Sprintf("%s:%d", metricsHost, metricsPort+suiteConfig.ParallelProcess)
 
 	kubeManager, err := manager.New(cfg, manager.Options{
-		Scheme:             scheme.Scheme,
-		MetricsBindAddress: metricsAddr,
+		Metrics: server.Options{
+			BindAddress:  metricsAddr,
+			ListenConfig: net.ListenConfig{},
+		},
+		Scheme: scheme.Scheme,
 	})
 	if err != nil {
 		return nil, err
