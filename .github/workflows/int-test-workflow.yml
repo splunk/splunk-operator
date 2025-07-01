@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL_3846_xnet
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
