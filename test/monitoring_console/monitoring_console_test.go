@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/onsi/ginkgo/types"
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
