@@ -258,6 +258,7 @@ var _ = Describe("Licensemanager test", func() {
 					LicenseURL: "/mnt/licenses/enterprise.lic",
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "Always",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
