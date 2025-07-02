@@ -22,6 +22,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -62,7 +63,7 @@ var _ = Describe("c3appfw test", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if CurrentGinkgoTestDescription().Failed {
+		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {

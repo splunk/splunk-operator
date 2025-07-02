@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -40,7 +41,7 @@ var _ = Describe("Licensemaster test", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if CurrentGinkgoTestDescription().Failed {
+		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -52,7 +53,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if CurrentGinkgoTestDescription().Failed {
+		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
