@@ -141,6 +141,7 @@ var _ = Describe("Smoke test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes:        []corev1.Volume{},
 					ServiceAccount: serviceAccountName,

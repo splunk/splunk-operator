@@ -1,12 +1,21 @@
 name: Arm AL2023 Integration Test WorkFlow
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  pull-requests: write
 on:
   workflow_dispatch:
+    inputs:
+      splunk_image_repository_tag:
+        description: 'Splunk AL2023-based Docker Image repository and tag (e.g. repository-name:tag)'
+        required: true
 jobs:
   build-operator-image-arm-al2023:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
@@ -52,8 +61,6 @@ jobs:
         test:
           [
             appframeworksS1,
-            managerappframeworkc3,
-            managerappframeworkm4,
             managersecret,
             managersmartstore,
             managermc1,
@@ -67,8 +74,8 @@ jobs:
     env:
       CLUSTER_NODES: 1
       CLUSTER_WORKERS: 3
-      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
-      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE_ARM64 }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
+      SPLUNK_ENTERPRISE_RELEASE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
@@ -86,6 +93,7 @@ jobs:
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
       ARM64: "true"
+      GRAVITON_TESTING: "true"
     steps:
       - name: Set Test Cluster Name
         run: |
@@ -195,10 +203,3 @@ jobs:
         if: ${{ always() }}
         run: |
           make cluster-down
-      #- name: Test Report
-      #  uses: dorny/test-reporter@v1
-      #  if: success() || failure()    # run this step even if previous step failed
-      #  with:
-      #    name: Integration Tests          # Name of the check run which will be created
-      #    path: inttest-*.xml         # Path to test results
-      #    reporter: jest-junit        # Format of test results

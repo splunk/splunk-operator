@@ -138,6 +138,7 @@ var _ = Describe("m4appfw test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -356,6 +357,7 @@ var _ = Describe("m4appfw test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -969,6 +971,7 @@ var _ = Describe("m4appfw test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1621,6 +1624,7 @@ var _ = Describe("m4appfw test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 				},
@@ -1754,6 +1758,7 @@ var _ = Describe("m4appfw test", func() {
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
+						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
 				},
