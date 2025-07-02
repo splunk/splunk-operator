@@ -20,8 +20,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
-	"github.com/onsi/ginkgo/types"
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 
 	//splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
