@@ -123,7 +123,7 @@ function createCluster() {
     aws iam create-role --role-name ${rolename} --assume-role-policy-document file://aws-ebs-csi-driver-trust-policy.json --description "irsa role for ${TEST_CLUSTER_NAME}"
     aws iam attach-role-policy  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy  --role-name ${rolename}
     kubectl annotate serviceaccount -n $namespace $service_account eks.amazonaws.com/role-arn=arn:aws:iam::$account_id:role/${rolename}
-    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::$account_id:role/${rolename} --force
+    eksctl create addon --name aws-ebs-csi-driver --cluster ${TEST_CLUSTER_NAME} --service-account-role-arn arn:aws:iam::${account_id}:role/${rolename} --force
     eksctl utils update-cluster-logging --cluster ${TEST_CLUSTER_NAME}
     # CSPL-2887 - Patch the default storage class to gp2
     kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
