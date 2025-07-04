@@ -117,7 +117,7 @@ jobs:
       matrix:
         test: [
                 basic,
-                appframeworksS1,
+                appframeworks1,
                 managersecret,
                 managermc,
                ]

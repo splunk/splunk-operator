@@ -60,7 +60,7 @@ jobs:
       matrix:
         test:
           [
-            appframeworksS1,
+            appframeworks1,
             managersecret,
             managersmartstore,
             managermc1,

@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-3776-vcluster-enablement
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -51,16 +52,16 @@ jobs:
       matrix:
         test:
           [
-            appframeworksS1,
-            managerappframeworkc3,
-            managerappframeworkm4,
-            managersecret,
-            managersmartstore,
-            managermc1,
-            managermc2,
-            managercrcrud,
-            licensemanager,
-            managerdeletecr,
+            appframeworks1,
+            # managerappframeworkc3,
+            # managerappframeworkm4,
+            # managersecret,
+            # managersmartstore,
+            # managermc1,
+            # managermc2,
+            # managercrcrud,
+            # licensemanager,
+            # managerdeletecr,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image
@@ -84,16 +85,15 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      TEST_CLUSTER_NAME: cspl-3776-vcluster-test
+      TEST_VCLUSTER_NAME: eks-integ-${{ matrix.test }}-${{ github.run_id }}
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
-          if grep -q "appframework" <<< "${{ matrix.test }}"; then
-            echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
-            echo "CLUSTER_NODES=2" >> $GITHUB_ENV
-          fi
+            if grep -q "appframework" <<< "${{ matrix.test }}"; then
+              echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
+              echo "CLUSTER_NODES=2" >> $GITHUB_ENV
+            fi
       - name: Checkcout code
         uses: actions/checkout@v2
       - name: Dotenv Action
@@ -127,7 +127,7 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           ./get_helm.sh
-          DESIRED_VERSION=v3.8.2 bash get_helm.sh
+          DESIRED_VERSION=v3.10.0 bash get_helm.sh
       - name: Install EKS CTL
         run: |
           curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -158,10 +158,14 @@ jobs:
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           docker push ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: Create EKS cluster
+      - name: Login to test cluster
         run: |
-          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-          make cluster-up
+          echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"
+          eksctl utils write-kubeconfig --cluster=${TEST_CLUSTER_NAME}
+      - name: Install vCluster CLI
+        uses: loft-sh/setup-vcluster@main
+      - name: Create Virtual Cluster
+        run: vcluster create ${TEST_VCLUSTER_NAME}
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -192,10 +196,8 @@ jobs:
         run: |
           make cleanup
           make clean
-      - name: Cleanup up EKS cluster
-        if: ${{ always() }}
-        run: |
-          make cluster-down
+      - name: Delete Virtual Cluster
+        run: vcluster delete ${TEST_VCLUSTER_NAME}
       #- name: Test Report
       #  uses: dorny/test-reporter@v1
       #  if: success() || failure()    # run this step even if previous step failed
