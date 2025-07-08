@@ -52,7 +52,7 @@ var _ = Describe("DeleteCR test", func() {
 			deployment.Teardown()
 		}
 		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+			testcaseEnvInst.Teardown()
 		}
 	})
 

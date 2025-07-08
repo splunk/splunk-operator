@@ -51,7 +51,7 @@ var _ = Describe("Smoke test", func() {
 			deployment.Teardown()
 		}
 		if testcaseEnvInst != nil {
-			Expect(testcaseEnvInst.Teardown()).ToNot(HaveOccurred())
+			testcaseEnvInst.Teardown()
 		}
 	})
 

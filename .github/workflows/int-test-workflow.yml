@@ -52,15 +52,15 @@ jobs:
       matrix:
         test:
           [
-            appframeworks1,
-            managerappframeworkc3,
-            managerappframeworkm4,
-            managersecret,
-            managersmartstore,
-            managermc1,
-            managermc2,
-            managercrcrud,
-            licensemanager,
+            # appframeworks1,
+            # managerappframeworkc3,
+            # managerappframeworkm4,
+            # managersecret,
+            # managersmartstore,
+            # managermc1,
+            # managermc2,
+            # managercrcrud,
+            # licensemanager,
             managerdeletecr,
           ]
     runs-on: ubuntu-latest

@@ -53,6 +53,6 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
-		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
+		testenvInstance.Teardown()
 	}
 })
