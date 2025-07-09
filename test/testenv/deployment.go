@@ -145,7 +145,7 @@ func (d *Deployment) Teardown() error {
 		}
 	}
 	d.testenv.Log.Info("deployment deleted.\n", "name", d.name)
-	return nil
+	return cleanupErr
 }
 
 // DeployStandalone deploys a standalone splunk enterprise instance on the specified testenv

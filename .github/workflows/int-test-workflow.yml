@@ -166,9 +166,9 @@ jobs:
         uses: loft-sh/setup-vcluster@main
       - name: Create Virtual Cluster
         run: vcluster create ${TEST_VCLUSTER_NAME}
-      - name: install metric server
-        run: |
-          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+      # - name: install metric server
+      #   run: |
+      #     kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
