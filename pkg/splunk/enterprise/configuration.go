@@ -2042,8 +2042,8 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 }
 
 func validateSplunkGeneralTerms() error {
-	if os.Getenv("SPLUNK_GENERAL_TERMS") == "--accept-current-at-splunk-com" {
+	if os.Getenv("SPLUNK_GENERAL_TERMS") == "--accept-sgt-current-at-splunk-com" {
 		return nil
 	}
-	return fmt.Errorf("SPLUNK_GENERAL_TERMS environment variable must be set to \"--accept-current-at-splunk-com\". Update the splunk-operator-controller-manager deployment")
+	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
 }

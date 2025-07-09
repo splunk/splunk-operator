@@ -18,7 +18,7 @@ WATCH_NAMESPACE ?= ""
 
 # SPLUNK_GENERAL_TERMS is used for the mandatory acknowledgment mechanism for 
 # the Splunk General Terms (SGT) https://www.splunk.com/en_us/legal/splunk-general-terms.html.
-# The value must be manually set to "--accept-current-at-splunk-com"
+# See README for more information on the required value.
 SPLUNK_GENERAL_TERMS ?= ""
 
 # NAMESPACE defines default namespace where operator will be installed

@@ -19,6 +19,22 @@ for Kubernetes (SOK). If you are just looking for documentation on how to
 deploy and use the latest release, please see the
 [Getting Started Documentation](docs/README.md).
 
+## Splunk General Terms Acceptance
+
+Starting with operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. **This is a breaking change, and user action is required.**
+
+For Splunk Enterprise version 10.x and later image versions, license acceptance requires an additional `SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com` argument. This indicates that users have read and accepted the current/latest version of the Splunk General Terms, available [here](https://www.splunk.com/en_us/legal/splunk-general-terms.html) as may be updated to from time to time. Unless you have jointly executed with Splunk a negotiated version of these General Terms that explicitly supersedes this agreement, by accessing or using the Splunk Enterprise software, you are agreeing to the Splunk General Terms posted at the time of your access and use, and acknowledge its applicability to this software. Please read and make sure you agree to the Splunk General Terms before you access or use this software. Only after doing so should you include the `SPLUNK_GENERAL_TERMS` environment variable with the value of `--accept-sgt-current-at-splunk-com` to indicate your acceptance of the current/latest Splunk General Terms and launch the Splunk Enterprise software.
+
+By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the required additional value `--accept-sgt-current-at-splunk-com` in the splunk-operator-controller-manager deployment, or you can pass the `SPLUNK_GENERAL_TERMS` parameter with the required additional value to the `make deploy` command.
+
+If you use the below example and the additional `--accept-sgt-current-at-splunk-com` flag, you are indicating that you have read and accepted the current/latest version of the Splunk General Terms, as may be updated from time to time, and acknowledge its applicability to this software - as noted above.
+
+```
+make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge" SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
+```
+
+For more information about this change, see the [Splunk General Terms Migration Documentation](docs/SplunkGeneralTermsMigration.md).
+
 ## Prerequisites
 
 You must have [Docker Engine](https://docs.docker.com/install/) installed to
@@ -130,12 +146,6 @@ If you want operator to use specific version of splunk instance, then you must p
 
 ```
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge"
-```
-
-Starting with operator version 3.0.0, which includes support for the next Splunk Enterprise version, an additional Docker-Splunk specific parameter is required to start containers. This is a mandatory acknowledgment mechanism for the [Splunk General Terms (SGT)](https://www.splunk.com/en_us/legal/splunk-general-terms.html). By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the value "--accept-current-at-splunk-com" in the splunk-operator-controller-manager deployment, or you can pass the `SPLUNK_GENERAL_TERMS` parameter with the required value to the `make deploy` command
-
-```
-make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge" SPLUNK_GENERAL_TERMS="--accept-current-at-splunk-com"
 ```
 
 Use this to run the operator as a local foreground process on your machine:
