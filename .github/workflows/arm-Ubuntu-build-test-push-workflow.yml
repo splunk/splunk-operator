@@ -117,7 +117,7 @@ jobs:
       matrix:
         test: [
                 basic,
-                appframeworksS1,
+                appframeworks1,
                 managersecret,
                 managermc,
               ]
@@ -146,10 +146,9 @@ jobs:
       DEPLOYMENT_TYPE: ""
       ARM64: "true"
       GRAVITON_TESTING: "true"
+      TEST_CLUSTER_NAME: cspl-3760-vcluster-karpenter-test
+      TEST_VCLUSTER_NAME: ubnt-smk-${{ matrix.test }}-${{ github.run_id }}
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Chekcout code
         uses: actions/checkout@v2
       - name: Dotenv Action
@@ -183,7 +182,7 @@ jobs:
           curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
           chmod 700 get_helm.sh
           ./get_helm.sh
-          DESIRED_VERSION=v3.8.2 bash get_helm.sh
+          DESIRED_VERSION=v3.18.3 bash get_helm.sh
       - name: Install EKS CTL
         run: |
           curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ steps.dotenv.outputs.EKSCTL_VERSION }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -214,11 +213,14 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
-      - name: Create EKS cluster
+      - name: Login to test cluster
         run: |
-           export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-           export EKS_INSTANCE_TYPE=${{ steps.dotenv.outputs.EKS_INSTANCE_TYPE_ARM64 }}
-           make cluster-up
+          echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"
+          eksctl utils write-kubeconfig --cluster=${TEST_CLUSTER_NAME}
+      - name: Install vCluster CLI
+        uses: loft-sh/setup-vcluster@main
+      - name: Create Virtual Cluster
+        run: vcluster create ${TEST_VCLUSTER_NAME}
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -250,7 +252,6 @@ jobs:
         run: |
           make cleanup
           make clean
-      - name: Cleanup up EKS cluster
+      - name: Delete Virtual Cluster
         if: ${{ always() }}
-        run: |
-          make cluster-down
+        run: vcluster delete ${TEST_VCLUSTER_NAME}

@@ -49,7 +49,7 @@ jobs:
       matrix:
         test:
           [
-            appframeworksS1,
+            appframeworks1,
             managerappframeworkc3,
             managerappframeworkm4,
             managersecret,
@@ -81,10 +81,9 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
+      TEST_CLUSTER_NAME: cspl-3760-vcluster-karpenter-test
+      TEST_VCLUSTER_NAME: night-int-${{ matrix.test }}-${{ github.run_id }}
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
@@ -150,10 +149,14 @@ jobs:
       - name: Change Operator Image Tag to latest
         run: |
           docker tag ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:latest
-      - name: Create EKS cluster
+      - name: Login to test cluster
         run: |
-          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
-          make cluster-up
+          echo "Retrieving kubeconfig for ${TEST_CLUSTER_NAME}"
+          eksctl utils write-kubeconfig --cluster=${TEST_CLUSTER_NAME}
+      - name: Install vCluster CLI
+        uses: loft-sh/setup-vcluster@main
+      - name: Create Virtual Cluster
+        run: vcluster create ${TEST_VCLUSTER_NAME}
       - name: install metric server
         run: |
           kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -185,10 +188,9 @@ jobs:
         run: |
           make cleanup
           make clean
-      - name: Cleanup up EKS cluster
+      - name: Delete Virtual Cluster
         if: ${{ always() }}
-        run: |
-          make cluster-down
+        run: vcluster delete ${TEST_VCLUSTER_NAME}
   publish_operator_image:
     runs-on: ubuntu-latest
     needs: int-tests
