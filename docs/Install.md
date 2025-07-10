@@ -23,7 +23,7 @@ kubectl apply -f splunk-operator-cluster.yaml --server-side
 
 ## Install Operator to Accept the Splunk General Terms
 
-Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. This is a breaking change, and user action is required. 
+Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. **This is a breaking change, and user action is required.**
 
 For Splunk Enterprise version 10.x and later image versions, license acceptance requires an additional `SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com` argument. This indicates that users have read and accepted the current/latest version of the Splunk General Terms, available [here](https://www.splunk.com/en_us/legal/splunk-general-terms.html) as may be updated to from time to time. Unless you have jointly executed with Splunk a negotiated version of these General Terms that explicitly supersedes this agreement, by accessing or using the Splunk Enterprise software, you are agreeing to the Splunk General Terms posted at the time of your access and use, and acknowledge its applicability to this software. Please read and make sure you agree to the Splunk General Terms before you access or use this software. Only after doing so should you include the `SPLUNK_GENERAL_TERMS` environment variable with the value of `--accept-sgt-current-at-splunk-com` to indicate your acceptance of the current/latest Splunk General Terms and launch the Splunk Enterprise software.
 

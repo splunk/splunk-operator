@@ -7,7 +7,7 @@ All users deploying Splunk Enterprise 10.x or later image versions instances mus
 
 ## What's happening?
 
-Starting with the 3.0.0 release, there is now a mandatory acknowledgment mechanism for the Splunk General Terms (SGT) within the Splunk Operator for Kubernetes. This is a breaking change, and user action is required. This involves creating a new `SPLUNK_GENERAL_TERMS` environment variable in the splunk operator deployment, which gets passed to every CRD.
+Starting with the 3.0.0 release, there is now a mandatory acknowledgment mechanism for the Splunk General Terms (SGT) within the Splunk Operator for Kubernetes. **This is a breaking change, and user action is required.** This involves creating a new `SPLUNK_GENERAL_TERMS` environment variable in the splunk operator deployment, which gets passed to every CRD.
 
 To learn more about the required value for this variable, please see the [README](../README.md) or Splunk Enterprise 10.x image’s README.
 
