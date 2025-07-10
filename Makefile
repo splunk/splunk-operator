@@ -193,13 +193,13 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl apply --server-side --force-conflicts -f -
+	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
 	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/$(ENVIRONMENT)/kustomization.yaml
 	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s/value: \"${SPLUNK_GENERAL_TERMS}\"/value: SPLUNK_GENERAL_TERMS_VALUE/g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/value: \"${SPLUNK_GENERAL_TERMS}\"/value: SPLUNK_GENERAL_TERMS_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl delete -f -
