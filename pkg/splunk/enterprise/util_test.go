@@ -1098,6 +1098,11 @@ func TestAppPhaseStatusAsStr(t *testing.T) {
 		t.Errorf("Got wrong status. Expected status=Download Pending, Got = %s", status)
 	}
 
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgDownloadInProgress)
+	if status != "Download In Progress" {
+		t.Errorf("Got wrong status. Expected status=\"Download In Progress\", Got = %s", status)
+	}
+
 	status = appPhaseStatusAsStr(enterpriseApi.AppPkgDownloadComplete)
 	if status != "Download Complete" {
 		t.Errorf("Got wrong status. Expected status=\"Download Complete\", Got = %s", status)
@@ -1108,9 +1113,34 @@ func TestAppPhaseStatusAsStr(t *testing.T) {
 		t.Errorf("Got wrong status. Expected status=\"Download Error\", Got = %s", status)
 	}
 
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyPending)
+	if status != "Pod Copy Pending" {
+		t.Errorf("Got wrong status. Expected status=Pod Copy Pending, Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyInProgress)
+	if status != "Pod Copy In Progress" {
+		t.Errorf("Got wrong status. Expected status=\"Pod Copy In Progress\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyComplete)
+	if status != "Pod Copy Complete" {
+		t.Errorf("Got wrong status. Expected status=\"Pod Copy Complete\", Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgPodCopyError)
+	if status != "Pod Copy Error" {
+		t.Errorf("Got wrong status. Expected status=\"Pod Copy Error\", Got = %s", status)
+	}
+
 	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallPending)
 	if status != "Install Pending" {
 		t.Errorf("Got wrong status. Expected status=Install Pending, Got = %s", status)
+	}
+
+	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallInProgress)
+	if status != "Install In Progress" {
+		t.Errorf("Got wrong status. Expected status=\"Install In Progress\", Got = %s", status)
 	}
 
 	status = appPhaseStatusAsStr(enterpriseApi.AppPkgInstallComplete)
@@ -1132,6 +1162,7 @@ func TestAppPhaseStatusAsStr(t *testing.T) {
 func TestBundlePushStateAsStr(t *testing.T) {
 	bpsMap := map[enterpriseApi.BundlePushStageType]string{
 		enterpriseApi.BundlePushPending:    "Bundle Push Pending",
+		enterpriseApi.BundlePushInProgress: "Bundle Push In Progress",
 		enterpriseApi.BundlePushComplete:   "Bundle Push Complete",
 		4:                                  "Invalid bundle push state",
 	}
