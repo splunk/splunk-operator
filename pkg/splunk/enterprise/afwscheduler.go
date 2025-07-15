@@ -37,9 +37,11 @@ import (
 
 var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
 	enterpriseApi.AppPkgDownloadPending:     true,
+	enterpriseApi.AppPkgDownloadInProgress:  true,
 	enterpriseApi.AppPkgDownloadComplete:    true,
 	enterpriseApi.AppPkgDownloadError:       true,
 	enterpriseApi.AppPkgPodCopyPending:      true,
+	enterpriseApi.AppPkgPodCopyInProgress:   true,
 	enterpriseApi.AppPkgPodCopyComplete:     true,
 	enterpriseApi.AppPkgMissingFromOperator: true,
 	enterpriseApi.AppPkgPodCopyError:        true,
@@ -551,6 +553,34 @@ downloadWork:
 					scopedLog.Error(err, "insufficient storage for the app pkg download. appSrcName: %s, app name: %s, app size: %d Bytes", downloadWorker.appSrcName, downloadWorker.appDeployInfo.AppName, downloadWorker.appDeployInfo.Size)
 					// setting isActive to false here so that downloadPhaseManager can take care of it.
 					downloadWorker.isActive = false
+					<-downloadWorkersRunPool
+					continue
+				}
+
+				// update the download state of app to be DownloadInProgress
+				updatePplnWorkerPhaseInfo(ctx, downloadWorker.appDeployInfo, downloadWorker.appDeployInfo.PhaseInfo.FailCount, enterpriseApi.AppPkgDownloadInProgress)
+
+				appDeployInfo := downloadWorker.appDeployInfo
+
+				// create the sub-directories on the volume for downloading scoped apps
+				localPath, err := downloadWorker.createDownloadDirOnOperator(ctx)
+				if err != nil {
+					scopedLog.Error(err, "unable to create download directory on operator", "appSrcName", downloadWorker.appSrcName, "appName", appDeployInfo.AppName)
+
+					// increment the retry count and mark this app as download pending
+					updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
+
+					<-downloadWorkersRunPool
+					continue
+				}
+
+				// get the remoteDataClientMgr instance
+				remoteDataClientMgr, err := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+				if err != nil {
+					scopedLog.Error(err, "unable to get remote data client manager")
+					// increment the retry count and mark this app as download error
+					updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadError)
+
 					<-downloadWorkersRunPool
 					continue
 				}
