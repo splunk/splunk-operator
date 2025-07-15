@@ -189,6 +189,67 @@ func TestGenerateSecret(t *testing.T) {
 	test("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 10)
 }
 
+func TestGenerateSecretWithComplexity(t *testing.T) {
+	test := func(n int, minlower int, minupper int, mindecimal int, minspecial int) {
+		var err error
+		results := [][]byte{}
+		b := make([]byte, n)
+		// get 100 results
+		for i := 0; i < 100; i++ {
+			b, err = GenerateSecretWithComplexity(n, minlower, minupper, mindecimal, minspecial)
+			if err != nil {
+				fmt.Printf("GenerateSecretWithComplexity(%d,%d,%d,%d,%d) returned error  %s", n, minlower, minupper, mindecimal, minspecial, err)
+				break
+			} else {
+
+				results = append(results, b)
+
+				// ensure its length is correct
+				if len(results[i]) != n {
+					fmt.Printf("GenerateSecretWithComplexity(%d,%d,%d,%d,%d) len = %d; want %d", n, minlower, minupper, mindecimal, minspecial, len(results[i]), n)
+				}
+
+				// ensure it only includes allowed bytes
+				for _, c := range results[i] {
+					if bytes.IndexByte([]byte(SecretBytesComplete), c) == -1 {
+						fmt.Printf("GenerateSecretWithComplexity(%d,%d,%d,%d,%d) returned invalid byte: %c", n, minlower, minupper, mindecimal, minspecial, c)
+					}
+				}
+
+				// ensure each result is unique
+				for x := i; x > 0; x-- {
+					if bytes.Equal(results[x-1], results[i]) {
+						fmt.Printf("GenerateSecretWithComplexity(%d,%d,%d,%d,%d) returned two identical values: %s", n, minlower, minupper, mindecimal, minspecial, string(results[i]))
+					}
+				}
+			}
+		}
+	}
+	// simple one with no complexity constraint
+	test(10, 0, 0, 0, 0)
+	// test with complexity and different lengths
+	test(10, 1, 1, 1, 1)
+	test(24, 1, 1, 1, 1)
+	// test complexity that match exactly length
+	test(4, 1, 1, 1, 1)
+	test(8, 2, 2, 2, 2)
+}
+
+func TestErrorGenerateSecretWithTooMuchComplexity(t *testing.T) {
+	testneg := func(n int, minlower int, minupper int, mindecimal int, minspecial int) {
+		var err error
+		_, err = GenerateSecretWithComplexity(n, minlower, minupper, mindecimal, minspecial)
+		fmt.Printf("err=%s ", err)
+		if err == nil {
+			fmt.Printf("GenerateSecretWithComplexity(%d,%d,%d,%d,%d) returned success when expected error about impossible complexity, err=%s", n, minlower, minupper, mindecimal, minspecial, err)
+		}
+	}
+	// test impossible combination ie complexity over length
+	testneg(4, 1, 1, 2, 1)
+	testneg(8, 2, 5, 1, 1)
+	testneg(24, 24, 1, 1, 1)
+}
+
 func TestSortContainerPorts(t *testing.T) {
 	var ports []corev1.ContainerPort
 	var want []corev1.ContainerPort
