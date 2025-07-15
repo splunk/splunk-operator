@@ -296,6 +296,11 @@ func (testenv *TestEnv) GetName() string {
 
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestEnv) Teardown() error {
+	defer func() {
+		if r := recover(); r != nil {
+			testenv.Log.Error(fmt.Errorf("panic: %v", r), "Recovered from panic in TestEnv.Teardown")
+		}
+	}()
 
 	if testenv.SkipTeardown && testenv.debug == "True" {
 		testenv.Log.Info("testenv teardown is skipped!\n")
