@@ -452,6 +452,8 @@ func bundlePushStateAsStr(ctx context.Context, state enterpriseApi.BundlePushSta
 	switch state {
 	case enterpriseApi.BundlePushPending:
 		return "Bundle Push Pending"
+	case enterpriseApi.BundlePushInProgress:
+		return "Bundle Push In Progress"
 	case enterpriseApi.BundlePushComplete:
 		return "Bundle Push Complete"
 	default:
