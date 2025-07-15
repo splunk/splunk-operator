@@ -426,24 +426,18 @@ func appPhaseStatusAsStr(status enterpriseApi.AppPhaseStatusType) string {
 	switch status {
 	case enterpriseApi.AppPkgDownloadPending:
 		return "Download Pending"
-	case enterpriseApi.AppPkgDownloadInProgress:
-		return "Download In Progress"
 	case enterpriseApi.AppPkgDownloadComplete:
 		return "Download Complete"
 	case enterpriseApi.AppPkgDownloadError:
 		return "Download Error"
 	case enterpriseApi.AppPkgPodCopyPending:
 		return "Pod Copy Pending"
-	case enterpriseApi.AppPkgPodCopyInProgress:
-		return "Pod Copy In Progress"
 	case enterpriseApi.AppPkgPodCopyComplete:
 		return "Pod Copy Complete"
 	case enterpriseApi.AppPkgPodCopyError:
 		return "Pod Copy Error"
 	case enterpriseApi.AppPkgInstallPending:
 		return "Install Pending"
-	case enterpriseApi.AppPkgInstallInProgress:
-		return "Install In Progress"
 	case enterpriseApi.AppPkgInstallComplete:
 		return "Install Complete"
 	case enterpriseApi.AppPkgInstallError:
@@ -458,8 +452,6 @@ func bundlePushStateAsStr(ctx context.Context, state enterpriseApi.BundlePushSta
 	switch state {
 	case enterpriseApi.BundlePushPending:
 		return "Bundle Push Pending"
-	case enterpriseApi.BundlePushInProgress:
-		return "Bundle Push In Progress"
 	case enterpriseApi.BundlePushComplete:
 		return "Bundle Push Complete"
 	default:
