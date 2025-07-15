@@ -572,6 +572,8 @@ type PhaseInfo struct {
 const (
 	// AppPkgDownloadPending indicates pending
 	AppPkgDownloadPending AppPhaseStatusType = 101
+	// AppPkgDownloadInProgress indicates in progress
+	AppPkgDownloadInProgress = 102
 	// AppPkgDownloadComplete indicates complete
 	AppPkgDownloadComplete = 103
 	// AppPkgDownloadError indicates error after retries
@@ -581,6 +583,8 @@ const (
 const (
 	// AppPkgPodCopyPending indicates pending
 	AppPkgPodCopyPending AppPhaseStatusType = 201
+	// AppPkgPodCopyInProgress indicates in progress
+	AppPkgPodCopyInProgress = 202
 	// AppPkgPodCopyComplete indicates complete
 	AppPkgPodCopyComplete = 203
 	// AppPkgMissingFromOperator indicates the downloaded app package is missing
@@ -592,6 +596,8 @@ const (
 const (
 	// AppPkgInstallPending indicates pending
 	AppPkgInstallPending AppPhaseStatusType = 301
+	// AppPkgInstallInProgress  indicates in progress
+	AppPkgInstallInProgress = 302
 	// AppPkgInstallComplete indicates complete
 	AppPkgInstallComplete = 303
 	// AppPkgMissingOnPodError indicates app pkg is not available on Pod for install
