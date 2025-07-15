@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     if:
       contains('
-        refs/heads/develop
+        refs/heads/feature/release-2.8.1
         ', github.ref)
     steps:
     - name: Checkout code
