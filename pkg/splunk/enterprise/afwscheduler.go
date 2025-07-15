@@ -44,7 +44,6 @@ var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
 	enterpriseApi.AppPkgMissingFromOperator: true,
 	enterpriseApi.AppPkgPodCopyError:        true,
 	enterpriseApi.AppPkgInstallPending:      true,
-	enterpriseApi.AppPkgInstallInProgress:   true,
 	enterpriseApi.AppPkgInstallComplete:     true,
 	enterpriseApi.AppPkgMissingOnPodError:   true,
 	enterpriseApi.AppPkgInstallError:        true,
@@ -558,6 +557,13 @@ downloadWork:
 				// increment the count in worker waitgroup
 				downloadWorker.waiter.Add(1)
 
+				appDeployInfo := downloadWorker.appDeployInfo
+
+				remoteDataClientMgr, err := getRemoteDataClientMgr(ctx, downloadWorker.client, downloadWorker.cr, downloadWorker.afwConfig, downloadWorker.appSrcName)
+				localPath, err := downloadWorker.createDownloadDirOnOperator(ctx)
+				if err != nil {
+					scopedLog.Error(err, "unable to create download directory on operator", "appSrcName", downloadWorker.appSrcName, "appName", appDeployInfo.AppName)
+				}
 				// start the actual download
 				go downloadWorker.download(ctx, pplnPhase, *remoteDataClientMgr, localPath, downloadWorkersRunPool)
 
