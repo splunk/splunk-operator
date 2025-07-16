@@ -65,7 +65,7 @@ metadata:
           "metadata": {
             "name": "clustermanager-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -73,7 +73,7 @@ metadata:
           "metadata": {
             "name": "indexercluster-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -81,7 +81,7 @@ metadata:
           "metadata": {
             "name": "licensemanager-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -89,7 +89,7 @@ metadata:
           "metadata": {
             "name": "monitoringconsole-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -97,7 +97,7 @@ metadata:
           "metadata": {
             "name": "searchheadcluster-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -105,13 +105,13 @@ metadata:
           "metadata": {
             "name": "standalone-sample"
           },
-          "spec": {}
+          "spec": null
         }
       ]
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2025-04-25T05:04:32Z"
+    createdAt: "2025-07-16T09:03:58Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
@@ -393,14 +393,14 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:9.4.1
+                  value: docker.io/splunk/splunk:9.4.3
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: POD_NAME
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:2.8.0
+                image: docker.io/splunk/splunk-operator:2.8.1
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -513,7 +513,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: docker.io/splunk/splunk:9.4.1
+  - image: docker.io/splunk/splunk:9.4.3
     name: splunk-enterprise
   replaces: splunk-operator.v2.7.1
   version: 2.8.0
