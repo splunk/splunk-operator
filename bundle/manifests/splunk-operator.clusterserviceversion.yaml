@@ -116,11 +116,11 @@ metadata:
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
-    olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.15"}]'
+    olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.19"}]'
     operators.operatorframework.io/builder: operator-sdk-v1.31.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/splunk/splunk-operator
-  name: splunk-operator.v2.8.0
+  name: splunk-operator.v2.8.1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -515,5 +515,5 @@ spec:
   relatedImages:
   - image: docker.io/splunk/splunk:9.4.3
     name: splunk-enterprise
-  replaces: splunk-operator.v2.7.1
-  version: 2.8.0
+  replaces: splunk-operator.v2.8.0
+  version: 2.8.1
