@@ -44,6 +44,9 @@ For Ingress we recommend using separate ports for encrypted and non-encrypted tr
 #### Indexer Discovery is not supported
 Indexer Discovery is not supported on a Kubernetes cluster. Instead, the Ingress controllers will be responsible to connect forwarders to peer nodes in Indexer clusters.
 
+#### Sticky Sessions
+When configuring the ingress configuration, it is important to ensure that the session is sticky to the Splunk specific instance. This is required for Splunk to work properly since otherwise, a blank page might be experienced when trying to access the Splunk instances. The examples below show how to configure this using Istio and Nginx Ingress controllers.
+
 
 ## Configuring Ingress Using Istio
 
@@ -451,6 +454,9 @@ Note that the Virtual Service no longer handles TLS since it has been terminated
 
 ##### Documentation tested on Istio v1.8 and Kubernetes v1.17
 
+### Sticky Sessions
+Follow [Istio Sticky Sessions Documentation](https://istio.io/latest/docs/reference/config/networking/destination-rule/#LoadBalancerSettings) to learn how to configure session stickiness for Istio.
+
 ## Note on Service Mesh and Istio
 
 Istio is a popular choice for its Service Mesh capabilities. However, Service Mesh for Splunk instances are only supported on Istio v1.8 and above, along with Kubernetes v1.19 and above. At the time of this documentation, neither Amazon AWS nor Google Cloud have updated their stack to these versions.
@@ -667,6 +673,9 @@ spec:
 
 ##### Documentation tested on Ingress Nginx v1.19.4 and Kubernetes v1.17
 
+### Sticky Sessions
+Follow [Ingress Nginx Sticky Sessions Documentation](https://kubernetes.github.io/ingress-nginx/examples/affinity/cookie/) to learn how to configure session stickiness for the Ingress Nginx controller.
+
 ## Configuring Ingress Using NGINX Ingress Controller (Nginxinc) 
 
 The Nginx Ingress Controller is an open source version of the F5 product. Please review their documentation below for more details.
@@ -862,6 +871,10 @@ spec:
 ```
 
 ##### Documentation tested on Nginx Ingress Controller v1.9.0 and Kubernetes v1.18
+
+### Sticky Sessions
+Follow [Nginx Ingress Controller Sticky Sessions Documentation](https://github.com/nginx/kubernetes-ingress/tree/main/examples/ingress-resources/session-persistence) to learn how to configure session stickiness for Nginx Ingress Controller.
+
 
 ## Using Let's Encrypt to manage TLS certificates 
 
