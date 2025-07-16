@@ -65,7 +65,7 @@ metadata:
           "metadata": {
             "name": "clustermanager-sample"
           },
-          "spec": null
+          "spec": {}
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -73,7 +73,7 @@ metadata:
           "metadata": {
             "name": "indexercluster-sample"
           },
-          "spec": null
+          "spec": {}
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -81,7 +81,7 @@ metadata:
           "metadata": {
             "name": "licensemanager-sample"
           },
-          "spec": null
+          "spec": {}
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -89,7 +89,7 @@ metadata:
           "metadata": {
             "name": "monitoringconsole-sample"
           },
-          "spec": null
+          "spec": {}
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -97,7 +97,7 @@ metadata:
           "metadata": {
             "name": "searchheadcluster-sample"
           },
-          "spec": null
+          "spec": {}
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -105,7 +105,7 @@ metadata:
           "metadata": {
             "name": "standalone-sample"
           },
-          "spec": null
+          "spec": {}
         }
       ]
     capabilities: Seamless Upgrades
