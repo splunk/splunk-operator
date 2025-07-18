@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - int-helm-tests-failing
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
