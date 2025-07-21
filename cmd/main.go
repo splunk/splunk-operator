@@ -59,6 +59,13 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(scheme))
+
+    // Ensure v4 API has priority
+    utilruntime.Must(scheme.SetVersionPriority(
+        enterpriseApi.GroupVersion,
+        enterpriseApiV3.GroupVersion,
+    ))
+	
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }
