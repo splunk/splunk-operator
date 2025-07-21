@@ -5,7 +5,7 @@ on:
       - develop
       - main
       - feature**
-      - int-helm-tests-failing
+  workflow_dispatch:
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
