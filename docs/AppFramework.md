@@ -680,7 +680,7 @@ spec:
       serviceAccountName: splunk-operator
       containers:
       - name: splunk-operator
-        image: "docker.io/splunk/splunk-operator:2.8.0"
+        image: "docker.io/splunk/splunk-operator:2.8.1"
         volumeMounts:
         - mountPath: /opt/splunk/appframework/
           name: app-staging
