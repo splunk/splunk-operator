@@ -840,6 +840,10 @@ func (mgr *indexerClusterPodManager) PrepareRecycle(ctx context.Context, n int32
 	return mgr.decommission(ctx, n, false)
 }
 
+func (mgr *indexerClusterPodManager) FinishUpgrade(ctx context.Context, n int32) (error) {
+	return nil
+}
+
 // FinishRecycle for indexerClusterPodManager completes recycle event for indexer pod; it returns true when complete
 func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
 	if n >= int32(len(mgr.cr.Status.Peers)) {

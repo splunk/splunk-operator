@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -72,7 +73,7 @@ type ClusterMasterReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *ClusterMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req, "ClusterMaster")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ClusterMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterMaster")
 
 	reqLogger := log.FromContext(ctx)

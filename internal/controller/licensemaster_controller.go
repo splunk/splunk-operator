@@ -26,6 +26,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -71,7 +72,7 @@ type LicenseMasterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *LicenseMasterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileCounters.With(getPrometheusLabels(req, "LicenseMaster")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "LicenseMaster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "LicenseMaster")
 
 	reqLogger := log.FromContext(ctx)

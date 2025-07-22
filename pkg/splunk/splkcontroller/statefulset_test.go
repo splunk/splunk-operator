@@ -75,6 +75,16 @@ func (mgr *errTestPodManager) FinishRecycle(ctx context.Context, n int32) (bool,
 	return true, errors.New(splcommon.Rerr)
 }
 
+func (mgr *errTestPodManager) FinishUpgrade(ctx context.Context, n int32) (error) {
+	// Induce not ready error
+	if ctx.Value("errKey") == "errVal" {
+		return nil
+	}
+
+	return errors.New(splcommon.Rerr)
+}
+
+
 func TestApplyStatefulSet(t *testing.T) {
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"}}

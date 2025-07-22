@@ -50,6 +50,9 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer Node Affinity
 	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
+
+	// upgrade strategy for the search head cluster
+	// UpgradeStrategy UpgradeStrategy `json:"upgradeStrategy,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -128,7 +131,21 @@ type SearchHeadClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	UpgradePhase UpgradePhase `json:"upgradePhase"`
+
+	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
+
+	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+
 }
+
+type UpgradePhase string
+
+const (
+	UpgradePhaseUpgrading UpgradePhase = "Upgrading"
+	UpgradePhaseUpgraded UpgradePhase = "Upgraded"
+)
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

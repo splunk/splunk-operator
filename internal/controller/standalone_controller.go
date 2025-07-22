@@ -31,6 +31,7 @@ import (
 
 	"github.com/pkg/errors"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,7 +76,7 @@ type StandaloneReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileCounters.With(getPrometheusLabels(req, "Standalone")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Standalone")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "Standalone")
 
 	reqLogger := log.FromContext(ctx)

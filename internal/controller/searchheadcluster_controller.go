@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,7 +71,7 @@ type SearchHeadClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *SearchHeadClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileCounters.With(getPrometheusLabels(req, "SearchHeadCluster")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "SearchHeadCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "SearchHeadCluster")
 
 	reqLogger := log.FromContext(ctx)

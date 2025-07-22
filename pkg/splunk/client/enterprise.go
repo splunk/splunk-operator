@@ -307,6 +307,28 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	return c.Do(request, expectedStatus, nil)
 }
 
+// InitiateUpgrade set upgrade banner for a search head cluster
+func (c *SplunkClient) InitiateUpgrade() error {
+	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-init", c.ManagementURI)
+	request, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
+}
+
+// UpgradeFinalize unset upgrade banner for a search head cluster captain
+func (c *SplunkClient) UpgradeFinalize(captainURI string) error {
+	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-finalize", captainURI)
+	request, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
+}
+
 // RemoveSearchHeadClusterMember removes a search head cluster member.
 // You can use this on any member of a search head cluster.
 // See https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/Removeaclustermember

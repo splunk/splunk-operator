@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -71,7 +72,7 @@ type ClusterManagerReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *ClusterManagerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// your logic here
-	reconcileCounters.With(getPrometheusLabels(req, "ClusterManager")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ClusterManager")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "ClusterManager")
 
 	reqLogger := log.FromContext(ctx)
@@ -160,9 +161,9 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // recordInstrumentionData Record api profiling information to prometheus
 func recordInstrumentionData(start time.Time, req ctrl.Request, module string, name string) {
-	metricLabels := getPrometheusLabels(req, name)
-	metricLabels[labelModuleName] = module
-	metricLabels[labelMethodName] = name
+	metricLabels := metrics.GetPrometheusLabels(req, name)
+	metricLabels[metrics.LabelModuleName] = module
+	metricLabels[metrics.LabelMethodName] = name
 	value := float64(time.Since(start) / time.Millisecond)
-	apiTotalTimeMetricEvents.With(metricLabels).Set(value)
+	metrics.ApiTotalTimeMetricEvents.With(metricLabels).Set(value)
 }
