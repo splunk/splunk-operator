@@ -51,11 +51,6 @@ func ManagerOptionsWithNamespaces(logger logr.Logger, opt ctrl.Options) ctrl.Opt
 	opts :=  cache.Options{}
 	namespaces := GetWatchNamespaces()
 	switch {
-	// case len(namespaces) == 0:
-	// 	logger.Info("Manager will watch and manage resources in all namespaces")
-	// 	opts = cache.Options{DefaultNamespaces: map[string]cache.Config{
-	// 		cache.AllNamespaces: {},
-	// 	}}
 	case len(namespaces) == 1:
 		logger.Info("Manager will be watching namespace", "namespace", namespaces[0])
 		opts = cache.Options{DefaultNamespaces: map[string]cache.Config{
