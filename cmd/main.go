@@ -19,11 +19,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"time"
+
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
-	"os"
+	"github.com/splunk/splunk-operator/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -108,7 +110,7 @@ func main() {
 	// Logging setup
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	baseOptions := ctrl.Options{
 		Metrics: metricsserver.Options{
 			BindAddress:    metricsAddr,
 			FilterProvider: filters.WithAuthenticationAndAuthorization,
@@ -119,7 +121,12 @@ func main() {
 		LeaderElectionID:       "270bec8c.splunk.com",
 		LeaseDuration:          &leaseDuration,
 		RenewDeadline:          &renewDeadline,
-	})
+	}
+
+	// Apply namespace-specific configuration
+	managerOptions := config.ManagerOptionsWithNamespaces(setupLog, baseOptions)
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions)
 
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

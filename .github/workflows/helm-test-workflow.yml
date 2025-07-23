@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+  workflow_dispatch:
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
