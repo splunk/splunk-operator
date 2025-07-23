@@ -2239,6 +2239,8 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 			// Status update successful
 			break
+		} else {
+			scopedLog.Error(err, "Status update failed")
 		}
 
 		time.Sleep(time.Duration(tryCnt) * 10 * time.Millisecond)
