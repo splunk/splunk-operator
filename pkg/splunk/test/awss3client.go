@@ -25,8 +25,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // MockAWSS3ClientError is used to store all the objects for an app source
@@ -96,7 +96,7 @@ type MockAWSDownloadClient struct{}
 
 // Download is a mock call for aws sdk download api.
 // It just does some error checking.
-func (mockDownloadClient MockAWSDownloadClient) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (size int64, err error) {
+func (mockDownloadClient MockAWSDownloadClient) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*manager.Downloader)) (size int64, err error) {
 	var bytes int64
 	remoteFile := *input.Key
 	localFile := w.(*os.File).Name()

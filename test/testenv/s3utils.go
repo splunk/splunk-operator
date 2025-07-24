@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
@@ -8,10 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -68,13 +70,13 @@ func DownloadLicenseFromS3Bucket() (string, error) {
 	return filename, err
 }
 
-// S3Session Create session object for S3 bucket connection
-func S3Session() (*session.Session, error) {
-	sess, err := session.NewSession(&aws.Config{Region: aws.String(s3Region)})
+// S3Config Create config object for S3 bucket connection
+func S3Config() (*aws.Config, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(s3Region))
 	if err != nil {
-		logf.Log.Error(err, "Failed to create session to S3")
+		logf.Log.Error(err, "Failed to create config for S3")
 	}
-	return sess, err
+	return &cfg, err
 }
 
 // DownloadFileFromS3 downloads file from S3
@@ -95,13 +97,14 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 	}
 	defer file.Close()
 
-	sess, err := S3Session()
+	cfg, err := S3Config()
 	if err != nil {
 		return "", err
 	}
 
-	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
+	s3Client := s3.NewFromConfig(*cfg)
+	downloader := manager.NewDownloader(s3Client)
+	numBytes, err := downloader.Download(context.TODO(), file,
 		&s3.GetObjectInput{
 			Bucket: aws.String(dataBucket),
 			Key:    aws.String(s3FilePath + "/" + filename),
@@ -118,10 +121,11 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 
 // UploadFileToS3 upload file to S3
 func UploadFileToS3(dataBucket string, filename string, path string, file *os.File) (string, error) {
-	sess, err := S3Session()
+	cfg, err := S3Config()
 	if err == nil {
-		uploader := s3manager.NewUploader(sess)
-		numBytes, err := uploader.Upload(&s3manager.UploadInput{
+		s3Client := s3.NewFromConfig(*cfg)
+		uploader := manager.NewUploader(s3Client)
+		numBytes, err := uploader.Upload(context.TODO(), &s3.PutObjectInput{
 			Bucket: aws.String(dataBucket),
 			Key:    aws.String(filepath.Join(path, filename)), // Name of the file to be saved
 			Body:   file,
@@ -134,11 +138,10 @@ func UploadFileToS3(dataBucket string, filename string, path string, file *os.Fi
 	return filepath.Join(path, filename), err
 }
 
-// GetFileListOnS3 lists object in a bucket
-func GetFileListOnS3(dataBucket string, path string) []*s3.Object {
-	sess, err := S3Session()
-	svc := s3.New(session.Must(sess, err))
-	resp, err := svc.ListObjects(&s3.ListObjectsInput{
+func GetFileListOnS3(dataBucket string, path string) []types.Object {
+	cfg, err := S3Config()
+	svc := s3.NewFromConfig(*cfg)
+	resp, err := svc.ListObjects(context.TODO(), &s3.ListObjectsInput{
 		Bucket: aws.String(dataBucket),
 		Prefix: aws.String(path),
 	})
@@ -163,17 +166,18 @@ func DeleteFilesOnS3(bucket string, filenames []string) error {
 
 // DeleteFileOnS3 Delete a given file on S3 Bucket
 func DeleteFileOnS3(bucket string, filename string) error {
-	sess, err := S3Session()
+	cfg, err := S3Config()
 	if err != nil {
 		return err
 	}
-	svc := s3.New(sess)
-	_, err = svc.DeleteObject(&s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(filename)})
+	svc := s3.NewFromConfig(*cfg)
+	_, err = svc.DeleteObject(context.TODO(), &s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(filename)})
 	if err != nil {
 		logf.Log.Error(err, "Unable to delete object from bucket", "Object Name", filename, "Bucket Name", bucket)
 	}
 
-	err = svc.WaitUntilObjectNotExists(&s3.HeadObjectInput{
+	waiter := s3.NewObjectNotExistsWaiter(svc)
+	waiter.Wait(context.TODO(), &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(filename),
 	})
