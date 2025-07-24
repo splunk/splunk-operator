@@ -28,7 +28,7 @@ import (
 
 	"github.com/pkg/errors"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -565,6 +565,7 @@ downloadWork:
 				// create the sub-directories on the volume for downloading scoped apps
 				localPath, err := downloadWorker.createDownloadDirOnOperator(ctx)
 				if err != nil {
+					scopedLog.Error(err, "unable to create download directory on operator", "appSrcName", downloadWorker.appSrcName, "appName", appDeployInfo.AppName)
 
 					// increment the retry count and mark this app as download pending
 					updatePplnWorkerPhaseInfo(ctx, appDeployInfo, appDeployInfo.PhaseInfo.FailCount+1, enterpriseApi.AppPkgDownloadPending)
@@ -1385,12 +1386,12 @@ func validatePhaseInfo(ctx context.Context, phaseInfo *enterpriseApi.PhaseInfo) 
 			enterpriseApi.PhaseInstall)
 
 	if !strings.Contains(phases, string(phaseInfo.Phase)) {
-		scopedLog.Error(nil, "Invalid phase in PhaseInfo")
+		scopedLog.Error(nil, "Invalid phase in PhaseInfo", "phase", string(phaseInfo.Phase))
 		return false
 	}
 
 	if ok := appPhaseInfoStatuses[phaseInfo.Status]; !ok {
-		scopedLog.Error(nil, "Invalid status in PhaseInfo")
+		scopedLog.Error(nil, "Invalid status in PhaseInfo", "phase", string(phaseInfo.Phase), "status", phaseInfo.Status)
 		return false
 	}
 	return true

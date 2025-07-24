@@ -31,6 +31,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -40,7 +41,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -318,14 +319,14 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 	// Create namespace scoped secret
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	smartstoreConfigMap := corev1.ConfigMap{
@@ -426,12 +427,12 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	smartstoreConfigMap := corev1.ConfigMap{
@@ -444,7 +445,7 @@ func TestPerformCmasterBundlePush(t *testing.T) {
 
 	_, err = splctrl.ApplyConfigMap(ctx, client, &smartstoreConfigMap)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	current.Status.BundlePushTracker.NeedToPushMasterApps = true
@@ -499,12 +500,12 @@ func TestPushMasterAppsBundle(t *testing.T) {
 
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	err = PushMasterAppsBundle(ctx, client, &current)
@@ -584,7 +585,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err = splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	cm.Kind = "ClusterMaster"
@@ -656,7 +657,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	// test deletion
@@ -754,7 +755,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -903,7 +904,7 @@ func TestClusterMasterGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1124,7 +1125,22 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 		return RemoteDataListResponse, nil
 	}
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.Standalone{}).
+		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{}).
+		WithStatusSubresource(&enterpriseApiV3.LicenseMaster{})
 	c := builder.Build()
 	utilruntime.Must(enterpriseApiV3.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()

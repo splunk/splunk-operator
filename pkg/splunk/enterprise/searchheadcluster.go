@@ -29,7 +29,7 @@ import (
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -131,7 +131,8 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkSearchHead)
+		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkSearchHead)
+
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating

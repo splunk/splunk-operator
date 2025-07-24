@@ -34,6 +34,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -43,7 +44,7 @@ import (
 	"github.com/go-logr/logr"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
@@ -813,7 +814,7 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	// Create S3 secret
@@ -903,7 +904,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1045,7 +1046,7 @@ func TestSHCGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1228,7 +1229,7 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	// test deletion
@@ -1489,9 +1490,20 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		return RemoteDataListResponse, nil
 	}
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.Standalone{}).
+		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
 	c := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// create searchheadcluster custom resource

@@ -5,27 +5,6 @@ splunk-operator:
 image:
   repository: docker.io/splunk/splunk:9.4.3
 
-# The kube-rbac-proxy is a small HTTP proxy for a single upstream, that can perform RBAC
-# authorization against the Kubernetes API.
-# reference: https://github.com/brancz/kube-rbac-proxy
-kubeRbacProxy:
-
-  # Specify kube-rbac-proxy image
-  image:
-    repository: gcr.io/kubebuilder/kube-rbac-proxy
-    pullPolicy: IfNotPresent
-    tag: "v0.13.1"
-
-  # Set resource requests and limits for kube-rbac-proxy container
-  resources:
-    limits:
-      cpu: 500m
-      memory: 128Mi
-    requests:
-      cpu: 5m
-      memory: 64Mi
-
-
 # Splunk Operator configurations
 splunkOperator:
 

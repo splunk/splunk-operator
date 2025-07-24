@@ -41,9 +41,10 @@ import (
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestApplyClusterManager(t *testing.T) {
@@ -620,14 +621,14 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	// Create namespace scoped secret
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	secret.Data[s3AccessKey] = []byte("abcdJDckRkxhMEdmSk5FekFRRzBFOXV6bGNldzJSWE9IenhVUy80aa")
 	secret.Data[s3SecretKey] = []byte("g4NVp0a29PTzlPdGczWk1vekVUcVBSa0o4NkhBWWMvR1NadDV4YVEy")
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	smartstoreConfigMap := corev1.ConfigMap{
@@ -729,12 +730,12 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	smartstoreConfigMap := corev1.ConfigMap{
@@ -747,7 +748,7 @@ func TestPerformCmBundlePush(t *testing.T) {
 
 	_, err = splctrl.ApplyConfigMap(ctx, client, &smartstoreConfigMap)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
@@ -809,12 +810,12 @@ func TestPushManagerAppsBundle(t *testing.T) {
 
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	_, err = splctrl.ApplySecret(ctx, client, secret)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	err = PushManagerAppsBundle(ctx, client, &current)
@@ -894,7 +895,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err = splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	cm.Kind = "ClusterManager"
@@ -966,7 +967,7 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	// test deletion
@@ -1063,7 +1064,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1212,7 +1213,7 @@ func TestClusterManagerGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1425,9 +1426,16 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	ctx := context.TODO()
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	// Create License Manager
 	lm := enterpriseApi.LicenseManager{
@@ -1504,7 +1512,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	// now the statefulset image in spec is updated to splunk2
 	ApplyLicenseManager(ctx, client, &lm)
 
-	// now the statefulset and license manager both should be in ready state
+	// should be status ready now
 	ApplyLicenseManager(ctx, client, &lm)
 
 	clusterManager := &enterpriseApi.ClusterManager{}
@@ -1573,9 +1581,16 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	}
 	lm.Spec.Image = "splunk/splunk:latest"
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 
 	// Create the instances
 	client.Create(ctx, lm)
@@ -1658,9 +1673,21 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 		return remoteDataListResponse, nil
 	}
 
-	builder := fake.NewClientBuilder()
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.Standalone{}).
+		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+
 	c := builder.Build()
-	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
 	ctx := context.TODO()
 
 	// Create App framework volume
