@@ -40,30 +40,13 @@ var _ RemoteDataClient = &AWSS3Client{}
 
 // SplunkAWSS3Client is an interface to AWS S3 client
 type SplunkAWSS3Client interface {
-	ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error)
-}
-
-// s3ClientWrapper wraps *s3.Client to implement SplunkAWSS3Client
-type s3ClientWrapper struct {
-	client *s3.Client
-}
-
-func (w *s3ClientWrapper) ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
-	return w.client.ListObjectsV2(context.TODO(), options)
+	ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	GetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
 // SplunkAWSDownloadClient is used to download the apps from remote storage
 type SplunkAWSDownloadClient interface {
-	Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*manager.Downloader)) (n int64, err error)
-}
-
-// downloaderWrapper wraps manager.Downloader to match SplunkAWSDownloadClient interface
-type downloaderWrapper struct {
-	downloader *manager.Downloader
-}
-
-func (d *downloaderWrapper) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*manager.Downloader)) (int64, error) {
-	return d.downloader.Download(w, input, options...)
+	Download(ctx context.Context, w io.WriterAt, input *s3.GetObjectInput, options ...func(*manager.Downloader)) (n int64, err error)
 }
 
 // AWSS3Client is a client to implement S3 specific APIs
@@ -147,13 +130,17 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 			config.WithHTTPClient(&httpClient),
 		)
 	}
+	if err != nil {
+		scopedLog.Error(err, "Failed to initialize an AWS S3 config.")
+		return nil
+	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(endpoint)
 	})
 
 	// Validate transport
 	tlsVersion := "Unknown"
-	if tr, ok := s3Client.Options().HTTPClient.Do(*http.Transport); ok {
+	if tr, ok := httpClient.Transport.(*http.Transport); ok {
 		tlsVersion = getTLSVersion(tr)
 	}
 
@@ -178,8 +165,16 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 	endpointWithRegion := fmt.Sprintf("%s%s%s", region, awsRegionEndPointDelimiter, endpoint)
 
 	cl := fn(ctx, endpointWithRegion, accessKeyID, secretAccessKey)
-	s3SplunkClient = cl.(SplunkAWSS3Client)
-	downloader := manager.NewDownloader(cl.(*s3ClientWrapper).client)
+	if cl == nil {
+		err = fmt.Errorf("failed to create an AWS S3 client")
+		return nil, err
+	}
+
+	s3SplunkClient, ok := cl.(SplunkAWSS3Client)
+	if !ok {
+		return nil, fmt.Errorf("unable to get s3 client")
+	}
+	downloader := manager.NewDownloader(cl.(SplunkAWSS3Client))
 
 	return &AWSS3Client{
 		Region:             region,
@@ -189,7 +184,7 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 		Prefix:             prefix,
 		StartAfter:         startAfter,
 		Client:             s3SplunkClient,
-		Downloader:         &downloaderWrapper{downloader: downloader},
+		Downloader:         downloader,
 	}, nil
 }
 
@@ -231,7 +226,7 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 	}
 
 	client := awsclient.Client
-	resp, err := client.ListObjectsV2(options)
+	resp, err := client.ListObjectsV2(ctx, options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName, "endpoint", awsclient.Endpoint)
 		return remoteDataClientResponse, err
@@ -272,7 +267,7 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest R
 	defer file.Close()
 
 	downloader := awsclient.Downloader
-	numBytes, err = downloader.Download(file,
+	numBytes, err = downloader.Download(ctx, file,
 		&s3.GetObjectInput{
 			Bucket:  aws.String(awsclient.BucketName),
 			Key:     aws.String(downloadRequest.RemoteFile),

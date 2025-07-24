@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -29,6 +30,7 @@ var (
 	testS3Bucket              = os.Getenv("TEST_BUCKET")
 	testIndexesS3Bucket       = os.Getenv("TEST_INDEXES_S3_BUCKET")
 	enterpriseLicenseLocation = os.Getenv("ENTERPRISE_LICENSE_LOCATION")
+	s3deleteWaitTime          = 60
 )
 
 // GetSmartStoreIndexesBucet returns smartstore test bucket name
@@ -180,7 +182,7 @@ func DeleteFileOnS3(bucket string, filename string) error {
 	waiter.Wait(context.TODO(), &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(filename),
-	})
+	}, time.Duration(time.Duration(s3deleteWaitTime).Seconds()))
 	logf.Log.Info("Deleted file on S3", "File Name", filename, "Bucket", bucket)
 	return err
 }
