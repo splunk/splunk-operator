@@ -770,7 +770,7 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 	shc := &enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "SearchHeadCluster",
-			APIVersion: "enterprise.splunk.com/v3",
+			APIVersion: "enterprise.splunk.com/v4",
 		},
 
 		ObjectMeta: metav1.ObjectMeta{
