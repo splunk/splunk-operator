@@ -5,6 +5,7 @@ on:
     branches:
     - main
     - develop
+    - remove_readiness_overwrite
 jobs:
   check-formating:
     runs-on: ubuntu-latest

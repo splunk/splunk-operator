@@ -70,6 +70,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		{MetaName: "*v1." + splcommon.TestStack1LicenseManagerStatefulSet},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-master-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-master"},
@@ -89,9 +90,9 @@ func TestApplyLicenseMaster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[9], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[8], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[10], funcCalls[12], funcCalls[13]}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[10]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[10], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[11], funcCalls[13], funcCalls[14]}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[11]}, "List": {listmockCall[0]}}
 	current := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",

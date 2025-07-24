@@ -562,10 +562,23 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
-	configMap := corev1.ConfigMap{
+	configMapName := GetProbeConfigMapName(cr.GetNamespace())
+	configMapNamespace := cr.GetNamespace()
+	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
+
+	// Check if the config map already exists
+	var configMap corev1.ConfigMap
+	err := client.Get(ctx, namespacedName, &configMap)
+
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return &configMap, nil
+	}
+
+	// Existing config map not found, create one for the probes
+	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetProbeConfigMapName(cr.GetNamespace()),
-			Namespace: cr.GetNamespace(),
+			Name:      configMapName,
+			Namespace: configMapNamespace,
 		},
 	}
 

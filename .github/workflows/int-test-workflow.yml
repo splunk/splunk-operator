@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - remove_readiness_overwrite
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
