@@ -75,7 +75,7 @@ func (mgr *errTestPodManager) FinishRecycle(ctx context.Context, n int32) (bool,
 	return true, errors.New(splcommon.Rerr)
 }
 
-func (mgr *errTestPodManager) FinishUpgrade(ctx context.Context, n int32) (error) {
+func (mgr *errTestPodManager) FinishUpgrade(ctx context.Context, n int32) error {
 	// Induce not ready error
 	if ctx.Value("errKey") == "errVal" {
 		return nil
@@ -83,7 +83,6 @@ func (mgr *errTestPodManager) FinishUpgrade(ctx context.Context, n int32) (error
 
 	return errors.New(splcommon.Rerr)
 }
-
 
 func TestApplyStatefulSet(t *testing.T) {
 	ctx := context.TODO()

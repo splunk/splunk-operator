@@ -60,7 +60,7 @@ func (mgr *DefaultStatefulSetPodManager) FinishRecycle(ctx context.Context, n in
 	return true, nil
 }
 
-func (mgr *DefaultStatefulSetPodManager) FinishUpgrade(ctx context.Context, n int32) (error) {
+func (mgr *DefaultStatefulSetPodManager) FinishUpgrade(ctx context.Context, n int32) error {
 	return nil
 }
 

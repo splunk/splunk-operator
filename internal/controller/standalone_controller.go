@@ -30,8 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pkg/errors"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"

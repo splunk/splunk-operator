@@ -840,7 +840,7 @@ func (mgr *indexerClusterPodManager) PrepareRecycle(ctx context.Context, n int32
 	return mgr.decommission(ctx, n, false)
 }
 
-func (mgr *indexerClusterPodManager) FinishUpgrade(ctx context.Context, n int32) (error) {
+func (mgr *indexerClusterPodManager) FinishUpgrade(ctx context.Context, n int32) error {
 	return nil
 }
 

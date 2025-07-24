@@ -131,7 +131,7 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 
 			metrics.UpgradeStartTime.Set(float64(currentTime))
 
-//			mgr.cr.Status.UpgradePhase = "Upgrading"
+			//			mgr.cr.Status.UpgradePhase = "Upgrading"
 			mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
 		}
 
@@ -202,7 +202,7 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 		mgr.log.Info("Finalize Upgrade - unset banner")
 		return c.UpgradeFinalize(captainURI)
 	}
-	
+
 	return nil
 }
 

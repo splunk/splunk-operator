@@ -24,8 +24,8 @@ import (
 	"github.com/splunk/splunk-operator/internal/controller/common"
 
 	"github.com/pkg/errors"
-	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"

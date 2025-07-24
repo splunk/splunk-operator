@@ -137,14 +137,13 @@ type SearchHeadClusterStatus struct {
 	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
 
 	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
-
 }
 
 type UpgradePhase string
 
 const (
 	UpgradePhaseUpgrading UpgradePhase = "Upgrading"
-	UpgradePhaseUpgraded UpgradePhase = "Upgraded"
+	UpgradePhaseUpgraded  UpgradePhase = "Upgraded"
 )
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster

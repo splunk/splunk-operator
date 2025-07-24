@@ -54,5 +54,5 @@ type StatefulSetPodManager interface {
 	// FinishRecycle completes recycle event for pod and returns true, or returns false if nothing to do
 	FinishRecycle(context.Context, int32) (bool, error)
 
-	FinishUpgrade(context.Context, int32) (error)
+	FinishUpgrade(context.Context, int32) error
 }
