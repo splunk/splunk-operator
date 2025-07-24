@@ -19,11 +19,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
-	"os"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
-	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -44,6 +46,8 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 	//extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -57,6 +61,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(scheme))
+	utilruntime.Must(enterprisev4.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 	//utilruntime.Must(extapi.AddToScheme(scheme))
 }
@@ -182,6 +187,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
+		os.Exit(1)
+	}
+	if err := (&controller.IngestorClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

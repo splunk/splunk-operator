@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-3551-ingestion-cr
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest

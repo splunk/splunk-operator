@@ -60,6 +60,9 @@ const (
 	// SplunkIndexer may be a standalone or clustered indexer peer
 	SplunkIndexer InstanceType = "indexer"
 
+	// SplunkIngestor may be a standalone or clustered ingestion peer
+	SplunkIngestor InstanceType = "ingestor"
+
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
