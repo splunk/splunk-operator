@@ -4,6 +4,7 @@ on:
     branches:
       - develop
       - main
+      - bugfix/remove-rbac-bindings
       - feature**
   workflow_dispatch:
 jobs:
