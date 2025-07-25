@@ -33,12 +33,12 @@ const (
 	IngestorClusterPausedAnnotation = "ingestorcluster.enterprise.splunk.com/paused"
 )
 
-// IngestorClusterSpec defines the spec of Ingestor Cluster pods
+// IngestorClusterSpec defines the spec of Ingestor Cluster
 type IngestorClusterSpec struct {
-	// Common SPlunk spec
+	// Common Splunk spec
 	CommonSplunkSpec `json:",inline"`
 
-	// Number of ingestion pods
+	// Number of ingestor pods
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
@@ -83,15 +83,15 @@ type PipelineConfigSpec struct {
 	IndexerPipe bool `json:"indexerPipe"`
 }
 
-// IngestorClusterStatus defines the observed state of Ingestor Cluster pods
+// IngestorClusterStatus defines the observed state of Ingestor Cluster
 type IngestorClusterStatus struct {
-	// Phase of the ingestion pods
+	// Phase of the ingestor pods
 	Phase Phase `json:"phase"`
 
-	// Number of desired ingestion pods
+	// Number of desired ingestor pods
 	Replicas int32 `json:"replicas"`
 
-	// Number of ready ingestion pods
+	// Number of ready ingestor pods
 	ReadyReplicas int32 `json:"readyReplicas"`
 
 	// Selector for pods used by HorizontalPodAutoscaler
@@ -134,210 +134,192 @@ type IngestorCluster struct {
 	Status IngestorClusterStatus `json:"status,omitempty,omitzero"`
 }
 
-// DeepCopyObject implements common.MetaObject.
+// DeepCopyObject implements client.Object.
 func (ic *IngestorCluster) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
-// GetAnnotations implements common.MetaObject.
+// GetAnnotations implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetAnnotations of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetAnnotations() map[string]string {
 	panic("unimplemented")
 }
 
-// GetCreationTimestamp implements common.MetaObject.
+// GetCreationTimestamp implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetCreationTimestamp of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetCreationTimestamp() metav1.Time {
 	panic("unimplemented")
 }
 
-// GetDeletionGracePeriodSeconds implements common.MetaObject.
+// GetDeletionGracePeriodSeconds implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetDeletionGracePeriodSeconds of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetDeletionGracePeriodSeconds() *int64 {
 	panic("unimplemented")
 }
 
-// GetDeletionTimestamp implements common.MetaObject.
+// GetDeletionTimestamp implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetDeletionTimestamp of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetDeletionTimestamp() *metav1.Time {
 	panic("unimplemented")
 }
 
-// GetFinalizers implements common.MetaObject.
+// GetFinalizers implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetFinalizers of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetFinalizers() []string {
 	panic("unimplemented")
 }
 
-// GetGenerateName implements common.MetaObject.
+// GetGenerateName implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetGenerateName of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetGenerateName() string {
 	panic("unimplemented")
 }
 
-// GetGeneration implements common.MetaObject.
+// GetGeneration implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetGeneration of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetGeneration() int64 {
 	panic("unimplemented")
 }
 
-// GetLabels implements common.MetaObject.
+// GetLabels implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetLabels of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetLabels() map[string]string {
 	panic("unimplemented")
 }
 
-// GetManagedFields implements common.MetaObject.
+// GetManagedFields implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetManagedFields of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetManagedFields() []metav1.ManagedFieldsEntry {
 	panic("unimplemented")
 }
 
-// GetName implements common.MetaObject.
+// GetName implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetName of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetName() string {
 	panic("unimplemented")
 }
 
-// GetNamespace implements common.MetaObject.
+// GetNamespace implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetNamespace of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetNamespace() string {
 	panic("unimplemented")
 }
 
-// GetObjectKind implements common.MetaObject.
+// GetObjectKind implements client.Object.
 // Subtle: this method shadows the method (TypeMeta).GetObjectKind of IngestorCluster.TypeMeta.
 func (ic *IngestorCluster) GetObjectKind() schema.ObjectKind {
 	panic("unimplemented")
 }
 
-// GetObjectMeta implements common.MetaObject.
-// Subtle: this method shadows the method (ObjectMeta).GetObjectMeta of IngestorCluster.ObjectMeta.
-func (ic *IngestorCluster) GetObjectMeta() metav1.Object {
-	panic("unimplemented")
-}
-
-// GetOwnerReferences implements common.MetaObject.
+// GetOwnerReferences implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetOwnerReferences of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetOwnerReferences() []metav1.OwnerReference {
 	panic("unimplemented")
 }
 
-// GetResourceVersion implements common.MetaObject.
+// GetResourceVersion implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetResourceVersion of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetResourceVersion() string {
 	panic("unimplemented")
 }
 
-// GetSelfLink implements common.MetaObject.
+// GetSelfLink implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetSelfLink of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetSelfLink() string {
 	panic("unimplemented")
 }
 
-// GetUID implements common.MetaObject.
+// GetUID implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).GetUID of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) GetUID() types.UID {
 	panic("unimplemented")
 }
 
-// GroupVersionKind implements common.MetaObject.
-// Subtle: this method shadows the method (TypeMeta).GroupVersionKind of IngestorCluster.TypeMeta.
-func (ic *IngestorCluster) GroupVersionKind() schema.GroupVersionKind {
-	panic("unimplemented")
-}
-
-// SetAnnotations implements common.MetaObject.
+// SetAnnotations implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetAnnotations of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetAnnotations(annotations map[string]string) {
 	panic("unimplemented")
 }
 
-// SetCreationTimestamp implements common.MetaObject.
+// SetCreationTimestamp implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetCreationTimestamp of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetCreationTimestamp(timestamp metav1.Time) {
 	panic("unimplemented")
 }
 
-// SetDeletionGracePeriodSeconds implements common.MetaObject.
+// SetDeletionGracePeriodSeconds implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetDeletionGracePeriodSeconds of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetDeletionGracePeriodSeconds(*int64) {
 	panic("unimplemented")
 }
 
-// SetDeletionTimestamp implements common.MetaObject.
+// SetDeletionTimestamp implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetDeletionTimestamp of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetDeletionTimestamp(timestamp *metav1.Time) {
 	panic("unimplemented")
 }
 
-// SetFinalizers implements common.MetaObject.
+// SetFinalizers implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetFinalizers of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetFinalizers(finalizers []string) {
 	panic("unimplemented")
 }
 
-// SetGenerateName implements common.MetaObject.
+// SetGenerateName implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetGenerateName of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetGenerateName(name string) {
 	panic("unimplemented")
 }
 
-// SetGeneration implements common.MetaObject.
+// SetGeneration implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetGeneration of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetGeneration(generation int64) {
 	panic("unimplemented")
 }
 
-// SetGroupVersionKind implements common.MetaObject.
-// Subtle: this method shadows the method (TypeMeta).SetGroupVersionKind of IngestorCluster.TypeMeta.
-func (ic *IngestorCluster) SetGroupVersionKind(kind schema.GroupVersionKind) {
-	panic("unimplemented")
-}
-
-// SetLabels implements common.MetaObject.
+// SetLabels implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetLabels of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetLabels(labels map[string]string) {
 	panic("unimplemented")
 }
 
-// SetManagedFields implements common.MetaObject.
+// SetManagedFields implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetManagedFields of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetManagedFields(managedFields []metav1.ManagedFieldsEntry) {
 	panic("unimplemented")
 }
 
-// SetName implements common.MetaObject.
+// SetName implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetName of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetName(name string) {
 	panic("unimplemented")
 }
 
-// SetNamespace implements common.MetaObject.
+// SetNamespace implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetNamespace of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetNamespace(namespace string) {
 	panic("unimplemented")
 }
 
-// SetOwnerReferences implements common.MetaObject.
+// SetOwnerReferences implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetOwnerReferences of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetOwnerReferences([]metav1.OwnerReference) {
 	panic("unimplemented")
 }
 
-// SetResourceVersion implements common.MetaObject.
+// SetResourceVersion implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetResourceVersion of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetResourceVersion(version string) {
 	panic("unimplemented")
 }
 
-// SetSelfLink implements common.MetaObject.
+// SetSelfLink implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetSelfLink of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetSelfLink(selfLink string) {
 	panic("unimplemented")
 }
 
-// SetUID implements common.MetaObject.
+// SetUID implements client.Object.
 // Subtle: this method shadows the method (ObjectMeta).SetUID of IngestorCluster.ObjectMeta.
 func (ic *IngestorCluster) SetUID(uid types.UID) {
 	panic("unimplemented")
