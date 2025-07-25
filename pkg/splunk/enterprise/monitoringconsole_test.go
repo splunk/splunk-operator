@@ -87,7 +87,6 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-monitoring-console-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-monitoring-console"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-monitoring-console-secret-v1"},
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-monitoring-console"},

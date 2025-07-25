@@ -176,7 +176,6 @@ func TestApplyIndexerCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-indexer-service"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
-		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
 		{MetaName: "*v4.ClusterManager-test-manager1"},
