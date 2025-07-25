@@ -562,10 +562,32 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
-	configMap := corev1.ConfigMap{
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getProbeConfigMap").WithValues("namespace", cr.GetNamespace())
+
+	configMapName := GetProbeConfigMapName(cr.GetNamespace())
+	configMapNamespace := cr.GetNamespace()
+	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
+
+	// Check if the config map already exists
+	scopedLog.Info("Checking for existing config map", "name", configMapName, "namespace", configMapNamespace)
+	var configMap corev1.ConfigMap
+	err := client.Get(ctx, namespacedName, &configMap)
+
+	if err == nil {
+		scopedLog.Info("Retrieved existing config map", "name", configMapName, "namespace", configMapNamespace)
+		return &configMap, nil
+	} else if !k8serrors.IsNotFound(err) {
+		scopedLog.Error(err, "Error retrieving config map", "name", configMapName, "namespace", configMapNamespace)
+		return nil, err
+	}
+
+	// Existing config map not found, create one for the probes
+	scopedLog.Info("Creating new config map", "name", configMapName, "namespace", configMapNamespace)
+	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetProbeConfigMapName(cr.GetNamespace()),
-			Namespace: cr.GetNamespace(),
+			Name:      configMapName,
+			Namespace: configMapNamespace,
 		},
 	}
 
