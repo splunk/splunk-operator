@@ -153,6 +153,8 @@ func getTelAppNameExtension(crKind string) (string, error) {
 		return "cmaster", nil
 	case "ClusterManager":
 		return "cmanager", nil
+	case "IngestorCluster":
+		return "ingestor", nil
 	default:
 		return "", errors.New("Invalid CR kind for telemetry app")
 	}

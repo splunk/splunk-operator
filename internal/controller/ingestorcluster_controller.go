@@ -110,11 +110,10 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
-			common.ConfigMapChangedPredicate(),
-			common.ClusterManagerChangedPredicate(),
-			common.ClusterMasterChangedPredicate(),
+			common.CrdChangedPredicate(),
 		)).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(

@@ -19,15 +19,16 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
-	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -36,6 +37,12 @@ import (
 // ApplyIngestorCluster reconciles the state of an IngestorCluster custom resource
 func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
 	var err error
+
+	// Unless modified, reconcile for this object will be requeued after 5 seconds
+	result := reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Second * 5,
+	}
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyIngestorCluster")
@@ -49,16 +56,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	cr.Kind = "IngestorCluster"
 
-	// Unless modified, reconcile for this object will be requeued after 5 seconds
-	result := reconcile.Result{
-		Requeue:      true,
-		RequeueAfter: time.Second * 5,
-	}
-
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
-	cr.Status.Replicas = cr.Spec.Replicas
-	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-ingester", cr.GetName())
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
@@ -71,7 +70,29 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
-	// create or update general config resources
+	cr.Status.Replicas = cr.Spec.Replicas
+
+	// If needed, Migrate the app framework status
+	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
+	if err != nil {
+		return result, err
+	}
+
+	// If app framework is configured, then do following things
+	// Initialize the S3 clients based on providers
+	// Check the status of apps on remote storage
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+		err = initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
+		if err != nil {
+			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
+			cr.Status.AppContext.IsDeploymentInProgress = false
+			return result, err
+		}
+	}
+
+	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-ingestor", cr.GetName())
+
+	// Create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
@@ -81,6 +102,16 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// Check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		// If this is the last of its kind getting deleted,
+		// remove the entry for this CR type from configMap or else
+		// just decrement the refCount for this CR type
+		if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
+			err = UpdateOrRemoveEntryFromConfigMapLocked(ctx, client, cr, SplunkIngestor)
+			if err != nil {
+				return result, err
+			}
+		}
+
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIngestor)
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
@@ -88,9 +119,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
-		}
-		if err != nil {
-			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}
@@ -109,6 +137,42 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
+	// If we are using App Framework and are scaling up, we should re-populate the
+	// config map with all the appSource entries
+	// This is done so that the new pods
+	// that come up now will have the complete list of all the apps and then can
+	// download and install all the apps
+	// If we are scaling down, just update the auxPhaseInfo list
+	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
+
+		statefulsetName := GetSplunkStatefulsetName(SplunkIngestor, cr.GetName())
+
+		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
+		if err != nil {
+			return result, err
+		}
+
+		appStatusContext := cr.Status.AppContext
+
+		switch isStatefulSetScaling {
+		case enterpriseApi.StatefulSetScalingUp:
+			// If we are indeed scaling up, then mark the deploy status to Pending
+			// for all the app sources so that we add all the app sources in config map
+			cr.Status.AppContext.IsDeploymentInProgress = true
+
+			for appSrc := range appStatusContext.AppsSrcDeployStatus {
+				changeAppSrcDeployInfoStatus(ctx, appSrc, appStatusContext.AppsSrcDeployStatus, enterpriseApi.RepoStateActive, enterpriseApi.DeployStatusComplete, enterpriseApi.DeployStatusPending)
+				changePhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+			}
+
+		// If we are scaling down, just delete the state auxPhaseInfo entries
+		case enterpriseApi.StatefulSetScalingDown:
+			for appSrc := range appStatusContext.AppsSrcDeployStatus {
+				removeStaleEntriesFromAuxPhaseInfo(ctx, cr.Spec.Replicas, appSrc, appStatusContext.AppsSrcDeployStatus)
+			}
+		}
+	}
+
 	// Create or update statefulset for the ingestors
 	statefulSet, err := getIngestorStatefulSet(ctx, client, cr)
 	if err != nil {
@@ -116,25 +180,52 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
-	var phase enterpriseApi.Phase
+	// Make changes to respective mc configmap when changing/removing mcRef from spec
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	if err != nil {
+		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
+		return result, err
+	}
 
 	mgr := splctrl.DefaultStatefulSetPodManager{}
-	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
+	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
 	if err != nil {
 		eventPublisher.Warning(ctx, "update", fmt.Sprintf("update stateful set failed %s", err.Error()))
-
 		return result, err
 	}
 	cr.Status.Phase = phase
 
-	cr.Kind = "IngestorCluster"
-	// If statefulSet is not created, avoid upgrade path validation
-	if !statefulSet.CreationTimestamp.IsZero() {
-		// Check if the IngestorCluster is ready for version upgrade
-		continueReconcile, err := UpgradePathValidation(ctx, client, cr, cr.Spec.CommonSplunkSpec, nil)
-		if err != nil || !continueReconcile {
-			return result, err
+	// No need to requeue if everything is ready
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// Upgrade fron automated MC to MC CRD
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
+		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
+		if err != nil {
+			eventPublisher.Warning(ctx, "DeleteReferencesToAutomatedMCIfExists", fmt.Sprintf("delete reference to automated MC if exists failed %s", err.Error()))
+			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
+		}
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
+			if err != nil {
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
+				return result, err
+			}
+		}
+
+		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
+		result = *finalResult
+
+		// Add a splunk operator telemetry app
+		if cr.Spec.EtcVolumeStorageConfig.EphemeralStorage || !cr.Status.TelAppInstalled {
+			podExecClient := splutil.GetPodExecClient(client, cr, "")
+			err = addTelApp(ctx, podExecClient, cr.Spec.Replicas, cr)
+			if err != nil {
+				return result, err
+			}
+
+			// Mark telemetry app as installed
+			cr.Status.TelAppInstalled = true
 		}
 	}
 
@@ -154,25 +245,14 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		cr.Spec.Replicas = 1
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-type ingestorClusterPodManager struct {
-	c               splcommon.ControllerClient
-	log             logr.Logger
-	cr              *enterpriseApi.IngestorCluster
-	secrets         *corev1.Secret
-	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
-}
-
-// newIngestorClusterPodManager function to create pod manager this is added to write unit test case
-var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) ingestorClusterPodManager {
-	return ingestorClusterPodManager{
-		log:             log,
-		cr:              cr,
-		secrets:         secret,
-		newSplunkClient: newSplunkClient,
+	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
+		err := ValidateAppFrameworkSpec(ctx, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext, true, cr.GetObjectKind().GroupVersionKind().Kind)
+		if err != nil {
+			return err
+		}
 	}
+
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors

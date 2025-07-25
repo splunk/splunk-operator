@@ -61,7 +61,6 @@ spec:
             type: object
           spec:
             description: IngestorClusterSpec defines the spec of Ingestor Cluster
-              pods
             properties:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
@@ -1581,31 +1580,44 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              pipelineConfig:
+                description: Pipeline configuration
+                properties:
+                  indexerPipe:
+                    type: boolean
+                  remoteQueueOutput:
+                    type: boolean
+                  remoteQueueRuleset:
+                    type: boolean
+                  remoteQueueTyping:
+                    type: boolean
+                  ruleSet:
+                    type: boolean
+                  typing:
+                    type: boolean
+                type: object
               pushBus:
                 description: Push Bus spec
                 properties:
-                  pipelineConfig:
-                    properties:
-                      indexerPipe:
-                        type: boolean
-                      remoteQueueOutput:
-                        type: boolean
-                      remoteQueueRuleset:
-                        type: boolean
-                      remoteQueueTyping:
-                        type: boolean
-                      ruleSet:
-                        type: boolean
-                      typing:
-                        type: boolean
-                    type: object
                   sqs:
                     properties:
                       authRegion:
                         type: string
+                      deadLetterQueueName:
+                        type: string
                       endpoint:
                         type: string
+                      largeMessageStoreEndpoint:
+                        type: string
+                      largeMessageStorePath:
+                        type: string
+                      maxRetriesPerPart:
+                        type: integer
                       queueName:
+                        type: string
+                      retryPolicy:
+                        type: string
+                      sendInterval:
                         type: string
                     type: object
                   type:
@@ -1644,7 +1656,7 @@ spec:
                     type: integer
                 type: object
               replicas:
-                description: Number of ingestion pods
+                description: Number of ingestor pods
                 format: int32
                 type: integer
               resources:
@@ -4253,7 +4265,7 @@ spec:
             type: object
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
-              Cluster pods
+              Cluster
             properties:
               appContext:
                 description: App Framework context
@@ -4540,7 +4552,7 @@ spec:
                 description: Auxillary message describing CR status
                 type: string
               phase:
-                description: Phase of the ingestion pods
+                description: Phase of the ingestor pods
                 enum:
                 - Pending
                 - Ready
@@ -4551,11 +4563,11 @@ spec:
                 - Error
                 type: string
               readyReplicas:
-                description: Number of ready ingestion pods
+                description: Number of ready ingestor pods
                 format: int32
                 type: integer
               replicas:
-                description: Number of desired ingestion pods
+                description: Number of desired ingestor pods
                 format: int32
                 type: integer
               resourceRevMap:
