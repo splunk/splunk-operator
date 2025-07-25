@@ -610,20 +610,20 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
 
 	// Check if the config map already exists
-	scopedLog.Info("Checking for existing config map", "name", configMapName, "namespace", configMapNamespace)
+	scopedLog.Info("Checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 	var configMap corev1.ConfigMap
 	err := client.Get(ctx, namespacedName, &configMap)
 
 	if err == nil {
-		scopedLog.Info("Retrieved existing config map", "name", configMapName, "namespace", configMapNamespace)
+		scopedLog.Info("Retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 		return &configMap, nil
 	} else if !k8serrors.IsNotFound(err) {
-		scopedLog.Error(err, "Error retrieving config map", "name", configMapName, "namespace", configMapNamespace)
+		scopedLog.Error(err, "Error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 		return nil, err
 	}
 
 	// Existing config map not found, create one for the probes
-	scopedLog.Info("Creating new config map", "name", configMapName, "namespace", configMapNamespace)
+	scopedLog.Info("Creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
 	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
