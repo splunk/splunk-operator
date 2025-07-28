@@ -113,7 +113,7 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 		})
 
 	if err != nil {
-		logf.Log.Error(err, "Failed to download file", "Filename", filename)
+		logf.Log.Error(err, "Failed to download file", "Bucket", dataBucket, "Path", s3FilePath, "Filename", filename)
 		return "", err
 	}
 
