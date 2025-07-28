@@ -900,6 +900,14 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
+	headlessServiceName := ""
+	if instanceType == SplunkSearchHead || instanceType == SplunkIndexer || instanceType == SplunkMonitoringConsole {
+		headlessServiceName = GetSplunkServiceName(instanceType, cr.GetName(), true)
+	}
+	domainName := os.Getenv("CLUSTER_DOMAIN")
+	if domainName == "" {
+		domainName = "cluster.local"
+	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
@@ -908,6 +916,11 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
+		{Name: "POD_NAME", Value: cr.GetName()},
+		{Name: "POD_NAMESPACE", Value: cr.GetNamespace()},
+		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
+		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: headlessServiceName},
+		{Name: "DOMAIN_NAME", Value: domainName},
 	}
 
 	// update variables for licensing, if configured
