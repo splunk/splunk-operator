@@ -52,16 +52,16 @@ jobs:
       matrix:
         test:
           [
-            # appframeworksS1,
-            # managerappframeworkc3,
-            # managerappframeworkm4,
+            appframeworksS1,
+            managerappframeworkc3,
+            managerappframeworkm4,
             managersecret,
-            # managersmartstore,
-            # managermc1,
-            # managermc2,
-            # managercrcrud,
+            managersmartstore,
+            managermc1,
+            managermc2,
+            managercrcrud,
             licensemanager,
-            # managerdeletecr,
+            managerdeletecr,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image
