@@ -109,7 +109,7 @@ func DownloadFileFromS3(dataBucket string, filename string, s3FilePath string, d
 	numBytes, err := downloader.Download(context.TODO(), file,
 		&s3.GetObjectInput{
 			Bucket: aws.String(dataBucket),
-			Key:    aws.String(s3FilePath + "/" + filename),
+			Key:    aws.String(s3FilePath + filename),
 		})
 
 	if err != nil {
