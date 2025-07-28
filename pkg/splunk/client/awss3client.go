@@ -113,7 +113,7 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 	endpoint = regEndSl[1]
 
 	if accessKeyID != "" && secretAccessKey != "" {
-		cfg, err = config.LoadDefaultConfig(context.TODO(),
+		cfg, err = config.LoadDefaultConfig(ctx,
 			config.WithRegion(region),
 			config.WithRetryMaxAttempts(3),
 			config.WithHTTPClient(&httpClient),
@@ -124,7 +124,7 @@ func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, s
 		)
 	} else {
 		scopedLog.Info("No valid access/secret keys.  Attempt to connect without them")
-		cfg, err = config.LoadDefaultConfig(context.TODO(),
+		cfg, err = config.LoadDefaultConfig(ctx,
 			config.WithRegion(region),
 			config.WithRetryMaxAttempts(3),
 			config.WithHTTPClient(&httpClient),
