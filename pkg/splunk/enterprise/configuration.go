@@ -916,7 +916,8 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			Name: "POD_NAME",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
+					APIVersion: "v1",
+					FieldPath:  "metadata.name",
 				},
 			},
 		},
