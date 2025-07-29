@@ -51,7 +51,13 @@ var _ = Describe("IngestorCluster Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: enterprisev4.IngestorClusterSpec{
+						CommonSplunkSpec: enterprisev4.CommonSplunkSpec{
+							Spec: enterprisev4.Spec{
+								ImagePullPolicy: "Always",
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
