@@ -900,10 +900,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
-	headlessServiceName := ""
-	if instanceType == SplunkSearchHead || instanceType == SplunkIndexer || instanceType == SplunkMonitoringConsole {
-		headlessServiceName = GetSplunkServiceName(instanceType, cr.GetName(), true)
-	}
 	domainName := os.Getenv("CLUSTER_DOMAIN")
 	if domainName == "" {
 		domainName = "cluster.local"
@@ -916,10 +912,17 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
-		{Name: "POD_NAME", Value: cr.GetName()},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
 		{Name: "POD_NAMESPACE", Value: cr.GetNamespace()},
 		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
-		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: headlessServiceName},
+		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), true)},
 		{Name: "DOMAIN_NAME", Value: domainName},
 	}
 
