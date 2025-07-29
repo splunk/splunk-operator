@@ -178,6 +178,8 @@ func (mgr *searchHeadClusterPodManager) FinishRecycle(ctx context.Context, n int
 
 func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int32) error {
 
+	reqLogger := log.FromContext(ctx)
+
 	if mgr.cr.Status.UpgradePhase == enterpriseApi.UpgradePhaseUpgrading {
 		c := mgr.getClient(ctx, n)
 
@@ -199,7 +201,7 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 		// revert upgrade state status
 		mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgraded
 
-		mgr.log.Info("Finalize Upgrade - unset banner")
+		reqLogger.Info("Finalize Upgrade - unset banner")
 		return c.UpgradeFinalize(captainURI)
 	}
 

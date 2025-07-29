@@ -208,6 +208,7 @@ func searchHeadClusterPodManagerTester(t *testing.T, method string, mockHandlers
 	}
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
+
 	mgr := &searchHeadClusterPodManager{
 		log:     scopedLog,
 		cr:      &cr,
@@ -318,11 +319,18 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 	// test pod needs update => transition to detention
 	mockHandlers = append(mockHandlers, spltest.MockHTTPHandler{
 		Method: "POST",
-		URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/member/control/control/set_manual_detention?manual_detention=on",
+		URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/captain/control/control/upgrade-init",
 		Status: 200,
 		Err:    nil,
 		Body:   ``,
-	})
+	}, spltest.MockHTTPHandler{
+		Method: "POST",
+		URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/shcluster/member/control/control/set_manual_detention?manual_detention=on",
+		Status: 200,
+		Err:    nil,
+		Body:   ``,	
+	},
+	)
 	pod.ObjectMeta.Labels["controller-revision-hash"] = "v0"
 	method = "searchHeadClusterPodManager.Update(Quarantine Pod)"
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[2], funcCalls[2], funcCalls[5], funcCalls[2], funcCalls[2]}, "Create": {funcCalls[1]}}
