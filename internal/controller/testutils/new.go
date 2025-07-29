@@ -45,6 +45,40 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 	return ad
 }
 
+// NewIngestorCluster returns new IngestorCluster instance with its config hash
+func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
+	c := &enterpriseApi.Spec{
+		ImagePullPolicy: string(pullPolicy),
+	}
+
+	cs := &enterpriseApi.CommonSplunkSpec{
+		Mock:    true,
+		Spec:    *c,
+		Volumes: []corev1.Volume{},
+		MonitoringConsoleRef: corev1.ObjectReference{
+			Name: "mcName",
+		},
+	}
+
+	ic := &enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "enterprise.splunk.com/v4",
+			Kind:       "IngestorCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+	}
+
+	ic.Spec = enterpriseApi.IngestorClusterSpec{
+		CommonSplunkSpec: *cs,
+	}
+
+	return ic
+}
+
 // NewSearchHeadCluster returns new serach head cluster instance with its config hash
 func NewSearchHeadCluster(name, ns, image string) *enterpriseApi.SearchHeadCluster {
 

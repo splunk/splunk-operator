@@ -48,7 +48,7 @@ func GetWatchNamespaces() []string {
 
 // ManagerOptionsWithNamespaces returns an updated Options with namespaces information.
 func ManagerOptionsWithNamespaces(logger logr.Logger, opt ctrl.Options) ctrl.Options {
-	opts :=  cache.Options{}
+	opts := cache.Options{}
 	namespaces := GetWatchNamespaces()
 	switch {
 	case len(namespaces) == 1:
