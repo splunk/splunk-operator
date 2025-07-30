@@ -57,6 +57,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	var err error
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError
+	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
