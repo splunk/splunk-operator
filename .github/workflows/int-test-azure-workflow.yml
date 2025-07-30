@@ -57,6 +57,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
       AZURE_REGION: ${{ secrets.AZURE_REGION }}
+      SPLUNK_GENERAL_TERMS_FLAG: ${{ secrets.SPLUNK_GENERAL_TERMS_FLAG }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v2

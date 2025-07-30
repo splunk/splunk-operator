@@ -86,6 +86,7 @@ jobs:
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
       ARM64: "true"
+      SPLUNK_GENERAL_TERMS_FLAG: ${{ secrets.SPLUNK_GENERAL_TERMS_FLAG }}
     steps:
       - name: Set Test Cluster Name
         run: |

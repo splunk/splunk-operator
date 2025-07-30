@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL_3357_configmap
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -84,6 +85,7 @@ jobs:
       ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      SPLUNK_GENERAL_TERMS_FLAG: ${{ secrets.SPLUNK_GENERAL_TERMS_FLAG }}
     steps:
       - name: Set Test Cluster Name
         run: |
