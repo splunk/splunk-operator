@@ -123,7 +123,7 @@ func (cmstr *ClusterManager) NewEvent(eventType, reason, message string) corev1.
 			Namespace:    cmstr.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Clustermanager",
+			Kind:       "ClusterManager",
 			Namespace:  cmstr.Namespace,
 			Name:       cmstr.Name,
 			UID:        cmstr.UID,
