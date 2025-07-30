@@ -43,45 +43,27 @@ var ApiTotalTimeMetricEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	Help: "The time it takes to complete each call in standalone (in milliseconds)",
 }, []string{LabelNamespace, LabelName, LabelKind, LabelModuleName, LabelMethodName})
 
-var (
-	UpgradeStartTime = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "splunk_upgrade_start_time",
-		Help: "Unix timestamp when the SHC upgrade started",
-	})
-	UpgradeEndTime = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "splunk_upgrade_end_time",
-		Help: "Unix timestamp when the SHC upgrade ended",
-	},
-	)
-	ShortSearchSuccessCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "splunk_short_search_success_total",
-			Help: "Total number of successful short searches per search head",
-		},
-		[]string{"sh_name"},
-	)
-	ShortSearchFailureCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "splunk_short_search_failure_total",
-			Help: "Total number of failed short searches per search head",
-		},
-		[]string{"sh_name"},
-	)
-	TotalSearchSuccessCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "splunk_total_search_success_total",
-			Help: "Total number of successful total searches per search head",
-		},
-		[]string{"sh_name"},
-	)
-	TotalSearchFailureCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "splunk_total_search_failure_total",
-			Help: "Total number of failed total searches per search head",
-		},
-		[]string{"sh_name"},
-	)
-)
+var UpgradeStartTime = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "splunk_upgrade_start_time",
+	Help: "Unix timestamp when the SHC upgrade started",
+})
+
+var UpgradeEndTime = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "splunk_upgrade_end_time",
+	Help: "Unix timestamp when the SHC upgrade ended",
+})
+
+var ActiveHistoricalSearchCount = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "splunk_active_historical_search_count",
+		Help: "Total number of active historical search count",
+	}, []string{"sh_name"})
+
+var ActiveRealtimeSearchCount = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "splunk_active_realtime_search_count",
+		Help: "Total number of active realtime search count",
+	}, []string{"sh_name"})
 
 func GetPrometheusLabels(request reconcile.Request, kind string) prometheus.Labels {
 	return prometheus.Labels{
@@ -109,9 +91,7 @@ func init() {
 		ApiTotalTimeMetricEvents,
 		UpgradeStartTime,
 		UpgradeEndTime,
-		ShortSearchSuccessCounter,
-		ShortSearchFailureCounter,
-		TotalSearchSuccessCounter,
-		TotalSearchFailureCounter,
+		ActiveHistoricalSearchCount,
+		ActiveRealtimeSearchCount,
 	)
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
@@ -138,6 +139,15 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		return false, c.SetSearchHeadDetention(true)
 
 	case "ManualDetention":
+
+		metrics.ActiveHistoricalSearchCount.With(prometheus.Labels{
+			"sh_name": mgr.cr.Status.Members[n].Name,
+		}).Set(float64(mgr.cr.Status.Members[n].ActiveHistoricalSearchCount))
+
+		metrics.ActiveRealtimeSearchCount.With(prometheus.Labels{
+			"sh_name": mgr.cr.Status.Members[n].Name,
+		}).Set(float64(mgr.cr.Status.Members[n].ActiveRealtimeSearchCount))
+
 		// Wait until active searches have drained
 		searchesComplete := mgr.cr.Status.Members[n].ActiveHistoricalSearchCount+mgr.cr.Status.Members[n].ActiveRealtimeSearchCount == 0
 		if searchesComplete {

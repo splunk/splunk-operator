@@ -200,7 +200,6 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// handle SHC upgrade process
 	phase, err = mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 
-	//	phase, err = mgr.ReconcileUpgrade(ctx, client, statefulSet, cr.Spec.Replicas)
 	if err != nil {
 		return result, err
 	}
