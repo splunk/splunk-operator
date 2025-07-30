@@ -27,11 +27,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -40,12 +40,13 @@ var _ RemoteDataClient = &AWSS3Client{}
 
 // SplunkAWSS3Client is an interface to AWS S3 client
 type SplunkAWSS3Client interface {
-	ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error)
+	ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	GetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
 // SplunkAWSDownloadClient is used to download the apps from remote storage
 type SplunkAWSDownloadClient interface {
-	Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (n int64, err error)
+	Download(ctx context.Context, w io.WriterAt, input *s3.GetObjectInput, options ...func(*manager.Downloader)) (n int64, err error)
 }
 
 // AWSS3Client is a client to implement S3 specific APIs
@@ -75,15 +76,15 @@ func GetRegion(ctx context.Context, endpoint string, region *string) error {
 	return err
 }
 
-// InitAWSClientWrapper is a wrapper around InitClientSession
+// InitAWSClientWrapper is a wrapper around InitClientConfig
 func InitAWSClientWrapper(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
-	return InitAWSClientSession(ctx, region, accessKeyID, secretAccessKey)
+	return InitAWSClientConfig(ctx, region, accessKeyID, secretAccessKey)
 }
 
-// InitAWSClientSession initializes and returns a client session object
-func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
+// InitAWSClientConfig initializes and returns a client config object
+func InitAWSClientConfig(ctx context.Context, regionWithEndpoint, accessKeyID, secretAccessKey string) SplunkAWSS3Client {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("InitAWSClientSession")
+	scopedLog := reqLogger.WithName("InitAWSClientConfig")
 
 	// Enforcing minimum version TLS1.2
 	tr := &http.Transport{
@@ -98,7 +99,7 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 	}
 
 	var err error
-	var sess *session.Session
+	var cfg aws.Config
 	var region, endpoint string
 
 	// Extract region and endpoint
@@ -111,37 +112,39 @@ func InitAWSClientSession(ctx context.Context, regionWithEndpoint, accessKeyID, 
 	region = regEndSl[0]
 	endpoint = regEndSl[1]
 
-	config := &aws.Config{
-		Region:     aws.String(region),
-		MaxRetries: aws.Int(3),
-		HTTPClient: &httpClient,
-	}
-
 	if accessKeyID != "" && secretAccessKey != "" {
-		config.WithCredentials(credentials.NewStaticCredentials(
-			accessKeyID,     // id
-			secretAccessKey, // secret
-			""))
+		cfg, err = config.LoadDefaultConfig(ctx,
+			config.WithRegion(region),
+			config.WithRetryMaxAttempts(3),
+			config.WithHTTPClient(&httpClient),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				accessKeyID,     // id
+				secretAccessKey, // secret
+				"")),            // token
+		)
 	} else {
 		scopedLog.Info("No valid access/secret keys.  Attempt to connect without them")
+		cfg, err = config.LoadDefaultConfig(ctx,
+			config.WithRegion(region),
+			config.WithRetryMaxAttempts(3),
+			config.WithHTTPClient(&httpClient),
+		)
 	}
-
-	sess, err = session.NewSession(config)
 	if err != nil {
-		scopedLog.Error(err, "Failed to initialize an AWS S3 session.")
+		scopedLog.Error(err, "Failed to initialize an AWS S3 config.")
 		return nil
 	}
-
-	s3Client := s3.New(sess, &aws.Config{Endpoint: aws.String(endpoint)})
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(endpoint)
+	})
 
 	// Validate transport
 	tlsVersion := "Unknown"
-	if tr, ok := s3Client.Config.HTTPClient.Transport.(*http.Transport); ok {
+	if tr, ok := httpClient.Transport.(*http.Transport); ok {
 		tlsVersion = getTLSVersion(tr)
 	}
 
-	scopedLog.Info("AWS Client Session initialization successful.", "region", region, "TLS Version", tlsVersion)
-	s3Client.Endpoint = endpoint
+	scopedLog.Info("AWS Client Config initialization successful.", "region", region, "TLS Version", tlsVersion)
 	return s3Client
 }
 
@@ -167,11 +170,11 @@ func NewAWSS3Client(ctx context.Context, bucketName string, accessKeyID string, 
 		return nil, err
 	}
 
-	s3SplunkClient, ok := cl.(*s3.S3)
+	s3SplunkClient, ok := cl.(SplunkAWSS3Client)
 	if !ok {
 		return nil, fmt.Errorf("unable to get s3 client")
 	}
-	downloader := s3manager.NewDownloaderWithClient(cl.(*s3.S3))
+	downloader := manager.NewDownloader(cl.(SplunkAWSS3Client))
 
 	return &AWSS3Client{
 		Region:             region,
@@ -218,12 +221,12 @@ func (awsclient *AWSS3Client) GetAppsList(ctx context.Context) (RemoteDataListRe
 		Bucket:     aws.String(awsclient.BucketName),
 		Prefix:     aws.String(awsclient.Prefix),
 		StartAfter: aws.String(awsclient.StartAfter), // exclude the directory itself from listing
-		MaxKeys:    aws.Int64(4000),                  // return upto 4K keys from S3
+		MaxKeys:    aws.Int32(4000),                  // return upto 4K keys from S3
 		Delimiter:  aws.String("/"),                  // limit the listing to 1 level only
 	}
 
 	client := awsclient.Client
-	resp, err := client.ListObjectsV2(options)
+	resp, err := client.ListObjectsV2(ctx, options)
 	if err != nil {
 		scopedLog.Error(err, "Unable to list items in bucket", "AWS S3 Bucket", awsclient.BucketName, "endpoint", awsclient.Endpoint)
 		return remoteDataClientResponse, err
@@ -264,7 +267,7 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest R
 	defer file.Close()
 
 	downloader := awsclient.Downloader
-	numBytes, err = downloader.Download(file,
+	numBytes, err = downloader.Download(ctx, file,
 		&s3.GetObjectInput{
 			Bucket:  aws.String(awsclient.BucketName),
 			Key:     aws.String(downloadRequest.RemoteFile),
