@@ -113,12 +113,12 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-namespace.yaml --server-side
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-namespace.yaml --server-side
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.7.1/splunk-operator-cluster.yaml --server-side
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-cluster.yaml --server-side
 ```
 
 The reason for appending `--server-side` to the apply command is that some of the CRDs are getting too long according to the CRD standards. There are no real implications caused by this.

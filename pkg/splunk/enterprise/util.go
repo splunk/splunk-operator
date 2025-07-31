@@ -46,7 +46,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	// Used to move files between pods
@@ -786,14 +786,10 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource
-func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, smartstore *enterpriseApi.SmartStoreSpec, instanceType InstanceType) error {
+func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("DeleteOwnerReferencesForResources").WithValues("kind", cr.GetObjectKind().GroupVersionKind().Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
-
-	if smartstore != nil {
-		_ = DeleteOwnerReferencesForS3SecretObjects(ctx, client, cr, smartstore)
-	}
 
 	// Delete references to Default secret object
 	defaultSecretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
@@ -838,7 +834,7 @@ func DeleteOwnerReferencesForS3SecretObjects(ctx context.Context, client splcomm
 
 	volList := smartstore.VolList
 	for _, volume := range volList {
-		if volume.SecretRef != "" {
+		if volume.SecretRef != "" && volume.SecretRef != splcommon.GetNamespaceScopedSecretName(cr.GetNamespace()) {
 			_, err = splutil.RemoveSecretOwnerRef(ctx, client, volume.SecretRef, cr)
 			if err == nil {
 				scopedLog.Info("Removed references for Secret Object", "secret", volume.SecretRef)
@@ -2243,6 +2239,8 @@ func updateCRStatus(ctx context.Context, client splcommon.ControllerClient, orig
 
 			// Status update successful
 			break
+		} else {
+			scopedLog.Error(err, "Error trying to update the CR status")
 		}
 
 		time.Sleep(time.Duration(tryCnt) * 10 * time.Millisecond)

@@ -32,7 +32,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
@@ -98,6 +98,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 				return result, err
 			}
 		}
+
 		// If this is the last of its kind getting deleted,
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type.
@@ -108,9 +109,9 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 			}
 		}
 
-		DeleteOwnerReferencesForResources(ctx, client, cr, nil, SplunkLicenseMaster)
-		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
+		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkLicenseMaster)
 
+		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {

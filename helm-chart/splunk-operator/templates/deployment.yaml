@@ -42,28 +42,14 @@ spec:
       hostPID: {{ .Values.splunkOperator.hostPID }}
       hostIPC: {{ .Values.splunkOperator.hostIPC }}
       containers:
-        - name: kube-rbac-proxy
-          image: "{{ .Values.kubeRbacProxy.image.repository }}:{{ .Values.kubeRbacProxy.image.tag }}"
-          imagePullPolicy: {{ .Values.kubeRbacProxy.image.pullPolicy }}
-          args:
-          - "--secure-listen-address=0.0.0.0:8443"
-          - "--upstream=http://127.0.0.1:8080/"
-          - "--logtostderr=true"
-          - "--v=10"
-          ports:
-          - containerPort: 8443
-            name: https
-            protocol: TCP
-          resources:
-{{- toYaml .Values.kubeRbacProxy.resources | nindent 12 }}
         - name: manager
           image: "{{ .Values.splunkOperator.image.repository}}"
           imagePullPolicy: {{ .Values.splunkOperator.image.pullPolicy }}
           args:
-          - --leader-elect
-          - --pprof
+            - --leader-elect
+            - --pprof
           command:
-          - /manager
+            - /manager
 {{- with .Values.splunkOperator.livenessProbe }}
           livenessProbe:
 {{- toYaml . | nindent 12 }}
@@ -73,24 +59,24 @@ spec:
 {{- toYaml . | nindent 12 }}
 {{- end }}
           env:
-          - name: WATCH_NAMESPACE
+            - name: WATCH_NAMESPACE
 {{- if .Values.splunkOperator.clusterWideAccess  }}
-            value: {{ .Values.splunkOperator.watchNamespaces }}
+              value: {{ .Values.splunkOperator.watchNamespaces }}
 {{- else }}
-            value: {{ .Release.Namespace }}
+              value: {{ .Release.Namespace }}
 {{- end }}
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: OPERATOR_NAME
-            value: {{ include "splunk-operator.operator.fullname" . }}
-          - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-            value: "{{ .Values.image.repository }}"
-          - name: CLUSTER_DOMAIN
-            value: {{ .Values.splunkOperator.clusterDomain | default "cluster.local" }}
-          - name: SPLUNK_GENERAL_TERMS
-            value: {{ .Values.splunkOperator.splunkGeneralTerms | default "" }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: {{ include "splunk-operator.operator.fullname" . }}
+            - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+              value: "{{ .Values.image.repository }}"
+            - name: CLUSTER_DOMAIN
+              value: {{ .Values.splunkOperator.clusterDomain | default "cluster.local" }}
+            - name: SPLUNK_GENERAL_TERMS
+              value: {{ .Values.splunkOperator.splunkGeneralTerms | default "" }}
 {{- with .Values.extraEnvs }}
 {{- toYaml . | trim | nindent 10 }}
 {{- end }}

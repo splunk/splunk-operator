@@ -1,15 +1,17 @@
 # Default environment is default
-ENVIRONMENT=${1:-default}
+ENVIRONMENT ?= ${1}
+${ENVIRONMENT}:
+	ENVIRONMENT = default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 2.8.0
+VERSION ?= 2.8.1
 
 # SPLUNK_ENTERPRISE_IMAGE defines the splunk docker tag that is used as default image.
-SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk:edge"
+SPLUNK_ENTERPRISE_IMAGE ?= "docker.io/splunk/splunk"
 
 # WATCH_NAMESPACE defines if its clusterwide operator or namespace specific
 # by default we leave it as clusterwide if it has to be namespace specific,
@@ -30,7 +32,7 @@ NAMESPACE ?= "splunk-operator"
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
 ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
+BUNDLE_CHANNELS := --channels=${CHANNELS}
 endif
 
 # DEFAULT_CHANNEL defines the default channel used in the bundle.
@@ -39,9 +41,9 @@ endif
 # - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
 # - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=${DEFAULT_CHANNEL}
 endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+BUNDLE_METADATA_OPTS ?= ${BUNDLE_CHANNELS} ${BUNDLE_DEFAULT_CHANNEL}
 
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
@@ -52,12 +54,12 @@ IMAGE_TAG_BASE ?= splunk/splunk-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.26.0
+ENVTEST_K8S_VERSION = 1.31.0
 
 ignore-not-found ?= True
 
@@ -130,20 +132,20 @@ scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...
 
-vet: setup/ginkgo ## Run go vet against code.
+vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/controller ./pkg/splunk/client ./pkg/splunk/util ./controllers
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	go build -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	go run ./cmd/main.go
 
 docker-build: #test ## Build docker image with the manager.
 	docker build -t ${IMG} .
@@ -156,29 +158,32 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal@sha256
-#   Build Base OS Version: d16d4445b1567f29449fba3b6d2bc37db467dc3067d33e940477e55aecdf6e8e (corresponds to tag 8.10)
+#   Build Base OS Version: 88d40445bdf35b3b848371dec918b7d6ed0ef0e03a4e0f510c10be536e4aa1c9 (corresponds to tag 8.10-1753676782)
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal@sha256
-BASE_IMAGE_VERSION ?= d16d4445b1567f29449fba3b6d2bc37db467dc3067d33e940477e55aecdf6e8e
+BASE_IMAGE_VERSION ?= 88d40445bdf35b3b848371dec918b7d6ed0ef0e03a4e0f510c10be536e4aa1c9
 
 docker-buildx:
-	@if [ -z "$(IMG)" ]; then \
-		echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
-		exit 1; \
-	fi; \
-	if echo "$(BASE_IMAGE)" | grep -q "distroless"; then \
-		DOCKERFILE="Dockerfile.distroless"; \
-		BUILD_TAG="$(IMG)-distroless"; \
-	else \
-		DOCKERFILE="Dockerfile"; \
-		BUILD_TAG="$(IMG)"; \
-	fi; \
-	docker buildx build --push --platform="$(PLATFORMS)" \
-		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
-		--build-arg BASE_IMAGE_VERSION="$(BASE_IMAGE_VERSION)" \
-		--tag "$$BUILD_TAG" -f "$$DOCKERFILE" .
+	@if [ -z "${IMG}" ]; then \
+            echo "Error: IMG is a mandatory argument. Usage: make docker-buildx IMG=<image_name> ...."; \
+            exit 1; \
+        fi; \
+        	docker buildx create --name project-v3-builder --use || true; \
+        	docker buildx use project-v3-builder; \
+        if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
+            DOCKERFILE="Dockerfile.distroless"; \
+            BUILD_TAG="${IMG}-distroless"; \
+        else \
+            DOCKERFILE="Dockerfile"; \
+            BUILD_TAG="${IMG}"; \
+        fi; \
+        docker buildx build --push --platform="${PLATFORMS}" \
+            --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+            --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
+        - docker buildx rm project-v3-builder || true
 
 
 
@@ -187,42 +192,42 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side --force-conflicts -f -
 
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=${ignore-not-found} -f -
 
 deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
-	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/$(ENVIRONMENT)/kustomization.yaml
-	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/$(ENVIRONMENT)/kustomization.yaml
+	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s/value: \"${WATCH_NAMESPACE}\"/value: WATCH_NAMESPACE_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) "s|${SPLUNK_ENTERPRISE_IMAGE}|SPLUNK_ENTERPRISE_IMAGE|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: \"${SPLUNK_GENERAL_TERMS}\"/value: SPLUNK_GENERAL_TERMS_VALUE/g"  config/${ENVIRONMENT}/kustomization.yaml
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/$(ENVIRONMENT) | kubectl delete -f -
+	$(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl delete -f -
 
 ## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
+LOCALBIN ?= "$(shell pwd)/bin"
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v4.5.5
+KUSTOMIZE_VERSION ?= v5.4.3
 CONTROLLER_TOOLS_VERSION ?= v0.16.1
 
 CONTROLLER_GEN = $(LOCALBIN)/controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}
 
 KUSTOMIZE = $(LOCALBIN)/kustomize
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN)
+	test -s $(LOCALBIN)/kustomize || curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,${KUSTOMIZE_VERSION}) $(LOCALBIN)
 
 ENVTEST = $(LOCALBIN)/setup-envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
@@ -237,19 +242,19 @@ bundle: manifests kustomize
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
 	$(SED) "s/namespace: splunk-operator/namespace: ${NAMESPACE}/g"  config/default/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/default/kustomization.yaml
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle $(BUNDLE_GEN_FLAGS)
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle ${BUNDLE_GEN_FLAGS}
 	operator-sdk bundle validate ./bundle
 	operator-sdk bundle validate bundle --select-optional suite=operatorframework
 	cp bundle/manifests/enterprise.splunk.com* helm-chart/splunk-operator/crds
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	docker build -f bundle.Dockerfile -t ${BUNDLE_IMG} .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
-	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
+	$(MAKE) docker-push IMG=${BUNDLE_IMG}
 
 .PHONY: opm
 OPM = ./bin/opm
@@ -260,7 +265,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.23.0/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.24.2/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
@@ -270,14 +275,14 @@ endif
 
 # A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
 # These images MUST exist in a registry and be pull-able.
-BUNDLE_IMGS ?= $(BUNDLE_IMG)
+BUNDLE_IMGS ?= ${BUNDLE_IMG}
 
 # The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
-CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:v$(VERSION)
+CATALOG_IMG ?= ${IMAGE_TAG_BASE}-catalog:v${VERSION}
 
 # Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
 ifneq ($(origin CATALOG_BASE_IMG), undefined)
-FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
+FROM_INDEX_OPT := --from-index ${CATALOG_BASE_IMG}
 endif
 
 # Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.
@@ -285,20 +290,20 @@ endif
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+	$(OPM) index add --container-tool docker --mode semver --tag ${CATALOG_IMG} --bundles ${BUNDLE_IMGS} ${FROM_INDEX_OPT}
 
 # Push the catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
-	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+	$(MAKE) docker-push IMG=${CATALOG_IMG}
 
 
 
 .PHONY: code/sec
-code/sec: $GOBIN/gosec ## Run gosec
+code/sec: $(GOBIN)/gosec ## Run gosec
 	gosec -severity medium --confidence medium -quiet ./...
 
-$GOBIN/gosec:
+$(GOBIN)/gosec:
 	go get -u github.com/securego/gosec/cmd/gosec
 
 .PHONY: cluster-up
@@ -375,8 +380,8 @@ generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster
 GO_DOWNLOAD_URL=https://go.dev/dl/go1.17.7.darwin-amd64.pkg
 export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/v1.17.0
 OPERATOR_SDK_DOWNLOAD_URL=curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-MINIKUBE_DOWNLOAD_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-$(OS)-$(ARCH)
-KUBECTL_DOWNLOAD_URL="https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/$(OS)/$(ARCH)/kubectl"
+MINIKUBE_DOWNLOAD_URL=https://storage.googleapis.com/minikube/releases/latest/minikube-${OS}-${ARCH}
+KUBECTL_DOWNLOAD_URL="https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/${OS}/${ARCH}/kubectl"
 
 .PHONY: setup/devsetup
 setup/devsetup:
@@ -392,7 +397,7 @@ setup/devsetup:
 
 clean: stop_clair_scanner
 	@rm -rf ./build/_output
-	@docker rmi  $(IMG) || true
+	@docker rmi  ${IMG} || true
 	@rm -f clair-scanner
 	@rm -rf clair-scanner-logs
 
@@ -406,3 +411,9 @@ setup/ginkgo:
 	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
 	@echo Installing gomega
 	@go get github.com/onsi/gomega/...
+
+.PHONY: build-installer
+build-installer: manifests generate kustomize
+	mkdir -p dist
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/install.yaml
