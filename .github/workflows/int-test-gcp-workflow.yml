@@ -106,7 +106,6 @@ jobs:
       GCP_INDEXES_CONTAINER: ${{ secrets.GCP_INDEXES_CONTAINER}}
       ECR_REPOSITORY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}
       GCP_CONTAINER_REGISTRY_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-      SPLUNK_GENERAL_TERMS_FLAG: ${{ secrets.SPLUNK_GENERAL_TERMS_FLAG }}
     steps:
       - name: Set Test Cluster Name
         run: |

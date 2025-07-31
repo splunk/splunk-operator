@@ -189,7 +189,6 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
-      SPLUNK_GENERAL_TERMS_FLAG: ${{ secrets.SPLUNK_GENERAL_TERMS_FLAG }}
     steps:
       - name: Set Test Cluster Name
         run: |

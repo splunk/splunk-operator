@@ -5,7 +5,6 @@ on:
       - develop
       - main
       - feature**
-      - CSPL_3357_configmap
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -68,7 +67,6 @@ jobs:
       HELM_REPO_PATH: "../../../../helm-chart"
       INSTALL_OPERATOR: "true"
       TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
-      SPLUNK_GENERAL_TERMS_FLAG: ${{ secrets.SPLUNK_GENERAL_TERMS_FLAG }}
     steps:
       - uses: chrisdickinson/setup-yq@3d931309f27270ebbafd53f2daee773a82ea1822
       - name: Checking YQ installation
