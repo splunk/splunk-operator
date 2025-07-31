@@ -160,6 +160,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-indexer"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
+		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-indexer-secret-v1"},
 		{MetaName: "*v4.ClusterManager-test-manager1"},
@@ -197,7 +198,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 		{ListOpts: listOpts},
 		{ListOpts: listOpts1},
 	}
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[1]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[1]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "List": {listmockCall[0], listmockCall[1]}}
 
 	current := enterpriseApi.IndexerCluster{
