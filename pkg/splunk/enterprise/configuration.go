@@ -367,6 +367,11 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
+	err = validateSplunkGeneralTerms()
+	if err != nil {
+		return err
+	}
+
 	// if not provided, set default values for imagePullSecrets
 	err = ValidateImagePullSecrets(ctx, c, cr, spec)
 	if err != nil {
@@ -868,6 +873,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
+		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 	}
 
 	// update variables for licensing, if configured
@@ -2033,4 +2039,11 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
 	return err
+}
+
+func validateSplunkGeneralTerms() error {
+	if os.Getenv("SPLUNK_GENERAL_TERMS") == "--accept-sgt-current-at-splunk-com" {
+		return nil
+	}
+	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
 }
