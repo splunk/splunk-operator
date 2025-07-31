@@ -23,8 +23,8 @@ aws-cli v1.20.8
 Copyright 2012-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 https://github.com/aws/aws-cli
 
-aws-sdk-go v1.42.16
-https://github.com/aws/aws-sdk-go
+aws-sdk-go-v2 v1.36.6
+https://github.com/aws/aws-sdk-go-v2
 
 promotheus/client-golang v1.11.0
 https://github.com/prometheus/client_golang
