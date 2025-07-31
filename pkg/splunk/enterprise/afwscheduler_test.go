@@ -377,6 +377,13 @@ func TestGetApplicablePodNameForAppFramework(t *testing.T) {
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
 	}
+
+	cr.TypeMeta.Kind = "IngestorCluster"
+	expectedPodName = "splunk-stack1-ingestor-0"
+	returnedPodName = getApplicablePodNameForAppFramework(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
 }
 
 func TestInitAppInstallPipeline(t *testing.T) {

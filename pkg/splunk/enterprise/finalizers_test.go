@@ -54,6 +54,8 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		component = "cluster-master"
 	case "MonitoringConsole":
 		component = "monitoring-console"
+	case "IngestorCluster":
+		component = "ingestor"
 	}
 
 	labelsB := map[string]string{
@@ -306,6 +308,19 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 					{MetaName: "*v4.IndexerCluster-test-stack1"},
 					{MetaName: "*v4.IndexerCluster-test-stack1"},
 				}
+			case "IngestorCluster":
+                mockCalls["Create"] = []spltest.MockFuncCall{
+                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
+                    {MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
+                }
+                mockCalls["Get"] = []spltest.MockFuncCall{
+                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
+                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
+                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
+                    {MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
+                    {MetaName: "*v4.IngestorCluster-test-stack1"},
+                    {MetaName: "*v4.IngestorCluster-test-stack1"},
+                }
 			}
 		}
 	}
@@ -340,6 +355,8 @@ func splunkPVCDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(
 		component = "cluster-manager"
 	case "MonitoringConsole":
 		component = "monitoring-console"
+	case "IngestorCluster":
+		component = "ingestor"
 	}
 
 	labels := map[string]string{

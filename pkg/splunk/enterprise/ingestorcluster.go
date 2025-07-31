@@ -23,6 +23,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splkClient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -92,6 +93,60 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-ingestor", cr.GetName())
 
+	// Mount queue configuration as defaults
+	cr.Spec.Defaults = fmt.Sprintf(`
+		default.yml: |
+			splunk:
+			conf:
+				- key: outputs
+				value:
+					directory: /opt/splunk/etc/system/local
+					content:
+					"remote_queue:%s":
+						remote_queue.type: %s
+						remote_queue.%s.encoding_format: s2s
+						remote_queue.%s.auth_region: %s
+						remote_queue.%s.endpoint: %s
+						remote_queue.%s.large_message_store.endpoint: %s
+						remote_queue.%s.large_message_store.path: %s
+						remote_queue.%s.dead_letter_queue.name: %s
+						remote_queue.%s.max_count.max_retries_per_part: %d
+						remote_queue.%s.retry_policy: %s
+						remote_queue.%s.send_interval: %s
+				- key: default-mode
+				value:
+					directory: /opt/splunk/etc/system/local
+					content:
+					"pipeline:remotequeueruleset":
+						disabled: "%t"
+					"pipeline:ruleset":
+						disabled: "%t"
+					"pipeline:remotequeuetyping":
+						disabled: "%t"
+					"pipeline:remotequeueoutput":
+						disabled: "%t"
+					"pipeline:typing":
+						disabled: "%t"
+					"pipeline:indexerPipe":
+						disabled: "%t"`,
+		cr.Spec.PushBus.SQS.QueueName,
+		cr.Spec.PushBus.Type,
+		cr.Spec.PushBus.Type,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.AuthRegion,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.Endpoint,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStorePath,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.DeadLetterQueueName,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.MaxRetriesPerPart,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy,
+		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.SendInterval,
+		cr.Spec.PipelineConfig.RemoteQueueRuleset,
+		cr.Spec.PipelineConfig.RuleSet,
+		cr.Spec.PipelineConfig.RemoteQueueTyping,
+		cr.Spec.PipelineConfig.RemoteQueueOutput,
+		cr.Spec.PipelineConfig.Typing,
+		cr.Spec.PipelineConfig.IndexerPipe)
+
 	// Create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
@@ -102,6 +157,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// Check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		if cr.Spec.MonitoringConsoleRef.Name != "" {
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), false)
+			if err != nil {
+				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("create/update monitoring console config map failed %s", err.Error()))
+				return result, err
+			}
+		}
+
 		// If this is the last of its kind getting deleted,
 		// remove the entry for this CR type from configMap or else
 		// just decrement the refCount for this CR type
@@ -144,7 +207,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// download and install all the apps
 	// If we are scaling down, just update the auxPhaseInfo list
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 && cr.Status.ReadyReplicas > 0 {
-
 		statefulsetName := GetSplunkStatefulsetName(SplunkIngestor, cr.GetName())
 
 		isStatefulSetScaling, err := splctrl.IsStatefulSetScalingUpOrDown(ctx, client, cr, statefulsetName, cr.Spec.Replicas)
@@ -173,6 +235,22 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 	}
 
+	// Fetch the old IngestorCluster from the API server
+	oldCR := &enterpriseApi.IngestorCluster{}
+	err = client.Get(ctx, types.NamespacedName{Name: cr.GetName(), Namespace: cr.GetNamespace()}, oldCR)
+	if err == nil && oldCR.ResourceVersion != "" {
+		// Create a SplunkClient for this cluster (adjust as needed)
+		updated, err := handlePushBusOrPipelineConfigChange(ctx, oldCR, cr, client)
+		if err != nil {
+			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change")
+			return result, err
+		}
+		if updated {
+			// Only PushBus or Pipeline changed, config updated, skip restart logic
+			return result, nil
+		}
+	}
+
 	// Create or update statefulset for the ingestors
 	statefulSet, err := getIngestorStatefulSet(ctx, client, cr)
 	if err != nil {
@@ -181,7 +259,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	// Make changes to respective mc configmap when changing/removing mcRef from spec
-	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
+	err = validateMonitoringConsoleRef(ctx, client, statefulSet, make([]corev1.EnvVar, 0))
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateMonitoringConsoleRef", fmt.Sprintf("validate monitoring console reference failed %s", err.Error()))
 		return result, err
@@ -206,7 +284,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
 		}
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
+			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, make([]corev1.EnvVar, 0), true)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
 				return result, err
@@ -242,7 +320,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
 	if cr.Spec.Replicas == 0 {
-		cr.Spec.Replicas = 1
+		cr.Spec.Replicas = 3
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -258,4 +336,55 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
 func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) (*appsv1.StatefulSet, error) {
 	return getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, make([]corev1.EnvVar, 0))
+}
+
+// Checks if only PushBus or Pipeline config changed, and updates the conf file if so
+func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *enterpriseApi.IngestorCluster, k8s client.Client) (bool, error) {
+	pushBusChanged := !reflect.DeepEqual(oldCR.Spec.PushBus, newCR.Spec.PushBus)
+	pipelineChanged := !reflect.DeepEqual(oldCR.Spec.PipelineConfig, newCR.Spec.PipelineConfig)
+
+	// If neither changed, nothing to do
+	if !pushBusChanged && !pipelineChanged {
+		return false, nil
+	}
+
+	// If only PushBus or Pipeline changed (not other fields)
+	oldCopy := oldCR.DeepCopy()
+	newCopy := newCR.DeepCopy()
+	oldCopy.Spec.PushBus = enterpriseApi.PushBusSpec{}
+	newCopy.Spec.PushBus = enterpriseApi.PushBusSpec{}
+	oldCopy.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{}
+	newCopy.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{}
+
+	if reflect.DeepEqual(oldCopy.Spec, newCopy.Spec) {
+		// List all pods for this IngestorCluster StatefulSet
+		var updateErr error
+		readyReplicas := oldCR.Status.ReadyReplicas
+		for n := 0; n < int(readyReplicas); n++ {
+			memberName := GetSplunkStatefulsetPodName(SplunkIngestor, oldCR.GetName(), int32(n))
+			fqdnName := splcommon.GetServiceFQDN(oldCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, oldCR.GetName(), false)))
+			adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, oldCR.GetNamespace(), "password")
+			if err != nil {
+				return true, err
+			}
+			splunkClient := splkClient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+
+			// Only PushBus or Pipeline changed
+			if pipelineChanged {
+				if err := splunkClient.UpdateConfFile("default-mode"); err != nil {
+					updateErr = err
+				}
+			}
+			if pushBusChanged {
+				if err := splunkClient.UpdateConfFile("outputs.conf"); err != nil {
+					updateErr = err
+				}
+			}
+		}
+		// Do NOT restart Splunk
+		return true, updateErr
+	}
+
+	// Other fields changed, so don't handle here
+	return false, nil
 }

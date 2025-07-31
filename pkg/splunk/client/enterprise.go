@@ -942,3 +942,16 @@ func (c *SplunkClient) RestartSplunk() error {
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
 }
+
+// Update default-mode.conf and outputs.conf files
+// See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
+func (c *SplunkClient) UpdateConfFile(fileName string) error {
+	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
+	request, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	expectedStatus := []int{200, 201}
+	err = c.Do(request, expectedStatus, nil)
+	return err
+}

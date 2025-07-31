@@ -2461,6 +2461,8 @@ func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) 
 		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
 	}
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }

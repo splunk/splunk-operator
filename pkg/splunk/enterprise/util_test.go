@@ -2687,7 +2687,8 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 		WithStatusSubresource(&enterpriseApiV3.LicenseMaster{}).
-		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{})
+		WithStatusSubresource(&enterpriseApiV3.ClusterMaster{}).
+		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	c := builder.Build()
 	ctx := context.TODO()
 
@@ -2923,6 +2924,43 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	} else if receivedCR.(*enterpriseApi.SearchHeadCluster).Status.Message != "testerror" {
 		t.Errorf("Failed to update error message")
 	}
+
+	// IngestorCluster: should return a vaid CR
+	ic := enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "IngestorCluster",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+				},
+				Volumes: []corev1.Volume{},
+			},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{
+			ReadyReplicas: 3,
+		},
+	}
+
+	// When the CR is available, should be able to fetch it.
+	err = c.Create(ctx, &ic)
+	if err != nil {
+		t.Errorf("ingestor CR creation failed.")
+	}
+
+	receivedCR, err = fetchCurrentCRWithStatusUpdate(ctx, c, &ic, nil)
+	if err != nil {
+		t.Errorf("Expected a valid CR without error, but got the error %v", err)
+	} else if receivedCR == nil || receivedCR.GroupVersionKind().Kind != "IngestorCluster" {
+		t.Errorf("Failed to fetch the CR")
+	}
 }
 
 // func getApplicablePodNameForK8Probes(t *testing.T) {
@@ -2980,6 +3018,13 @@ func TestGetApplicablePodNameForK8Probes(t *testing.T) {
 
 	cr.TypeMeta.Kind = "LicenseMaster"
 	expectedPodName = "splunk-stack1-license-master-0"
+	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
+	if expectedPodName != returnedPodName {
+		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
+	}
+
+	cr.TypeMeta.Kind = "IngestorCluster"
+	expectedPodName = "splunk-stack1-ingestor-0"
 	returnedPodName = getApplicablePodNameForK8Probes(&cr, podID)
 	if expectedPodName != returnedPodName {
 		t.Errorf("Unable to fetch correct pod name. Expected %s, returned %s", expectedPodName, returnedPodName)
@@ -3258,7 +3303,8 @@ func TestGetCurrentImage(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	client := builder.Build()
 	client.Create(ctx, &current)
 	_, err := ApplyClusterManager(ctx, client, &current)

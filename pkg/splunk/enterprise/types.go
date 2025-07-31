@@ -276,7 +276,7 @@ func (instanceType InstanceType) ToKind() string {
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
 	case SplunkIngestor:
-		kind = "ingestor-cluster"
+		kind = "ingestor"
 	}
 	return kind
 }
