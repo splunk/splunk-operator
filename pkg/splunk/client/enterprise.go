@@ -945,9 +945,9 @@ func (c *SplunkClient) RestartSplunk() error {
 
 // Update default-mode.conf and outputs.conf files
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
-func (c *SplunkClient) UpdateConfFile(fileName string) error {
+func (c *SplunkClient) UpdateConfFile(fileName, inputs string) error {
 	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
-	request, err := http.NewRequest("POST", endpoint, nil)
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(inputs))
 	if err != nil {
 		return err
 	}

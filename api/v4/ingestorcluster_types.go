@@ -48,8 +48,8 @@ type IngestorClusterSpec struct {
 	// Pipeline configuration
 	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
 
-	// Service account name
-	ServiceAccountName string `json:"serviceAccountName"`
+	// Secret ref
+	SecretRef string `json:"secretRef"`
 }
 
 // Helper types
