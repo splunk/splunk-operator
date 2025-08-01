@@ -113,11 +113,11 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 			mgr.log.Info("Setting Probe level failed. Probably, the Pod is already down", "memberName", memberName)
 		}
 
-		mgr.log.Info("Setting Upgrade banner")
+		mgr.log.Info("Initializes rolling upgrade process")
 		err = c.InitiateUpgrade()
 
 		if err != nil {
-			mgr.log.Info("Setting upgrade banner failed.")
+			mgr.log.Info("Initialization of rolling upgrade failed.")
 			return false, err
 		}
 
@@ -190,6 +190,7 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 
 	reqLogger := log.FromContext(ctx)
 
+	// check if shc is in an upgrade process
 	if mgr.cr.Status.UpgradePhase == enterpriseApi.UpgradePhaseUpgrading {
 		c := mgr.getClient(ctx, n)
 
@@ -198,21 +199,12 @@ func (mgr *searchHeadClusterPodManager) FinishUpgrade(ctx context.Context, n int
 		mgr.cr.Status.UpgradeEndTimestamp = currentTime
 
 		metrics.UpgradeEndTime.Set(float64(currentTime))
-		// metrics still
-
-		i, err := c.GetSearchHeadCaptainInfo()
-		if err != nil {
-			mgr.log.Info("Getting Search Head Captain Info failed")
-			return err
-		}
-
-		captainURI := i.PeerSchemeHostPort
 
 		// revert upgrade state status
 		mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgraded
 
-		reqLogger.Info("Finalize Upgrade - unset banner")
-		return c.UpgradeFinalize(captainURI)
+		reqLogger.Info("Finalize Upgrade")
+		return c.FinalizeUpgrade()
 	}
 
 	return nil

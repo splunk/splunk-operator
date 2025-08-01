@@ -257,10 +257,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	// all is good!
 	scopedLog.Info("All pods are ready")
 
-	// Unset upgrade banner from the captain
+	// Finalize rolling upgrade process
+	// It uses first pod to get a client
 	err = mgr.FinishUpgrade(ctx, 0)
 	if err != nil {
-		scopedLog.Error(err, "Unable to unset upgrade banner")
+		scopedLog.Error(err, "Unable to finalize rolling upgrade process")
 		return enterpriseApi.PhaseError, err
 	}
 

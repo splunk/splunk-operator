@@ -307,7 +307,8 @@ func (c *SplunkClient) SetSearchHeadDetention(detain bool) error {
 	return c.Do(request, expectedStatus, nil)
 }
 
-// InitiateUpgrade set upgrade banner for a search head cluster
+// InitiateUpgrade initializes rolling upgrade process for a search head cluster
+// This endpoint proxies request to the cluster captain
 func (c *SplunkClient) InitiateUpgrade() error {
 	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-init", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
@@ -318,9 +319,10 @@ func (c *SplunkClient) InitiateUpgrade() error {
 	return c.Do(request, expectedStatus, nil)
 }
 
-// UpgradeFinalize unset upgrade banner for a search head cluster captain
-func (c *SplunkClient) UpgradeFinalize(captainURI string) error {
-	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-finalize", captainURI)
+// FinalizeUpgrade finalizes rolling upgrade process for a search head cluster
+// This endpoint proxies request to the cluster captain
+func (c *SplunkClient) FinalizeUpgrade() error {
+	endpoint := fmt.Sprintf("%s/services/shcluster/captain/control/control/upgrade-finalize", c.ManagementURI)
 	request, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
