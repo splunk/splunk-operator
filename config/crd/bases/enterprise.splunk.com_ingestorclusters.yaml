@@ -1728,9 +1728,6 @@ spec:
                   If not specified uses the default serviceAccount for the namespace as per
                   https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
                 type: string
-              serviceAccountName:
-                description: Service account name
-                type: string
               serviceTemplate:
                 description: ServiceTemplate is a template used to create Kubernetes
                   services

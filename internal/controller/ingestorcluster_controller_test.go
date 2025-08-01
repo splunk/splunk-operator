@@ -148,7 +148,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 })
 
 func GetIngestorCluster(name string, namespace string) (*enterpriseApi.IngestorCluster, error) {
-	By("Expecting IngestorCluster custom resource to be created successfully")
+	By("Expecting IngestorCluster custom resource to be retrieved successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
@@ -199,7 +199,7 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 }
 
 func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enterpriseApi.Phase) *enterpriseApi.IngestorCluster {
-	By("Expecting IngestorCluster custom resource to be created successfully")
+	By("Expecting IngestorCluster custom resource to be updated successfully")
 
 	key := types.NamespacedName{
 		Name:      instance.Name,
@@ -227,7 +227,7 @@ func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enter
 }
 
 func DeleteIngestorCluster(name string, namespace string) {
-	By("Expecting IngestorCluster Deleted successfully")
+	By("Expecting IngestorCluster custom resource to be deleted successfully")
 
 	key := types.NamespacedName{
 		Name:      name,

@@ -943,15 +943,40 @@ func (c *SplunkClient) RestartSplunk() error {
 	return c.Do(request, expectedStatus, nil)
 }
 
-// Update default-mode.conf and outputs.conf files
+// Updates conf files and their properties
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
-func (c *SplunkClient) UpdateConfFile(fileName string) error {
-	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
-	request, err := http.NewRequest("POST", endpoint, nil)
+func (c *SplunkClient) UpdateConfFile(fileName, property string, propertyKVList [][]string) error {
+	// Creates an object in a conf file if it doesn't exist
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
+	body := fmt.Sprintf("name=%s", property)
+
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
 		return err
 	}
-	expectedStatus := []int{200, 201}
+
+	expectedStatus := []int{200, 201, 409}
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		return err
+	}
+
+	// Updates a property of an object in a conf file
+	endpoint = fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
+	body = ""
+	for _, kv := range propertyKVList {
+		body += fmt.Sprintf("%s=%s&", kv[0], kv[1])
+	}
+	if len(body) > 0 && body[len(body)-1] == '&' {
+		body = body[:len(body)-1]
+	}
+
+	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	expectedStatus = []int{200, 201}
 	err = c.Do(request, expectedStatus, nil)
 	return err
 }
