@@ -411,7 +411,7 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *ente
 	}
 
 	// Only update config for pods that exist
-	readyReplicas := oldCR.Status.ReadyReplicas
+	readyReplicas := newCR.Status.ReadyReplicas
 
 	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged", "pushBusChanged", pushBusChanged, "pipelineChanged", pipelineChanged, "firstCreate", firstCreate, "readyReplicas", readyReplicas)
 
@@ -420,21 +420,12 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *ente
 		return false, nil
 	}
 
-	// // If only PushBus or Pipeline changed (not other fields)
-	// oldCopy := oldCR.DeepCopy()
-	// newCopy := newCR.DeepCopy()
-	// oldCopy.Spec.PushBus = enterpriseApi.PushBusSpec{}
-	// newCopy.Spec.PushBus = enterpriseApi.PushBusSpec{}
-	// oldCopy.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{}
-	// newCopy.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{}
-
-	// if reflect.DeepEqual(oldCopy.Spec, newCopy.Spec) {
 	// List all pods for this IngestorCluster StatefulSet
 	var updateErr error
 	for n := 0; n < int(readyReplicas); n++ {
-		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, oldCR.GetName(), int32(n))
-		fqdnName := splcommon.GetServiceFQDN(oldCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkSearchHead, oldCR.GetName(), false)))
-		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, oldCR.GetNamespace(), "password")
+		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, newCR.GetName(), int32(n))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), false)))
+		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
 			return true, err
 		}
@@ -450,7 +441,7 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *ente
 		}
 		if pushBusChanged || firstCreate {
 			scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged || firstCreate ", "pushBusChanged || firstCreate ", pushBusChanged || firstCreate)
-			if err := splunkClient.UpdateConfFile("outputs.conf", inputsPushBus); err != nil {
+			if err := splunkClient.UpdateConfFile("outputs", inputsPushBus); err != nil {
 				updateErr = err
 			}
 		}

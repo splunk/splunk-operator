@@ -27,6 +27,7 @@ import (
 	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // SplunkHTTPClient defines the interface used by SplunkClient.
@@ -946,12 +947,20 @@ func (c *SplunkClient) RestartSplunk() error {
 // Update default-mode.conf and outputs.conf files
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
 func (c *SplunkClient) UpdateConfFile(fileName, inputs string) error {
+	logf.Log.Info("UpdateConfFile", "fileName", fileName, "inputs", inputs)
+
 	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
+
+	logf.Log.Info("UpdateConfFile", "endpoint", endpoint)
+
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(inputs))
+	logf.Log.Info("UpdateConfFile", "request", request, "err", err)
 	if err != nil {
 		return err
 	}
 	expectedStatus := []int{200, 201}
-	err = c.Do(request, expectedStatus, nil)
+	var resp interface{}
+	err = c.Do(request, expectedStatus, &resp)
+	logf.Log.Info("UpdateConfFile", "resp", resp, "err", err)
 	return err
 }
