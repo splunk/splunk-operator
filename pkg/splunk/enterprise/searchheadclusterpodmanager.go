@@ -124,15 +124,12 @@ func (mgr *searchHeadClusterPodManager) PrepareRecycle(ctx context.Context, n in
 		start := mgr.cr.Status.UpgradeStartTimestamp
 		end := mgr.cr.Status.UpgradeEndTimestamp
 
-		// todo: add Upgraded state as a requirement?
 		if end >= start {
-			// todo: check if the timestamps are overwritten by updateStatus
 			currentTime := time.Now().Unix()
 			mgr.cr.Status.UpgradeStartTimestamp = currentTime
 
 			metrics.UpgradeStartTime.Set(float64(currentTime))
 
-			//			mgr.cr.Status.UpgradePhase = "Upgrading"
 			mgr.cr.Status.UpgradePhase = enterpriseApi.UpgradePhaseUpgrading
 		}
 
