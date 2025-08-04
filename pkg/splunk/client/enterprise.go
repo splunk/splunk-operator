@@ -950,14 +950,35 @@ func (c *SplunkClient) UpdateConfFile(fileName, inputs string) error {
 	logf.Log.Info("UpdateConfFile", "fileName", fileName, "inputs", inputs)
 
 	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
-
 	logf.Log.Info("UpdateConfFile", "endpoint", endpoint)
 
-	request, err := http.NewRequest("POST", endpoint, strings.NewReader(inputs))
+	// Parse inputs string into form values
+	form := make(map[string]string)
+	for _, kv := range strings.Split(inputs, "&") {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) == 2 {
+			form[parts[0]] = parts[1]
+		}
+	}
+	// The Splunk API expects at least a "name" field for the stanza
+	if _, ok := form["name"]; !ok {
+		form["name"] = "default"
+	}
+
+	// Build form-encoded body
+	data := make([]string, 0, len(form))
+	for k, v := range form {
+		data = append(data, fmt.Sprintf("%s=%s", k, v))
+	}
+	body := strings.Join(data, "&")
+
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
 	logf.Log.Info("UpdateConfFile", "request", request, "err", err)
 	if err != nil {
 		return err
 	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	expectedStatus := []int{200, 201}
 	var resp interface{}
 	err = c.Do(request, expectedStatus, &resp)

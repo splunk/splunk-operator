@@ -411,7 +411,7 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *ente
 	}
 
 	// Only update config for pods that exist
-	readyReplicas := newCR.Status.ReadyReplicas
+	readyReplicas := newCR.Spec.Replicas
 
 	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged", "pushBusChanged", pushBusChanged, "pipelineChanged", pipelineChanged, "firstCreate", firstCreate, "readyReplicas", readyReplicas)
 
