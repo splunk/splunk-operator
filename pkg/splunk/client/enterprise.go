@@ -946,38 +946,18 @@ func (c *SplunkClient) RestartSplunk() error {
 
 // Update default-mode.conf and outputs.conf files
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
-func (c *SplunkClient) UpdateConfFile(fileName, inputs string) error {
-	logf.Log.Info("UpdateConfFile", "fileName", fileName, "inputs", inputs)
+func (c *SplunkClient) UpdateConfFile(fileName, property, key, value string) error {
+	logf.Log.Info("UpdateConfFile", "fileName", fileName, "property", property, "key", key, "value", value)
 
-	endpoint := fmt.Sprintf("%s/services/configs/conf-%s", c.ManagementURI, fileName)
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
 	logf.Log.Info("UpdateConfFile", "endpoint", endpoint)
 
-	// Parse inputs string into form values
-	form := make(map[string]string)
-	for _, kv := range strings.Split(inputs, "&") {
-		parts := strings.SplitN(kv, "=", 2)
-		if len(parts) == 2 {
-			form[parts[0]] = parts[1]
-		}
-	}
-	// The Splunk API expects at least a "name" field for the stanza
-	if _, ok := form["name"]; !ok {
-		form["name"] = "default"
-	}
-
-	// Build form-encoded body
-	data := make([]string, 0, len(form))
-	for k, v := range form {
-		data = append(data, fmt.Sprintf("%s=%s", k, v))
-	}
-	body := strings.Join(data, "&")
-
+	body := fmt.Sprintf("%s=%s", key, value)
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
 	logf.Log.Info("UpdateConfFile", "request", request, "err", err)
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	expectedStatus := []int{200, 201}
 	var resp interface{}

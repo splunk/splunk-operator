@@ -431,22 +431,91 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *ente
 		}
 		splunkClient := splkClient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		// Only PushBus or Pipeline changed
-		if pipelineChanged || firstCreate {
-			scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pipelineChanged || firstCreate ", "pipelineChanged || firstCreate ", pipelineChanged || firstCreate)
+		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(oldCR, newCR)
 
-			if err := splunkClient.UpdateConfFile("default-mode", inputsPipeline); err != nil {
-				updateErr = err
+		for _, field := range pushBusChangedFields {
+			if pushBusChanged || firstCreate {
+				scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged || firstCreate ", "pushBusChanged || firstCreate ", pushBusChanged || firstCreate)
+				if err := splunkClient.UpdateConfFile("outputs", field[0], field[1], field[2]); err != nil {
+					updateErr = err
+				}
 			}
 		}
-		if pushBusChanged || firstCreate {
-			scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged || firstCreate ", "pushBusChanged || firstCreate ", pushBusChanged || firstCreate)
-			if err := splunkClient.UpdateConfFile("outputs", inputsPushBus); err != nil {
-				updateErr = err
+
+		for _, field := range pipelineChangedFields {
+			if pipelineChanged || firstCreate {
+				scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pipelineChanged || firstCreate ", "pipelineChanged || firstCreate ", pipelineChanged || firstCreate)
+
+				if err := splunkClient.UpdateConfFile("default-mode", field[0], field[1], field[2]); err != nil {
+					updateErr = err
+				}
 			}
 		}
 	}
 
 	// Do NOT restart Splunk
 	return true, updateErr
+}
+
+// Returns the names of PushBus and PipelineConfig fields that changed between oldCR and newCR.
+func getChangedPushBusAndPipelineFields(oldCR, newCR *enterpriseApi.IngestorCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
+	// Compare PushBus fields
+	oldPB := oldCR.Spec.PushBus
+	newPB := newCR.Spec.PushBus
+
+	if oldPB.Type != newPB.Type {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), "remote_queue.type", newPB.Type})
+	}
+	// TODO: remote_queue.sqs_smartbus.encoding_format: s2s
+	if oldPB.SQS.AuthRegion != newPB.SQS.AuthRegion {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion})
+	}
+	// TODO: remote_queue.sqs_smartbus.access_key
+	// TODO: remote_queue.sqs_smartbus.secret_key
+	if oldPB.SQS.Endpoint != newPB.SQS.Endpoint {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.endpoint", newPB.Type), newPB.SQS.Endpoint})
+	}
+	if oldPB.SQS.LargeMessageStoreEndpoint != newPB.SQS.LargeMessageStoreEndpoint {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPB.Type), newPB.SQS.LargeMessageStoreEndpoint})
+	}
+	if oldPB.SQS.LargeMessageStorePath != newPB.SQS.LargeMessageStorePath {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.large_message_store.path", newPB.Type), newPB.SQS.LargeMessageStorePath})
+	}
+	if oldPB.SQS.DeadLetterQueueName != newPB.SQS.DeadLetterQueueName {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPB.Type), newPB.SQS.DeadLetterQueueName})
+	}
+	if oldPB.SQS.MaxRetriesPerPart != newPB.SQS.MaxRetriesPerPart {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPB.SQS.RetryPolicy, newPB.Type), fmt.Sprintf("%d", newPB.SQS.MaxRetriesPerPart)})
+	}
+	if oldPB.SQS.RetryPolicy != newPB.SQS.RetryPolicy {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.retry_policy", newPB.Type), newPB.SQS.RetryPolicy})
+	}
+	if oldPB.SQS.SendInterval != newPB.SQS.SendInterval {
+		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.send_interval", newPB.Type), newPB.SQS.SendInterval})
+	}
+
+	// Compare PipelineConfig fields
+	oldPC := oldCR.Spec.PipelineConfig
+	newPC := newCR.Spec.PipelineConfig
+
+	if oldPC.RemoteQueueRuleset != newPC.RemoteQueueRuleset {
+		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aremotequeueruleset", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueRuleset)})
+	}
+	if oldPC.RuleSet != newPC.RuleSet {
+		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aruleset", "disabled", fmt.Sprintf("%t", newPC.RuleSet)})
+	}
+	if oldPC.RemoteQueueTyping != newPC.RemoteQueueTyping {
+		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aremotequeuetyping", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueTyping)})
+	}
+	if oldPC.RemoteQueueOutput != newPC.RemoteQueueOutput {
+		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aremotequeueoutput", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueOutput)})
+	}
+	if oldPC.Typing != newPC.Typing {
+		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Atyping", "disabled", fmt.Sprintf("%t", newPC.Typing)})
+	}
+	if oldPC.IndexerPipe != newPC.IndexerPipe {
+		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3AindexerPipe", "disabled", fmt.Sprintf("%t", newPC.IndexerPipe)})
+	}
+
+	return
 }
