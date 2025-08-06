@@ -322,6 +322,8 @@ Note: The Splunk cluster peer restarts are triggered by the contents of the Splu
 
 The App Framework maintains a checksum for each app or add-on archive file in the App Source location in the form of the Etag of the remote storage object. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
+To disable applying the cluster bundle by default when the cluster manager pod starts up, add the environment variable `SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH="true"` to the splunk-operator-controller-manager deployment, or the individual CRs. This option is available for Splunk Enterprise versions 9.2.8, 9.3.6, 9.4.4, and 10.x. Check the compatibility with SOK versions in the [releases](https://github.com/splunk/splunk-operator/releases).
+
 **It is not supported to upload the same app under different archive file names.** If an app is not updating after uploading a new version under the same archive file name, do not upload the app using a different archive filename. Instead, check the [troubleshooting](#app-framework-troubleshooting) section for ways to debug the issue.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
