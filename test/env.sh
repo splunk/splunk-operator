@@ -15,7 +15,7 @@
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
 : "${EKS_CLUSTER_K8_VERSION:=1.31}"
 # Below env variables required to run license master test cases
-: "${ENTERPRISE_LICENSE_S3_PATH:=/test_licenses}"
+: "${ENTERPRISE_LICENSE_S3_PATH:=test_licenses/}"
 : "${TEST_S3_BUCKET:=splk-test-data-bucket}"
 # Below env variables required to run remote indexes test cases
 : "${INDEXES_S3_BUCKET:=splk-integration-test-bucket}"

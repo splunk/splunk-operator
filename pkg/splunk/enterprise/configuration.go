@@ -602,10 +602,32 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
-	configMap := corev1.ConfigMap{
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getProbeConfigMap").WithValues("namespace", cr.GetNamespace())
+
+	configMapName := GetProbeConfigMapName(cr.GetNamespace())
+	configMapNamespace := cr.GetNamespace()
+	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
+
+	// Check if the config map already exists
+	scopedLog.Info("Checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	var configMap corev1.ConfigMap
+	err := client.Get(ctx, namespacedName, &configMap)
+
+	if err == nil {
+		scopedLog.Info("Retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		return &configMap, nil
+	} else if !k8serrors.IsNotFound(err) {
+		scopedLog.Error(err, "Error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		return nil, err
+	}
+
+	// Existing config map not found, create one for the probes
+	scopedLog.Info("Creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetProbeConfigMapName(cr.GetNamespace()),
-			Namespace: cr.GetNamespace(),
+			Name:      configMapName,
+			Namespace: configMapNamespace,
 		},
 	}
 
@@ -900,6 +922,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
+	domainName := os.Getenv("CLUSTER_DOMAIN")
+	if domainName == "" {
+		domainName = "cluster.local"
+	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
@@ -908,6 +934,19 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					APIVersion: "v1",
+					FieldPath:  "metadata.name",
+				},
+			},
+		},
+		{Name: "POD_NAMESPACE", Value: cr.GetNamespace()},
+		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
+		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), true)},
+		{Name: "DOMAIN_NAME", Value: domainName},
 	}
 
 	// update variables for licensing, if configured

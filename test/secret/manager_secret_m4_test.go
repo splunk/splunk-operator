@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -44,7 +45,7 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 	AfterEach(func() {
 		// When a test spec failed, skip the teardown so we can troubleshoot.
-		if CurrentGinkgoTestDescription().Failed {
+		if types.SpecState(CurrentSpecReport().State) == types.SpecStateFailed {
 			testcaseEnvInst.SkipTeardown = true
 		}
 		if deployment != nil {
