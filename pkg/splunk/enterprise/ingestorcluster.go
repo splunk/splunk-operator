@@ -74,44 +74,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	cr.Status.Replicas = cr.Spec.Replicas
 
-	// // Fetch the old IngestorCluster from the API server
+	// Fetch the old IngestorCluster from the API server
 	oldCR := &enterpriseApi.IngestorCluster{}
 	err = client.Get(ctx, types.NamespacedName{Name: cr.GetName(), Namespace: cr.GetNamespace()}, oldCR)
 	if err != nil && !errors.IsNotFound(err) {
 		return result, err
 	}
-	// if err == nil && oldCR.ResourceVersion != "" {
-	// 	// Get credentials through the secretRef
-	// 	remoteDataClientSecret, errSecret := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.SecretRef)
-	// 	if errSecret != nil {
-	// 		return result, errSecret
-	// 	}
 
-	// 	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange err", "err", err)
-
-	// 	// Get access keys
-	// 	accessKeyID := string(remoteDataClientSecret.Data["s3_access_key"])
-	// 	secretAccessKey := string(remoteDataClientSecret.Data["s3_secret_key"])
-
-	// 	inputsPipeline := fmt.Sprintf("pipeline:remotequeueruleset.disabled=%t&pipeline:ruleset.disabled=%t&pipeline:remotequeuetyping.disabled=%t&pipeline:remotequeueoutput.disabled=%t&pipeline:typing.disabled=%t&pipeline:indexerPipe.disabled=%t", cr.Spec.PipelineConfig.RemoteQueueRuleset, cr.Spec.PipelineConfig.RuleSet, cr.Spec.PipelineConfig.RemoteQueueTyping, cr.Spec.PipelineConfig.RemoteQueueOutput, cr.Spec.PipelineConfig.Typing, cr.Spec.PipelineConfig.IndexerPipe)
-	// 	inputsPushBus := fmt.Sprintf("remote_queue=%s&remote_queue.type=%s&remote_queue.%s.encoding_format=s2s&remote_queue.%s.auth_region=%s&remote_queue.%s.access_key=%s&remote_queue.%s.secret_key=%s&remote_queue.%s.endpoint=%s&remote_queue.%s.large_message_store.endpoint=%s&remote_queue.%s.large_message_store.path=%s&remote_queue.%s.dead_letter_queue.name=%s&remote_queue.%s.%s.max_retries_per_part=%d&remote_queue.%s.retry_policy=%s&remote_queue.%s.send_interval=%s", cr.Spec.PushBus.SQS.QueueName, cr.Spec.PushBus.Type, cr.Spec.PushBus.Type, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.AuthRegion, cr.Spec.PushBus.Type, accessKeyID, cr.Spec.PushBus.Type, secretAccessKey, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.Endpoint, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStorePath, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.DeadLetterQueueName, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.SQS.MaxRetriesPerPart, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.SendInterval)
-
-	// 	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange", "oldCR", oldCR, "newCR", cr)
-	// 	// Create a SplunkClient for this cluster (adjust as needed)
-	// 	updated, err := handlePushBusOrPipelineConfigChange(ctx, oldCR, cr, client, inputsPipeline, inputsPushBus)
-	// 	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange err", "err", err)
-	// 	if err != nil {
-	// 		scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change")
-	// 		return result, err
-	// 	}
-	// 	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange updated", "updated", updated)
-	// 	if updated {
-	// 		// Only PushBus or Pipeline changed, config updated, skip restart logic
-	// 		return result, nil
-	// 	}
-	// }
-
-	// If needed, Migrate the app framework status
+	// If needed, migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {
 		return result, err
@@ -130,75 +100,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-ingestor", cr.GetName())
-
-	// // Get credentials through the secretRef
-	// remoteDataClientSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.SecretRef)
-	// if err != nil {
-	// 	return result, err
-	// }
-
-	// // Get access keys
-	// accessKeyID := string(remoteDataClientSecret.Data["s3_access_key"])
-	// secretAccessKey := string(remoteDataClientSecret.Data["s3_secret_key"])
-
-	// 	// Mount queue configuration as defaults
-	// 	cr.Spec.Defaults = fmt.Sprintf(
-	// 		`splunk:
-	//   conf:
-	//     - key: outputs
-	//       value:
-	//         directory: /opt/splunk/etc/system/local
-	//         content:
-	//           "remote_queue:%s":
-	//             remote_queue.type: %s
-	//             remote_queue.%s.encoding_format: s2s
-	//             remote_queue.%s.auth_region: %s
-	//             remote_queue.%s.access_key: %s
-	//             remote_queue.%s.secret_key: %s
-	//             remote_queue.%s.endpoint: %s
-	//             remote_queue.%s.large_message_store.endpoint: %s
-	//             remote_queue.%s.large_message_store.path: %s
-	//             remote_queue.%s.dead_letter_queue.name: %s
-	//             remote_queue.%s.%s.max_retries_per_part: %d
-	//             remote_queue.%s.retry_policy: %s
-	//             remote_queue.%s.send_interval: %s
-	//     - key: default-mode
-	//       value:
-	//         directory: /opt/splunk/etc/system/local
-	//         content:
-	//           "pipeline:remotequeueruleset":
-	//             disabled: "%t"
-	//           "pipeline:ruleset":
-	//             disabled: "%t"
-	//           "pipeline:remotequeuetyping":
-	//             disabled: "%t"
-	//           "pipeline:remotequeueoutput":
-	//             disabled: "%t"
-	//           "pipeline:typing":
-	//             disabled: "%t"
-	//           "pipeline:indexerPipe":
-	//             disabled: "%t"
-	// `,
-	// 		cr.Spec.PushBus.SQS.QueueName,
-	// 		cr.Spec.PushBus.Type,
-	// 		cr.Spec.PushBus.Type,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.AuthRegion,
-	// 		cr.Spec.PushBus.Type, accessKeyID,
-	// 		cr.Spec.PushBus.Type, secretAccessKey,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.Endpoint,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStorePath,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.DeadLetterQueueName,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.SQS.MaxRetriesPerPart,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy,
-	// 		cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.SendInterval,
-	// 		cr.Spec.PipelineConfig.RemoteQueueRuleset,
-	// 		cr.Spec.PipelineConfig.RuleSet,
-	// 		cr.Spec.PipelineConfig.RemoteQueueTyping,
-	// 		cr.Spec.PipelineConfig.RemoteQueueOutput,
-	// 		cr.Spec.PipelineConfig.Typing,
-	// 		cr.Spec.PipelineConfig.IndexerPipe,
-	// 	)
 
 	// Create or update general config resources
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
@@ -311,25 +212,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 	cr.Status.Phase = phase
 
-	if oldCR.Status.ReadyReplicas == 0 && cr.Status.ReadyReplicas > 0 {
-		// First create and pods are now ready, push config
-		remoteDataClientSecret, errSecret := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.SecretRef)
-		if errSecret != nil {
-			return result, errSecret
-		}
-		accessKeyID := string(remoteDataClientSecret.Data["s3_access_key"])
-		secretAccessKey := string(remoteDataClientSecret.Data["s3_secret_key"])
-		inputsPipeline := fmt.Sprintf("pipeline:remotequeueruleset.disabled=%t&pipeline:ruleset.disabled=%t&pipeline:remotequeuetyping.disabled=%t&pipeline:remotequeueoutput.disabled=%t&pipeline:typing.disabled=%t&pipeline:indexerPipe.disabled=%t", cr.Spec.PipelineConfig.RemoteQueueRuleset, cr.Spec.PipelineConfig.RuleSet, cr.Spec.PipelineConfig.RemoteQueueTyping, cr.Spec.PipelineConfig.RemoteQueueOutput, cr.Spec.PipelineConfig.Typing, cr.Spec.PipelineConfig.IndexerPipe)
-		inputsPushBus := fmt.Sprintf("remote_queue=%s&remote_queue.type=%s&remote_queue.%s.encoding_format=s2s&remote_queue.%s.auth_region=%s&remote_queue.%s.access_key=%s&remote_queue.%s.secret_key=%s&remote_queue.%s.endpoint=%s&remote_queue.%s.large_message_store.endpoint=%s&remote_queue.%s.large_message_store.path=%s&remote_queue.%s.dead_letter_queue.name=%s&remote_queue.%s.%s.max_retries_per_part=%d&remote_queue.%s.retry_policy=%s&remote_queue.%s.send_interval=%s", cr.Spec.PushBus.SQS.QueueName, cr.Spec.PushBus.Type, cr.Spec.PushBus.Type, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.AuthRegion, cr.Spec.PushBus.Type, accessKeyID, cr.Spec.PushBus.Type, secretAccessKey, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.Endpoint, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.LargeMessageStorePath, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.DeadLetterQueueName, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.SQS.MaxRetriesPerPart, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.Type, cr.Spec.PushBus.SQS.SendInterval)
-		_, err := handlePushBusOrPipelineConfigChange(ctx, oldCR, cr, client, inputsPipeline, inputsPushBus)
+	// No need to requeue if everything is ready
+	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		_, err = handlePushBusOrPipelineConfigChange(ctx, cr, client)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")
 			return result, err
 		}
-	}
 
-	// No need to requeue if everything is ready
-	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		// Upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -374,7 +264,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
 	if cr.Spec.Replicas == 0 {
-		cr.Spec.Replicas = 3
+		cr.Spec.Replicas = 1
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -393,62 +283,30 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // Checks if only PushBus or Pipeline config changed, and updates the conf file if so
-func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *enterpriseApi.IngestorCluster, k8s client.Client, inputsPipeline, inputsPushBus string) (bool, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyIngestorCluster")
-
-	pushBusChanged := !reflect.DeepEqual(oldCR.Spec.PushBus, newCR.Spec.PushBus)
-	pipelineChanged := !reflect.DeepEqual(oldCR.Spec.PipelineConfig, newCR.Spec.PipelineConfig)
-
-	// Detect first resource creation (oldCR is empty)
-	firstCreate := oldCR.Status.ReadyReplicas == 0 && newCR.Status.ReadyReplicas > 0
-
-	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged", "pushBusChanged", pushBusChanged, "pipelineChanged", pipelineChanged, "firstCreate", firstCreate)
-
-	// If neither changed and not first create, nothing to do
-	if !pushBusChanged && !pipelineChanged && !firstCreate {
-		return false, nil
-	}
-
+func handlePushBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, k8s client.Client) (bool, error) {
 	// Only update config for pods that exist
-	readyReplicas := newCR.Spec.Replicas
-
-	scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged", "pushBusChanged", pushBusChanged, "pipelineChanged", pipelineChanged, "firstCreate", firstCreate, "readyReplicas", readyReplicas)
-
-	if readyReplicas == 0 {
-		// No pods to update yet
-		return false, nil
-	}
+	readyReplicas := newCR.Status.ReadyReplicas
 
 	// List all pods for this IngestorCluster StatefulSet
 	var updateErr error
 	for n := 0; n < int(readyReplicas); n++ {
 		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, newCR.GetName(), int32(n))
-		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), false)))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
 			return true, err
 		}
 		splunkClient := splkClient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(oldCR, newCR)
+		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(newCR)
 
-		for _, field := range pushBusChangedFields {
-			if pushBusChanged || firstCreate {
-				scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pushBusChanged || firstCreate ", "pushBusChanged || firstCreate ", pushBusChanged || firstCreate)
-				if err := splunkClient.UpdateConfFile("outputs", field[0], field[1], field[2]); err != nil {
-					updateErr = err
-				}
-			}
+		if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PushBus.SQS.QueueName), pushBusChangedFields); err != nil {
+			updateErr = err
 		}
 
 		for _, field := range pipelineChangedFields {
-			if pipelineChanged || firstCreate {
-				scopedLog.Info("ApplyIngestorCluster handlePushBusOrPipelineConfigChange pipelineChanged || firstCreate ", "pipelineChanged || firstCreate ", pipelineChanged || firstCreate)
-
-				if err := splunkClient.UpdateConfFile("default-mode", field[0], field[1], field[2]); err != nil {
-					updateErr = err
-				}
+			if err := splunkClient.UpdateConfFile("default-mode", field[0], [][]string{[]string{field[1], field[2]}}); err != nil {
+				updateErr = err
 			}
 		}
 	}
@@ -458,63 +316,33 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, oldCR, newCR *ente
 }
 
 // Returns the names of PushBus and PipelineConfig fields that changed between oldCR and newCR.
-func getChangedPushBusAndPipelineFields(oldCR, newCR *enterpriseApi.IngestorCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
+func getChangedPushBusAndPipelineFields(newCR *enterpriseApi.IngestorCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
 	// Compare PushBus fields
-	oldPB := oldCR.Spec.PushBus
 	newPB := newCR.Spec.PushBus
-
-	if oldPB.Type != newPB.Type {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), "remote_queue.type", newPB.Type})
-	}
-	// TODO: remote_queue.sqs_smartbus.encoding_format: s2s
-	if oldPB.SQS.AuthRegion != newPB.SQS.AuthRegion {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion})
-	}
-	// TODO: remote_queue.sqs_smartbus.access_key
-	// TODO: remote_queue.sqs_smartbus.secret_key
-	if oldPB.SQS.Endpoint != newPB.SQS.Endpoint {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.endpoint", newPB.Type), newPB.SQS.Endpoint})
-	}
-	if oldPB.SQS.LargeMessageStoreEndpoint != newPB.SQS.LargeMessageStoreEndpoint {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPB.Type), newPB.SQS.LargeMessageStoreEndpoint})
-	}
-	if oldPB.SQS.LargeMessageStorePath != newPB.SQS.LargeMessageStorePath {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.large_message_store.path", newPB.Type), newPB.SQS.LargeMessageStorePath})
-	}
-	if oldPB.SQS.DeadLetterQueueName != newPB.SQS.DeadLetterQueueName {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPB.Type), newPB.SQS.DeadLetterQueueName})
-	}
-	if oldPB.SQS.MaxRetriesPerPart != newPB.SQS.MaxRetriesPerPart {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPB.SQS.RetryPolicy, newPB.Type), fmt.Sprintf("%d", newPB.SQS.MaxRetriesPerPart)})
-	}
-	if oldPB.SQS.RetryPolicy != newPB.SQS.RetryPolicy {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.retry_policy", newPB.Type), newPB.SQS.RetryPolicy})
-	}
-	if oldPB.SQS.SendInterval != newPB.SQS.SendInterval {
-		pushBusChangedFields = append(pushBusChangedFields, []string{fmt.Sprintf("remote_queue%3A%s", newPB.SQS.QueueName), fmt.Sprintf("remote_queue.%s.send_interval", newPB.Type), newPB.SQS.SendInterval})
-	}
-
-	// Compare PipelineConfig fields
-	oldPC := oldCR.Spec.PipelineConfig
 	newPC := newCR.Spec.PipelineConfig
 
-	if oldPC.RemoteQueueRuleset != newPC.RemoteQueueRuleset {
-		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aremotequeueruleset", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueRuleset)})
+	// Push all PushBus fields
+	pushBusChangedFields = [][]string{
+		{"remote_queue.type", newPB.Type},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", newPB.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", newPB.Type), newPB.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPB.Type), newPB.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPB.Type), newPB.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPB.Type), newPB.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPB.SQS.RetryPolicy, newPB.Type), fmt.Sprintf("%d", newPB.SQS.MaxRetriesPerPart)},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newPB.Type), newPB.SQS.RetryPolicy},
+		{fmt.Sprintf("remote_queue.%s.send_interval", newPB.Type), newPB.SQS.SendInterval},
 	}
-	if oldPC.RuleSet != newPC.RuleSet {
-		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aruleset", "disabled", fmt.Sprintf("%t", newPC.RuleSet)})
-	}
-	if oldPC.RemoteQueueTyping != newPC.RemoteQueueTyping {
-		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aremotequeuetyping", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueTyping)})
-	}
-	if oldPC.RemoteQueueOutput != newPC.RemoteQueueOutput {
-		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Aremotequeueoutput", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueOutput)})
-	}
-	if oldPC.Typing != newPC.Typing {
-		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3Atyping", "disabled", fmt.Sprintf("%t", newPC.Typing)})
-	}
-	if oldPC.IndexerPipe != newPC.IndexerPipe {
-		pipelineChangedFields = append(pipelineChangedFields, []string{"pipeline%3AindexerPipe", "disabled", fmt.Sprintf("%t", newPC.IndexerPipe)})
+
+	// Always set all pipeline fields, not just changed ones
+	pipelineChangedFields = [][]string{
+		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueRuleset)},
+		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPC.RuleSet)},
+		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueTyping)},
+		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueOutput)},
+		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPC.Typing)},
+		{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newPC.IndexerPipe)},
 	}
 
 	return

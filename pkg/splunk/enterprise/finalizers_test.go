@@ -309,18 +309,18 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 					{MetaName: "*v4.IndexerCluster-test-stack1"},
 				}
 			case "IngestorCluster":
-                mockCalls["Create"] = []spltest.MockFuncCall{
-                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
-                    {MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
-                }
-                mockCalls["Get"] = []spltest.MockFuncCall{
-                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
-                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
-                    {MetaName: "*v1.Secret-test-splunk-test-secret"},
-                    {MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
-                    {MetaName: "*v4.IngestorCluster-test-stack1"},
-                    {MetaName: "*v4.IngestorCluster-test-stack1"},
-                }
+				mockCalls["Create"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
+				}
+				mockCalls["Get"] = []spltest.MockFuncCall{
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.Secret-test-splunk-test-secret"},
+					{MetaName: "*v1.ConfigMap-test-splunk-ingestor-stack1-configmap"},
+					{MetaName: "*v4.IngestorCluster-test-stack1"},
+					{MetaName: "*v4.IngestorCluster-test-stack1"},
+				}
 			}
 		}
 	}

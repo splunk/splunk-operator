@@ -64,7 +64,7 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("ingestorcluster", req.NamespacedName)
 
-	// Fetch the IndexerCluster
+	// Fetch the IngestorCluster
 	instance := &enterpriseApi.IngestorCluster{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {

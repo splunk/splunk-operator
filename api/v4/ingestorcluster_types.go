@@ -47,9 +47,6 @@ type IngestorClusterSpec struct {
 
 	// Pipeline configuration
 	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
-
-	// Secret ref
-	SecretRef string `json:"secretRef"`
 }
 
 // Helper types
