@@ -38,6 +38,9 @@ const (
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
+	PipelineConfig PipelineConfigSpec `json:"PipelineConfig,omitempty"`
+
+	PullBus PushBusSpec `json:"pullBus,omitempty"`
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
 }

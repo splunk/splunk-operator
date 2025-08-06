@@ -497,6 +497,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		_, err = handlePushBusOrPipelineConfigChangeIndexer(ctx, cr, client)
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
@@ -1153,6 +1154,72 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	}
 
 	return extractedValue
+}
+
+// Checks if only PushBus or Pipeline config changed, and updates the conf file if so
+func handlePushBusOrPipelineConfigChangeIndexer(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) (bool, error) {
+	// Only update config for pods that exist
+	readyReplicas := newCR.Status.ReadyReplicas
+
+	// List all pods for this IngestorCluster StatefulSet
+	var updateErr error
+	for n := 0; n < int(readyReplicas); n++ {
+		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, newCR.GetName(), int32(n))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
+		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
+		if err != nil {
+			return true, err
+		}
+		splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+
+		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFieldsIndexer(newCR)
+
+		if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), pushBusChangedFields); err != nil {
+			updateErr = err
+		}
+
+		for _, field := range pipelineChangedFields {
+			if err := splunkClient.UpdateConfFile("default-mode", field[0], [][]string{[]string{field[1], field[2]}}); err != nil {
+				updateErr = err
+			}
+		}
+
+	}
+
+	// Do NOT restart Splunk
+	return true, updateErr
+}
+
+func getChangedPushBusAndPipelineFieldsIndexer(newCR *enterpriseApi.IndexerCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
+	// Compare PushBus fields
+	newPB := newCR.Spec.PullBus
+	newPC := newCR.Spec.PipelineConfig
+
+	// Push all PushBus fields
+	pushBusChangedFields = [][]string{
+		{"remote_queue.type", newPB.Type},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", newPB.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", newPB.Type), newPB.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPB.Type), newPB.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPB.Type), newPB.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPB.Type), newPB.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPB.SQS.RetryPolicy, newPB.Type), fmt.Sprintf("%d", newPB.SQS.MaxRetriesPerPart)},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newPB.Type), newPB.SQS.RetryPolicy},
+		{fmt.Sprintf("remote_queue.%s.send_interval", newPB.Type), newPB.SQS.SendInterval},
+	}
+
+	// Always set all pipeline fields, not just changed ones
+	pipelineChangedFields = [][]string{
+		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueRuleset)},
+		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPC.RuleSet)},
+		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueTyping)},
+		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueOutput)},
+		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPC.Typing)},
+		{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newPC.IndexerPipe)},
+	}
+
+	return
 }
 
 // Tells if there is an image migration from 8.x.x to 9.x.x
