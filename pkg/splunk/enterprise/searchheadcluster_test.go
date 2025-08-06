@@ -476,12 +476,12 @@ func TestApplyShcSecret(t *testing.T) {
 			Status: 200,
 			Err:    nil,
 		},
-		{
-			Method: "POST",
-			URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
-			Status: 200,
-			Err:    nil,
-		},
+		// {
+		// 	Method: "POST",
+		// 	URL:    "https://splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local:8089/services/server/control/restart",
+		// 	Status: 200,
+		// 	Err:    nil,
+		// },
 	}
 
 	cr := enterpriseApi.SearchHeadCluster{
@@ -510,7 +510,7 @@ func TestApplyShcSecret(t *testing.T) {
 
 	podExecCommands := []string{
 		"/opt/splunk/bin/splunk edit shcluster-config",
-		"opt/splunk/bin/splunk cmd splunkd rest",
+		"opt/splunk/bin/splunk edit user admin",
 	}
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
 		{

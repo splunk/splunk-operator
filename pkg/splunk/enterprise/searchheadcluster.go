@@ -367,37 +367,23 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 
 		// If admin secret is different from namespace scoped secret change it
 		if adminPwd != nsAdminSecret {
-			scopedLog.Info("admin password different from namespace scoped secret, changing admin password")
-			// If admin password already changed, ignore
-			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
-				if mgr.cr.Status.AdminSecretChanged[i] {
-					continue
+			// We want to change the admin password only if it has not been changed already
+			if len(mgr.cr.Status.AdminSecretChanged) == 0 || !mgr.cr.Status.AdminSecretChanged[0] {
+				scopedLog.Info("admin password different from namespace scoped secret, changing admin password for SearchHeadCluster")
+
+				// Change admin password for SearchHeadCluster
+				command := fmt.Sprintf("/opt/splunk/bin/splunk edit user admin -password %s -auth admin:%s ", nsAdminSecret, adminPwd)
+				streamOptions.Stdin = strings.NewReader(command)
+				_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+				if err != nil {
+					return err
 				}
-			}
+				scopedLog.Info("admin password changed for SearchHeadCluster")
 
-			// Change admin password on splunk instance of pod
-			command := fmt.Sprintf("/opt/splunk/bin/splunk cmd splunkd rest --noauth POST /services/admin/users/admin 'password=%s'", nsAdminSecret)
-			streamOptions.Stdin = strings.NewReader(command)
-			_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
-			if err != nil {
-				return err
-			}
-			scopedLog.Info("admin password changed on the splunk instance of pod")
-
-			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
-			err = shClient.RestartSplunk()
-			if err != nil {
-				return err
-			}
-			scopedLog.Info("Restarted Splunk")
-
-			// Set the adminSecretChanged changed flag to true
-			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
-				mgr.cr.Status.AdminSecretChanged[i] = true
-			} else {
-				scopedLog.Info("Appending to AdminSecretChanged")
+				// append AdminSecretChanged flag for SearchHeadCluster (will only have one entry due to the enclosing if)
 				mgr.cr.Status.AdminSecretChanged = append(mgr.cr.Status.AdminSecretChanged, true)
+			} else {
+				scopedLog.Info("admin password already changed for SearchHeadCluster, pod secret to be changed")
 			}
 
 			// Adding to map of secrets to be synced
@@ -417,8 +403,9 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 		Since the operator utilizes the admin password retrieved from the secret mounted on a SHC pod to make
 		REST API calls to the Splunk instances running on SHC Pods, it results in unsuccessful authentication.
 		Update the admin password on secret mounted on SHC pod to ensure successful authentication.
+		The change will be applied only if the admin password was previously changed on the search head cluster
 	*/
-	if len(mgr.cr.Status.AdminPasswordChangedSecrets) > 0 {
+	if len(mgr.cr.Status.AdminSecretChanged) > 0 && mgr.cr.Status.AdminSecretChanged[0] {
 		for podSecretName := range mgr.cr.Status.AdminPasswordChangedSecrets {
 			podSecret, err := splutil.GetSecretByName(ctx, mgr.c, mgr.cr.GetNamespace(), mgr.cr.GetName(), podSecretName)
 			if err != nil {
