@@ -947,6 +947,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
 		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), true)},
 		{Name: "DOMAIN_NAME", Value: domainName},
+		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
 	}
 
 	// update variables for licensing, if configured
