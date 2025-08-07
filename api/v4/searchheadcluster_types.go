@@ -128,7 +128,20 @@ type SearchHeadClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	UpgradePhase UpgradePhase `json:"upgradePhase"`
+
+	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
+
+	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
 }
+
+type UpgradePhase string
+
+const (
+	UpgradePhaseUpgrading UpgradePhase = "Upgrading"
+	UpgradePhaseUpgraded  UpgradePhase = "Upgraded"
+)
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
