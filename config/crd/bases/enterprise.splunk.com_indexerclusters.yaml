@@ -4244,6 +4244,21 @@ spec:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
                 type: boolean
+              PipelineConfig:
+                properties:
+                  indexerPipe:
+                    type: boolean
+                  remoteQueueOutput:
+                    type: boolean
+                  remoteQueueRuleset:
+                    type: boolean
+                  remoteQueueTyping:
+                    type: boolean
+                  ruleSet:
+                    type: boolean
+                  typing:
+                    type: boolean
+                type: object
               affinity:
                 description: Kubernetes Affinity rules that control how pods are assigned
                   to particular nodes.
@@ -5604,6 +5619,35 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              pullBus:
+                description: |-
+                  Helper types
+                  Only SQS as of now
+                properties:
+                  sqs:
+                    properties:
+                      authRegion:
+                        type: string
+                      deadLetterQueueName:
+                        type: string
+                      endpoint:
+                        type: string
+                      largeMessageStoreEndpoint:
+                        type: string
+                      largeMessageStorePath:
+                        type: string
+                      maxRetriesPerPart:
+                        type: integer
+                      queueName:
+                        type: string
+                      retryPolicy:
+                        type: string
+                      sendInterval:
+                        type: string
+                    type: object
+                  type:
+                    type: string
+                type: object
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe

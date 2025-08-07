@@ -497,7 +497,15 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		_, err = handlePushBusOrPipelineConfigChangeIndexer(ctx, cr, client)
+		// If values for PullBus and PipelineConfig are provided, update config files accordingly
+		if (cr.Spec.PullBus != enterpriseApi.PushBusSpec{}) && (cr.Spec.PipelineConfig != enterpriseApi.PipelineConfigSpec{}) {
+			_, err = handlePullBusOrPipelineConfigChangeIndexer(ctx, cr, client)
+			if err != nil {
+				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
+				return result, err
+			}
+		}
+
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
@@ -1156,25 +1164,29 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	return extractedValue
 }
 
-// Checks if only PushBus or Pipeline config changed, and updates the conf file if so
-func handlePushBusOrPipelineConfigChangeIndexer(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) (bool, error) {
+// Checks if only PullBus or Pipeline config changed, and updates the conf file if so
+func handlePullBusOrPipelineConfigChangeIndexer(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) (bool, error) {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
 	// List all pods for this IngestorCluster StatefulSet
 	var updateErr error
 	for n := 0; n < int(readyReplicas); n++ {
-		memberName := GetSplunkStatefulsetPodName(SplunkIngestor, newCR.GetName(), int32(n))
-		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
+		memberName := GetSplunkStatefulsetPodName(SplunkIndexer, newCR.GetName(), int32(n))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, newCR.GetName(), true)))
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
 			return true, err
 		}
 		splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFieldsIndexer(newCR)
+		pullBusChangedFields, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(newCR)
 
-		if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), pushBusChangedFields); err != nil {
+		if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), pullBusChangedFields); err != nil {
+			updateErr = err
+		}
+
+		if err := splunkClient.UpdateConfFile("inputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), pullBusChangedFields); err != nil {
 			updateErr = err
 		}
 
@@ -1190,13 +1202,13 @@ func handlePushBusOrPipelineConfigChangeIndexer(ctx context.Context, newCR *ente
 	return true, updateErr
 }
 
-func getChangedPushBusAndPipelineFieldsIndexer(newCR *enterpriseApi.IndexerCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
-	// Compare PushBus fields
+func getChangedPullBusAndPipelineFieldsIndexer(newCR *enterpriseApi.IndexerCluster) (pullBusChangedFields, pipelineChangedFields [][]string) {
+	// Compare PullBus fields
 	newPB := newCR.Spec.PullBus
 	newPC := newCR.Spec.PipelineConfig
 
-	// Push all PushBus fields
-	pushBusChangedFields = [][]string{
+	// Push all PullBus fields
+	pullBusChangedFields = [][]string{
 		{"remote_queue.type", newPB.Type},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", newPB.Type), "s2s"},
 		{fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion},

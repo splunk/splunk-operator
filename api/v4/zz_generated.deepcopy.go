@@ -511,6 +511,7 @@ func (in *IndexerClusterMemberStatus) DeepCopy() *IndexerClusterMemberStatus {
 func (in *IndexerClusterSpec) DeepCopyInto(out *IndexerClusterSpec) {
 	*out = *in
 	in.CommonSplunkSpec.DeepCopyInto(&out.CommonSplunkSpec)
+	out.PipelineConfig = in.PipelineConfig
 	out.PullBus = in.PullBus
 }
 
