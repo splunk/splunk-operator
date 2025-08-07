@@ -88,7 +88,7 @@ type PipelineConfigSpec struct {
 
 	Typing bool `json:"typing"`
 
-	IndexerPipe bool `json:"indexerPipe"`
+	IndexerPipe bool `json:"indexerPipe,omitempty"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster

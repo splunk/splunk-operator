@@ -4244,21 +4244,6 @@ spec:
               Mock:
                 description: Mock to differentiate between UTs and actual reconcile
                 type: boolean
-              PipelineConfig:
-                properties:
-                  indexerPipe:
-                    type: boolean
-                  remoteQueueOutput:
-                    type: boolean
-                  remoteQueueRuleset:
-                    type: boolean
-                  remoteQueueTyping:
-                    type: boolean
-                  ruleSet:
-                    type: boolean
-                  typing:
-                    type: boolean
-                type: object
               affinity:
                 description: Kubernetes Affinity rules that control how pods are assigned
                   to particular nodes.
@@ -5619,6 +5604,21 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              pipelineConfig:
+                properties:
+                  indexerPipe:
+                    type: boolean
+                  remoteQueueOutput:
+                    type: boolean
+                  remoteQueueRuleset:
+                    type: boolean
+                  remoteQueueTyping:
+                    type: boolean
+                  ruleSet:
+                    type: boolean
+                  typing:
+                    type: boolean
+                type: object
               pullBus:
                 description: |-
                   Helper types

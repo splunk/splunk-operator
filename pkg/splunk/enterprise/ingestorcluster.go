@@ -214,6 +214,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// TODO: Make it work when HPA scales replicas - all new pods should get the configuration
 		_, err = handlePushBusOrPipelineConfigChange(ctx, cr, client)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")

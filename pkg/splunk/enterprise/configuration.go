@@ -462,6 +462,9 @@ func getSplunkPorts(instanceType InstanceType) map[string]int {
 	case SplunkIndexer:
 		result[GetPortName(hecPort, protoHTTP)] = 8088
 		result[GetPortName(s2sPort, protoTCP)] = 9997
+	case SplunkIngestor:
+		result[GetPortName(hecPort, protoHTTP)] = 8088
+		result[GetPortName(s2sPort, protoTCP)] = 9997
 	}
 
 	return result
