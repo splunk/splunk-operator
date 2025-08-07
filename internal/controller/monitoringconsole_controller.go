@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,7 +72,7 @@ type MonitoringConsoleReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *MonitoringConsoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileCounters.With(getPrometheusLabels(req, "MonitoringConsole")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "MonitoringConsole")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "MonitoringConsole")
 	reqLogger := log.FromContext(ctx)
 	reqLogger = reqLogger.WithValues("monitoringconsole", req.NamespacedName)

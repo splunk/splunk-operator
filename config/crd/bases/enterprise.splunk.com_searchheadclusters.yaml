@@ -9470,6 +9470,14 @@ spec:
               telAppInstalled:
                 description: Telemetry App installation flag
                 type: boolean
+              upgradeEndTimestamp:
+                format: int64
+                type: integer
+              upgradePhase:
+                type: string
+              upgradeStartTimestamp:
+                format: int64
+                type: integer
             type: object
         type: object
     served: true
