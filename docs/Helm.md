@@ -15,7 +15,7 @@ Upgrading to latest version of splunk operator using helm chart will not upgrade
 
 ```
 git clone https://github.com/splunk/splunk-operator.git .
-git checkout release/2.3.0
+git checkout release/2.8.1
 make install
 ```
 
@@ -105,7 +105,7 @@ helm install --set splunk-operator.enabled=false --set installCRDs=true <RELEASE
 Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise custom resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
 
 ```
-clusterMaster:
+clusterManager:
   enabled: true
   name: cm-test
 
@@ -135,7 +135,7 @@ REVISION: 1
 TEST SUITE: None
 ```
 ```
-splunk-cm-test-cluster-master-0                       1/1     Running   0               11m
+splunk-cm-test-cluster-manager-0                      1/1     Running   0               11m
 splunk-idxc-test-indexer-0                            1/1     Running   0               5m49s
 splunk-idxc-test-indexer-1                            1/1     Running   0               5m49s
 splunk-idxc-test-indexer-2                            1/1     Running   0               5m49s
