@@ -60,6 +60,10 @@ func (mgr *DefaultStatefulSetPodManager) FinishRecycle(ctx context.Context, n in
 	return true, nil
 }
 
+func (mgr *DefaultStatefulSetPodManager) FinishUpgrade(ctx context.Context, n int32) error {
+	return nil
+}
+
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
 func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet) (enterpriseApi.Phase, error) {
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
@@ -252,6 +256,17 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 
 	// all is good!
 	scopedLog.Info("All pods are ready")
+
+	// Finalize rolling upgrade process
+	// It uses first pod to get a client
+	err = mgr.FinishUpgrade(ctx, 0)
+	if err != nil {
+		scopedLog.Error(err, "Unable to finalize rolling upgrade process")
+		return enterpriseApi.PhaseError, err
+	}
+
+	scopedLog.Info("Statefulset - Phase Ready")
+
 	return enterpriseApi.PhaseReady, nil
 }
 

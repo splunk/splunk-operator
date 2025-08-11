@@ -925,6 +925,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
+	domainName := os.Getenv("CLUSTER_DOMAIN")
+	if domainName == "" {
+		domainName = "cluster.local"
+	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
@@ -933,6 +937,19 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					APIVersion: "v1",
+					FieldPath:  "metadata.name",
+				},
+			},
+		},
+		{Name: "POD_NAMESPACE", Value: cr.GetNamespace()},
+		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
+		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), true)},
+		{Name: "DOMAIN_NAME", Value: domainName},
 	}
 
 	// update variables for licensing, if configured
