@@ -35,6 +35,7 @@ import (
 	"github.com/pkg/errors"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
@@ -58,7 +59,7 @@ type IngestorClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileCounters.With(getPrometheusLabels(req, "IngestorCluster")).Inc()
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "IngestorCluster")).Inc()
 	defer recordInstrumentionData(time.Now(), req, "controller", "IngestorCluster")
 
 	reqLogger := log.FromContext(ctx)
