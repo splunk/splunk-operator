@@ -134,6 +134,13 @@ func TestGetSplunkManualAppUpdateConfigMapName(t *testing.T) {
 	}
 }
 
+func TestGetSplunkIndexerPeerName(t *testing.T) {
+	val := GetSplunkIndexerPeerName(SplunkStandalone, "iden", 0, "default")
+	if val != "splunk-iden-standalone-0.splunk-iden-standalone-headless.default.svc.cluster.local" {
+		t.Errorf("Incorrect name")
+	}
+}
+
 func TestGetPortName(t *testing.T) {
 	val := GetPortName("8080", "TCP")
 	if val != "TCP-8080" {

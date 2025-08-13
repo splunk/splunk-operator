@@ -3,6 +3,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime/debug"
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 )
 
 func TestUpgradePathValidation(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
@@ -371,7 +373,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
 		response := map[string]splclient.ClusterManagerPeerInfo{
-			"splunk-test-indexer-0": {
+			"splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local": {
 				ID:             "site-1",
 				Status:         "Up",
 				ActiveBundleID: "1",

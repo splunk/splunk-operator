@@ -1023,7 +1023,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		return err
 	}
 	for n := int32(0); n < statefulSet.Status.Replicas; n++ {
-		peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
+		peerName := GetSplunkIndexerPeerName(SplunkIndexer, mgr.cr.GetName(), n, mgr.cr.GetNamespace())
 		peerStatus := enterpriseApi.IndexerClusterMemberStatus{Name: peerName}
 		peerInfo, ok := peers[peerName]
 		if ok {

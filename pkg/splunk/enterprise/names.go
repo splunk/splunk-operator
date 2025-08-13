@@ -263,6 +263,17 @@ func GetSplunkManualAppUpdateConfigMapName(namespace string) string {
 	return fmt.Sprintf(manualAppUpdateCMStr, namespace)
 }
 
+// GetSplunkIndexerPeerName uses a template to name a specific indexer cluster peer for Splunk instances.
+func GetSplunkIndexerPeerName(instanceType InstanceType, identifier string, index int32, namespace string) string {
+	podName := GetSplunkStatefulsetPodName(instanceType, identifier, index)
+	serviceName := GetSplunkServiceName(instanceType, identifier, true)
+	domainName := os.Getenv("CLUSTER_DOMAIN")
+	if domainName == "" {
+		domainName = "cluster.local"
+	}
+	return fmt.Sprintf("%s.%s.%s.svc.%s", podName, serviceName, namespace, domainName)
+}
+
 // GetSplunkStatefulsetUrls returns a list of fully qualified domain names for all pods within a Splunk StatefulSet.
 func GetSplunkStatefulsetUrls(namespace string, instanceType InstanceType, identifier string, replicas int32, hostnameOnly bool) string {
 	urls := make([]string, replicas)

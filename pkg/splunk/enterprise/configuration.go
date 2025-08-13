@@ -951,8 +951,16 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		},
 		{Name: "POD_NAMESPACE", Value: cr.GetNamespace()},
 		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
-		{Name: "SPLUNK_HEADLESS_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), true)},
 		{Name: "DOMAIN_NAME", Value: domainName},
+		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+	}
+
+	// add headless service name if it exists
+	if instanceType == SplunkMonitoringConsole || instanceType == SplunkSearchHead || instanceType == SplunkIndexer || instanceType == SplunkStandalone {
+		env = append(env, corev1.EnvVar{
+			Name:  "SPLUNK_HEADLESS_SERVICE_NAME",
+			Value: GetSplunkServiceName(instanceType, cr.GetName(), true),
+		})
 	}
 
 	// update variables for licensing, if configured
