@@ -373,7 +373,7 @@ func TestUpgradePathValidation(t *testing.T) {
 	}
 	GetClusterManagerPeersCall = func(ctx context.Context, mgr *indexerClusterPodManager) (map[string]splclient.ClusterManagerPeerInfo, error) {
 		response := map[string]splclient.ClusterManagerPeerInfo{
-			"splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local": {
+			"splunk-test-indexer-0": {
 				ID:             "site-1",
 				Status:         "Up",
 				ActiveBundleID: "1",

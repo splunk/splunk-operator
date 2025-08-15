@@ -940,27 +940,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					APIVersion: "v1",
-					FieldPath:  "metadata.name",
-				},
-			},
-		},
-		{Name: "POD_NAMESPACE", Value: cr.GetNamespace()},
-		{Name: "SPLUNK_SERVICE_NAME", Value: GetSplunkServiceName(instanceType, cr.GetName(), false)},
-		{Name: "DOMAIN_NAME", Value: domainName},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
-	}
-
-	// add headless service name if it exists
-	if instanceType == SplunkMonitoringConsole || instanceType == SplunkSearchHead || instanceType == SplunkIndexer || instanceType == SplunkStandalone {
-		env = append(env, corev1.EnvVar{
-			Name:  "SPLUNK_HEADLESS_SERVICE_NAME",
-			Value: GetSplunkServiceName(instanceType, cr.GetName(), true),
-		})
 	}
 
 	// update variables for licensing, if configured
