@@ -173,6 +173,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           helm repo add splunk https://splunk.github.io/splunk-operator/
+      - name: Package splunk-operator chart for tests
+        run: |
+          helm package helm-chart/splunk-operator
+          mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts
       - name: Run helm test
         env:
           KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
