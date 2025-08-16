@@ -322,7 +322,7 @@ Note: The Splunk cluster peer restarts are triggered by the contents of the Splu
 
 The App Framework maintains a checksum for each app or add-on archive file in the App Source location in the form of the Etag of the remote storage object. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
 
-To disable applying the cluster bundle by default when the cluster manager pod starts up, add the environment variable `SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH="true"` to the splunk-operator-controller-manager deployment, or the individual CRs. This option is available for Splunk Enterprise versions 9.2.8, 9.3.6, 9.4.4, and 10.x. Check the compatibility with SOK versions in the [releases](https://github.com/splunk/splunk-operator/releases).
+By default, the Splunk Operator will skip applying the cluster bundle on startup by setting the environment variable `SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH` to `true`. The operator will take care of running the `apply cluster-bundle` command in the app framework logic. To enable applying the cluster bundle by default when the cluster manager pod starts up, set the environment variable `SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH` to `false` in the individual CRs. This option is available for Splunk Enterprise versions 9.2.8, 9.3.6, 9.4.4, and 10.x. Check the compatibility with SOK versions in the [releases](https://github.com/splunk/splunk-operator/releases).
 
 **It is not supported to upload the same app under different archive file names.** If an app is not updating after uploading a new version under the same archive file name, do not upload the app using a different archive filename. Instead, check the [troubleshooting](#app-framework-troubleshooting) section for ways to debug the issue.
 
@@ -598,7 +598,7 @@ NOTE: If an app source name needs to be changed, make sure the name change is pe
     | ClusterManager    | cluster, local                         | Yes                   |
     | SearchHeadCluster | cluster, local                         | Yes                   |
     | Standalone        | local                                  | Yes                   |
-    | LicenceManager    | local                                  | Yes                   |
+    | LicenseManager    | local                                  | Yes                   |
     | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 
@@ -700,6 +700,8 @@ spec:
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
           value: "docker.io/splunk/splunk:9.4.0"
+        - name: SPLUNK_GENERAL_TERMS
+          value: ""
 
       volumes:
       - name: app-staging
