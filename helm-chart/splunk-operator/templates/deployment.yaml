@@ -75,6 +75,8 @@ spec:
               value: "{{ .Values.image.repository }}"
             - name: CLUSTER_DOMAIN
               value: {{ .Values.splunkOperator.clusterDomain | default "cluster.local" }}
+            - name: SPLUNK_GENERAL_TERMS
+              value: {{ .Values.splunkOperator.splunkGeneralTerms | default "" }}
 {{- with .Values.extraEnvs }}
 {{- toYaml . | trim | nindent 10 }}
 {{- end }}

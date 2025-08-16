@@ -3,6 +3,7 @@ package enterprise
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime/debug"
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 )
 
 func TestUpgradePathValidation(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
