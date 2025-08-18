@@ -30,6 +30,8 @@ wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator
 ​
 2. (Optional) Review the file and update it with your specific customizations used during your install.
 
+a. **NOTE** The `SPLUNK_GENERAL_TERMS` environment variable is set to an empty string by default. This will need to be manually updated to the required value. If you do not update this in the yaml file, you can update the splunk-operator-controller-manager deployment directly. See [Configuring Operator to Accept the Splunk General Terms](#configuring-operator-to-accept-the-splunk-general-terms).
+
 ​
 3. Upgrade the Splunk Operator.​
 ```
@@ -93,6 +95,35 @@ Set KUBECONFIG and run the already downloaded `operator-upgrade.sh` script with 
 
 Note: This script can be run from `Mac` or `Linux` system. To run this script on `Windows`, use `cygwin`.
 
+## Configuring Operator to Accept the Splunk General Terms
+
+Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. **This is a breaking change, and user action is required.**
+
+Starting in 10.x image versions of Splunk Enterprise, license acceptance requires an additional `SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com` argument. This indicates that users have read and accepted the current/latest version of the Splunk General Terms, available at https://www.splunk.com/en_us/legal/splunk-general-terms.html as may be updated from time to time. Unless you have jointly executed with Splunk a negotiated version of these General Terms that explicitly supersedes this agreement, by accessing or using Splunk software, you are agreeing to the Splunk General Terms posted at the time of your access and use and acknowledging its applicability to the Splunk software. Please read and make sure you agree to the Splunk General Terms before you access or use this software. Only after doing so should you include the `--accept-sgt-current-at-splunk-com` flag to indicate your acceptance of the current/latest Splunk General Terms and launch this software. All examples below have been updated with this change.
+
+If you use the below examples and the ‘--accept-sgt-current-at-splunk-com’ flag, you are indicating that you have read and accepted the current/latest version of the Splunk General Terms, as may be updated from time to time, and acknowledging its applicability to this software - as noted above.
+
+By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the required additional value `--accept-sgt-current-at-splunk-com` in the splunk-operator-controller-manager deployment, pass the `SPLUNK_GENERAL_TERMS` parameter with the required value to the `make deploy` command, or update the value in the Splunk Operator installation file from the release on GitHub.
+
+```yaml
+...
+        env:
+        - name: WATCH_NAMESPACE
+          value: "splunk-operator"
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: splunk/splunk:9.4.0
+        - name: OPERATOR_NAME
+          value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-sgt-current-at-splunk-com"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+...
+```
+
 ## Configuring Operator to watch specific namespace
 
 If Splunk Operator is installed clusterwide then
@@ -107,6 +138,8 @@ Edit `deployment` `splunk-operator-controller-manager-<podid>` in `splunk-operat
           value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:

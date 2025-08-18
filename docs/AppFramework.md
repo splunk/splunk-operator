@@ -175,7 +175,9 @@ spec:
 
 The App Framework detects the Splunk app or add-on archive files available in the App Source locations, and deploys them to the standalone instance path for local use.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location in the form of the Etag of the remote storage object. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+
+**It is not supported to upload the same app under different archive file names.** If an app is not updating after uploading a new version under the same archive file name, do not upload the app using a different archive filename. Instead, check the [troubleshooting](#app-framework-troubleshooting) section for ways to debug the issue.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
@@ -318,7 +320,11 @@ The apps in the `networkApps` and `clusterBase` folders are deployed to the clus
 
 Note: The Splunk cluster peer restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location in the form of the Etag of the remote storage object. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+
+By default, the Splunk Operator will skip applying the cluster bundle on startup by setting the environment variable `SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH` to `true`. The operator will take care of running the `apply cluster-bundle` command in the app framework logic. To enable applying the cluster bundle by default when the cluster manager pod starts up, set the environment variable `SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH` to `false` in the individual CRs. This option is available for Splunk Enterprise versions 9.2.8, 9.3.6, 9.4.4, and 10.x. Check the compatibility with SOK versions in the [releases](https://github.com/splunk/splunk-operator/releases).
+
+**It is not supported to upload the same app under different archive file names.** If an app is not updating after uploading a new version under the same archive file name, do not upload the app using a different archive filename. Instead, check the [troubleshooting](#app-framework-troubleshooting) section for ways to debug the issue.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
@@ -466,7 +472,9 @@ The apps in the `searchApps` and `machineLearningApps` folders are deployed to t
 
 Note: The Splunk search head restarts are triggered by the contents of the Splunk apps deployed, and are not initiated by the App Framework.
 
-The App Framework maintains a checksum for each app or add-on archive file in the App Source location. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location in the form of the Etag of the remote storage object. The app name and checksum is recorded in the CR, and used to compare the deployed apps to the app archive files in the App Source location. The App Framework will scan for changes to the App Source folders using the polling interval, and deploy any updated apps to the instance. For the App Framework to detect that an app or add-on had changed, the updated app must use the same archive file name as the previously deployed one.
+
+**It is not supported to upload the same app under different archive file names.** If an app is not updating after uploading a new version under the same archive file name, do not upload the app using a different archive filename. Instead, check the [troubleshooting](#app-framework-troubleshooting) section for ways to debug the issue.
 
 By default, the App Framework polls the remote object storage location for new or changed apps at the `appsRepoPollIntervalSeconds` interval. To disable the interval check, and manage app updates manually, see the [Manual initiation of app management](#manual-initiation-of-app-management).
 
@@ -590,7 +598,7 @@ NOTE: If an app source name needs to be changed, make sure the name change is pe
     | ClusterManager    | cluster, local                         | Yes                   |
     | SearchHeadCluster | cluster, local                         | Yes                   |
     | Standalone        | local                                  | Yes                   |
-    | LicenceManager    | local                                  | Yes                   |
+    | LicenseManager    | local                                  | Yes                   |
     | MonitoringConsole | local                                  | Yes                   |
     | IndexerCluster    | N/A                                    | No                    |
 
@@ -692,6 +700,8 @@ spec:
           value: "splunk-operator"
         - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
           value: "docker.io/splunk/splunk:9.4.0"
+        - name: SPLUNK_GENERAL_TERMS
+          value: ""
 
       volumes:
       - name: app-staging
@@ -1872,3 +1882,16 @@ bash# kubectl get shc -o yaml | grep -i appSrcDeployStatus -A 33
     maintenanceMode: true
     members:
 ```
+
+### App is not updating after new file uploaded to remote storage
+The App Framework maintains a checksum for each app or add-on archive file in the App Source location in the form of the Etag of the remote storage object. The Etag  should get updated if the contents of the new file uploaded are different from the original. If an app is not getting updated on the pod, verify that the Etag is different from the original that was already installed.
+
+The splunk-operator-controller-manager pod logs will contain information about the Etag. Look for the log
+```
+INFO	initAndCheckAppInfoStatus	Apps List retrieved from remote storage	{"controller"..., "App Source": "searchApps", "Content": [{"Etag":"etag","Key":"path/file.tgz","LastModified":"2025-06-06T15:15:01Z","Size":263096926,"StorageClass":"STANDARD"}]}
+```
+
+Keep in mind that based on the `appsRepoStatusPollIntervalSeconds`, it might take some time for the apps to get updated. Please wait the required amount of time for the app framework to poll the latest versions from storage.
+
+### App is not correctly copying to pod
+If an app is packaged on a Mac, there might be issues extracting the contents on the running pod. If there are issues installing apps that were packaged manually, ensure that they can be extracted in a Linux environment before uploading it to the remote storage.

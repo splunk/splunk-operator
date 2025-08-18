@@ -62,7 +62,11 @@ func (testenv *TestCaseEnv) GetKubeClient() client.Client {
 
 // NewDefaultTestCaseEnv creates a default test environment
 func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv, error) {
-	return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
+	if os.Getenv("GRAVITON_TESTING") == "true" {
+		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), specifiedLicenseFilePath)
+	} else {
+		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
+	}
 }
 
 // NewTestCaseEnv creates a new test environment to run tests againsts
@@ -105,6 +109,11 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 // GetName returns the name of the testenv
 func (testenv *TestCaseEnv) GetName() string {
 	return testenv.name
+}
+
+// GetName returns the Splunk image of the testenv
+func (testenv *TestCaseEnv) GetSplunkImage() string {
+	return testenv.splunkImage
 }
 
 // IsOperatorInstalledClusterWide returns if operator is installed clusterwide

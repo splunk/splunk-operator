@@ -3,12 +3,12 @@ ARG PLATFORMS=linux/amd64
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-# This sha relates to ubi minimal version 8.10-1255, which is tagged as 8.10 and latest as of Apr 25, 2025
+# This sha relates to ubi minimal version 8.10-1753676782, which is tagged as 8.10 and latest as of Jul 28, 2025
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal@sha256
-ARG BASE_IMAGE_VERSION=b2a1bec3dfbc7a14a1d84d98934dfe8fdde6eb822a211286601cf109cbccb075
+ARG BASE_IMAGE_VERSION=88d40445bdf35b3b848371dec918b7d6ed0ef0e03a4e0f510c10be536e4aa1c9
 
 # Build the manager binary
-FROM golang:1.23.0 AS builder
+FROM golang:1.24.2 AS builder
 
 WORKDIR /workspace
 
@@ -19,16 +19,16 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
+COPY cmd/main.go cmd/main.go
 COPY api/ api/
-COPY controllers/ controllers/
+COPY internal/controller/ internal/controller/
 COPY pkg/ pkg/
 COPY tools/ tools/
 COPY hack hack/
 
 # Build
 # TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}

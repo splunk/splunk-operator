@@ -16,6 +16,7 @@
 package test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,8 +26,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // MockAWSS3ClientError is used to store all the objects for an app source
@@ -70,7 +71,7 @@ func (c *MockAWSS3Handler) CheckAWSRemoteDataListResponse(t *testing.T, testMeth
 }
 
 // ListObjectsV2 is a mock call to ListObjectsV2
-func (mockClient MockAWSS3Client) ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+func (mockClient MockAWSS3Client) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	output := &s3.ListObjectsV2Output{}
 
 	tmp, err := json.Marshal(mockClient.Objects)
@@ -86,9 +87,31 @@ func (mockClient MockAWSS3Client) ListObjectsV2(options *s3.ListObjectsV2Input) 
 	return output, nil
 }
 
+// GetObject is a mock call to GetObject
+func (mockClient MockAWSS3Client) GetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	output := &s3.GetObjectOutput{}
+
+	tmp, err := json.Marshal(mockClient.Objects)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(tmp, &output.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return output, nil
+}
+
 // ListObjectsV2 is a mock call to ListObjectsV2
-func (mockClient MockAWSS3ClientError) ListObjectsV2(options *s3.ListObjectsV2Input) (*s3.ListObjectsV2Output, error) {
+func (mockClient MockAWSS3ClientError) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	return &s3.ListObjectsV2Output{}, errors.New("Dummy Error")
+}
+
+// GetObject is a mock call to GetObject
+func (mockClient MockAWSS3ClientError) GetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return &s3.GetObjectOutput{}, errors.New("Dummy Error")
 }
 
 // MockAWSDownloadClient is mock aws client for download
@@ -96,7 +119,7 @@ type MockAWSDownloadClient struct{}
 
 // Download is a mock call for aws sdk download api.
 // It just does some error checking.
-func (mockDownloadClient MockAWSDownloadClient) Download(w io.WriterAt, input *s3.GetObjectInput, options ...func(*s3manager.Downloader)) (size int64, err error) {
+func (mockDownloadClient MockAWSDownloadClient) Download(ctx context.Context, w io.WriterAt, input *s3.GetObjectInput, options ...func(*manager.Downloader)) (size int64, err error) {
 	var bytes int64
 	remoteFile := *input.Key
 	localFile := w.(*os.File).Name()
