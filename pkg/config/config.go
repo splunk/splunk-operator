@@ -34,7 +34,7 @@ const (
 // GetWatchNamespaces returns the Namespaces the operator should be watching for changes.
 func GetWatchNamespaces() []string {
 	ns, found := os.LookupEnv(WatchNamespaceEnvVar)
-	if !found {
+	if !found || ns == "" {
 		return nil
 	}
 
@@ -51,6 +51,9 @@ func ManagerOptionsWithNamespaces(logger logr.Logger, opt ctrl.Options) ctrl.Opt
 	opts := cache.Options{}
 	namespaces := GetWatchNamespaces()
 	switch {
+	case len(namespaces) == 0:
+		logger.Info("Manager will be watching all namespaces")
+		return opt // No namespaces specified, so return the original options.
 	case len(namespaces) == 1:
 		logger.Info("Manager will be watching namespace", "namespace", namespaces[0])
 		opts = cache.Options{DefaultNamespaces: map[string]cache.Config{
