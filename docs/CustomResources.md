@@ -193,7 +193,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| replicas   | integer | The number of standalone replicas (defaults to 1) |
+| replicas   | integer | The number of standalone replicas (miminum of 1, which is the default) |
 
 
 ## SearchHeadCluster Resource Spec Parameters
@@ -263,7 +263,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |
-| replicas   | integer | The number of indexer cluster members (defaults to 1) |
+| replicas   | integer | The number of indexer cluster members (minimum of 3, which is the default) |
 
 
 ## MonitoringConsole Resource Spec Parameters
