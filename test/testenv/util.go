@@ -597,6 +597,9 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 								}, {
 									Name:  "RELATED_IMAGE_SPLUNK_ENTERPRISE",
 									Value: splunkEnterpriseImageAndTag,
+								}, {
+									Name:  "SPLUNK_GENERAL_TERMS",
+									Value: "--accept-sgt-current-at-splunk-com",
 								},
 							},
 						},
