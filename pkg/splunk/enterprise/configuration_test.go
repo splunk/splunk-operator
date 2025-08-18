@@ -293,6 +293,7 @@ func TestSmartstoreApplyStandaloneFailsOnInvalidSmartStoreConfig(t *testing.T) {
 }
 
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	c := spltest.NewMockClient()
 	cr := enterpriseApi.ClusterManager{
@@ -1430,10 +1431,10 @@ func TestAddStorageVolumes(t *testing.T) {
 	// test if adminManagedPV logic works
 
 	labels = map[string]string{
-		"app.kubernetes.io/component": "indexer",
-		"app.kubernetes.io/instance": "splunk-CM-cluster-manager",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/instance":   "splunk-CM-cluster-manager",
 		"app.kubernetes.io/managed-by": "splunk-operator",
-		"app.kubernetes.io/name": "cluster-manager",
+		"app.kubernetes.io/name":       "cluster-manager",
 	}
 
 	// adjust CR annotations
@@ -1466,10 +1467,10 @@ func TestAddStorageVolumes(t *testing.T) {
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-statefulset",
-			Namespace: cr.GetNamespace(),
+			Name:        "test-statefulset",
+			Namespace:   cr.GetNamespace(),
 			Annotations: cr.GetAnnotations(),
-			Labels: cr.GetLabels(),
+			Labels:      cr.GetLabels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,

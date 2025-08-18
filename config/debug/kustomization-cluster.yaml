@@ -119,7 +119,7 @@ patches:
     name: controller-manager
   patch: |-
     - op: add
-      path: /spec/template/spec/containers/1/env
+      path: /spec/template/spec/containers/2/env
       value: 
       - name: WATCH_NAMESPACE
         value: WATCH_NAMESPACE_VALUE
@@ -127,6 +127,8 @@ patches:
         value: SPLUNK_ENTERPRISE_IMAGE
       - name: OPERATOR_NAME
         value: splunk-operator
+      - name: SPLUNK_GENERAL_TERMS
+        value: SPLUNK_GENERAL_TERMS_VALUE
       - name: POD_NAME
         valueFrom:
           fieldRef:
