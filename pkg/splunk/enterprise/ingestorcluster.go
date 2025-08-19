@@ -214,7 +214,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// TODO: Make it work when HPA scales replicas - all new pods should get the configuration
 		_, err = handlePushBusOrPipelineConfigChange(ctx, cr, client)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")
@@ -264,8 +263,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
 func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
-	if cr.Spec.Replicas == 0 {
-		cr.Spec.Replicas = 1
+	if cr.Spec.Replicas < 3 {
+		cr.Spec.Replicas = 3
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -280,7 +279,15 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
 func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) (*appsv1.StatefulSet, error) {
-	return getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, make([]corev1.EnvVar, 0))
+	ss, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkIngestor, cr.Spec.Replicas, []corev1.EnvVar{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Setup App framework staging volume for apps
+	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
+
+	return ss, nil
 }
 
 // Checks if only PushBus or Pipeline config changed, and updates the conf file if so

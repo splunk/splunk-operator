@@ -56,6 +56,8 @@ func DeleteSplunkPvc(ctx context.Context, cr splcommon.MetaObject, c splcommon.C
 		components = append(components, splcommon.ClusterManager)
 	case "MonitoringConsole":
 		components = append(components, "monitoring-console")
+	case "IngestorCluster":
+		components = append(components, "ingestor")
 	default:
 		scopedLog.Info("Skipping PVC removal")
 		return nil
