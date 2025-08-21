@@ -117,7 +117,7 @@ EOF
 ```
 This will automatically configure a cluster, with a predetermined number of index cluster peers generated automatically based upon the replication_factor (RF) set. This example includes the `monitoringConsoleRef` parameter used to define a monitoring console pod. 
 
-NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterManager,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters.
+NOTE: If you try to specify the number of `replicas` on an IndexerCluster CR less than the RF (as set on ClusterManager,) the Splunk Operator will always scale the number of peers to either the `replication_factor` for single site indexer clusters, or to the `origin` count in `site_replication_factor` for multi-site indexer clusters. The minimum number of indexer cluster peers is 3.
 
 After starting the cluster manager, indexer cluster peers, and monitoring console pods using the examples above, use the `kubectl get pods` command to verify your environment:
 ```
@@ -843,3 +843,22 @@ Use the kubectl command to update the global kubernetes secret object:
 Use the kubectl command to delete the global kubernetes secret object:
 
 `kubectl delete secret splunk-<desired_namespace>-secret`
+
+## Creating Custom Probe Scripts
+
+The default liveness, readiness, and startup probe scripts are housed in the tools/k8_probes/ directory. During the creation of a CR, the Splunk Operator will create a configmap named `splunk-<CR namespace>-probe-configmap` in the namespace of the CR with these scripts to mount to the pod for the liveness probe, readiness probe, and startup probe. If you would like to use a custom probe script, there are two options to edit these scripts.
+
+NOTE: Liveness, readiness, and startup probe scripts must be used by all CRs in the same namespace. Different namespaces can have different probe scripts.
+
+### Edit the configmap after it is automatically created
+
+When a CR is created for the first time in a specific namespace, and the probe configmap for that namespace is not yet created, the Splunk Operator will automatically create the `splunk-<CR namespace>-probe-configmap` configmap with the default scripts from the tools/k8_probes/ directory. Once it is created, you can edit the data in the configmap manually. The operator will not overwrite the data in the configmap if it is changed.
+
+### Create the configmap before deploying CRs
+
+Before deploying any Custom Resources to a specific namespace, you can manually create the configmap with your unique scripts as the data. All three scripts must be included in the configmap whether you are using a custom script for one or all of the probes. The scripts must be named exactly `livenessProbe.sh`, `readinessProbe.sh`, and `startupProbe.sh`. If you only require a custom script for one or two probes, please make sure to add the default script for the other probes to your configmap. **The operator will never overwrite the data in the existing `splunk-<CR namespace>-probe-configmap` configmap.** Only a user can manually update the scripts if needed.
+
+To create the configmap, run the following command:
+```
+kubectl create configmap splunk-<CR namespace>-probe-configmap --from-file=livenessProbe.sh,readinessProbe.sh,startupProbe.sh -n <CR namespace>
+```

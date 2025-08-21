@@ -193,7 +193,7 @@ the `Standalone` resource provides the following `Spec` configuration parameters
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| replicas   | integer | The number of standalone replicas (defaults to 1) |
+| replicas   | integer | The number of standalone replicas (miminum of 1, which is the default) |
 
 
 ## SearchHeadCluster Resource Spec Parameters
@@ -263,7 +263,7 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 
 | Key        | Type    | Description                                           |
 | ---------- | ------- | ----------------------------------------------------- |
-| replicas   | integer | The number of indexer cluster members (defaults to 1) |
+| replicas   | integer | The number of indexer cluster members (minimum of 3, which is the default) |
 
 
 ## MonitoringConsole Resource Spec Parameters
@@ -402,6 +402,65 @@ metadata:
 spec:
   replicas: 1
 ```
+
+#### admin-managed-pv Annotations
+The admin-managed-pv annotation in the splunk-operator's Custom Resource allows the admin to control whether Persistent Volumes (PVs) are dynamically created for the StatefulSet associated with the CR. If set to `true`, no PVs will be created, and the Persistent Volume Claim templates in the StatefulSet manifest will include a selector block to match `app.kubernetes.io/instance` and `app.kubernetes.io/name` labels for pre-created PVs. This means that `/opt/splunk/etc` and `/opt/splunk/var` related PVCs will contain code block like below 
+
+```
+apiVersion: v1
+kind: PersistentVolumeClaim
+...
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: splunk-cm-cluster-manager
+      app.kubernetes.io/name: cluster-manager
+```
+
+To match selector definition like this, Persistent Volume must set labels accordingly 
+
+```
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-example-etc
+  labels:
+    app.kubernetes.io/instance: splunk-cm-cluster-manager
+    app.kubernetes.io/name: cluster-manager
+```
+
+When admin-managed-pv is set to `false`, PVs will be dynamically created as usual, providing dedicated persistent storage for the StatefulSet.
+
+Here is an example of a Standalone with the admin-managed-pv annotation set. After 
+```
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: single
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+  annotations:
+    enterprise.splunk.com/admin-managed-pv: "true"
+```
+##### PV label values
+In order to prepare labels for CR's persistent volumes you need to know values beforehand
+Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
+| Customer Resource Definition | app.kubernetes.io/name value |
+| ----------- | --------- |
+| clustermanager.enterprise.splunk.com | cluster-manager |
+| clustermaster.enterprise.splunk.com | cluster-master |
+| indexercluster.enterprise.splunk.com | indexer-cluster |
+| licensemanager.enterprise.splunk.com | license-manager |
+| licensemaster.enterprise.splunk.com | license-master |
+| monitoringconsole.enterprise.splunk.com | monitoring-console |
+| searchheadcluster.enterprise.splunk.com | search-head |
+| standalone.enterprise.splunk.com | standalone |
+
+`app.kubernetes.io/instance` value consist of three elements concatenated with hyphens
+1. "splunk"
+2. provided by admin CR name
+3. CRD kind name
+
+For example `clusterManager` CR named "test" will have set `app.kubernetes.io/instance` as `splunk-test-cluster-manager`
 
 #### Container Logs
 The Splunk Enterprise CRDs deploy Splunkd in Kubernetes pods running [docker-splunk](https://github.com/splunk/docker-splunk) container images. Adding a couple of environment variables to the CR spec as follows produces `detailed container logs`:

@@ -29,11 +29,11 @@ api/v3/licensemaster_types.go
 api/v3/zz_generated.deepcopy.go
 api/v3/common_types.go
 pkg/splunk/enterprise/licensemaster.go
-controllers/licensemaster_controller.go
+controller/licensemaster_controller.go
 tools/k8s_collectors/k8s-systeminfo-collector.sh
-controllers/common/predicate.go
+controller/common/predicate.go
 pkg/splunk/enterprise/finalizers.go
-controllers/monitoringconsole_controller.go
+controller/monitoringconsole_controller.go
 pkg/splunk/enterprise/events.go
 #Exceptions for dual support of cluster manager
 api/v3/clustermaster_types.go
@@ -47,9 +47,9 @@ config/rbac/clustermaster_editor_role.yaml
 config/rbac/clustermaster_viewer_role.yaml
 config/rbac/clustermanager_editor_role.yaml
 config/rbac/clustermanager_viewer_role.yaml
-controllers/clustermaster_controller.go
-controllers/clustermaster_controller_test.go
-controllers/licensemaster_controller_test.go
+controller/clustermaster_controller.go
+controller/clustermaster_controller_test.go
+controller/licensemaster_controller_test.go
 kuttl/tests/smoke/clustered-master-deployment-c3/00-assert.yaml
 kuttl/tests/smoke/clustered-master-deployment-c3/00-deploy-clustermanager.yaml
 kuttl/tests/smoke/clustered-master-deployment-c3/01-deploy-indexercluster.yaml
@@ -82,7 +82,7 @@ main.go
 PROJECT
 pkg/
 deploy/
-controllers/
+internal/controller/
 test/
 docs/
 README.md

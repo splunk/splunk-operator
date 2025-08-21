@@ -40,13 +40,9 @@ jobs:
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
-    - name: Make Splunk Operator Image
+    - name: Build and Push Splunk Operator Image
       run: |
-        make docker-build IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-    - name: Push Splunk Operator Image to ECR
-      run: |
-        echo "Uploading Image to ECR:: ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA"
-        make docker-push IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+        make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
     strategy:
       fail-fast: false
@@ -83,7 +79,6 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       PRIVATE_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-      ENTERPRISE_LICENSE_LOCATION: ${{ secrets.ENTERPRISE_LICENSE_LOCATION }}
       CLUSTER_WIDE: "true"
     steps:
       - name: Set Test Cluster Name

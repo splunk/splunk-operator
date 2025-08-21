@@ -1,5 +1,75 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 2.8.1 (2025-07-16)
+
+* This is the 2.8.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* Update `olm.maxOpenShiftVersion` version in operator's bundle
+
+### Supported Splunk Version
+
+>| Splunk Version|
+>| --- |
+>| 9.4.3 |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version|
+>| --- |
+>| 1.27+ |
+
+## 2.8.0 (2025-04-25)
+
+* This is the 2.8.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* CSPL-3586 - Certify FIPS 140-3 Compliance
+
+* CSPL-3624 - Update Helm Charts for 2.8.0 Support
+
+* CSPL-3673 - Github Issue #1157: Failed to install the operator - CRD metadata.annotations too long
+
+* CSPL-3590 - Vulnerability Fix: github.com/golang-jwt/jwt/v5, golang.org/x/net
+
+* CSPL-3674 - Github Readme Updates
+
+* CSPL-3463 - Push RC images to private ECR repository
+
+* CSPL-3499 - Fix Segmentation Fault in Splunk Operator Due to App Volume Name Change
+
+* CSPL-3547 - Support Appframework migration to manager-app
+
+* CSPL-3529 - Disable ARM AL2023 tests for develop builds
+
+* CSPL-3534 - Fix policy string processing in the cluster script
+
+* CSPL-3527 - Create Pull Request Template for Github Repo
+
+* CSPL-3426 - App Framework: Allow .tar.gz file extension
+
+* CSPL-3518 - Task for Github Issue  #1211 Splunk Operator: Why force ClusterIP and ignore k8s default field in service template
+
+* CSPL-3460 - Container Scan: Upgrade google.golang.org/grpc from v1.49.0 to 1.58.3, 1.57.1, 1.56.3 for splunk/splunk-operator
+
+* CSPL-3435 - Support with Bias language migration
+
+* CSPL-3434 - Update base image to ubi-minimal
+
+* CSPL-3269 - Github Issue #1309: App Framework: 2.5.2 can't install packages from splunkbase, placed in s3 bucket
+
+* CSPL-3298 - Fix integration test workflow pull splunk operator image
+
+### Supported Splunk Version
+
+>| Splunk Version|
+>| --- |
+>| 9.4.1 |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version|
+>| --- |
+>| 1.31+ |
+
 ## 2.7.1 (2025-01-28)
 
 * This is the 2.7.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)

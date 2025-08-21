@@ -30,7 +30,7 @@ import (
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1502,7 +1502,7 @@ func TestPipelineWorkerDownloadShouldPass(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1665,7 +1665,7 @@ func TestPipelineWorkerDownloadShouldFail(t *testing.T) {
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	splclient.RegisterRemoteDataClient(ctx, "aws")
@@ -1805,6 +1805,124 @@ func TestScheduleDownloads(t *testing.T) {
 	}
 
 	maxWorkers := 3
+	downloadPhaseWaiter := new(sync.WaitGroup)
+
+	downloadPhaseWaiter.Add(1)
+	// schedule the download threads to do actual download work
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
+
+	// add the workers to msgChannel so that scheduleDownlads thread can pick them up
+	for _, downloadWorker := range pplnPhase.q {
+		downloadWorker.waiter = &pplnPhase.workerWaiter
+		pplnPhase.msgChannel <- downloadWorker
+		downloadWorker.isActive = true
+	}
+
+	close(pplnPhase.msgChannel)
+
+	downloadPhaseWaiter.Add(1)
+	close(ppln.sigTerm)
+	// schedule the download threads to do actual download work
+	go pplnPhase.downloadWorkerHandler(ctx, ppln, uint64(maxWorkers), downloadPhaseWaiter)
+
+	downloadPhaseWaiter.Wait()
+}
+
+// This test case is to verify that the operator does not crash when the app name is changed.
+func TestScheduleDownloadsFailRemoteDataClientMgr(t *testing.T) {
+	ctx := context.TODO()
+	var ppln *AppInstallPipeline
+	appDeployContext := &enterpriseApi.AppDeploymentContext{}
+
+	client := spltest.NewMockClient()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "s1",
+			Namespace: "test",
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Standalone",
+		},
+		Spec: enterpriseApi.StandaloneSpec{
+			Replicas: 1,
+			AppFrameworkConfig: enterpriseApi.AppFrameworkSpec{
+				PhaseMaxRetries:           3,
+				AppsRepoPollInterval:      60,
+				MaxConcurrentAppDownloads: 5,
+				VolList: []enterpriseApi.VolumeSpec{
+					{
+						Name:      "test_volume",
+						Endpoint:  "https://s3-eu-west-2.amazonaws.com",
+						Path:      "testbucket-rs-london",
+						SecretRef: "s3-secret",
+						Provider:  "aws",
+					},
+				},
+				AppSources: []enterpriseApi.AppSourceSpec{
+					{
+						Name:     "appSrc1",
+						Location: "adminAppsRepo",
+						AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
+							VolName: "test_volume",
+							Scope:   "local",
+						},
+					},
+				},
+			},
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-s1-standalone",
+			Namespace: "test",
+		},
+	}
+	sts.Spec.Replicas = new(int32)
+	*sts.Spec.Replicas = 1
+
+	ppln = initAppInstallPipeline(ctx, appDeployContext, client, &cr)
+	pplnPhase := ppln.pplnPhases[enterpriseApi.PhaseDownload]
+
+	testApps := []string{"app2.tgz"}
+	testHashes := []string{"efgh2222"}
+	testSizes := []int64{20}
+
+	appDeployInfoList := make([]*enterpriseApi.AppDeploymentInfo, 1)
+	for index := range testApps {
+		appDeployInfoList[index] = &enterpriseApi.AppDeploymentInfo{
+			AppName: testApps[index],
+			PhaseInfo: enterpriseApi.PhaseInfo{
+				Phase:     enterpriseApi.PhaseDownload,
+				Status:    enterpriseApi.AppPkgDownloadPending,
+				FailCount: 0,
+			},
+			ObjectHash: testHashes[index],
+			Size:       uint64(testSizes[index]),
+		}
+	}
+
+	// create the local directory
+	localPath := filepath.Join(splcommon.AppDownloadVolume, "downloadedApps", "test" /*namespace*/, "Standalone", cr.Name, "local", "appSrc1") + "/"
+	err := createAppDownloadDir(ctx, localPath)
+	if err != nil {
+		t.Errorf("Unable to create the download directory")
+	}
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	// create the dummy app package for appSrc1 locally, to test the case
+	// where an app is already downloaded and hence we dont re-download it
+	appFileName := testApps[0] + "_" + testHashes[0]
+	appLoc := filepath.Join(localPath, appFileName)
+	err = createOrTruncateAppFileLocally(appLoc, testSizes[0])
+	if err != nil {
+		t.Errorf("Unable to create the app files locally")
+	}
+	defer os.Remove(appLoc)
+
+	// create pipeline workers
+	ppln.createAndAddPipelineWorker(ctx, enterpriseApi.PhaseDownload, appDeployInfoList[0], "appSrc2", "", &cr.Spec.AppFrameworkConfig, client, &cr, sts)
+
+	maxWorkers := 1
 	downloadPhaseWaiter := new(sync.WaitGroup)
 
 	downloadPhaseWaiter.Add(1)

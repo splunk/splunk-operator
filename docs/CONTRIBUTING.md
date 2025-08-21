@@ -125,13 +125,17 @@ If you need help, tag one of the active maintainers of this project in a post or
 ```
 # Active maintainers marked with (*)
 
-(*) Sirish Mohan - admin
-(*) Gaurav Gupta
-(*) Subba Gontla
-(*) Arjun Kondur
-(*) Kriti Ashok
-(*) Param Dhanoya
 (*) Vivek Reddy
+(*) Raizel Lieberman
+(*) Patryk Wasielewski
+(*) Igor Grzankowski
+(*) Kasia Kozioł
+() Sirish Mohan
+() Gaurav Gupta
+() Subba Gontla
+() Arjun Kondur
+() Kriti Ashok
+() Param Dhanoya
 () Victor Ebken
 () Ajeet Kumar
 () Jeff Rybczynski
