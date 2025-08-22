@@ -600,6 +600,9 @@ var _ = Describe("s1appfw test", func() {
 			err = deployment.UpdateCR(ctx, standalone)
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
+			// Ensure Standalone is scaling down
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingDown)
+
 			// Wait for Standalone to be in READY status
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
