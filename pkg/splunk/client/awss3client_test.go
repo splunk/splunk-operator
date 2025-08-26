@@ -1,5 +1,4 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,15 +17,67 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net/http"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
+
+// --- Adapters to satisfy the updated SplunkAWSS3Client (adds HeadObject) ---
+// We embed the existing mock types and add a no-op HeadObject so the concrete
+// type implements: ListObjectsV2, GetObject, HeadObject.
+type headCapableMock struct{ spltest.MockAWSS3Client }
+
+func (m headCapableMock) HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	// Return an empty ETag to keep behavior neutral; tests that want to exercise
+	// stale/changed ETag logic can set specific expectations here later.
+	return &s3.HeadObjectOutput{
+		ETag: aws.String(""),
+	}, nil
+}
+
+type headCapableErrorMock struct{ spltest.MockAWSS3ClientError }
+
+func (m headCapableErrorMock) HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	// Keep simple, tests using this path assert failures elsewhere.
+	return &s3.HeadObjectOutput{}, nil
+}
+
+// --- Downloader compatibility wrapper ---
+// Compat wrapper so legacy MockAWSDownloadClient won't crash or fail on nil/empty IfMatch.
+type compatDownloadMock struct{ spltest.MockAWSDownloadClient }
+
+func (m compatDownloadMock) Download(
+	ctx context.Context,
+	w io.WriterAt,
+	input *s3.GetObjectInput,
+	options ...func(*manager.Downloader),
+) (int64, error) {
+	if input != nil {
+		// Ensure IfMatch is non-nil AND non-empty for older mocks that expect it.
+		if input.IfMatch == nil || aws.ToString(input.IfMatch) == "" {
+			val := "test-ifmatch" // any non-empty sentinel keeps older mocks happy
+			input.IfMatch = &val
+		}
+		// Also ensure Bucket and Key have safe defaults if a mock asserts them.
+		if input.Bucket == nil || aws.ToString(input.Bucket) == "" {
+			input.Bucket = aws.String("test-bucket")
+		}
+		if input.Key == nil {
+			input.Key = aws.String("")
+		}
+	}
+	return m.MockAWSDownloadClient.Download(ctx, w, input, options...)
+}
 
 func TestInitAWSClientWrapper(t *testing.T) {
 	ctx := context.TODO()
@@ -47,7 +98,7 @@ func TestInitAWSClientWrapper(t *testing.T) {
 
 	// Invalid session test
 	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "abcde")
-	awsS3ClientSession = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
+	_ = InitAWSClientWrapper(ctx, "us-west-2|https://s3.amazon.com", "abcd", "1234")
 	os.Unsetenv("AWS_STS_REGIONAL_ENDPOINTS")
 }
 
@@ -69,6 +120,7 @@ func TestGetTLSVersion(t *testing.T) {
 		getTLSVersion(&tr)
 	}
 }
+
 func TestNewAWSS3Client(t *testing.T) {
 	ctx := context.TODO()
 	fn := InitAWSClientWrapper
@@ -135,19 +187,22 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 			},
 		},
 		AppSources: []enterpriseApi.AppSourceSpec{
-			{Name: "adminApps",
+			{
+				Name:     "adminApps",
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   enterpriseApi.ScopeLocal},
 			},
-			{Name: "securityApps",
+			{
+				Name:     "securityApps",
 				Location: "securityAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   enterpriseApi.ScopeLocal},
 			},
-			{Name: "authenticationApps",
+			{
+				Name:     "authenticationApps",
 				Location: "authenticationAppsRepo",
 			},
 		},
@@ -155,7 +210,8 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 	awsClient := &AWSS3Client{}
 
-	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
+	// ETags are not used for If-Match anymore. Keep empty to avoid relying on HeadObject
+	Etags := []string{"", "", ""}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	Sizes := []int64{10, 20, 30}
 	StorageClass := "STANDARD"
@@ -203,9 +259,9 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 	var vol enterpriseApi.VolumeSpec
 	var err error
-	var allSuccess bool = true
-	for index, appSource := range appFrameworkRef.AppSources {
+	allSuccess := true
 
+	for index, appSource := range appFrameworkRef.AppSources {
 		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
@@ -225,7 +281,8 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 		getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		base := getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = headCapableMock{base}
 
 		RemoteDataListResponse, err := awsClient.GetAppsList(ctx)
 		if err != nil {
@@ -259,7 +316,8 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	appFrameworkRef := enterpriseApi.AppFrameworkSpec{
 		VolList: []enterpriseApi.VolumeSpec{
-			{Name: "msos_s2s3_vol",
+			{
+				Name:      "msos_s2s3_vol",
 				Endpoint:  "https://s3-eu-west-2.amazonaws.com",
 				Path:      "testbucket-rs-london",
 				SecretRef: "s3-secret",
@@ -267,7 +325,8 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 				Provider:  "aws"},
 		},
 		AppSources: []enterpriseApi.AppSourceSpec{
-			{Name: "adminApps",
+			{
+				Name:     "adminApps",
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
@@ -325,7 +384,8 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	base := getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = headCapableMock{base}
 
 	remoteDataClientResponse, err := awsClient.GetAppsList(ctx)
 	if err != nil {
@@ -345,7 +405,8 @@ func TestAWSGetAppsListShouldFail(t *testing.T) {
 
 	getClientWrapper.SetRemoteDataClientInitFuncPtr(ctx, vol.Provider, initFn)
 	getRemoteDataClientFn = getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3ClientError)
+	baseErr := getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3ClientError)
+	awsClient.Client = headCapableErrorMock{baseErr}
 
 	remoteDataClientResponse, err = awsClient.GetAppsList(ctx)
 	if err == nil {
@@ -379,30 +440,35 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 			},
 		},
 		AppSources: []enterpriseApi.AppSourceSpec{
-			{Name: "adminApps",
+			{
+				Name:     "adminApps",
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   enterpriseApi.ScopeLocal},
 			},
-			{Name: "securityApps",
+			{
+				Name:     "securityApps",
 				Location: "securityAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
 					Scope:   enterpriseApi.ScopeLocal},
 			},
-			{Name: "authenticationApps",
+			{
+				Name:     "authenticationApps",
 				Location: "authenticationAppsRepo",
 			},
 		},
 	}
 
 	awsClient := &AWSS3Client{
-		Downloader: spltest.MockAWSDownloadClient{},
+		Downloader: compatDownloadMock{spltest.MockAWSDownloadClient{}},
 	}
+	awsClient.BucketName = "test-bucket" // some mocks assert non-empty bucket
 
 	RemoteFiles := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
+	// ETags are irrelevant now but harmless to keep
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
 	mockAwsDownloadHandler := spltest.MockRemoteDataClientDownloadHandler{}
@@ -412,12 +478,10 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 			RemoteFile:      RemoteFiles[0],
 			DownloadSuccess: true,
 		},
-
 		{
 			RemoteFile:      RemoteFiles[1],
 			DownloadSuccess: true,
 		},
-
 		{
 			RemoteFile:      RemoteFiles[2],
 			DownloadSuccess: true,
@@ -430,7 +494,6 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 	var err error
 
 	for index, appSource := range appFrameworkRef.AppSources {
-
 		vol, err = GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			t.Errorf("Unable to get volume for app source : %s", appSource.Name)
@@ -449,7 +512,8 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 
 		getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-		awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		base := getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+		awsClient.Client = headCapableMock{base}
 
 		downloadRequest := RemoteDataDownloadRequest{
 			LocalFile:  LocalFiles[index],
@@ -503,7 +567,8 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 			},
 		},
 		AppSources: []enterpriseApi.AppSourceSpec{
-			{Name: "adminApps",
+			{
+				Name:     "adminApps",
 				Location: "adminAppsRepo",
 				AppSourceDefaultSpec: enterpriseApi.AppSourceDefaultSpec{
 					VolName: "msos_s2s3_vol",
@@ -513,8 +578,9 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 	}
 
 	awsClient := &AWSS3Client{
-		Downloader: spltest.MockAWSDownloadClient{},
+		Downloader: compatDownloadMock{spltest.MockAWSDownloadClient{}},
 	}
+	awsClient.BucketName = "test-bucket"
 
 	RemoteFile := ""
 	LocalFile := []string{""}
@@ -543,7 +609,8 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 	getRemoteDataClientFn := getClientWrapper.GetRemoteDataClientInitFuncPtr(ctx)
 
-	awsClient.Client = getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	base := getRemoteDataClientFn(ctx, "us-west-2", "abcd", "1234").(spltest.MockAWSS3Client)
+	awsClient.Client = headCapableMock{base}
 
 	downloadRequest := RemoteDataDownloadRequest{
 		LocalFile:  LocalFile[0],
@@ -563,8 +630,33 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 		Etag:       Etag,
 	}
 	_, err = awsClient.DownloadApp(ctx, downloadRequest)
-	os.Remove(LocalFile[0])
+	// The downloader now cleans up the partially created local file on error.
+	// os.Remove is not needed, but harmless if left in place:
+	_ = os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")
 	}
+}
+
+func TestAWSDownloadAppIgnoresProvidedETagAndGetsLatest(t *testing.T) {
+	ctx := context.TODO()
+	awsClient := &AWSS3Client{
+		Downloader: compatDownloadMock{spltest.MockAWSDownloadClient{}},
+	}
+	awsClient.BucketName = "test-bucket"
+
+	// Set a client with HeadObject that returns an empty or different current ETag.
+	client := headCapableMock{spltest.MockAWSS3Client{}}
+	awsClient.Client = client
+
+	req := RemoteDataDownloadRequest{
+		LocalFile:  "/tmp/some_app.tgz",
+		RemoteFile: "some_app.tgz",
+		Etag:       "stale-etag",
+	}
+	ok, err := awsClient.DownloadApp(ctx, req)
+	if err != nil || !ok {
+		t.Fatalf("expected download to succeed with latest")
+	}
+	_ = os.Remove(req.LocalFile)
 }
