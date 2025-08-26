@@ -38,8 +38,7 @@ import (
 type headCapableMock struct{ spltest.MockAWSS3Client }
 
 func (m headCapableMock) HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
-	// Return an empty ETag to keep behavior neutral; tests that want to exercise
-	// stale/changed ETag logic can set specific expectations here later.
+	// Return an empty ETag to keep behavior neutral; tests can extend if needed.
 	return &s3.HeadObjectOutput{
 		ETag: aws.String(""),
 	}, nil
@@ -48,35 +47,20 @@ func (m headCapableMock) HeadObject(ctx context.Context, in *s3.HeadObjectInput,
 type headCapableErrorMock struct{ spltest.MockAWSS3ClientError }
 
 func (m headCapableErrorMock) HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
-	// Keep simple, tests using this path assert failures elsewhere.
+	// Keep simple; tests using this path assert failures elsewhere.
 	return &s3.HeadObjectOutput{}, nil
 }
+// Minimal downloader stub that never inspects IfMatch.
+type noopDownloader struct{}
 
-// --- Downloader compatibility wrapper ---
-// Compat wrapper so legacy MockAWSDownloadClient won't crash or fail on nil/empty IfMatch.
-type compatDownloadMock struct{ spltest.MockAWSDownloadClient }
-
-func (m compatDownloadMock) Download(
+func (noopDownloader) Download(
 	ctx context.Context,
 	w io.WriterAt,
 	input *s3.GetObjectInput,
 	options ...func(*manager.Downloader),
 ) (int64, error) {
-	if input != nil {
-		// Ensure IfMatch is non-nil AND non-empty for older mocks that expect it.
-		if input.IfMatch == nil || aws.ToString(input.IfMatch) == "" {
-			val := "test-ifmatch" // any non-empty sentinel keeps older mocks happy
-			input.IfMatch = &val
-		}
-		// Also ensure Bucket and Key have safe defaults if a mock asserts them.
-		if input.Bucket == nil || aws.ToString(input.Bucket) == "" {
-			input.Bucket = aws.String("test-bucket")
-		}
-		if input.Key == nil {
-			input.Key = aws.String("")
-		}
-	}
-	return m.MockAWSDownloadClient.Download(ctx, w, input, options...)
+	// Simulate a successful download.
+	return 1, nil
 }
 
 func TestInitAWSClientWrapper(t *testing.T) {
@@ -210,7 +194,7 @@ func TestAWSGetAppsListShouldNotFail(t *testing.T) {
 
 	awsClient := &AWSS3Client{}
 
-	// ETags are not used for If-Match anymore. Keep empty to avoid relying on HeadObject
+	// ETags are no longer used for If-Match. Keep empty for neutrality.
 	Etags := []string{"", "", ""}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	Sizes := []int64{10, 20, 30}
@@ -462,13 +446,13 @@ func TestAWSDownloadAppShouldNotFail(t *testing.T) {
 	}
 
 	awsClient := &AWSS3Client{
-		Downloader: compatDownloadMock{spltest.MockAWSDownloadClient{}},
+		Downloader: noopDownloader{},
 	}
 	awsClient.BucketName = "test-bucket" // some mocks assert non-empty bucket
 
 	RemoteFiles := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	LocalFiles := []string{"/tmp/admin_app.tgz", "/tmp/security_app.tgz", "/tmp/authentication_app.tgz"}
-	// ETags are irrelevant now but harmless to keep
+	// ETags are irrelevant now; keep for request construction/logging parity
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd8"}
 
 	mockAwsDownloadHandler := spltest.MockRemoteDataClientDownloadHandler{}
@@ -578,7 +562,7 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 	}
 
 	awsClient := &AWSS3Client{
-		Downloader: compatDownloadMock{spltest.MockAWSDownloadClient{}},
+		Downloader: noopDownloader{},
 	}
 	awsClient.BucketName = "test-bucket"
 
@@ -631,7 +615,6 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 	}
 	_, err = awsClient.DownloadApp(ctx, downloadRequest)
 	// The downloader now cleans up the partially created local file on error.
-	// os.Remove is not needed, but harmless if left in place:
 	_ = os.Remove(LocalFile[0])
 	if err == nil {
 		t.Errorf("DownloadApp should have returned error since remoteFile name is empty")
@@ -640,10 +623,11 @@ func TestAWSDownloadAppShouldFail(t *testing.T) {
 
 func TestAWSDownloadAppIgnoresProvidedETagAndGetsLatest(t *testing.T) {
 	ctx := context.TODO()
-	awsClient := &AWSS3Client{
-		Downloader: compatDownloadMock{spltest.MockAWSDownloadClient{}},
-	}
-	awsClient.BucketName = "test-bucket"
+    awsClient := &AWSS3Client{
+        Downloader: noopDownloader{},
+    }
+    awsClient.BucketName = "test-bucket"
+    awsClient.Client = headCapableMock{spltest.MockAWSS3Client{}}
 
 	// Set a client with HeadObject that returns an empty or different current ETag.
 	client := headCapableMock{spltest.MockAWSS3Client{}}

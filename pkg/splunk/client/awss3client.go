@@ -68,30 +68,30 @@ var regionRegex = `(?i)(^|\.)(s3)[\.-]([a-z0-9-]+)\.amazonaws\.com$`
 
 // GetRegion extracts the region from the endpoint field
 func GetRegion(ctx context.Context, endpoint string, region *string) error {
-    var host string
+	var host string
 
-    // If endpoint looks like a URL, extract the hostname; otherwise use raw string.
-    if u, err := url.Parse(endpoint); err == nil && u.Hostname() != "" {
-        host = u.Hostname()
-    } else {
-        // tolerate raw host (with or without scheme)
-        host = endpoint
-        // strip a possible leading scheme manually if present
-        if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-            if u2, err2 := url.Parse(host); err2 == nil && u2.Hostname() != "" {
-                host = u2.Hostname()
-            }
-        }
-    }
+	// If endpoint looks like a URL, extract the hostname; otherwise use raw string.
+	if u, err := url.Parse(endpoint); err == nil && u.Hostname() != "" {
+		host = u.Hostname()
+	} else {
+		// tolerate raw host (with or without scheme)
+		host = endpoint
+		// strip a possible leading scheme manually if present
+		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
+			if u2, err2 := url.Parse(host); err2 == nil && u2.Hostname() != "" {
+				host = u2.Hostname()
+			}
+		}
+	}
 
-    pattern := regexp.MustCompile(regionRegex)
-    m := pattern.FindStringSubmatch(host)
-    if len(m) >= 4 {
-        // capture group 3 is the region
-        *region = m[3]
-        return nil
-    }
-    return fmt.Errorf("unable to extract region from the endpoint: %q (host: %q)", endpoint, host)
+	pattern := regexp.MustCompile(regionRegex)
+	m := pattern.FindStringSubmatch(host)
+	if len(m) >= 4 {
+		// capture group 3 is the region
+		*region = m[3]
+		return nil
+	}
+	return fmt.Errorf("unable to extract region from the endpoint: %q (host: %q)", endpoint, host)
 }
 
 // InitAWSClientWrapper is a wrapper around InitClientConfig
@@ -277,13 +277,13 @@ func (awsclient *AWSS3Client) DownloadApp(ctx context.Context, downloadRequest R
 	scopedLog := reqLogger.WithName("DownloadApp").WithValues("remoteFile", downloadRequest.RemoteFile, "localFile",
 		downloadRequest.LocalFile, "etag", downloadRequest.Etag)
 
-   // Validate inputs early, avoid calling downloader with bad args.
-    if strings.TrimSpace(downloadRequest.LocalFile) == "" {
-        return false, fmt.Errorf("local file path is empty")
-    }
-    if strings.TrimSpace(downloadRequest.RemoteFile) == "" {
-        return false, fmt.Errorf("remote file key is empty")
-    }
+	// Validate inputs early, avoid calling downloader with bad args.
+	if strings.TrimSpace(downloadRequest.LocalFile) == "" {
+		return false, fmt.Errorf("local file path is empty")
+	}
+	if strings.TrimSpace(downloadRequest.RemoteFile) == "" {
+		return false, fmt.Errorf("remote file key is empty")
+	}
 
 	var numBytes int64
 	file, err := os.Create(downloadRequest.LocalFile)
