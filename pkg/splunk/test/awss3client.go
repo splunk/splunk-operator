@@ -26,6 +26,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -104,6 +105,13 @@ func (mockClient MockAWSS3Client) GetObject(ctx context.Context, input *s3.GetOb
 	return output, nil
 }
 
+// HeadObject is a mock call to HeadObject
+func (mockClient MockAWSS3Client) HeadObject(ctx context.Context, input *s3.HeadObjectInput, options ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	return &s3.HeadObjectOutput{
+		ETag: aws.String(""),
+	}, nil
+}
+
 // ListObjectsV2 is a mock call to ListObjectsV2
 func (mockClient MockAWSS3ClientError) ListObjectsV2(ctx context.Context, input *s3.ListObjectsV2Input, options ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	return &s3.ListObjectsV2Output{}, errors.New("Dummy Error")
@@ -112,6 +120,11 @@ func (mockClient MockAWSS3ClientError) ListObjectsV2(ctx context.Context, input 
 // GetObject is a mock call to GetObject
 func (mockClient MockAWSS3ClientError) GetObject(ctx context.Context, input *s3.GetObjectInput, options ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	return &s3.GetObjectOutput{}, errors.New("Dummy Error")
+}
+
+// HeadObject is a mock call to HeadObject
+func (mockClient MockAWSS3ClientError) HeadObject(ctx context.Context, input *s3.HeadObjectInput, options ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	return &s3.HeadObjectOutput{}, errors.New("dummy Error")
 }
 
 // MockAWSDownloadClient is mock aws client for download
@@ -123,10 +136,9 @@ func (mockDownloadClient MockAWSDownloadClient) Download(ctx context.Context, w 
 	var bytes int64
 	remoteFile := *input.Key
 	localFile := w.(*os.File).Name()
-	eTag := *input.IfMatch
 
-	if remoteFile == "" || localFile == "" || eTag == "" {
-		err := fmt.Errorf("empty localFile/remoteFile/eTag. remoteFile=%s, localFile=%s, etag=%s", remoteFile, localFile, eTag)
+	if remoteFile == "" || localFile == "" {
+		err := fmt.Errorf("empty localFile/remoteFile/eTag. remoteFile=%s, localFile=%s", remoteFile, localFile)
 		return bytes, err
 	}
 
