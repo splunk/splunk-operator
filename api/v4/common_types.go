@@ -113,6 +113,8 @@ type Spec struct {
 	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
+	// Set duration in seconds the pod needs to terminate gracefully
+	// If not specified, uses 1200 as the default
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
 }
 

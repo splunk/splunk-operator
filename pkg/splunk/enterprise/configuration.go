@@ -85,6 +85,8 @@ var defaultStartupProbe corev1.Probe = corev1.Probe{
 	},
 }
 
+var defaultTerminationGracePeriodSeconds = int64(1200)
+
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -1122,7 +1124,12 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		setPreStopLifecycleHandler(podTemplateSpec, idx)
 	}
 
-	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &spec.TerminationGracePeriodSeconds
+	if spec.TerminationGracePeriodSeconds != 0 {
+		podTemplateSpec.Spec.TerminationGracePeriodSeconds = &spec.TerminationGracePeriodSeconds
+	} else {
+		// Use default if TerminationGracePeriodSeconds is not set
+		podTemplateSpec.Spec.TerminationGracePeriodSeconds = &defaultTerminationGracePeriodSeconds
+	}
 }
 
 func removeDuplicateEnvVars(sliceList []corev1.EnvVar) []corev1.EnvVar {

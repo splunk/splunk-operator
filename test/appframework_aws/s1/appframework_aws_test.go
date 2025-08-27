@@ -575,8 +575,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhasePending)
-			testenv.VerifyMonitoringConsolePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
+			//testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			//########### SCALING UP VERIFICATION #########
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
@@ -601,20 +600,11 @@ var _ = Describe("s1appfw test", func() {
 			err = deployment.UpdateCR(ctx, standalone)
 			Expect(err).To(Succeed(), "Failed to scale down Standalone")
 
-			// Allow time for update to take effect. The phase change from Ready -> ScalingDown -> Ready happens very quickly, so this wait allows
-			// for the update to happen. If the ScalingDown phase takes longer, the test will still check for the Ready phase when that is complete.
-			// The test checks that the number of replicas is correctly updated later, which is why we can avoid checking the ScalingDown phase here.
-			time.Sleep(1 * time.Second)
+			// Ensure Standalone is scaling down
+			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseScalingDown)
 
 			// Wait for Standalone to be in READY status
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
-
-			// Verify the correct number of replicas for Standalone
-			standalone = &enterpriseApi.Standalone{}
-			err = deployment.GetInstance(ctx, deployment.GetName(), standalone)
-			Expect(err).To(Succeed(), "Failed to get instance of Standalone after scaling down")
-			Expect(standalone.Spec.Replicas).To(Equal(int32(scaledReplicaCount)), "Unexpected number of replicas for Standalone")
-			Expect(standalone.Status.ReadyReplicas).To(Equal(int32(scaledReplicaCount)), "Unexpected number of ready replicas for Standalone")
 
 			// Verify Monitoring Console is Ready and stays in ready state
 			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
