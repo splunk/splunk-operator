@@ -85,6 +85,8 @@ var defaultStartupProbe corev1.Probe = corev1.Probe{
 	},
 }
 
+var defaultTerminationGracePeriodSeconds = int64(1200)
+
 // getSplunkLabels returns a map of labels to use for Splunk Enterprise components.
 func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partOfIdentifier string) map[string]string {
 	// For multisite / multipart IndexerCluster, the name of the part containing the cluster-manager is used
@@ -800,6 +802,17 @@ func getSmartstoreConfigMap(ctx context.Context, client splcommon.ControllerClie
 	return configMap
 }
 
+// set the PreStop lifecycle handler for the specified container index
+func setPreStopLifecycleHandler(podTemplateSpec *corev1.PodTemplateSpec, idx int) {
+	podTemplateSpec.Spec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk", "offline", "&&", "/opt/splunk/bin/splunk", "stop"},
+			},
+		},
+	}
+}
+
 // updateSplunkPodTemplateWithConfig modifies the podTemplateSpec object based on configuration of the Splunk Enterprise resource.
 func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, instanceType InstanceType, extraEnv []corev1.EnvVar, secretToMount string) {
 
@@ -1106,6 +1119,16 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		}
+
+		// Use the helper function to set the lifecycle handler
+		setPreStopLifecycleHandler(podTemplateSpec, idx)
+	}
+
+	if spec.TerminationGracePeriodSeconds != 0 {
+		podTemplateSpec.Spec.TerminationGracePeriodSeconds = &spec.TerminationGracePeriodSeconds
+	} else {
+		// Use default if TerminationGracePeriodSeconds is not set
+		podTemplateSpec.Spec.TerminationGracePeriodSeconds = &defaultTerminationGracePeriodSeconds
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1815,4 +1816,41 @@ func TestValidateLivenessProbe(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
+}
+
+func TestSetPreStopLifecycleHandler(t *testing.T) {
+	// Create a pod template spec with a single container
+	podTemplateSpec := corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "splunk"},
+			},
+		},
+	}
+
+	// Index of the container to apply the lifecycle handler
+	idx := 0
+
+	// Set the lifecycle handler
+	setPreStopLifecycleHandler(&podTemplateSpec, idx)
+
+	t.Run("test lifecycle pre-stop handler", func(t *testing.T) {
+		// Verify that the lifecycle handler was set correctly
+		if podTemplateSpec.Spec.Containers[idx].Lifecycle == nil {
+			t.Error("Expected Lifecycle to be set, but it was nil")
+		}
+
+		if podTemplateSpec.Spec.Containers[idx].Lifecycle.PreStop == nil {
+			t.Error("Expected PreStop to be set, but it was nil")
+		}
+
+		if podTemplateSpec.Spec.Containers[idx].Lifecycle.PreStop.Exec == nil {
+			t.Error("Expected Exec to be set, but it was nil")
+		}
+
+		expectedCommand := []string{"/bin/sh", "-c", "/opt/splunk/bin/splunk", "offline", "&&", "/opt/splunk/bin/splunk", "stop"}
+		if !reflect.DeepEqual(podTemplateSpec.Spec.Containers[idx].Lifecycle.PreStop.Exec.Command, expectedCommand) {
+			t.Errorf("Expected command to be %v, but got %v", expectedCommand, podTemplateSpec.Spec.Containers[idx].Lifecycle.PreStop.Exec.Command)
+		}
+	})
 }
