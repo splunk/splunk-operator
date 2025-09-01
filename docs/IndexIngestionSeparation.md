@@ -366,6 +366,50 @@ spec:
 
 - [Horizontal Pod Autoscaling on Kubernetes Docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
 
+# Grafana
+
+In order to monitor the resources, Grafana could be installed and configured on the cluster to present the setup on a dashabord in a series of useful diagrams and metrics. 
+
+## Example
+
+In the following example, the dashboard presents ingestion and indexing data in the form of useful diagrams and metrics such as number of replicas or resource consumption. 
+
+```
+{
+  "id": null,
+  "uid": "splunk-autoscale",
+  "title": "Splunk Ingestion & Indexer Autoscaling with I/O & PV",
+  "schemaVersion": 27,
+  "version": 12,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "timezone": "browser",
+  "style": "dark",
+  "tags": ["splunk","autoscale","ingestion","indexer","io","pv"],
+  "graphTooltip": 1,
+  "panels": [
+    { "id": 1,  "type": "stat",       "title": "Ingestion Replicas",       "gridPos": {"x":0,"y":0,"w":4,"h":4}, "targets":[{"expr":"kube_statefulset_replicas{namespace=\"default\",statefulset=\"splunk-ingestor-ingestor\"}"}], "options": {"reduceOptions":{"calcs":["last"]},"orientation":"horizontal","colorMode":"value","graphMode":"none","textMode":"value","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"#73BF69"},{"value":5,"color":"#EAB839"},{"value":8,"color":"#BF1B00"}]}}},
+    { "id": 2,  "type": "stat",       "title": "Indexer Replicas",       "gridPos": {"x":4,"y":0,"w":4,"h":4}, "targets":[{"expr":"kube_statefulset_replicas{namespace=\"default\",statefulset=\"splunk-indexer-indexer\"}"}], "options": {"reduceOptions":{"calcs":["last"]},"orientation":"horizontal","colorMode":"value","graphMode":"none","textMode":"value","thresholds":{"mode":"absolute","steps":[{"value":null,"color":"#73BF69"},{"value":5,"color":"#EAB839"},{"value":8,"color":"#BF1B00"}]}}},
+    { "id": 3,  "type": "timeseries","title": "Ingestion CPU (cores)","gridPos": {"x":8,"y":0,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_cpu_usage_seconds_total{namespace=\"default\",pod=~\"splunk-ingestor-ingestor-.*\"}[1m]))","legendFormat":"CPU (cores)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#FFA600"}}},
+    { "id": 4,  "type": "timeseries","title": "Ingestion Memory (MiB)","gridPos": {"x":16,"y":0,"w":8,"h":4},"targets":[{"expr":"sum(container_memory_usage_bytes{namespace=\"default\",pod=~\"splunk-ingestor-ingestor-.*\"}) / 1024 / 1024","legendFormat":"Memory (MiB)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#00AF91"}}},
+    { "id": 5,  "type": "timeseries","title": "Ingestion Network In (KB/s)","gridPos": {"x":0,"y":8,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_network_receive_bytes_total{namespace=\"default\",pod=~\"splunk-ingestor-ingestor-.*\"}[1m])) / 1024","legendFormat":"Net In (KB/s)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#59A14F"}}},
+    { "id": 6,  "type": "timeseries","title": "Ingestion Network Out (KB/s)","gridPos": {"x":8,"y":8,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_network_transmit_bytes_total{namespace=\"default\",pod=~\"splunk-ingestor-ingestor-.*\"}[1m])) / 1024","legendFormat":"Net Out (KB/s)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#E15759"}}},
+    { "id": 7,  "type": "timeseries","title": "Indexer CPU (cores)","gridPos": {"x":16,"y":4,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_cpu_usage_seconds_total{namespace=\"default\",pod=~\"splunk-indexer-indexer-.*\"}[1m]))","legendFormat":"CPU (cores)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#7D4E57"}}},
+    { "id":8,  "type": "timeseries","title": "Indexer Memory (MiB)","gridPos": {"x":0,"y":12,"w":8,"h":4},"targets":[{"expr":"sum(container_memory_usage_bytes{namespace=\"default\",pod=~\"splunk-indexer-indexer-.*\"}) / 1024 / 1024","legendFormat":"Memory (MiB)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#4E79A7"}}},
+    { "id":9,  "type": "timeseries","title": "Indexer Network In (KB/s)","gridPos": {"x":8,"y":12,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_network_receive_bytes_total{namespace=\"default\",pod=~\"splunk-indexer-indexer-.*\"}[1m])) / 1024","legendFormat":"Net In (KB/s)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#9467BD"}}},
+    { "id":10,  "type": "timeseries","title": "Indexer Network Out (KB/s)","gridPos": {"x":16,"y":12,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_network_transmit_bytes_total{namespace=\"default\",pod=~\"splunk-indexer-indexer-.*\"}[1m])) / 1024","legendFormat":"Net Out (KB/s)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#8C564B"}}},
+    { "id":11,  "type": "timeseries","title": "Ingestion Disk Read (KB/s)","gridPos": {"x":0,"y":16,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_fs_reads_bytes_total{namespace=\"default\",pod=~\"splunk-ingestor-ingestor-.*\"}[1m])) / 1024","legendFormat":"Disk Read (KB/s)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#1F77B4"}}},
+    { "id":12,  "type": "timeseries","title": "Ingestion Disk Write (KB/s)","gridPos": {"x":8,"y":16,"w":8,"h":4},"targets":[{"expr":"sum(rate(container_fs_writes_bytes_total{namespace=\"default\",pod=~\"splunk-ingestor-ingestor-.*\"}[1m])) / 1024","legendFormat":"Disk Write (KB/s)"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"},"color":{"mode":"fixed","fixedColor":"#FF7F0E"}}},
+    { "id":13,  "type": "timeseries","title": "Indexer PV Usage (GiB)","gridPos": {"x":0,"y":20,"w":8,"h":4},"targets":[{"expr":"kubelet_volume_stats_used_bytes{namespace=\"default\",persistentvolumeclaim=~\".*-indexer-.*\"} / 1024 / 1024 / 1024","legendFormat":"Used GiB"},{"expr":"kubelet_volume_stats_capacity_bytes{namespace=\"default\",persistentvolumeclaim=~\".*-indexer-.*\"} / 1024 / 1024 / 1024","legendFormat":"Capacity GiB"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"}}},
+    { "id":14,  "type": "timeseries","title": "Ingestion PV Usage (GiB)","gridPos": {"x":8,"y":20,"w":8,"h":4},"targets":[{"expr":"kubelet_volume_stats_used_bytes{namespace=\"default\",persistentvolumeclaim=~\".*-ingestor-.*\"} / 1024 / 1024 / 1024","legendFormat":"Used GiB"},{"expr":"kubelet_volume_stats_capacity_bytes{namespace=\"default\",persistentvolumeclaim=~\".*-ingestor-.*\"} / 1024 / 1024 / 1024","legendFormat":"Capacity GiB"}],"options":{"legend":{"displayMode":"list","placement":"bottom"},"yAxis":{"mode":"auto"}}}
+  ]
+}
+```
+
+## Documentation References
+
+- [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
+
 # Example
 
 1. Install CRDs and Splunk Operator for Kubernetes.
@@ -626,7 +670,7 @@ remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.path = s3://ing-ind-separation/smartbus-test
 remote_queue.sqs_smartbus.retry_policy = max_count
-remote_queue.sqs_smartbus.send_interval = 3s
+remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
 ```
 
@@ -665,14 +709,14 @@ spec:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ing-ind-separation/smartbus-test
       deadLetterQueueName: ing-ind-separation-dlq
-      maxRetriesPerPart: 3
+      maxRetriesPerPart: 4
       retryPolicy: max_count
-      sendInterval: 3s
+      sendInterval: 5s
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
     remoteQueueTyping: false
-    remoteQueueOutput: true
+    remoteQueueOutput: false
     typing: true
 ```
 
@@ -708,7 +752,7 @@ sh-4.4$ cat /opt/splunk/etc/system/local/inputs.conf
 disabled = 0
 
 [remote_queue:ing-ind-separation-q]
-remote_queue.max_count.sqs_smartbus.max_retries_per_part = 3
+remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
@@ -718,7 +762,7 @@ remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.type = sqs_smartbus
 sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
 [remote_queue:ing-ind-separation-q]
-remote_queue.max_count.sqs_smartbus.max_retries_per_part = 3
+remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
 remote_queue.sqs_smartbus.encoding_format = s2s
@@ -726,7 +770,7 @@ remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.path = s3://ing-ind-separation/smartbus-test
 remote_queue.sqs_smartbus.retry_policy = max_count
-remote_queue.sqs_smartbus.send_interval = 3s
+remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
 sh-4.4$ cat /opt/splunk/etc/system/local/default-mode.conf 
 [pipeline:remotequeueruleset]

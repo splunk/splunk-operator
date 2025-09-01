@@ -29,7 +29,6 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -73,13 +72,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	cr.Status.Replicas = cr.Spec.Replicas
-
-	// Fetch the old IngestorCluster from the API server
-	oldCR := &enterpriseApi.IngestorCluster{}
-	err = client.Get(ctx, types.NamespacedName{Name: cr.GetName(), Namespace: cr.GetNamespace()}, oldCR)
-	if err != nil && !errors.IsNotFound(err) {
-		return result, err
-	}
 
 	// If needed, migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
