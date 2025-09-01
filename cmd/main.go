@@ -111,7 +111,7 @@ func main() {
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
-	// TODO: enable https for /metrics encpoint by default  
+	// TODO: enable https for /metrics endpoint by default  
 	// if secureMetrics {
 	// 	// FilterProvider is used to protect the metrics endpoint with authn/authz.
 	// 	// These configurations ensure that only authorized users and service accounts
