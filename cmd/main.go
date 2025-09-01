@@ -141,10 +141,6 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	baseOptions := ctrl.Options{
-		// Metrics: metricsserver.Options{
-		// 	BindAddress:    metricsAddr,
-		// 	FilterProvider: filters.WithAuthenticationAndAuthorization,
-		// },
 		Metrics:                metricsServerOptions,
 		Scheme:                 scheme,
 		HealthProbeBindAddress: probeAddr,
