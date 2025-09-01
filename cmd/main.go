@@ -89,9 +89,9 @@ func main() {
 	flag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
 	flag.IntVar(&leaseDurationSecond, "lease-duration", int(leaseDurationSecond), "manager lease duration in seconds")
 	flag.IntVar(&renewDeadlineSecond, "renew-duration", int(renewDeadlineSecond), "manager renew duration in seconds")
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to. "+
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", true,
+	flag.BoolVar(&secureMetrics, "metrics-secure", false,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -108,15 +108,17 @@ func main() {
 		// unauthorized access to sensitive metrics data. Consider replacing with CertDir, CertName, and KeyName
 		// to provide certificates, ensuring the server communicates using trusted and secure certificates.
 		TLSOpts: tlsOpts,
+		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
-	if secureMetrics {
-		// FilterProvider is used to protect the metrics endpoint with authn/authz.
-		// These configurations ensure that only authorized users and service accounts
-		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
-		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/metrics/filters#WithAuthenticationAndAuthorization
-		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
-	}
+	// TODO: enable https for /metrics encpoint by default  
+	// if secureMetrics {
+	// 	// FilterProvider is used to protect the metrics endpoint with authn/authz.
+	// 	// These configurations ensure that only authorized users and service accounts
+	// 	// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
+	// 	// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/metrics/filters#WithAuthenticationAndAuthorization
+	// 	metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
+	// }
 
 	// see https://github.com/operator-framework/operator-sdk/issues/1813
 	if leaseDurationSecond < 30 {
