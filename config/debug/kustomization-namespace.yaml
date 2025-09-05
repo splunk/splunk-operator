@@ -27,11 +27,6 @@ bases:
 #- ../prometheus
 
 patchesStrategicMerge:
-# Protect the /metrics endpoint by putting it behind auth.
-# If you want your controller-manager to expose the /metrics
-# endpoint w/o any authn/z, please comment the following line.
-- manager_auth_proxy_patch.yaml
-
 # Mount the controller config file for loading manager configurations
 # through a ComponentConfig type
 #- manager_config_patch.yaml
@@ -135,3 +130,8 @@ patches:
         valueFrom:
           fieldRef:
             fieldPath: metadata.name
+# [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
+# More info: https://book.kubebuilder.io/reference/metrics
+- path: manager_metrics_patch.yaml
+  target:
+    kind: Deployment

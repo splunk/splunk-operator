@@ -31,7 +31,6 @@ bases:
 patchesStrategicMerge:
 - debug-sidecar-patch.yaml
 
-
 # Mount the controller config file for loading manager configurations
 # through a ComponentConfig type
 #- manager_config_patch.yaml
