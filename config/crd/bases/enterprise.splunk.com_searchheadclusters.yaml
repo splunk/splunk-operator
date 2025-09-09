@@ -4633,6 +4633,18 @@ spec:
       jsonPath: .status.readyReplicas
       name: Ready
       type: integer
+    - description: Database phase
+      jsonPath: .status.databaseSummary.phase
+      name: DB
+      type: string
+    - description: Database provider
+      jsonPath: .status.databaseSummary.provider
+      name: DBProv
+      type: string
+    - description: Database endpoint
+      jsonPath: .status.databaseSummary.endpoint
+      name: DBEp
+      type: string
     - description: Age of search head cluster
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -5835,6 +5847,76 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              database:
+                description: 'NEW: Database configuration (optional). If omitted,
+                  the operator may default to Mode=Auto.'
+                properties:
+                  autoNameSuffix:
+                    description: |-
+                      Optional: override the auto-created claim/conn naming (useful for multi-SHC namespaces).
+                      If empty, the controller uses <shc-name>-db and <shc-name>-db-conn.
+                    type: string
+                  databaseClassName:
+                    description: 'Optional: DatabaseClass to use when Mode=Auto (defaults
+                      to cluster default class if omitted).'
+                    type: string
+                  external:
+                    description: External supplies connection details via a Secret
+                      (when Mode=External).
+                    properties:
+                      connectionSecretRef:
+                        description: |-
+                          ConnectionSecretRef points to a Secret with keys:
+                          host, port, dbname, username, password, sslmode, (optional) sslrootcert
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    type: object
+                  managedRef:
+                    description: ManagedRef names an existing DatabaseCluster to use
+                      (when Mode=ManagedRef).
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  mode:
+                    description: Mode selects how the database is provided (Auto|ManagedRef|External).
+                    enum:
+                    - Auto
+                    - ManagedRef
+                    - External
+                    type: string
+                  policy:
+                    description: Policy controls rollout behavior vs DB readiness.
+                    properties:
+                      rolloutGate:
+                        description: |-
+                          RolloutGate determines what to do if the database is not ready:
+                          - BlockRollout: prevent scale-up / rollout until DB is ready
+                          - WarnOnly: proceed but surface a warning condition
+                        enum:
+                        - BlockRollout
+                        - WarnOnly
+                        type: string
+                    type: object
+                type: object
               defaults:
                 description: Inline map of default.yml overrides used to initialize
                   the environment
@@ -9384,6 +9466,21 @@ spec:
                 description: true if the search head cluster's captain is ready to
                   service requests
                 type: boolean
+              databaseSummary:
+                description: 'NEW: concise database view for operators and automation'
+                properties:
+                  endpoint:
+                    type: string
+                  lastBackup:
+                    format: date-time
+                    type: string
+                  phase:
+                    type: string
+                  provider:
+                    type: string
+                  version:
+                    type: string
+                type: object
               deployerPhase:
                 description: current phase of the deployer
                 enum:

@@ -49,6 +49,7 @@ rules:
   resources:
   - clustermanagers
   - clustermasters
+  - databaseclusters
   - indexerclusters
   - licensemanagers
   - licensemasters
@@ -68,6 +69,7 @@ rules:
   resources:
   - clustermanagers/finalizers
   - clustermasters/finalizers
+  - databaseclusters/finalizers
   - indexerclusters/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
@@ -81,6 +83,7 @@ rules:
   resources:
   - clustermanagers/status
   - clustermasters/status
+  - databaseclusters/status
   - indexerclusters/status
   - licensemanagers/status
   - licensemasters/status

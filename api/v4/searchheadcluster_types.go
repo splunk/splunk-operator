@@ -1,7 +1,6 @@
 /*
 Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
 
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -35,6 +34,75 @@ const (
 	SearchHeadClusterPausedAnnotation = "searchheadcluster.enterprise.splunk.com/paused"
 )
 
+// -------------------------
+// NEW: Database API pieces
+// -------------------------
+
+// DatabaseMode selects how a database is provided to the SHC.
+// +kubebuilder:validation:Enum=Auto;ManagedRef;External
+type DatabaseMode string
+
+const (
+	// DatabaseModeAuto: operator will auto-provision (via DatabaseClaim -> DatabaseCluster).
+	DatabaseModeAuto DatabaseMode = "Auto"
+	// DatabaseModeManagedRef: reference an existing DatabaseCluster by name.
+	DatabaseModeManagedRef DatabaseMode = "ManagedRef"
+	// DatabaseModeExternal: use a pre-provisioned external DB via a normalized Secret.
+	DatabaseModeExternal DatabaseMode = "External"
+)
+
+// SearchHeadClusterDatabasePolicy controls how SHC rollout behaves relative to DB readiness.
+type SearchHeadClusterDatabasePolicy struct {
+	// RolloutGate determines what to do if the database is not ready:
+	// - BlockRollout: prevent scale-up / rollout until DB is ready
+	// - WarnOnly: proceed but surface a warning condition
+	// +kubebuilder:validation:Enum=BlockRollout;WarnOnly
+	RolloutGate string `json:"rolloutGate,omitempty"`
+}
+
+// SearchHeadClusterExternalDB describes how SHC connects to an external (customer/CSP-managed) DB.
+type SearchHeadClusterExternalDB struct {
+	// ConnectionSecretRef points to a Secret with keys:
+	// host, port, dbname, username, password, sslmode, (optional) sslrootcert
+	ConnectionSecretRef corev1.LocalObjectReference `json:"connectionSecretRef"`
+}
+
+// SearchHeadClusterDatabaseSpec configures database usage for SHC.
+// Keep this surface minimal; provisioning details live in Database{Class,Claim,Cluster}.
+type SearchHeadClusterDatabaseSpec struct {
+	// Mode selects how the database is provided (Auto|ManagedRef|External).
+	Mode DatabaseMode `json:"mode,omitempty"`
+
+	// ManagedRef names an existing DatabaseCluster to use (when Mode=ManagedRef).
+	ManagedRef *corev1.LocalObjectReference `json:"managedRef,omitempty"`
+
+	// External supplies connection details via a Secret (when Mode=External).
+	External *SearchHeadClusterExternalDB `json:"external,omitempty"`
+
+	// Policy controls rollout behavior vs DB readiness.
+	Policy *SearchHeadClusterDatabasePolicy `json:"policy,omitempty"`
+
+	// Optional: DatabaseClass to use when Mode=Auto (defaults to cluster default class if omitted).
+	DatabaseClassName string `json:"databaseClassName,omitempty"`
+
+	// Optional: override the auto-created claim/conn naming (useful for multi-SHC namespaces).
+	// If empty, the controller uses <shc-name>-db and <shc-name>-db-conn.
+	AutoNameSuffix string `json:"autoNameSuffix,omitempty"`
+}
+
+// DatabaseSummary is populated by the controller to summarize DB state on the SHC.
+type DatabaseSummary struct {
+	Provider   string       `json:"provider,omitempty"`
+	Phase      string       `json:"phase,omitempty"`
+	Endpoint   string       `json:"endpoint,omitempty"`
+	Version    string       `json:"version,omitempty"`
+	LastBackup *metav1.Time `json:"lastBackup,omitempty"`
+}
+
+// -------------------------
+// Existing SHC API
+// -------------------------
+
 // SearchHeadClusterSpec defines the desired state of a Splunk Enterprise search head cluster
 type SearchHeadClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -50,6 +118,9 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer Node Affinity
 	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
+
+	// NEW: Database configuration (optional). If omitted, the operator may default to Mode=Auto.
+	Database *SearchHeadClusterDatabaseSpec `json:"database,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -129,11 +200,12 @@ type SearchHeadClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	UpgradePhase UpgradePhase `json:"upgradePhase"`
+	UpgradePhase          UpgradePhase `json:"upgradePhase"`
+	UpgradeStartTimestamp int64        `json:"upgradeStartTimestamp"`
+	UpgradeEndTimestamp   int64        `json:"upgradeEndTimestamp"`
 
-	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
-
-	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+	// NEW: concise database view for operators and automation
+	DatabaseSummary *DatabaseSummary `json:"databaseSummary,omitempty"`
 }
 
 type UpgradePhase string
@@ -153,6 +225,9 @@ const (
 // +kubebuilder:printcolumn:name="Deployer",type="string",JSONPath=".status.deployerPhase",description="Status of the deployer"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of search head cluster members"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head cluster members"
+// +kubebuilder:printcolumn:name="DB",type="string",JSONPath=".status.databaseSummary.phase",description="Database phase"
+// +kubebuilder:printcolumn:name="DBProv",type="string",JSONPath=".status.databaseSummary.provider",description="Database provider"
+// +kubebuilder:printcolumn:name="DBEp",type="string",JSONPath=".status.databaseSummary.endpoint",description="Database endpoint"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of search head cluster"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
