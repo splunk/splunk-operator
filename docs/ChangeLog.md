@@ -10,11 +10,8 @@
 * CSPL-3851 Adding info to docs about session stickiness for ingress
 * CSPL-3912 Allow Custom Probe Scripts
 * CSPL-3867: SHC and CM Error Message Visibility
-* CSPL-3913: Pass dynamic environment variables in Splunk StatefulSet for Ansible-based config generation
-* CSPL-3867: SHC and CM Error Message Visibility
-* CSPL-3851 Adding info to docs about session stickiness for ingress
-* CSPL-3584: Split run-tests.sh into multiple files
 * CSPL-3186: Upgrade Enterprise Security Version 8.0.2
+* 1559: Added SplunkGeneralTerms acceptance
 
 ### Supported Splunk Version
 
