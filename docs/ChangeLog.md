@@ -1,5 +1,30 @@
 # Splunk Operator for Kubernetes Change Log
 
+## 3.0.0 (2025-09-08)
+
+* This is the 3.0.0 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
+
+* CSPL-3784: Update base image to latest ubi8-minimal version
+* CSPL-3675 Update Operator-SDK to v1.39
+* CSPL-3783: Update AppFramework docs with troubleshooting information
+* CSPL-3851 Adding info to docs about session stickiness for ingress
+* CSPL-3912 Allow Custom Probe Scripts
+* CSPL-3867: SHC and CM Error Message Visibility
+* CSPL-3186: Upgrade Enterprise Security Version 8.0.2
+* 1559: Added SplunkGeneralTerms acceptance
+
+### Supported Splunk Version
+
+>| Splunk Version |
+>|----------------|
+>| 10.0.0         |
+
+### Supported Kubernetes Version
+
+>| Kubernetes Version|
+>| --- |
+>| 1.27+ |
+
 ## 2.8.1 (2025-07-16)
 
 * This is the 2.8.1 release. The Splunk Operator for Kubernetes is a supported platform for deploying Splunk Enterprise with the prerequisites and constraints laid out [here](https://github.com/splunk/splunk-operator/blob/main/docs/README.md#prerequisites-for-the-splunk-operator)
