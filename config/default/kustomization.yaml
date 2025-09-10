@@ -28,7 +28,6 @@ bases:
 # [METRICS] Expose the controller manager metrics service.
 - metrics_service.yaml
 
-
 patchesStrategicMerge:
 # Mount the controller config file for loading manager configurations
 # through a ComponentConfig type
