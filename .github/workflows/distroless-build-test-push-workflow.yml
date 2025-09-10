@@ -94,7 +94,9 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
       - name: Build and push Splunk Operator Image
         run: |
-          make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless
+          export BASE_IMAGE=gcr.io/distroless/static-debian12
+          export BASE_IMAGE_VERSION=latest
+          make docker-buildx BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless"
       - name: Sign Splunk Operator image with a key
         run: |
           cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}-distroless
