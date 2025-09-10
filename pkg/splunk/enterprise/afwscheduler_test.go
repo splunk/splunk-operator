@@ -1353,7 +1353,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 
 	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
-		t.Errorf("Unable to get the sts for SHC deployer")
+		t.Errorf("Unable to get the sts for LicenseManager")
 	}
 
 	// Test if STS works for Standalone
@@ -1367,7 +1367,21 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 
 	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
-		t.Errorf("Unable to get the sts for SHC deployer")
+		t.Errorf("Unable to get the sts for Standalone")
+	}
+
+	// Test if STS works for IngestorCluster
+	cr.TypeMeta.Kind = "IngestorCluster"
+	current = appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-ingestor",
+			Namespace: "test",
+		},
+	}
+
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
+		t.Errorf("Unable to get the sts for IngestorCluster")
 	}
 
 	// Negative testing
@@ -4218,6 +4232,7 @@ func TestGetTelAppNameExtension(t *testing.T) {
 		"SearchHeadCluster": "shc",
 		"ClusterMaster":     "cmaster",
 		"ClusterManager":    "cmanager",
+		"IngestorCluster":    "ingestor",
 	}
 
 	// Test all CR kinds

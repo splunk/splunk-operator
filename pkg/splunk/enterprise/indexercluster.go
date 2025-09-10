@@ -243,7 +243,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		// TODO: Make it work when HPA scales replicas - all new pods should get the configuration
 		if cr.Spec.PullBus.Type != "" {
-			_, err = handlePullBusOrPipelineConfigChange(ctx, cr, client)
+			err = mgr.handlePullBusOrPipelineConfigChange(ctx, cr, client)
 			if err != nil {
 				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
 				return result, err
@@ -509,7 +509,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// TODO: Make it work when HPA scales replicas - all new pods should get the configuration
 		// If values for PullBus and PipelineConfig are provided, update config files accordingly
 		if cr.Spec.PullBus.Type != "" {
-			_, err = handlePullBusOrPipelineConfigChange(ctx, cr, client)
+			err = mgr.handlePullBusOrPipelineConfigChange(ctx, cr, client)
 			if err != nil {
 				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
 				return result, err
@@ -1178,8 +1178,10 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	return extractedValue
 }
 
+var newSplunkClientForPullBusPipeline = splclient.NewSplunkClient
+
 // Checks if only PullBus or Pipeline config changed, and updates the conf file if so
-func handlePullBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) (bool, error) {
+func (mgr *indexerClusterPodManager) handlePullBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) error {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
@@ -1190,9 +1192,9 @@ func handlePullBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseA
 		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, newCR.GetName(), true)))
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
-			return true, err
+			return err
 		}
-		splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+		 splunkClient := newSplunkClientForPullBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(newCR)
 
@@ -1212,7 +1214,7 @@ func handlePullBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseA
 	}
 
 	// Do NOT restart Splunk
-	return true, updateErr
+	return updateErr
 }
 
 func getChangedPullBusAndPipelineFieldsIndexer(newCR *enterpriseApi.IndexerCluster) (pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields [][]string) {

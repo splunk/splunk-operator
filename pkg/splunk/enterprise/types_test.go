@@ -67,3 +67,29 @@ func TestInstanceType(t *testing.T) {
 	}
 
 }
+
+func TestKindToInstanceString(t *testing.T) {
+	tests := []struct {
+		kind     string
+		expected string
+	}{
+		{"ClusterManager", "cluster-manager"},
+		{"ClusterMaster", "cluster-master"},
+		{"IndexerCluster", "indexer"},
+		{"IngestorCluster", "ingestor"},
+		{"LicenseManager", "license-manager"},
+		{"LicenseMaster", "license-master"},
+		{"MonitoringConsole", "monitoring-console"},
+		{"SearchHeadCluster", "search-head"},
+		{"SearchHead", "search-head"},
+		{"Standalone", "standalone"},
+		{"UnknownKind", ""},
+	}
+
+	for _, tt := range tests {
+		got := KindToInstanceString(tt.kind)
+		if got != tt.expected {
+			t.Errorf("KindToInstanceString(%q) = %q; want %q", tt.kind, got, tt.expected)
+		}
+	}
+}

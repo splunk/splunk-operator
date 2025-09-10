@@ -2925,7 +2925,7 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		t.Errorf("Failed to update error message")
 	}
 
-	// IngestorCluster: should return a vaid CR
+	// IngestorCluster: should return a valid CR
 	ic := enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "IngestorCluster",

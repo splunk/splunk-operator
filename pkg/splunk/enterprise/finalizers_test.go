@@ -561,4 +561,15 @@ func TestDeleteSplunkPvcError(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error")
 	}
+
+	// IngestorCluster
+	icCr := &enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IngestorCluster",
+		},
+	}
+	err = DeleteSplunkPvc(ctx, icCr, c)
+	if err == nil {
+		t.Errorf("Expected error")
+	}
 }

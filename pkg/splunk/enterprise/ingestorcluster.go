@@ -22,8 +22,9 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splkClient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -206,7 +207,16 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		_, err = handlePushBusOrPipelineConfigChange(ctx, cr, client)
+		namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
+		if err != nil {
+			scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+			eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
+			return result, err
+		}
+
+		mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+
+		err = mgr.handlePushBusOrPipelineConfigChange(ctx, cr, client)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")
 			return result, err
@@ -283,7 +293,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // Checks if only PushBus or Pipeline config changed, and updates the conf file if so
-func handlePushBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, k8s client.Client) (bool, error) {
+func (mgr *ingestorClusterPodManager) handlePushBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, k8s client.Client) error {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
@@ -294,9 +304,9 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseA
 		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, newCR.GetName(), true)))
 		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
 		if err != nil {
-			return true, err
+			return err
 		}
-		splunkClient := splkClient.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(newCR)
 
@@ -305,14 +315,14 @@ func handlePushBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseA
 		}
 
 		for _, field := range pipelineChangedFields {
-			if err := splunkClient.UpdateConfFile("default-mode", field[0], [][]string{[]string{field[1], field[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile("default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
 				updateErr = err
 			}
 		}
 	}
 
 	// Do NOT restart Splunk
-	return true, updateErr
+	return updateErr
 }
 
 // Returns the names of PushBus and PipelineConfig fields that changed between oldCR and newCR.
@@ -346,4 +356,21 @@ func getChangedPushBusAndPipelineFields(newCR *enterpriseApi.IngestorCluster) (p
 	}
 
 	return
+}
+
+type ingestorClusterPodManager struct {
+	log             logr.Logger
+	cr              *enterpriseApi.IngestorCluster
+	secrets         *corev1.Secret
+	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
+}
+
+// newIngestorClusterPodManager function to create pod manager this is added to write unit test case
+var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) ingestorClusterPodManager {
+	return ingestorClusterPodManager{
+		log:             log,
+		cr:              cr,
+		secrets:         secret,
+		newSplunkClient: newSplunkClient,
+	}
 }
