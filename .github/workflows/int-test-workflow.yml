@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-3964-upgrade-operator-sdk
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
