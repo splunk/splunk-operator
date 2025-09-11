@@ -18,8 +18,10 @@ package enterprise
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -277,6 +279,50 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		if err != nil {
 			return err
 		}
+	}
+
+	if cr.Spec.PushBus == (enterpriseApi.PushBusSpec{}) {
+		return errors.New("PushBus spec cannot be empty")
+	}
+
+	if cr.Spec.PushBus.Type != "sqs_smartbus" {
+		return errors.New("only sqs_smartbus type is supported in PushBus spec")
+	}
+
+	if cr.Spec.PushBus.SQS == (enterpriseApi.SQSSpec{}) {
+		return errors.New("PushBus SQSSpec spec cannot be empty")
+	}
+
+	if !strings.HasPrefix(cr.Spec.PushBus.SQS.Endpoint, "https://") {
+		return errors.New("SQS Endpoint must start with https://")
+	}
+
+	if !strings.HasPrefix(cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint, "https://") {
+		return errors.New("SQS LargeMessageStoreEndpoint must start with https://")
+	}
+
+	if !strings.HasPrefix(cr.Spec.PushBus.SQS.LargeMessageStorePath, "s3://") {
+		return errors.New("SQS LargeMessageStorePath must start with s3://")
+	}
+
+	if cr.Spec.PushBus.SQS.MaxRetriesPerPart < 0 {
+		cr.Spec.PushBus.SQS.MaxRetriesPerPart = 3
+	}
+
+	if cr.Spec.PushBus.SQS.RetryPolicy == "" {
+		cr.Spec.PushBus.SQS.RetryPolicy = "max_count"
+	}
+
+	if cr.Spec.PushBus.SQS.SendInterval == "" {
+		cr.Spec.PushBus.SQS.SendInterval = "5s"
+	}
+
+	if cr.Spec.PushBus.SQS.EncodingFormat == "" {
+		cr.Spec.PushBus.SQS.EncodingFormat = "s2s"
+	}	
+
+	if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
+		return errors.New("PipelineConfig spec cannot be empty")
 	}
 
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)

@@ -1094,6 +1094,49 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 		len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("multisite cluster does not support cluster manager to be located in a different namespace")
 	}
+
+	if cr.Spec.PullBus != (enterpriseApi.PushBusSpec{}) {
+		if cr.Spec.PullBus.Type != "sqs_smartbus" {
+			return errors.New("only sqs_smartbus type is supported in PushBus spec")
+		}
+
+		if cr.Spec.PullBus.SQS == (enterpriseApi.SQSSpec{}) {
+			return errors.New("PushBus SQSSpec spec cannot be empty")
+		}
+
+		if !strings.HasPrefix(cr.Spec.PullBus.SQS.Endpoint, "https://") {
+			return errors.New("SQS Endpoint must start with https://")
+		}
+
+		if !strings.HasPrefix(cr.Spec.PullBus.SQS.LargeMessageStoreEndpoint, "https://") {
+			return errors.New("SQS LargeMessageStoreEndpoint must start with https://")
+		}
+
+		if !strings.HasPrefix(cr.Spec.PullBus.SQS.LargeMessageStorePath, "s3://") {
+			return errors.New("SQS LargeMessageStorePath must start with s3://")
+		}
+
+		if cr.Spec.PullBus.SQS.MaxRetriesPerPart < 0 {
+			cr.Spec.PullBus.SQS.MaxRetriesPerPart = 3
+		}
+
+		if cr.Spec.PullBus.SQS.RetryPolicy == "" {
+			cr.Spec.PullBus.SQS.RetryPolicy = "max_count"
+		}
+
+		if cr.Spec.PullBus.SQS.SendInterval == "" {
+			cr.Spec.PullBus.SQS.SendInterval = "5s"
+		}
+
+		if cr.Spec.PullBus.SQS.EncodingFormat == "" {
+			cr.Spec.PullBus.SQS.EncodingFormat = "s2s"
+		}
+
+		if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
+			return errors.New("PipelineConfig spec cannot be empty")
+		}
+	}
+
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
@@ -1191,7 +1234,7 @@ func (mgr *indexerClusterPodManager) handlePullBusOrPipelineConfigChange(ctx con
 		if err != nil {
 			return err
 		}
-		 splunkClient := newSplunkClientForPullBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+		splunkClient := newSplunkClientForPullBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(newCR)
 

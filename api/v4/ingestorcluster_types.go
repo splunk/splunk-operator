@@ -52,8 +52,6 @@ type IngestorClusterSpec struct {
 // Helper types
 // Only SQS as of now
 type PushBusSpec struct {
-	// +kubebuilder:validation:Enum=sqs_smartbus
-	// +kubebuilder:default=sqs_smartbus
 	Type string `json:"type"`
 
 	SQS SQSSpec `json:"sqs"`
@@ -64,51 +62,34 @@ type SQSSpec struct {
 
 	AuthRegion string `json:"authRegion"`
 
-	// +kubebuilder:validation:Pattern=`^https://`
 	Endpoint string `json:"endpoint"`
 
-	// +kubebuilder:validation:Pattern=`^https://`
 	LargeMessageStoreEndpoint string `json:"largeMessageStoreEndpoint"`
 
-	// +kubebuilder:validation:Pattern=`^s3://`
 	LargeMessageStorePath string `json:"largeMessageStorePath"`
 
 	DeadLetterQueueName string `json:"deadLetterQueueName"`
 
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:default=3
-	MaxRetriesPerPart int `json:"maxRetriesPerPart"`
+	MaxRetriesPerPart int `json:"maxRetriesPerPart,omitempty"`
 
-	// +kubebuilder:validation:Enum=max_count
-	// +kubebuilder:default=max_count
-	RetryPolicy string `json:"retryPolicy"`
+	RetryPolicy string `json:"retryPolicy,omitempty"`
 
-	// +kubebuilder:validation:Pattern=`^[0-9]+s$`
-	// +kubebuilder:default="5s"
-	SendInterval string `json:"sendInterval"`
+	SendInterval string `json:"sendInterval,omitempty"`
 
-	// +kubebuilder:validation:Enum=s2s
-	// +kubebuilder:default=s2s
-	EncodingFormat string `json:"encodingFormat"`
+	EncodingFormat string `json:"encodingFormat,omitempty"`
 }
 
 type PipelineConfigSpec struct {
-	// +kubebuilder:default=false
-	RemoteQueueRuleset bool `json:"remoteQueueRuleset"`
+	RemoteQueueRuleset bool `json:"remoteQueueRuleset,omitempty"`
 
-	// +kubebuilder:default=true
-	RuleSet bool `json:"ruleSet"`
+	RuleSet bool `json:"ruleSet,omitempty"`
 
-	// +kubebuilder:default=false
-	RemoteQueueTyping bool `json:"remoteQueueTyping"`
+	RemoteQueueTyping bool `json:"remoteQueueTyping,omitempty"`
 
-	// +kubebuilder:default=false
-	RemoteQueueOutput bool `json:"remoteQueueOutput"`
+	RemoteQueueOutput bool `json:"remoteQueueOutput,omitempty"`
 
-	// +kubebuilder:default=true
-	Typing bool `json:"typing"`
+	Typing bool `json:"typing,omitempty"`
 
-	// +kubebuilder:default=true
 	IndexerPipe bool `json:"indexerPipe,omitempty"`
 }
 

@@ -177,12 +177,42 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 			Namespace:   namespace,
 			Annotations: annotations,
 		},
-		Spec: enterpriseApi.IngestorClusterSpec{},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+			},
+			Replicas: 3,
+			PipelineConfig: enterpriseApi.PipelineConfigSpec{
+				RemoteQueueRuleset: false,
+				RuleSet:            true,
+				RemoteQueueTyping:  false,
+				RemoteQueueOutput:  false,
+				Typing:             true,
+				IndexerPipe:        true,
+			},
+			PushBus: enterpriseApi.PushBusSpec{
+				Type: "sqs_smartbus",
+				SQS: enterpriseApi.SQSSpec{
+					QueueName:                 "test-queue",
+					AuthRegion:                "us-west-2",
+					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+					DeadLetterQueueName:       "sqs-dlq-test",
+					MaxRetriesPerPart:         4,
+					RetryPolicy:               "max_count",
+					SendInterval:              "5s",
+					EncodingFormat:            "s2s",
+				},
+			},
+		},
 	}
 
-	ingSpec = testutils.NewIngestorCluster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ingSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
+
 	ic := &enterpriseApi.IngestorCluster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ic)
