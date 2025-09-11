@@ -52,6 +52,8 @@ type IngestorClusterSpec struct {
 // Helper types
 // Only SQS as of now
 type PushBusSpec struct {
+	// +kubebuilder:validation:Enum=sqs_smartbus
+	// +kubebuilder:default=sqs_smartbus
 	Type string `json:"type"`
 
 	SQS SQSSpec `json:"sqs"`
@@ -62,32 +64,51 @@ type SQSSpec struct {
 
 	AuthRegion string `json:"authRegion"`
 
+	// +kubebuilder:validation:Pattern=`^https://`
 	Endpoint string `json:"endpoint"`
 
+	// +kubebuilder:validation:Pattern=`^https://`
 	LargeMessageStoreEndpoint string `json:"largeMessageStoreEndpoint"`
 
+	// +kubebuilder:validation:Pattern=`^s3://`
 	LargeMessageStorePath string `json:"largeMessageStorePath"`
 
 	DeadLetterQueueName string `json:"deadLetterQueueName"`
 
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=3
 	MaxRetriesPerPart int `json:"maxRetriesPerPart"`
 
+	// +kubebuilder:validation:Enum=max_count
+	// +kubebuilder:default=max_count
 	RetryPolicy string `json:"retryPolicy"`
 
+	// +kubebuilder:validation:Pattern=`^[0-9]+s$`
+	// +kubebuilder:default="5s"
 	SendInterval string `json:"sendInterval"`
+
+	// +kubebuilder:validation:Enum=s2s
+	// +kubebuilder:default=s2s
+	EncodingFormat string `json:"encodingFormat"`
 }
 
 type PipelineConfigSpec struct {
+	// +kubebuilder:default=false
 	RemoteQueueRuleset bool `json:"remoteQueueRuleset"`
 
+	// +kubebuilder:default=true
 	RuleSet bool `json:"ruleSet"`
 
+	// +kubebuilder:default=false
 	RemoteQueueTyping bool `json:"remoteQueueTyping"`
 
+	// +kubebuilder:default=false
 	RemoteQueueOutput bool `json:"remoteQueueOutput"`
 
+	// +kubebuilder:default=true
 	Typing bool `json:"typing"`
 
+	// +kubebuilder:default=true
 	IndexerPipe bool `json:"indexerPipe,omitempty"`
 }
 
@@ -116,6 +137,12 @@ type IngestorClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Pipeline configuration status
+	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
+
+	// Push Bus status
+	PushBus PushBusSpec `json:"pushBus"`
 }
 
 // +kubebuilder:object:root=true

@@ -222,6 +222,9 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			return result, err
 		}
 
+		cr.Status.PushBus = cr.Spec.PushBus
+		cr.Status.PipelineConfig = cr.Spec.PipelineConfig
+
 		// Upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -308,10 +311,12 @@ func (mgr *ingestorClusterPodManager) handlePushBusOrPipelineConfigChange(ctx co
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(newCR)
+		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&newCR.Status, newCR)
 
-		if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PushBus.SQS.QueueName), pushBusChangedFields); err != nil {
-			updateErr = err
+		for _, pbVal := range pushBusChangedFields {
+			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PushBus.SQS.QueueName), [][]string{pbVal}); err != nil {
+				updateErr = err
+			}
 		}
 
 		for _, field := range pipelineChangedFields {
@@ -326,34 +331,17 @@ func (mgr *ingestorClusterPodManager) handlePushBusOrPipelineConfigChange(ctx co
 }
 
 // Returns the names of PushBus and PipelineConfig fields that changed between oldCR and newCR.
-func getChangedPushBusAndPipelineFields(newCR *enterpriseApi.IngestorCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
-	// Compare PushBus fields
+func getChangedPushBusAndPipelineFields(oldCrStatus *enterpriseApi.IngestorClusterStatus, newCR *enterpriseApi.IngestorCluster) (pushBusChangedFields, pipelineChangedFields [][]string) {
+	oldPB := oldCrStatus.PushBus
 	newPB := newCR.Spec.PushBus
+	oldPC := oldCrStatus.PipelineConfig
 	newPC := newCR.Spec.PipelineConfig
 
-	// Push all PushBus fields
-	pushBusChangedFields = [][]string{
-		{"remote_queue.type", newPB.Type},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newPB.Type), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", newPB.Type), newPB.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPB.Type), newPB.SQS.LargeMessageStoreEndpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPB.Type), newPB.SQS.LargeMessageStorePath},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPB.Type), newPB.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPB.SQS.RetryPolicy, newPB.Type), fmt.Sprintf("%d", newPB.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newPB.Type), newPB.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", newPB.Type), newPB.SQS.SendInterval},
-	}
+	// Push changed PushBus fields
+	pushBusChangedFields = pushBusChanged(oldPB, newPB)
 
-	// Always set all pipeline fields, not just changed ones
-	pipelineChangedFields = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPC.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPC.Typing)},
-		{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newPC.IndexerPipe)},
-	}
+	// Always changed pipeline fields
+	pipelineChangedFields = pipelineConfigChanged(oldPC, newPC)
 
 	return
 }
@@ -373,4 +361,60 @@ var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Inges
 		secrets:         secret,
 		newSplunkClient: newSplunkClient,
 	}
+}
+
+func pipelineConfigChanged(oldPipelineConfig, newPipelineConfig enterpriseApi.PipelineConfigSpec) (output [][]string) {
+	if oldPipelineConfig.RemoteQueueRuleset != newPipelineConfig.RemoteQueueRuleset {
+		output = append(output, []string{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueRuleset)})
+	}
+	if oldPipelineConfig.RuleSet != newPipelineConfig.RuleSet {
+		output = append(output, []string{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPipelineConfig.RuleSet)})
+	}
+	if oldPipelineConfig.RemoteQueueTyping != newPipelineConfig.RemoteQueueTyping {
+		output = append(output, []string{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueTyping)})
+	}
+	if oldPipelineConfig.RemoteQueueOutput != newPipelineConfig.RemoteQueueOutput {
+		output = append(output, []string{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueOutput)})
+	}
+	if oldPipelineConfig.Typing != newPipelineConfig.Typing {
+		output = append(output, []string{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPipelineConfig.Typing)})
+	}
+	if oldPipelineConfig.IndexerPipe != newPipelineConfig.IndexerPipe {
+		output = append(output, []string{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newPipelineConfig.IndexerPipe)})
+	}
+	return output
+}
+
+func pushBusChanged(oldPushBus, newPushBus enterpriseApi.PushBusSpec) (output [][]string) {
+	if oldPushBus.Type != newPushBus.Type {
+		output = append(output, []string{"remote_queue.type", newPushBus.Type})
+	}
+	if oldPushBus.SQS.EncodingFormat != newPushBus.SQS.EncodingFormat {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.encoding_format", newPushBus.Type), newPushBus.SQS.EncodingFormat})
+	}
+	if oldPushBus.SQS.AuthRegion != newPushBus.SQS.AuthRegion {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", newPushBus.Type), newPushBus.SQS.AuthRegion})
+	}
+	if oldPushBus.SQS.Endpoint != newPushBus.SQS.Endpoint {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", newPushBus.Type), newPushBus.SQS.Endpoint})
+	}
+	if oldPushBus.SQS.LargeMessageStoreEndpoint != newPushBus.SQS.LargeMessageStoreEndpoint {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPushBus.Type), newPushBus.SQS.LargeMessageStoreEndpoint})
+	}
+	if oldPushBus.SQS.LargeMessageStorePath != newPushBus.SQS.LargeMessageStorePath {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPushBus.Type), newPushBus.SQS.LargeMessageStorePath})
+	}
+	if oldPushBus.SQS.DeadLetterQueueName != newPushBus.SQS.DeadLetterQueueName {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPushBus.Type), newPushBus.SQS.DeadLetterQueueName})
+	}
+	if oldPushBus.SQS.MaxRetriesPerPart != newPushBus.SQS.MaxRetriesPerPart || oldPushBus.SQS.RetryPolicy != newPushBus.SQS.RetryPolicy {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPushBus.SQS.RetryPolicy, newPushBus.Type), fmt.Sprintf("%d", newPushBus.SQS.MaxRetriesPerPart)})
+	}
+	if oldPushBus.SQS.RetryPolicy != newPushBus.SQS.RetryPolicy {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.retry_policy", newPushBus.Type), newPushBus.SQS.RetryPolicy})
+	}
+	if oldPushBus.SQS.SendInterval != newPushBus.SQS.SendInterval {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.send_interval", newPushBus.Type), newPushBus.SQS.SendInterval})
+	}
+	return output
 }

@@ -234,7 +234,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
-	mockHTTPClient :=  &spltest.MockHTTPClient{}
+	mockHTTPClient := &spltest.MockHTTPClient{}
 	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
 			log: l, cr: cr, secrets: secret,
@@ -243,7 +243,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 			},
 		}
 	}
-	defer func(){ newIngestorClusterPodManager = origNew }()
+	defer func() { newIngestorClusterPodManager = origNew }()
 
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", cr.Spec.PushBus.Type), "s2s"},
@@ -401,17 +401,28 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 					MaxRetriesPerPart:         4,
 					RetryPolicy:               "max_count",
 					SendInterval:              "5s",
+					EncodingFormat:            "s2s",
 				},
+			},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{
+			PipelineConfig: enterpriseApi.PipelineConfigSpec{
+				RemoteQueueRuleset: true,
+				RuleSet:            false,
+				RemoteQueueTyping:  true,
+				RemoteQueueOutput:  true,
+				Typing:             false,
+				IndexerPipe:        false,
 			},
 		},
 	}
 
-	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(newCR)
+	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&newCR.Status, newCR)
 
 	assert.Equal(t, 10, len(pushBusChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", newCR.Spec.PushBus.Type},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.EncodingFormat},
 		{fmt.Sprintf("remote_queue.%s.auth_region", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStoreEndpoint},

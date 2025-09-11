@@ -248,7 +248,7 @@ func (instanceType InstanceType) ToRole() string {
 	case SplunkMonitoringConsole:
 		role = "splunk_monitor"
 	case SplunkIngestor:
-		role = "splunk_standalone" // TODO: change this to a new role when we have one
+		role = "splunk_standalone" // TODO: change this to a new role when we have one (splunk_ingestor)
 	}
 	return role
 }

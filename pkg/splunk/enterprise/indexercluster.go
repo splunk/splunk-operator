@@ -241,7 +241,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// TODO: Make it work when HPA scales replicas - all new pods should get the configuration
 		if cr.Spec.PullBus.Type != "" {
 			err = mgr.handlePullBusOrPipelineConfigChange(ctx, cr, client)
 			if err != nil {
@@ -506,8 +505,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// TODO: Make it work when HPA scales replicas - all new pods should get the configuration
-		// If values for PullBus and PipelineConfig are provided, update config files accordingly
 		if cr.Spec.PullBus.Type != "" {
 			err = mgr.handlePullBusOrPipelineConfigChange(ctx, cr, client)
 			if err != nil {

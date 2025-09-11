@@ -1584,16 +1584,22 @@ spec:
                 description: Pipeline configuration
                 properties:
                   indexerPipe:
+                    default: true
                     type: boolean
                   remoteQueueOutput:
+                    default: false
                     type: boolean
                   remoteQueueRuleset:
+                    default: false
                     type: boolean
                   remoteQueueTyping:
+                    default: false
                     type: boolean
                   ruleSet:
+                    default: true
                     type: boolean
                   typing:
+                    default: true
                     type: boolean
                 type: object
               pushBus:
@@ -1605,22 +1611,40 @@ spec:
                         type: string
                       deadLetterQueueName:
                         type: string
+                      encodingFormat:
+                        default: s2s
+                        enum:
+                        - s2s
+                        type: string
                       endpoint:
+                        pattern: ^https://
                         type: string
                       largeMessageStoreEndpoint:
+                        pattern: ^https://
                         type: string
                       largeMessageStorePath:
+                        pattern: ^s3://
                         type: string
                       maxRetriesPerPart:
+                        default: 3
+                        minimum: 0
                         type: integer
                       queueName:
                         type: string
                       retryPolicy:
+                        default: max_count
+                        enum:
+                        - max_count
                         type: string
                       sendInterval:
+                        default: 5s
+                        pattern: ^[0-9]+s$
                         type: string
                     type: object
                   type:
+                    default: sqs_smartbus
+                    enum:
+                    - sqs_smartbus
                     type: string
                 type: object
               readinessInitialDelaySeconds:
@@ -4559,6 +4583,73 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              pipelineConfig:
+                description: Pipeline configuration status
+                properties:
+                  indexerPipe:
+                    default: true
+                    type: boolean
+                  remoteQueueOutput:
+                    default: false
+                    type: boolean
+                  remoteQueueRuleset:
+                    default: false
+                    type: boolean
+                  remoteQueueTyping:
+                    default: false
+                    type: boolean
+                  ruleSet:
+                    default: true
+                    type: boolean
+                  typing:
+                    default: true
+                    type: boolean
+                type: object
+              pushBus:
+                description: Push Bus status
+                properties:
+                  sqs:
+                    properties:
+                      authRegion:
+                        type: string
+                      deadLetterQueueName:
+                        type: string
+                      encodingFormat:
+                        default: s2s
+                        enum:
+                        - s2s
+                        type: string
+                      endpoint:
+                        pattern: ^https://
+                        type: string
+                      largeMessageStoreEndpoint:
+                        pattern: ^https://
+                        type: string
+                      largeMessageStorePath:
+                        pattern: ^s3://
+                        type: string
+                      maxRetriesPerPart:
+                        default: 3
+                        minimum: 0
+                        type: integer
+                      queueName:
+                        type: string
+                      retryPolicy:
+                        default: max_count
+                        enum:
+                        - max_count
+                        type: string
+                      sendInterval:
+                        default: 5s
+                        pattern: ^[0-9]+s$
+                        type: string
+                    type: object
+                  type:
+                    default: sqs_smartbus
+                    enum:
+                    - sqs_smartbus
+                    type: string
+                type: object
               readyReplicas:
                 description: Number of ready ingestor pods
                 format: int32
