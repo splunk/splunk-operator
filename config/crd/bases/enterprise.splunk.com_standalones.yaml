@@ -5987,6 +5987,42 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              database:
+                description: Database integration (Auto/ManagedRef/External)
+                properties:
+                  autoNameSuffix:
+                    type: string
+                  databaseClassName:
+                    type: string
+                  external:
+                    properties:
+                      connectionSecretRef:
+                        description: 'Secret exposes: host,port,dbname,username,password,sslmode,(optional)sslrootcert'
+                        properties:
+                          name:
+                            type: string
+                        type: object
+                    type: object
+                  managedRef:
+                    properties:
+                      name:
+                        type: string
+                    type: object
+                  mode:
+                    enum:
+                    - Auto
+                    - ManagedRef
+                    - External
+                    type: string
+                  policy:
+                    properties:
+                      rolloutGate:
+                        enum:
+                        - BlockRollout
+                        - WarnOnly
+                        type: string
+                    type: object
+                type: object
               defaults:
                 description: Inline map of default.yml overrides used to initialize
                   the environment
@@ -9376,6 +9412,21 @@ spec:
                   version:
                     description: App Framework version info for future use
                     type: integer
+                type: object
+              databaseSummary:
+                description: Database summary for UX and gating
+                properties:
+                  endpoint:
+                    type: string
+                  lastBackup:
+                    format: date-time
+                    type: string
+                  phase:
+                    type: string
+                  provider:
+                    type: string
+                  version:
+                    type: string
                 type: object
               message:
                 description: Auxillary message describing CR status

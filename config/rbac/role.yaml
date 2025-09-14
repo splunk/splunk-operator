@@ -49,6 +49,13 @@ rules:
   resources:
   - clustermanagers
   - clustermasters
+  - databasebackups
+  - databaseclaim
+  - databaseclaims
+  - databaseclasses
+  - databaseclusters
+  - databasepoolers
+  - databaserestores
   - indexerclusters
   - licensemanagers
   - licensemasters
@@ -68,6 +75,8 @@ rules:
   resources:
   - clustermanagers/finalizers
   - clustermasters/finalizers
+  - databaseclaims/finalizers
+  - databaseclusters/finalizers
   - indexerclusters/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
@@ -81,6 +90,11 @@ rules:
   resources:
   - clustermanagers/status
   - clustermasters/status
+  - databasebackups/status
+  - databaseclaims/status
+  - databaseclusters/status
+  - databasepoolers/status
+  - databaserestores/status
   - indexerclusters/status
   - licensemanagers/status
   - licensemasters/status
@@ -91,3 +105,18 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - backups
+  - clusters
+  - poolers
+  - scheduledbackups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

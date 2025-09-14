@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v4
+kind: DatabaseBackup
+metadata:
+  name: shc-db-bkp
+  namespace: splunk
+spec:
+  targetRef:
+    name: shc-db
+  backupLabel: "e2e"

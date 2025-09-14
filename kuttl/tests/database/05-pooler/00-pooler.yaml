@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v4
+kind: DatabasePooler
+metadata:
+  name: shc-db-rw-pool
+  namespace: splunk
+spec:
+  clusterRef:
+    name: shc-db
+  mode: rw

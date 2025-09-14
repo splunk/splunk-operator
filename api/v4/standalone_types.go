@@ -46,6 +46,9 @@ type StandaloneSpec struct {
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// Database integration (Auto/ManagedRef/External)
+	Database *SearchHeadClusterDatabaseSpec `json:"database,omitempty"`
 }
 
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.
@@ -76,6 +79,9 @@ type StandaloneStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Database summary for UX and gating
+	DatabaseSummary *DatabaseSummary `json:"databaseSummary,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

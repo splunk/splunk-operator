@@ -1,0 +1,6 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+- ./kuttl/tests/database
+timeout: 1200          # 20 min overall (restore can take a bit)
+startControlPlane: false

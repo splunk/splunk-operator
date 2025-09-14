@@ -50,6 +50,9 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer Node Affinity
 	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
+
+	// Database integration (Auto/ManagedRef/External)
+	Database *SearchHeadClusterDatabaseSpec `json:"database,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -134,6 +137,9 @@ type SearchHeadClusterStatus struct {
 	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
 
 	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+
+	// Database summary for UX and gating
+	DatabaseSummary *DatabaseSummary `json:"databaseSummary,omitempty"`
 }
 
 type UpgradePhase string

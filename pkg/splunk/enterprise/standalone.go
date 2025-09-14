@@ -70,6 +70,15 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// updates status after function completes
 	cr.Status.Replicas = cr.Spec.Replicas
 
+
+	// Ensure DB and summarize FIXME TODO
+	/*err = EnsureDatabaseForSHC(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "EnsureDatabaseForSHC", fmt.Sprintf("ensure database for SHC failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to ensure database for SHC")
+		return result, err
+	}*/
+
 	// If needed, Migrate the app framework status
 	err = checkAndMigrateAppDeployStatus(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig, true)
 	if err != nil {

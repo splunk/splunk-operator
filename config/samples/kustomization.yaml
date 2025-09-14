@@ -13,4 +13,10 @@ resources:
 - enterprise_v4_searchheadcluster.yaml
 - enterprise_v4_clustermanager.yaml
 - enterprise_v4_licensemanager.yaml
+- enterprise_v4_databaseclaim.yaml
+- enterprise_v4_databaseclass.yaml
+- enterprise_v4_databasecluster.yaml
+- enterprise_v4_databasebackup.yaml
+- enterprise_v4_databaserestore.yaml
+- enterprise_v4_databasepooler.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

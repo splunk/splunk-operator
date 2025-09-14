@@ -17,4 +17,26 @@ resources:
 # More info: https://book.kubebuilder.io/reference/metrics.html
 - metrics_auth_role.yaml
 - metrics_auth_role_binding.yaml
-- metrics_reader_role.yaml
+#- metrics_reader_role.yaml    # For each CRD, "Admin", "Editor" and "Viewer" roles are scaffolded by
+# default, aiding admins in cluster management. Those roles are
+# not used by the {{ .ProjectName }} itself. You can comment the following lines
+# if you do not want those helpers be installed with your Project.
+- databasepooler_admin_role.yaml
+- databasepooler_editor_role.yaml
+- databasepooler_viewer_role.yaml
+- databaserestore_admin_role.yaml
+- databaserestore_editor_role.yaml
+- databaserestore_viewer_role.yaml
+- databasebackup_admin_role.yaml
+- databasebackup_editor_role.yaml
+- databasebackup_viewer_role.yaml
+- databasecluster_admin_role.yaml
+- databasecluster_editor_role.yaml
+- databasecluster_viewer_role.yaml
+- databaseclass_admin_role.yaml
+- databaseclass_editor_role.yaml
+- databaseclass_viewer_role.yaml
+- databaseclaim_admin_role.yaml
+- databaseclaim_editor_role.yaml
+- databaseclaim_viewer_role.yaml
+
