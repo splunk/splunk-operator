@@ -276,8 +276,7 @@ MonitoringConsole:
 		for _, cm := range clusterManagerList.Items {
 			if cm.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if cm.Status.Phase != enterpriseApi.PhaseReady {
-					message := fmt.Sprintf("cluster manager %s is not ready", cm.Name)
-					return false, fmt.Errorf(message)
+					return false, fmt.Errorf("cluster manager %s is not ready", cm.Name)
 				}
 			}
 		}
@@ -295,8 +294,7 @@ MonitoringConsole:
 		for _, shc := range searchHeadClusterList.Items {
 			if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if shc.Status.Phase != enterpriseApi.PhaseReady {
-					message := fmt.Sprintf("search head %s is not ready", shc.Name)
-					return false, fmt.Errorf(message)
+					return false, fmt.Errorf("search head %s is not ready", shc.Name)
 				}
 			}
 		}
@@ -314,8 +312,7 @@ MonitoringConsole:
 		for _, idx := range indexerClusterList.Items {
 			if idx.Name == cr.GetName() {
 				if idx.Status.Phase != enterpriseApi.PhaseReady {
-					message := fmt.Sprintf("indexer %s is not ready", idx.Name)
-					return false, fmt.Errorf(message)
+					return false, fmt.Errorf("indexer %s is not ready", idx.Name)
 				}
 			}
 		}
@@ -333,8 +330,7 @@ MonitoringConsole:
 		for _, stdln := range standaloneList.Items {
 			if stdln.Name == cr.GetName() {
 				if stdln.Status.Phase != enterpriseApi.PhaseReady {
-					message := fmt.Sprintf("standalone %s is not ready", stdln.Name)
-					return false, fmt.Errorf(message)
+					return false, fmt.Errorf("standalone %s is not ready", stdln.Name)
 				}
 			}
 		}

@@ -7,7 +7,7 @@
 If you want to customize the installation of the Splunk Operator, download a copy of the installation YAML locally, and open it in your favorite editor.
 
 ```
-wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-cluster.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-cluster.yaml
 ```
 
 ## Default Installation
@@ -17,8 +17,37 @@ Based on the file used Splunk Operator can be installed cluster-wide or namespac
 By installing `splunk-operator-cluster.yaml` Operator will watch all the namespaces of your cluster for splunk enterprise custom resources
 
 ```
-wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-cluster.yaml
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-cluster.yaml
 kubectl apply -f splunk-operator-cluster.yaml --server-side
+```
+
+## Install Operator to Accept the Splunk General Terms
+
+Starting with Operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. **This is a breaking change, and user action is required.**
+
+Starting in 10.x image versions of Splunk Enterprise, license acceptance requires an additional `SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com` argument. This indicates that users have read and accepted the current/latest version of the Splunk General Terms, available at https://www.splunk.com/en_us/legal/splunk-general-terms.html as may be updated from time to time. Unless you have jointly executed with Splunk a negotiated version of these General Terms that explicitly supersedes this agreement, by accessing or using Splunk software, you are agreeing to the Splunk General Terms posted at the time of your access and use and acknowledging its applicability to the Splunk software. Please read and make sure you agree to the Splunk General Terms before you access or use this software. Only after doing so should you include the `--accept-sgt-current-at-splunk-com` flag to indicate your acceptance of the current/latest Splunk General Terms and launch this software. All examples below have been updated with this change.
+
+If you use the below examples and the ‘--accept-sgt-current-at-splunk-com’ flag, you are indicating that you have read and accepted the current/latest version of the Splunk General Terms, as may be updated from time to time, and acknowledging its applicability to this software - as noted above.
+
+By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string. You must either manually update it to have the required additional value `--accept-sgt-current-at-splunk-com` in the splunk-operator-controller-manager deployment, or you can pass the `SPLUNK_GENERAL_TERMS` parameter with the required additional value to the `make deploy` command.
+
+```yaml
+...
+        env:
+        - name: WATCH_NAMESPACE
+          value: "namespace1,namespace2"
+        - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
+          value: splunk/splunk:9.4.0
+        - name: OPERATOR_NAME
+          value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: "--accept-sgt-current-at-splunk-com"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+...
 ```
 
 ## Install operator to watch multiple namespaces
@@ -34,6 +63,8 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
           value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -44,12 +75,13 @@ If Splunk Operator is installed clusterwide and user wants to manage multiple na
 
 ## Install operator to watch single namespace with restrictive permission
 
-In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace.
+In order to install operator with restrictive permission to watch only single namespace use [splunk-operator-namespace.yaml](https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-namespace.yaml). This will create Role and Role-Binding to only watch single namespace. By default operator will be installed in `splunk-operator` namespace, user can edit the file to change the namespace.
 
 ```
-wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-namespace.yaml
+wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-namespace.yaml
 kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
+
 
 ## Private Registries
 
@@ -71,6 +103,8 @@ If you are using a private registry for the Docker images, edit `deployment` `sp
           value: splunk/splunk:9.4.0
         - name: OPERATOR_NAME
           value: splunk-operator
+        - name: SPLUNK_GENERAL_TERMS
+          value: ""
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -86,14 +120,14 @@ As part of enhancing security and reducing the attack surface of the Splunk Oper
 
 1. **Image Tag**:
    - The distroless image can be identified by the `-distroless` suffix in its tag.
-   - Example: `splunk/splunk-operator:2.8.1-distroless`
+   - Example: `splunk/splunk-operator:3.0.0-distroless`
 
 2. **Modifying the Deployment**:
    - To use the distroless image, update the `manager` container image in the `splunk-operator-controller-manager` deployment as follows:
 
    ```yaml
    # Replace this with the distroless image name
-   image: splunk/splunk-operator:2.8.1-distroless
+   image: splunk/splunk-operator:3.0.0-distroless
    ```
 
 3. **Private Registry**:
@@ -130,12 +164,14 @@ Since distroless images do not contain a shell, debugging may require additional
        spec:
          containers:
            - name: manager
-             image: splunk/splunk-operator:2.8.1-distroless
+             image: splunk/splunk-operator:3.0.0-distroless
              env:
                - name: WATCH_NAMESPACE
                  value: ""
                - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
                  value: splunk/splunk:9.4.0
+               - name: SPLUNK_GENERAL_TERMS
+                 value: ""
            - name: sok-debug
              image: ubuntu:20.04  # Use any lightweight image with a shell
              command: ["/bin/bash", "-c", "tail -f /dev/null"]

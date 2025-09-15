@@ -55,10 +55,12 @@ func GetSecretStruct(ctx context.Context, deployment *Deployment, ns string, sec
 func ModifySecretObject(ctx context.Context, deployment *Deployment, ns string, secretName string, data map[string][]byte) error {
 	logf.Log.Info("Modify secret object", "Secret Name", secretName, "Data", data)
 	secret := newSecretSpec(ns, secretName, data)
+
 	err := deployment.UpdateCR(ctx, secret)
 	if err != nil {
 		logf.Log.Error(err, "Unable to update secret object")
 	}
+
 	return err
 }
 

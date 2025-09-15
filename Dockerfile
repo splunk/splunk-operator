@@ -1,14 +1,14 @@
 # Setup defaults for build arguments
-ARG PLATFORMS=linux/amd64
+ARG PLATFORMS=linux/amd64,linux/arm64
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-# This sha relates to ubi minimal version 8.10-1255, which is tagged as 8.10 and latest as of Apr 25, 2025
-ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal@sha256
-ARG BASE_IMAGE_VERSION=b2a1bec3dfbc7a14a1d84d98934dfe8fdde6eb822a211286601cf109cbccb075
+# This sha relates to ubi minimal version 8.10-1755105495, which is tagged as 8.10 and latest as of Aug 17, 2025
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
+ARG BASE_IMAGE_VERSION=8.10-1755105495
 
 # Build the manager binary
-FROM golang:1.23.0 AS builder
+FROM golang:1.24.2 AS builder
 
 WORKDIR /workspace
 
@@ -19,16 +19,16 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
+COPY cmd/main.go cmd/main.go
 COPY api/ api/
-COPY controllers/ controllers/
+COPY internal/controller/ internal/controller/
 COPY pkg/ pkg/
 COPY tools/ tools/
 COPY hack hack/
 
 # Build
 # TARGETOS and TARGETARCH are provided(inferred) by buildx via the --platforms flag
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 # Use BASE_IMAGE as the base image
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}
@@ -73,7 +73,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
-      version="2.8.1" \
+      version="3.0.0" \
       release="1" \
       summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
       description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."

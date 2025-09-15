@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,7 +38,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	splctrl "github.com/splunk/splunk-operator/pkg/splunk/controller"
+	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -98,52 +99,82 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 }
 
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
-func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string) (corev1.PersistentVolumeClaim, error) {
+func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string, adminManagedPV bool) (corev1.PersistentVolumeClaim, error) {
 	var storageCapacity resource.Quantity
 	var err error
+	var storageClassName string
+	var volumeClaim corev1.PersistentVolumeClaim
 
-	storageClassName := ""
-
-	// Depending on the volume type, determine storage capacity and storage class name(if configured)
-	if volumeType == splcommon.EtcVolumeStorage {
-		storageCapacity, err = splcommon.ParseResourceQuantity(spec.EtcVolumeStorageConfig.StorageCapacity, splcommon.DefaultEtcVolumeStorageCapacity)
+	// Depending on the volume type, determine storage capacity and storage class name (if configured)
+	switch volumeType {
+	case splcommon.EtcVolumeStorage:
+		storageCapacity, err = splcommon.ParseResourceQuantity(
+			spec.EtcVolumeStorageConfig.StorageCapacity,
+			splcommon.DefaultEtcVolumeStorageCapacity,
+		)
 		if err != nil {
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "etcStorage", err)
 		}
-		if spec.EtcVolumeStorageConfig.StorageClassName != "" {
-			storageClassName = spec.EtcVolumeStorageConfig.StorageClassName
-		}
-	} else if volumeType == splcommon.VarVolumeStorage {
-		storageCapacity, err = splcommon.ParseResourceQuantity(spec.VarVolumeStorageConfig.StorageCapacity, splcommon.DefaultVarVolumeStorageCapacity)
+		storageClassName = spec.EtcVolumeStorageConfig.StorageClassName
+
+	case splcommon.VarVolumeStorage:
+		storageCapacity, err = splcommon.ParseResourceQuantity(
+			spec.VarVolumeStorageConfig.StorageCapacity,
+			splcommon.DefaultVarVolumeStorageCapacity,
+		)
 		if err != nil {
 			return corev1.PersistentVolumeClaim{}, fmt.Errorf("%s: %s", "varStorage", err)
 		}
-		if spec.VarVolumeStorageConfig.StorageClassName != "" {
-			storageClassName = spec.VarVolumeStorageConfig.StorageClassName
-		}
+		storageClassName = spec.VarVolumeStorageConfig.StorageClassName
 	}
 
-	// Create a persistent volume claim
-	volumeClaim := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
-			Namespace: cr.GetNamespace(),
-			Labels:    labels,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: storageCapacity,
+	if adminManagedPV {
+		volumeClaim.Spec.StorageClassName = nil
+
+		volumeClaim = corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
+				Namespace: cr.GetNamespace(),
+				Labels:    labels,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageCapacity,
+					},
+				},
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app.kubernetes.io/name":     labels["app.kubernetes.io/name"],
+						"app.kubernetes.io/instance": labels["app.kubernetes.io/instance"],
+					},
 				},
 			},
-		},
+		}
+	} else {
+		volumeClaim = corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf(splcommon.PvcNamePrefix, volumeType),
+				Namespace: cr.GetNamespace(),
+				Labels:    labels,
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageCapacity,
+					},
+				},
+			},
+		}
+
+		if storageClassName != "" {
+			volumeClaim.Spec.StorageClassName = &storageClassName
+		}
+
 	}
 
-	// Assign storage class name if specified
-	if storageClassName != "" {
-		volumeClaim.Spec.StorageClassName = &storageClassName
-	}
 	return volumeClaim, nil
 }
 
@@ -367,6 +398,11 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
+	err = validateSplunkGeneralTerms()
+	if err != nil {
+		return err
+	}
+
 	// if not provided, set default values for imagePullSecrets
 	err = ValidateImagePullSecrets(ctx, c, cr, spec)
 	if err != nil {
@@ -483,7 +519,16 @@ func addSplunkVolumeToTemplate(podTemplateSpec *corev1.PodTemplateSpec, name str
 func addPVCVolumes(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, statefulSet *appsv1.StatefulSet, labels map[string]string, volumeType string) error {
 	// prepare and append persistent volume claims if storage is not ephemeral
 	var err error
-	volumeClaimTemplate, err := getSplunkVolumeClaims(cr, spec, labels, volumeType)
+	var adminManagedPV bool
+
+	annotations := cr.GetAnnotations()
+
+	// determine if CR's PVs are managed by an admin
+	if value, ok := annotations["enterprise.splunk.com/admin-managed-pv"]; ok && strings.ToLower(value) == "true" {
+		adminManagedPV = true
+	}
+
+	volumeClaimTemplate, err := getSplunkVolumeClaims(cr, spec, labels, volumeType, adminManagedPV)
 	if err != nil {
 		return err
 	}
@@ -562,10 +607,32 @@ func addStorageVolumes(ctx context.Context, cr splcommon.MetaObject, client splc
 
 func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject) (*corev1.ConfigMap, error) {
 
-	configMap := corev1.ConfigMap{
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("getProbeConfigMap").WithValues("namespace", cr.GetNamespace())
+
+	configMapName := GetProbeConfigMapName(cr.GetNamespace())
+	configMapNamespace := cr.GetNamespace()
+	namespacedName := types.NamespacedName{Namespace: configMapNamespace, Name: configMapName}
+
+	// Check if the config map already exists
+	scopedLog.Info("Checking for existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	var configMap corev1.ConfigMap
+	err := client.Get(ctx, namespacedName, &configMap)
+
+	if err == nil {
+		scopedLog.Info("Retrieved existing config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		return &configMap, nil
+	} else if !k8serrors.IsNotFound(err) {
+		scopedLog.Error(err, "Error retrieving config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+		return nil, err
+	}
+
+	// Existing config map not found, create one for the probes
+	scopedLog.Info("Creating new config map", "configMapName", configMapName, "configMapNamespace", configMapNamespace)
+	configMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetProbeConfigMapName(cr.GetNamespace()),
-			Namespace: cr.GetNamespace(),
+			Name:      configMapName,
+			Namespace: configMapNamespace,
 		},
 	}
 
@@ -860,6 +927,10 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
 	}
+	domainName := os.Getenv("CLUSTER_DOMAIN")
+	if domainName == "" {
+		domainName = "cluster.local"
+	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
 		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
@@ -868,6 +939,8 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_ROLE", Value: role},
 		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
+		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
+		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
 	}
 
 	// update variables for licensing, if configured
@@ -2033,4 +2106,11 @@ func validateStartupProbe(ctx context.Context, cr splcommon.MetaObject, startupP
 		scopedLog.Info("Startup Probe: PeriodSeconds is too small, recommended default minimum will be used", "configured", startupProbe.PeriodSeconds, "recommended minimum", startupProbePeriodSec)
 	}
 	return err
+}
+
+func validateSplunkGeneralTerms() error {
+	if os.Getenv("SPLUNK_GENERAL_TERMS") == "--accept-sgt-current-at-splunk-com" {
+		return nil
+	}
+	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
 }
