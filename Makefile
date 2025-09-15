@@ -232,9 +232,14 @@ $(KUSTOMIZE): $(LOCALBIN)
 
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 .PHONY: setup-envtest
-setup-envtest:
+setup-envtest: envtest
 	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
 		echo "Error setting up envtest"; exit 1; }
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
 ## Generate bundle manifests and metadata, then validate generated files.
 ## In addition, copy the newly generated crd files to helm crds.
