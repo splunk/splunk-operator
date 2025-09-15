@@ -155,5 +155,6 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("search-head-cluster-controller").
 		Complete(r)
 }

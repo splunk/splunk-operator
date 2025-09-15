@@ -52,6 +52,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        ports: []
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

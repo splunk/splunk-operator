@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -65,6 +66,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
+		BinaryAssetsDirectory: getFirstFoundEnvTestBinaryDir(),
 	}
 
 	var err error
@@ -166,3 +168,18 @@ var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	testEnv.Stop()
 })
+
+func getFirstFoundEnvTestBinaryDir() string {
+	basePath := filepath.Join("..", "..", "bin", "k8s")
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		logf.Log.Error(err, "Failed to read directory", "path", basePath)
+		return ""
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return filepath.Join(basePath, entry.Name())
+		}
+	}
+	return ""
+}
