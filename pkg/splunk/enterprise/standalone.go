@@ -70,7 +70,6 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// updates status after function completes
 	cr.Status.Replicas = cr.Spec.Replicas
 
-
 	// Ensure DB and summarize FIXME TODO
 	/*err = EnsureDatabaseForSHC(ctx, client, cr)
 	if err != nil {

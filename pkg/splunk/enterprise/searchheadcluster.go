@@ -27,6 +27,7 @@ import (
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	obsrecon "github.com/splunk/splunk-operator/pkg/splunk/enterprise/observability"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -250,6 +251,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
+		}
+		// Observability
+		sum, err := obsrecon.ReconcileObservability(ctx, client, cr)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "observability reconcile failed")
+		} else {
+			// status patch
+			cr.Status.ObservabilitySummary = sum
 		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {

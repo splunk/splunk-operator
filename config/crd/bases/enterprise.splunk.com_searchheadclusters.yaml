@@ -4641,6 +4641,10 @@ spec:
       jsonPath: .status.message
       name: Message
       type: string
+    - description: Observability summary
+      jsonPath: .status.observabilitySummary.message
+      name: Obs
+      type: string
     name: v4
     schema:
       openAPIV3Schema:
@@ -6479,6 +6483,56 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              observability:
+                description: Keep it small and safe-by-default (off unless enabled).
+                properties:
+                  metrics:
+                    properties:
+                      otel:
+                        properties:
+                          collectorNamespace:
+                            type: string
+                          createCollector:
+                            type: boolean
+                          enabled:
+                            type: boolean
+                          exporterConfigSecretRef:
+                            description: Provide your exporter configuration via a
+                              Secret (mount/env—out of scope for this POC).
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                          mode:
+                            type: string
+                          serviceMonitorSelector:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          targetAllocator:
+                            type: boolean
+                        type: object
+                      prometheus:
+                        properties:
+                          additionalLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          createPodMonitor:
+                            type: boolean
+                          createServiceMonitor:
+                            type: boolean
+                          enabled:
+                            type: boolean
+                          interval:
+                            type: string
+                          serviceMonitorNamespace:
+                            type: string
+                        type: object
+                    type: object
+                type: object
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -9490,6 +9544,45 @@ spec:
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret
                 type: string
+              observabilitySummary:
+                description: Observability wiring summary
+                properties:
+                  cnpg:
+                    description: CNPG-related counts we wired for metrics.
+                    properties:
+                      monitoredClusters:
+                        type: integer
+                      monitoredPoolers:
+                        type: integer
+                    type: object
+                  message:
+                    description: High-level one-liner, good for kubectl columns.
+                    type: string
+                  otel:
+                    description: Generic component mini-summary.
+                    properties:
+                      details:
+                        type: string
+                      enabled:
+                        type: boolean
+                      installed:
+                        type: boolean
+                      ready:
+                        type: boolean
+                    type: object
+                  prometheus:
+                    description: Prometheus and OpenTelemetry component summaries.
+                    properties:
+                      details:
+                        type: string
+                      enabled:
+                        type: boolean
+                      installed:
+                        type: boolean
+                      ready:
+                        type: boolean
+                    type: object
+                type: object
               phase:
                 description: current phase of the search head cluster
                 enum:

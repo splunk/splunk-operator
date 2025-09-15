@@ -19,7 +19,6 @@ import (
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters;backups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=backups;scheduledbackups;clusters;poolers,verbs=get;list;watch;create;update;patch;delete
 
-
 type DatabaseRestoreReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
