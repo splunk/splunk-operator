@@ -29,6 +29,12 @@ Installing the ```splunk/splunk-operator``` chart deploys the Splunk Operator wi
 helm show values splunk/splunk-operator
 ```
 
+### Installing CRDs
+ 
+# TODO: add explanation of why 
+
+The `splunk/splunk-operator` helm chart does not automatically install CRDs. To get the latest CRDs installed, checkout the latest from this repo
+
 ### Configuring Splunk Operator deployments
 
 There are a couple ways you can configure your operator deployment

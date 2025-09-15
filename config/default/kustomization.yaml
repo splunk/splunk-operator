@@ -119,13 +119,13 @@ patches:
       path: /spec/template/spec/containers/0/env
       value: 
       - name: WATCH_NAMESPACE
-        value: WATCH_NAMESPACE_VALUE
+        value: ""
       - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-        value: SPLUNK_ENTERPRISE_IMAGE
+        value: docker.io/splunk/splunk
       - name: OPERATOR_NAME
         value: splunk-operator
       - name: SPLUNK_GENERAL_TERMS
-        value: SPLUNK_GENERAL_TERMS_VALUE
+        value: ""
       - name: POD_NAME
         valueFrom:
           fieldRef:
