@@ -23,7 +23,7 @@ if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   echo "Installing enterprise CRDs..."
   make kustomize
   make uninstall
-  bin/kustomize build config/crd | kubectl create -f -
+  make install
   if [ "${CLUSTER_WIDE}" != "true" ]; then
     helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" helm-chart/splunk-operator
   else
