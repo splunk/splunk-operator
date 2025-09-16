@@ -5,7 +5,6 @@ on:
       - develop
       - main
       - feature**
-      - helm-chart-3.0.0
   workflow_dispatch:
 jobs:
   build-operator-image:
