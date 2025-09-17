@@ -50,9 +50,8 @@ The [Kubernetes Operator SDK](https://github.com/operator-framework/operator-sdk
 must also be installed to build this project.
 
 ```
-git clone -b v1.31.0 https://github.com/operator-framework/operator-sdk
+git clone -b v1.39.0 https://github.com/operator-framework/operator-sdk
 cd operator-sdk
-make tidy
 make install
 ```
 
