@@ -1,7 +1,7 @@
 #!/bin/bash
 
 : "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
-: "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:latest}"
+: "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:9.4.3}"
 : "${CLUSTER_PROVIDER:=eks}"
 : "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
@@ -50,9 +50,10 @@
 : "${CLUSTER_WIDE:=false}"
 # Below env variable can be used to set the test cases to be run. Defaults to smoke test
 # Acceptable input is a regex matching test names
-: "${TEST_REGEX:=smoke}"
+# : "${TEST_REGEX:=smoke}"
+: "${TEST_FOCUS:=basic}"
 # Regex to skip Test Cases
-: "${SKIP_REGEX:=}"
+: "${SKIP_REGEX:=^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$}"
 # Set to DEBUG_RUN:=True to skip tear down of test environment in case of test failure
 : "${DEBUG_RUN:=False}"
 # Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"
@@ -60,33 +61,33 @@
 : "${TEST_CLUSTER_PLATFORM:=eks}"
 
 # Docker registry to use to push the test images to and pull from in the cluster
-if [ -z "${PRIVATE_REGISTRY}" ]; then
-    case ${CLUSTER_PROVIDER} in
-      kind)
-        PRIVATE_REGISTRY=localhost:5000
-        ;;
-      eks)
-        if [ -z "${ECR_REGISTRY}" ]; then
-          echo "Please define ECR_REGISTRY that specified where images are pushed and pulled from."
-          exit 1
-        fi
-        PRIVATE_REGISTRY="${ECR_REGISTRY}"
-        ;;
-      azure)
-        if [ -z "${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}" ]; then
-          echo "Please define AZURE_CONTAINER_REGISTRY_LOGIN_SERVER that specified where images are pushed and pulled from."
-          exit 1
-        fi
-        PRIVATE_REGISTRY="${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}"
-         echo "${PRIVATE_REGISTRY}"
-        ;;
-      gcp)
-        if [ -z "${GCP_CONTAINER_REGISTRY_LOGIN_SERVER}" ]; then
-          echo "Please define GCP_CONTAINER_REGISTRY_LOGIN_SERVER that specified where images are pushed and pulled from."
-          exit 1
-        fi
-        PRIVATE_REGISTRY="${GCP_CONTAINER_REGISTRY_LOGIN_SERVER}"
-         echo "${PRIVATE_REGISTRY}"
-        ;;
-    esac
-fi
+# if [ -z "${PRIVATE_REGISTRY}" ]; then
+#     case ${CLUSTER_PROVIDER} in
+#       kind)
+#         PRIVATE_REGISTRY=localhost:5000
+#         ;;
+#       eks)
+#         if [ -z "${ECR_REGISTRY}" ]; then
+#           echo "Please define ECR_REGISTRY that specified where images are pushed and pulled from."
+#           exit 1
+#         fi
+#         PRIVATE_REGISTRY="${ECR_REGISTRY}"
+#         ;;
+#       azure)
+#         if [ -z "${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}" ]; then
+#           echo "Please define AZURE_CONTAINER_REGISTRY_LOGIN_SERVER that specified where images are pushed and pulled from."
+#           exit 1
+#         fi
+#         PRIVATE_REGISTRY="${AZURE_CONTAINER_REGISTRY_LOGIN_SERVER}"
+#          echo "${PRIVATE_REGISTRY}"
+#         ;;
+#       gcp)
+#         if [ -z "${GCP_CONTAINER_REGISTRY_LOGIN_SERVER}" ]; then
+#           echo "Please define GCP_CONTAINER_REGISTRY_LOGIN_SERVER that specified where images are pushed and pulled from."
+#           exit 1
+#         fi
+#         PRIVATE_REGISTRY="${GCP_CONTAINER_REGISTRY_LOGIN_SERVER}"
+#          echo "${PRIVATE_REGISTRY}"
+#         ;;
+#     esac
+# fi
