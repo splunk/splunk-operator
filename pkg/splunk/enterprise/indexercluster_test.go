@@ -2041,12 +2041,13 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 					MaxRetriesPerPart:         4,
 					RetryPolicy:               "max_count",
 					SendInterval:              "5s",
+					EncodingFormat: 		   "s2s",
 				},
 			},
 		},
 	}
 
-	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(newCR)
+	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(&newCR.Status, newCR)
 	assert.Equal(t, 8, len(pullBusChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", newCR.Spec.PullBus.Type},
@@ -2069,8 +2070,8 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.DeadLetterQueueName},
 		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PullBus.SQS.RetryPolicy, newCR.Spec.PullBus.Type), fmt.Sprintf("%d", newCR.Spec.PullBus.SQS.MaxRetriesPerPart)},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PullBus.Type), "s2s"},
 		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PullBus.Type), "s2s"},
 	}, pullBusChangedFieldsOutputs)
 
 	assert.Equal(t, 5, len(pipelineChangedFields))

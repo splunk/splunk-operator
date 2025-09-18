@@ -249,6 +249,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
+		cr.Status.PullBus = cr.Spec.PullBus
+		cr.Status.PipelineConfig = cr.Spec.PipelineConfig
+
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
@@ -512,6 +515,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				return result, err
 			}
 		}
+
+		cr.Status.PullBus = cr.Spec.PullBus
+		cr.Status.PipelineConfig = cr.Spec.PipelineConfig
 
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
@@ -1236,14 +1242,18 @@ func (mgr *indexerClusterPodManager) handlePullBusOrPipelineConfigChange(ctx con
 		}
 		splunkClient := newSplunkClientForPullBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(newCR)
+		pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(&newCR.Status, newCR)
 
-		if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), pullBusChangedFieldsOutputs); err != nil {
-			updateErr = err
+		for _, pbVal := range pullBusChangedFieldsOutputs {
+			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), [][]string{pbVal}); err != nil {
+				updateErr = err
+			}
 		}
 
-		if err := splunkClient.UpdateConfFile("inputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), pullBusChangedFieldsInputs); err != nil {
-			updateErr = err
+		for _, pbVal := range pullBusChangedFieldsInputs {
+			if err := splunkClient.UpdateConfFile("inputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PullBus.SQS.QueueName), [][]string{pbVal}); err != nil {
+				updateErr = err
+			}
 		}
 
 		for _, field := range pipelineChangedFields {
@@ -1257,35 +1267,18 @@ func (mgr *indexerClusterPodManager) handlePullBusOrPipelineConfigChange(ctx con
 	return updateErr
 }
 
-func getChangedPullBusAndPipelineFieldsIndexer(newCR *enterpriseApi.IndexerCluster) (pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields [][]string) {
+func getChangedPullBusAndPipelineFieldsIndexer(oldCrStatus *enterpriseApi.IndexerClusterStatus, newCR *enterpriseApi.IndexerCluster) (pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields [][]string) {
 	// Compare PullBus fields
+	oldPB := oldCrStatus.PullBus
 	newPB := newCR.Spec.PullBus
+	oldPC := oldCrStatus.PipelineConfig
 	newPC := newCR.Spec.PipelineConfig
 
 	// Push all PullBus fields
-	pullBusChangedFieldsInputs = [][]string{
-		{"remote_queue.type", newPB.Type},
-		{fmt.Sprintf("remote_queue.%s.auth_region", newPB.Type), newPB.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", newPB.Type), newPB.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPB.Type), newPB.SQS.LargeMessageStoreEndpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPB.Type), newPB.SQS.LargeMessageStorePath},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPB.Type), newPB.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPB.SQS.RetryPolicy, newPB.Type), fmt.Sprintf("%d", newPB.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newPB.Type), newPB.SQS.RetryPolicy},
-	}
-
-	pullBusChangedFieldsOutputs = pullBusChangedFieldsInputs
-	pullBusChangedFieldsOutputs = append(pullBusChangedFieldsOutputs, []string{fmt.Sprintf("remote_queue.%s.encoding_format", newPB.Type), "s2s"})
-	pullBusChangedFieldsOutputs = append(pullBusChangedFieldsOutputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", newPB.Type), newPB.SQS.SendInterval})
+	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs = pullBusChanged(oldPB, newPB)
 
 	// Always set all pipeline fields, not just changed ones
-	pipelineChangedFields = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPC.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPC.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPC.Typing)},
-	}
+	pipelineChangedFields = pipelineConfigChanged(oldPC, newPC, oldCrStatus.PullBus.SQS.QueueName != "", true)
 
 	return
 }
@@ -1299,4 +1292,41 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	previousVersion := strings.Split(previousImage, ":")[1]
 	currentVersion := strings.Split(currentImage, ":")[1]
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
+}
+
+func pullBusChanged(oldPullBus, newPullBus enterpriseApi.PushBusSpec) (inputs, outputs [][]string) {
+	if oldPullBus.Type != newPullBus.Type {
+		inputs = append(inputs, []string{"remote_queue.type", newPullBus.Type})
+	}
+	if oldPullBus.SQS.AuthRegion != newPullBus.SQS.AuthRegion {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", newPullBus.Type), newPullBus.SQS.AuthRegion})
+	}
+	if oldPullBus.SQS.Endpoint != newPullBus.SQS.Endpoint {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", newPullBus.Type), newPullBus.SQS.Endpoint})
+	}
+	if oldPullBus.SQS.LargeMessageStoreEndpoint != newPullBus.SQS.LargeMessageStoreEndpoint {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPullBus.Type), newPullBus.SQS.LargeMessageStoreEndpoint})
+	}
+	if oldPullBus.SQS.LargeMessageStorePath != newPullBus.SQS.LargeMessageStorePath {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPullBus.Type), newPullBus.SQS.LargeMessageStorePath})
+	}
+	if oldPullBus.SQS.DeadLetterQueueName != newPullBus.SQS.DeadLetterQueueName {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPullBus.Type), newPullBus.SQS.DeadLetterQueueName})
+	}
+	if oldPullBus.SQS.MaxRetriesPerPart != newPullBus.SQS.MaxRetriesPerPart || oldPullBus.SQS.RetryPolicy != newPullBus.SQS.RetryPolicy {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPullBus.SQS.RetryPolicy, newPullBus.Type), fmt.Sprintf("%d", newPullBus.SQS.MaxRetriesPerPart)})
+	}
+	if oldPullBus.SQS.RetryPolicy != newPullBus.SQS.RetryPolicy {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.retry_policy", newPullBus.Type), newPullBus.SQS.RetryPolicy})
+	}
+
+	outputs = inputs
+	if oldPullBus.SQS.SendInterval != newPullBus.SQS.SendInterval {
+		outputs = append(outputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", newPullBus.Type), newPullBus.SQS.SendInterval})
+	}
+	if oldPullBus.SQS.EncodingFormat != newPullBus.SQS.EncodingFormat {
+		outputs = append(outputs, []string{fmt.Sprintf("remote_queue.%s.encoding_format", newPullBus.Type), newPullBus.SQS.EncodingFormat})
+	}
+
+	return inputs, outputs
 }

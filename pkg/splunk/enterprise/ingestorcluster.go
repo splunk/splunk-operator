@@ -319,7 +319,7 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 
 	if cr.Spec.PushBus.SQS.EncodingFormat == "" {
 		cr.Spec.PushBus.SQS.EncodingFormat = "s2s"
-	}	
+	}
 
 	if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
 		return errors.New("PipelineConfig spec cannot be empty")
@@ -387,7 +387,7 @@ func getChangedPushBusAndPipelineFields(oldCrStatus *enterpriseApi.IngestorClust
 	pushBusChangedFields = pushBusChanged(oldPB, newPB)
 
 	// Always changed pipeline fields
-	pipelineChangedFields = pipelineConfigChanged(oldPC, newPC)
+	pipelineChangedFields = pipelineConfigChanged(oldPC, newPC, oldCrStatus.PushBus.SQS.QueueName != "", false)
 
 	return
 }
@@ -409,23 +409,24 @@ var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Inges
 	}
 }
 
-func pipelineConfigChanged(oldPipelineConfig, newPipelineConfig enterpriseApi.PipelineConfigSpec) (output [][]string) {
-	if oldPipelineConfig.RemoteQueueRuleset != newPipelineConfig.RemoteQueueRuleset {
+func pipelineConfigChanged(oldPipelineConfig, newPipelineConfig enterpriseApi.PipelineConfigSpec, pushBusStatusExists bool, isIndexer bool) (output [][]string) {
+	//  || !pushBusStatusExists - added to make it work for initial creation because if any field is false (which is the default of bool for Go), then it wouldn't be added to output
+	if oldPipelineConfig.RemoteQueueRuleset != newPipelineConfig.RemoteQueueRuleset || !pushBusStatusExists {
 		output = append(output, []string{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueRuleset)})
 	}
-	if oldPipelineConfig.RuleSet != newPipelineConfig.RuleSet {
+	if oldPipelineConfig.RuleSet != newPipelineConfig.RuleSet || !pushBusStatusExists {
 		output = append(output, []string{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPipelineConfig.RuleSet)})
 	}
-	if oldPipelineConfig.RemoteQueueTyping != newPipelineConfig.RemoteQueueTyping {
+	if oldPipelineConfig.RemoteQueueTyping != newPipelineConfig.RemoteQueueTyping || !pushBusStatusExists {
 		output = append(output, []string{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueTyping)})
 	}
-	if oldPipelineConfig.RemoteQueueOutput != newPipelineConfig.RemoteQueueOutput {
+	if oldPipelineConfig.RemoteQueueOutput != newPipelineConfig.RemoteQueueOutput || !pushBusStatusExists {
 		output = append(output, []string{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueOutput)})
 	}
-	if oldPipelineConfig.Typing != newPipelineConfig.Typing {
+	if oldPipelineConfig.Typing != newPipelineConfig.Typing || !pushBusStatusExists {
 		output = append(output, []string{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPipelineConfig.Typing)})
 	}
-	if oldPipelineConfig.IndexerPipe != newPipelineConfig.IndexerPipe {
+	if (oldPipelineConfig.IndexerPipe != newPipelineConfig.IndexerPipe || !pushBusStatusExists) && !isIndexer {
 		output = append(output, []string{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newPipelineConfig.IndexerPipe)})
 	}
 	return output
