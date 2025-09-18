@@ -47,13 +47,13 @@
 : "${GCP_STORAGE_ACCOUNT_KEY:=}"
 : "${GCP_MANAGED_ID_ENABLED:=}"
 # set when operator need to be installed clusterwide
-: "${CLUSTER_WIDE:=false}"
+: "${CLUSTER_WIDE:=true}"
 # Below env variable can be used to set the test cases to be run. Defaults to smoke test
 # Acceptable input is a regex matching test names
 # : "${TEST_REGEX:=smoke}"
 : "${TEST_FOCUS:=basic}"
 # Regex to skip Test Cases
-: "${SKIP_REGEX:=^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$}"
+: "${SKIP_REGEX:=}"
 # Set to DEBUG_RUN:=True to skip tear down of test environment in case of test failure
 : "${DEBUG_RUN:=False}"
 # Type of deplyoment, manifest files or helm chart, possible values "manifest" or "helm"
