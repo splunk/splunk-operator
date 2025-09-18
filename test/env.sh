@@ -1,8 +1,8 @@
 #!/bin/bash
 
-: "${SPLUNK_OPERATOR_IMAGE:=splunk/splunk-operator:latest}"
-: "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:9.4.3}"
-: "${CLUSTER_PROVIDER:=eks}"
+: "${SPLUNK_OPERATOR_IMAGE:=rliebermansplunk/splunk-operator:operator_18_sep_2025}"
+: "${SPLUNK_ENTERPRISE_IMAGE:=splunk/splunk:10.0.0}"
+: "${CLUSTER_PROVIDER:=}"
 : "${CLUSTER_NAME:=integration-test-cluster-eks}"
 : "${NUM_WORKERS:=3}"
 : "${NUM_NODES:=2}"

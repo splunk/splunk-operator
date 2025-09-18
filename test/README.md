@@ -32,6 +32,49 @@ Deployments.
 
 ## Running the tests
 
+### K3s Setup
+
+You need to be connected to a Kubernetes cluster, or create a K3s cluster on an ubuntu machine in order to run the tests. These steps walk you through how to setup a K3s cluster and run the tests if needed.
+
+1. Create an ubuntu EC2 instance on go/ccm.
+2. Ssh into the instance, and run `sudo su -`
+3. Download and start docker 
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+systemctl start docker
+```
+4. Clone the splunk operator repo and checkout this branch, which has the environment variables setup to pull a specific splunk operator image and run a single s1 deploy test case
+```bash
+git clone https://github.com/splunk/splunk-operator.git
+cd splunk-operator
+git checkout single_test_case
+```
+5. Install go
+```bash
+wget https://go.dev/dl/go1.24.2.linux-amd64.tar.gz
+rm -rf /usr/local/go && tar -C /usr/local -xzf go1.24.2.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin
+go version
+```
+6. Install ginkgo - DOES NOT WORK
+```bash
+apt install ginkgo
+go install github.com/onsi/ginkgo/v2/ginkgo
+go get github.com/onsi/gomega/...
+go mod tidy
+```
+7. Install K3s
+```bash
+curl -sfL https://get.k3s.io | sh -
+alias kubectl="/usr/local/bin/k3s kubectl"
+kubectl get nodes
+```
+8. Run the test case
+```bash
+make int-test
+```
+
 To run the tests, you will need to create or use an existing Kubernetes cluster. If you have a powerful machine and
 Docker engine installed, you can create a local Kubernetes cluster on top of Docker (Kubernetes-IN-Docker aka KIND
 cluster) for testing purpose.
