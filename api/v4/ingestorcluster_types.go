@@ -70,27 +70,27 @@ type SQSSpec struct {
 
 	DeadLetterQueueName string `json:"deadLetterQueueName"`
 
-	MaxRetriesPerPart int `json:"maxRetriesPerPart,omitempty"`
+	MaxRetriesPerPart int `json:"maxRetriesPerPart"`
 
-	RetryPolicy string `json:"retryPolicy,omitempty"`
+	RetryPolicy string `json:"retryPolicy"`
 
-	SendInterval string `json:"sendInterval,omitempty"`
+	SendInterval string `json:"sendInterval"`
 
-	EncodingFormat string `json:"encodingFormat,omitempty"`
+	EncodingFormat string `json:"encodingFormat"`
 }
 
 type PipelineConfigSpec struct {
-	RemoteQueueRuleset bool `json:"remoteQueueRuleset,omitempty"`
+	RemoteQueueRuleset bool `json:"remoteQueueRuleset"`
 
-	RuleSet bool `json:"ruleSet,omitempty"`
+	RuleSet bool `json:"ruleSet"`
 
-	RemoteQueueTyping bool `json:"remoteQueueTyping,omitempty"`
+	RemoteQueueTyping bool `json:"remoteQueueTyping"`
 
-	RemoteQueueOutput bool `json:"remoteQueueOutput,omitempty"`
+	RemoteQueueOutput bool `json:"remoteQueueOutput"`
 
-	Typing bool `json:"typing,omitempty"`
+	Typing bool `json:"typing"`
 
-	IndexerPipe bool `json:"indexerPipe,omitempty"`
+	IndexerPipe bool `json:"indexerPipe"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
