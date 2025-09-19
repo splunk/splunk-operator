@@ -281,32 +281,67 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		}
 	}
 
-	if cr.Spec.PushBus == (enterpriseApi.PushBusSpec{}) {
-		return errors.New("PushBus spec cannot be empty")
+	err := validateIngestorSpecificInputs(cr)
+	if err != nil {
+		return err
 	}
 
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+}
+
+func validateIngestorSpecificInputs(cr *enterpriseApi.IngestorCluster) error {
+	if cr.Spec.PushBus == (enterpriseApi.PushBusSpec{}) {
+		return errors.New("pushBus cannot be empty")
+	}
+
+	// sqs_smartbus type is supported for now
 	if cr.Spec.PushBus.Type != "sqs_smartbus" {
-		return errors.New("only sqs_smartbus type is supported in PushBus spec")
+		return errors.New("only sqs_smartbus type is supported in pushBus type")
 	}
 
 	if cr.Spec.PushBus.SQS == (enterpriseApi.SQSSpec{}) {
-		return errors.New("PushBus SQSSpec spec cannot be empty")
+		return errors.New("pushBus sqs cannot be empty")
 	}
 
+	// Cannot be empty fields check
+	cannotBeEmptyFields := []string{}
+	if cr.Spec.PushBus.SQS.QueueName == "" {
+		cannotBeEmptyFields = append(cannotBeEmptyFields, "queueName")
+	}
+
+	if cr.Spec.PushBus.SQS.AuthRegion == "" {
+		cannotBeEmptyFields = append(cannotBeEmptyFields, "authRegion")
+	}
+
+	if cr.Spec.PushBus.SQS.DeadLetterQueueName == "" {
+		cannotBeEmptyFields = append(cannotBeEmptyFields, "deadLetterQueueName")
+	}
+
+	if len(cannotBeEmptyFields) > 0 {
+		return errors.New("pushBus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
+	}
+
+	// Have to start with https:// or s3:// checks
+	haveToStartWithHttps := []string{}
 	if !strings.HasPrefix(cr.Spec.PushBus.SQS.Endpoint, "https://") {
-		return errors.New("SQS Endpoint must start with https://")
+		haveToStartWithHttps = append(haveToStartWithHttps, "endpoint")
 	}
 
 	if !strings.HasPrefix(cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint, "https://") {
-		return errors.New("SQS LargeMessageStoreEndpoint must start with https://")
+		haveToStartWithHttps = append(haveToStartWithHttps, "largeMessageStoreEndpoint")
+	}
+
+	if len(haveToStartWithHttps) > 0 {
+		return errors.New("pushBus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
 	}
 
 	if !strings.HasPrefix(cr.Spec.PushBus.SQS.LargeMessageStorePath, "s3://") {
-		return errors.New("SQS LargeMessageStorePath must start with s3://")
+		return errors.New("pushBus sqs largeMessageStorePath must start with s3://")
 	}
 
+	// Assign default values if not provided
 	if cr.Spec.PushBus.SQS.MaxRetriesPerPart < 0 {
-		cr.Spec.PushBus.SQS.MaxRetriesPerPart = 3
+		cr.Spec.PushBus.SQS.MaxRetriesPerPart = 4
 	}
 
 	if cr.Spec.PushBus.SQS.RetryPolicy == "" {
@@ -321,11 +356,12 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		cr.Spec.PushBus.SQS.EncodingFormat = "s2s"
 	}
 
+	// PipelineConfig cannot be empty
 	if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
-		return errors.New("PipelineConfig spec cannot be empty")
+		return errors.New("pipelineConfig spec cannot be empty")
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return nil
 }
 
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors

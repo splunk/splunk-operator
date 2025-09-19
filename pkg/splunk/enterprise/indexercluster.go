@@ -1101,29 +1101,64 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 		return fmt.Errorf("multisite cluster does not support cluster manager to be located in a different namespace")
 	}
 
+	err := validateIndexerSpecificInputs(cr)
+	if err != nil {
+		return err
+	}
+
+	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+}
+
+func validateIndexerSpecificInputs(cr *enterpriseApi.IndexerCluster) error {
+	// Otherwise, it means that no Ingestion & Index separation is applied
 	if cr.Spec.PullBus != (enterpriseApi.PushBusSpec{}) {
 		if cr.Spec.PullBus.Type != "sqs_smartbus" {
-			return errors.New("only sqs_smartbus type is supported in PushBus spec")
+			return errors.New("only sqs_smartbus type is supported in pullBus type")
 		}
 
 		if cr.Spec.PullBus.SQS == (enterpriseApi.SQSSpec{}) {
-			return errors.New("PushBus SQSSpec spec cannot be empty")
+			return errors.New("pullBus sqs cannot be empty")
 		}
 
+		// Cannot be empty fields check
+		cannotBeEmptyFields := []string{}
+		if cr.Spec.PullBus.SQS.QueueName == "" {
+			cannotBeEmptyFields = append(cannotBeEmptyFields, "queueName")
+		}
+
+		if cr.Spec.PullBus.SQS.AuthRegion == "" {
+			cannotBeEmptyFields = append(cannotBeEmptyFields, "authRegion")
+		}
+
+		if cr.Spec.PullBus.SQS.DeadLetterQueueName == "" {
+			cannotBeEmptyFields = append(cannotBeEmptyFields, "deadLetterQueueName")
+		}
+
+		if len(cannotBeEmptyFields) > 0 {
+			return errors.New("pullBus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
+		}
+
+		// Have to start with https:// or s3:// checks
+		haveToStartWithHttps := []string{}
 		if !strings.HasPrefix(cr.Spec.PullBus.SQS.Endpoint, "https://") {
-			return errors.New("SQS Endpoint must start with https://")
+			haveToStartWithHttps = append(haveToStartWithHttps, "endpoint")
 		}
 
 		if !strings.HasPrefix(cr.Spec.PullBus.SQS.LargeMessageStoreEndpoint, "https://") {
-			return errors.New("SQS LargeMessageStoreEndpoint must start with https://")
+			haveToStartWithHttps = append(haveToStartWithHttps, "largeMessageStoreEndpoint")
+		}
+
+		if len(haveToStartWithHttps) > 0 {
+			return errors.New("pullBus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
 		}
 
 		if !strings.HasPrefix(cr.Spec.PullBus.SQS.LargeMessageStorePath, "s3://") {
-			return errors.New("SQS LargeMessageStorePath must start with s3://")
+			return errors.New("pullBus sqs largeMessageStorePath must start with s3://")
 		}
 
+		// Assign default values if not provided
 		if cr.Spec.PullBus.SQS.MaxRetriesPerPart < 0 {
-			cr.Spec.PullBus.SQS.MaxRetriesPerPart = 3
+			cr.Spec.PullBus.SQS.MaxRetriesPerPart = 4
 		}
 
 		if cr.Spec.PullBus.SQS.RetryPolicy == "" {
@@ -1139,11 +1174,11 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 		}
 
 		if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
-			return errors.New("PipelineConfig spec cannot be empty")
+			return errors.New("pipelineConfig spec cannot be empty")
 		}
 	}
 
-	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
+	return nil
 }
 
 // helper function to get the list of IndexerCluster types in the current namespace
