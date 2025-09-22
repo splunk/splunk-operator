@@ -16,6 +16,11 @@ const (
 
 	//SHClusterAppsLoc = "etc/shcluster/apps"
 	SHClusterAppsLoc = SHCluster + "/apps"
+
+	TLSVolumeName = "splunk-tls"
+	TLSMountPath  = "/mnt/certs"
+
+	ReloadTimeoutSeconds = 15
 )
 
 // List of Operator Paths

@@ -17,6 +17,8 @@ package enterprise
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -2489,4 +2491,22 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
 	return err
+}
+
+// hashTLSSecret returns sha256(tls.crt||tls.key||ca.crt) or "" if any missing.
+func hashTLSSecret(s *corev1.Secret) string {
+	if s.Data == nil {
+		return ""
+	}
+	crt, ok1 := s.Data["tls.crt"]
+	key, ok2 := s.Data["tls.key"]
+	ca,  ok3 := s.Data["ca.crt"]
+	if !ok1 || !ok2 || !ok3 {
+		return ""
+	}
+	h := sha256.New()
+	h.Write(crt)
+	h.Write(key)
+	h.Write(ca)
+	return hex.EncodeToString(h.Sum(nil))
 }

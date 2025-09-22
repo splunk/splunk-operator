@@ -2335,6 +2335,12 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              tlsSecretName:
+                description: |-
+                  tlsSecretName enables cert-manager Secret based mTLS for this CR.
+                  Secret must contain: tls.crt, tls.key, ca.crt
+                  If empty, nothing changes.
+                type: string
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -7096,6 +7102,12 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              tlsSecretName:
+                description: |-
+                  tlsSecretName enables cert-manager Secret based mTLS for this CR.
+                  Secret must contain: tls.crt, tls.key, ca.crt
+                  If empty, nothing changes.
+                type: string
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -9377,6 +9389,9 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
+              lastTLSSecretHash:
+                description: Last observed hash of tls bundle (only used for provider=Secret)
+                type: string
               message:
                 description: Auxillary message describing CR status
                 type: string

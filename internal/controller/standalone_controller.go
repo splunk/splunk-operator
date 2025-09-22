@@ -122,44 +122,78 @@ var ApplyStandalone = func(ctx context.Context, client client.Client, instance *
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.Standalone{}).
-		WithEventFilter(predicate.Or(
-			common.GenerationChangedPredicate(),
-			common.AnnotationChangedPredicate(),
-			common.LabelChangedPredicate(),
-			common.SecretChangedPredicate(),
-			common.ConfigMapChangedPredicate(),
-			common.StatefulsetChangedPredicate(),
-			common.PodChangedPredicate(),
-			common.CrdChangedPredicate(),
-		)).
-		Watches(&appsv1.StatefulSet{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
-			)).
-		Watches(&corev1.Secret{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
-			)).
-		Watches(&corev1.ConfigMap{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
-			)).
-		Watches(&corev1.Pod{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&enterpriseApi.Standalone{},
-			)).
-		WithOptions(controller.Options{
-			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		}).
-		Complete(r)
+    // Index Standalone by spec.tlsSecretName
+    if err := mgr.GetFieldIndexer().IndexField(context.Background(),
+        &enterpriseApi.Standalone{}, "spec.tlsSecretName",
+        func(obj client.Object) []string {
+            s := obj.(*enterpriseApi.Standalone)
+            if s.Spec.TLSSecretName == "" {
+                return nil
+            }
+            return []string{s.Spec.TLSSecretName}
+        },
+    ); err != nil {
+        return err
+    }
+
+    // Map Secret -> Standalone list by the indexed field
+    secretToCR := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+        sec := o.(*corev1.Secret)
+        var list enterpriseApi.StandaloneList
+        if err := r.List(ctx, &list,
+            client.InNamespace(sec.Namespace),
+            client.MatchingFields{"spec.tlsSecretName": sec.Name},
+        ); err != nil {
+            return nil
+        }
+        reqs := make([]reconcile.Request, 0, len(list.Items))
+        for i := range list.Items {
+            reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
+        }
+        return reqs
+    })
+
+    return ctrl.NewControllerManagedBy(mgr).
+        For(&enterpriseApi.Standalone{}).
+        WithEventFilter(predicate.Or(
+            common.GenerationChangedPredicate(),
+            common.AnnotationChangedPredicate(),
+            common.LabelChangedPredicate(),
+            common.SecretChangedPredicate(),
+            common.ConfigMapChangedPredicate(),
+            common.StatefulsetChangedPredicate(),
+            common.PodChangedPredicate(),
+            common.CrdChangedPredicate(),
+        )).
+        Watches(&appsv1.StatefulSet{},
+            handler.EnqueueRequestForOwner(
+                mgr.GetScheme(),
+                mgr.GetRESTMapper(),
+                &enterpriseApi.Standalone{},
+            )).
+        // keep your existing owner-based Secret watch
+        Watches(&corev1.Secret{},
+            handler.EnqueueRequestForOwner(
+                mgr.GetScheme(),
+                mgr.GetRESTMapper(),
+                &enterpriseApi.Standalone{},
+            )).
+        // add our targeted Secret watch for cert-manager Secret (by name)
+        Watches(&corev1.Secret{}, secretToCR).
+        Watches(&corev1.ConfigMap{},
+            handler.EnqueueRequestForOwner(
+                mgr.GetScheme(),
+                mgr.GetRESTMapper(),
+                &enterpriseApi.Standalone{},
+            )).
+        Watches(&corev1.Pod{},
+            handler.EnqueueRequestForOwner(
+                mgr.GetScheme(),
+                mgr.GetRESTMapper(),
+                &enterpriseApi.Standalone{},
+            )).
+        WithOptions(controller.Options{
+            MaxConcurrentReconciles: enterpriseApi.TotalWorker,
+        }).
+        Complete(r)
 }

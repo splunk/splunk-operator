@@ -22,7 +22,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	tlsprov "github.com/splunk/splunk-operator/pkg/tls"
 )
 
 // ApplyStandalone reconciles the StatefulSet for N standalone instances of Splunk Enterprise.
@@ -224,6 +225,26 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 	cr.Status.Phase = phase
 
+	// --- TLS hot-reload on Secret rotation (opt-in) ---
+	if cr.Spec.TLSSecretName != "" && cr.Status.ReadyReplicas > 0 {
+		var tlsSec corev1.Secret
+		if e := client.Get(ctx, types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.TLSSecretName}, &tlsSec); e == nil {
+			newHash := hashTLSSecret(&tlsSec)
+			if newHash != "" && newHash != cr.Status.LastTLSSecretHash {
+				scopedLog.Info("Detected TLS Secret change, triggering hot reload",
+					"secret", cr.Spec.TLSSecretName, "oldHash", cr.Status.LastTLSSecretHash, "newHash", newHash)
+				if e := reloadAllStandalonePods(ctx, client, cr); e != nil {
+					eventPublisher.Warning(ctx, "TLSHotReload", fmt.Sprintf("hot reload failed: %s", e.Error()))
+					// do not fail hard, requeue soon
+					result.Requeue = true
+					result.RequeueAfter = 30 * time.Second
+				} else {
+					cr.Status.LastTLSSecretHash = newHash
+				}
+			}
+		}
+	}
+
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
@@ -282,6 +303,11 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 	// Setup App framework staging volume for apps
 	setupAppsStagingVolume(ctx, client, cr, &ss.Spec.Template, &cr.Spec.AppFrameworkConfig)
 
+	// Mount cert-manager TLS Secret at /mnt/certs if opted in
+	if cr.Spec.TLSSecretName != "" {
+		tlsprov.EnsureTLSMount(&ss.Spec.Template, cr.Spec.TLSSecretName)
+	}
+
 	return ss, nil
 }
 
@@ -322,4 +348,46 @@ func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr spl
 	}
 
 	return objectList, nil
+}
+
+
+// reloadAllStandalonePods hits reload endpoints on every pod for this CR.
+func reloadAllStandalonePods(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.Standalone) error {
+	var pods corev1.PodList
+	if err := c.List(ctx, &pods,
+		client.InNamespace(cr.GetNamespace()),
+		client.MatchingLabels{"app.kubernetes.io/instance": fmt.Sprintf("splunk-%s-standalone", cr.GetName())},
+	); err != nil {
+		return err
+	}
+
+	user, pass, err := getAdminCreds(ctx, c, cr)
+	if err != nil { return err }
+
+	httpClient := newInsecureHTTPClient()
+	var firstErr error
+
+	for i := range pods.Items {
+		p := &pods.Items[i]
+		if p.Status.PodIP == "" {
+			continue
+		}
+		scli := &splclient.SplunkClient{
+			ManagementURI: "https://" + p.Status.PodIP + ":8089",
+			Username:      user,
+			Password:      pass,
+			Client:        httpClient,
+		}
+		// 1) splunkd ssl
+		if err := callSplunk(ctx, scli, "/services/server/control/reload_ssl_config", url.Values{}); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		// 2) HEC ssl
+		if err := callSplunk(ctx, scli, "/services/data/inputs/http/ssl/_reload", url.Values{"requireServerRestart": {"true"}}); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		// 3) web proxy only (optional)
+		_ = callSplunk(ctx, scli, "/services/server/control/restart_webui_proxy_only", url.Values{})
+	}
+	return firstErr
 }

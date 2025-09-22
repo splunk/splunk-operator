@@ -76,6 +76,9 @@ type StandaloneStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Last observed hash of tls bundle (only used for provider=Secret)
+	LastTLSSecretHash string `json:"lastTLSSecretHash,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

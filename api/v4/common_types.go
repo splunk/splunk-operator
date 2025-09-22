@@ -112,6 +112,12 @@ type Spec struct {
 
 	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	// tlsSecretName enables cert-manager Secret based mTLS for this CR.
+	// Secret must contain: tls.crt, tls.key, ca.crt
+	// If empty, nothing changes.
+	// +optional
+	TLSSecretName string `json:"tlsSecretName,omitempty"`
 }
 
 // Phase is used to represent the current phase of a custom resource

@@ -2206,6 +2206,12 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              tlsSecretName:
+                description: |-
+                  tlsSecretName enables cert-manager Secret based mTLS for this CR.
+                  Secret must contain: tls.crt, tls.key, ca.crt
+                  If empty, nothing changes.
+                type: string
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
