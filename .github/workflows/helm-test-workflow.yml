@@ -5,7 +5,6 @@ on:
       - develop
       - main
       - feature**
-      - helm-test
   workflow_dispatch:
 jobs:
   build-operator-image:
