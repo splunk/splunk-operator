@@ -217,7 +217,7 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 
 ### Search Head Deployer Resource
 
-Since Serach Head Deployer doesn't require as many resources as Search Head Peers themselves, then Splunk Operator for Kubernetes 2.7.1 introduced additional field for SearchHeadCluster spec to manage resources for the deployer separately.
+Since Search Head Deployer doesn't require as many resources as Search Head Peers themselves, then Splunk Operator for Kubernetes 2.7.1 introduced additional field for SearchHeadCluster spec to manage resources for the deployer separately.
 
 If provided, resources are managed separately for Search Head Deployer and Search Head Peers. Otherwise, either default values are used if resources are not defined at all or Search Head Peers resources are applied to Search Head Deployer as well.
 
