@@ -273,7 +273,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
 		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
-
+		
 		for _, field := range propertyKVList {
 			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
 			mockHTTPClient.AddHandler(req, 200, "", nil)
@@ -417,7 +417,7 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 		},
 	}
 
-	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&newCR.Status, newCR)
+	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&newCR.Status, newCR, false)
 
 	assert.Equal(t, 10, len(pushBusChangedFields))
 	assert.Equal(t, [][]string{

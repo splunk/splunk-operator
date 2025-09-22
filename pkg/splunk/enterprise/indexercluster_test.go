@@ -2047,7 +2047,7 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		},
 	}
 
-	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(&newCR.Status, newCR)
+	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(&newCR.Status, newCR, false)
 	assert.Equal(t, 8, len(pullBusChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", newCR.Spec.PullBus.Type},
