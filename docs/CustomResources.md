@@ -215,6 +215,62 @@ the `SearchHeadCluster` resource provides the following `Spec` configuration par
 | -------- | ------- | ------------------------------------------------------------ |
 | replicas | integer | The number of search heads cluster members (minimum of 3, which is the default) |
 
+### Search Head Deployer Resource
+
+Since Search Head Deployer doesn't require as many resources as Search Head Peers themselves, then Splunk Operator for Kubernetes 2.7.1 introduced additional field for SearchHeadCluster spec to manage resources for the deployer separately.
+
+If provided, resources are managed separately for Search Head Deployer and Search Head Peers. Otherwise, either default values are used if resources are not defined at all or Search Head Peers resources are applied to Search Head Deployer as well.
+
+Additionally, node affinity specification was introduced for Search Head Deployer to separate it from Search Head Peers specification.
+
+| Key      | Type    | Description                                                  |
+| -------- | ------- | ------------------------------------------------------------ |
+| deployerNodeAffinity | *corev1.NodeAffinity | Search Head Deployer node affinity |
+| deployerResourceSpec | corev1.ResourceRequirements | Search Head Deployer resource specification |
+
+#### Example
+
+```
+deployerNodeAffinity:
+  preferredDuringSchedulingIgnoredDuringExecution:
+    ...
+  requiredDuringSchedulingIgnoredDuringExecution:
+    ...
+deployerResourceSpec:
+  claims:
+    ...
+  limits:
+    ...
+  requests:
+    ...
+```
+
+```
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  image: splunk/splunk: 9.4.4
+  serviceAccount: splunk-service-account
+  resources:
+    requests:
+      memory: "1024Mi"
+      cpu: "0.2"
+    limits:
+      memory: "10Gi"
+      cpu: "6"
+  deployerResourceSpec:
+    requests:
+      memory: "512Mi"
+      cpu: "0.1"
+    limits:
+      memory: "8Gi"
+      cpu: "4"
+```
+
 ## ClusterManager Resource Spec Parameters
 ClusterManager resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
 ```yaml
