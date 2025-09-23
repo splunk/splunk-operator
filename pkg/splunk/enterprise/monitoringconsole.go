@@ -304,35 +304,33 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 		if !ok {
 			revised.Data[url.Name] = url.Value
 		} else {
+			// Split both existing and new URLs into slices
+			existingURLs := strings.Split(revised.Data[url.Name], ",")
 			newInsURLs := strings.Split(url.Value, ",")
-			//1. Find number of URLs, that crname,  present in the current configmap
-			var crURLs string
+
+			// Create a map to track existing URLs
+			urlMap := make(map[string]bool)
+			for _, existingURL := range existingURLs {
+				if strings.TrimSpace(existingURL) != "" {
+					urlMap[strings.TrimSpace(existingURL)] = true
+				}
+			}
+
+			// Add new URLs that don't already exist
 			for _, newURL := range newInsURLs {
-				if strings.Contains(revised.Data[url.Name], newURL) {
-					if crURLs == "" {
-						crURLs = newURL
-					} else {
-						str := []string{crURLs, newURL}
-						crURLs = strings.Join(str, ",")
-					}
+				trimmedURL := strings.TrimSpace(newURL)
+				if trimmedURL != "" && !urlMap[trimmedURL] {
+					urlMap[trimmedURL] = true
 				}
 			}
-			//2. if length of both same then just reconcile
-			if len(crURLs) == len(url.Value) {
-				//reconcile
-				break
-			} else if len(crURLs) < len(url.Value) { //3. incoming URLs are more than current scaling up
-				//scaling UP
-				for _, newEntry := range newInsURLs {
-					if !strings.Contains(revised.Data[url.Name], newEntry) {
-						str := []string{revised.Data[url.Name], newEntry}
-						revised.Data[url.Name] = strings.Join(str, ",")
-					}
-				}
-			} else { //4. incoming URLs are less than current then scaling down
-				//scaling DOWN pods
-				DeleteURLsConfigMap(revised, crName, newURLs, false)
+
+			// Rebuild the comma-separated string
+			var finalURLs []string
+			for urlKey := range urlMap {
+				finalURLs = append(finalURLs, urlKey)
 			}
+			sort.Strings(finalURLs) // Ensure consistent ordering
+			revised.Data[url.Name] = strings.Join(finalURLs, ",")
 		}
 	}
 }
@@ -340,34 +338,52 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 // DeleteURLsConfigMap for deleting server peers to the monitoring console or scaling down
 func DeleteURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1.EnvVar, deleteCR bool) {
 	for _, url := range newURLs {
+		if revised.Data[url.Name] == "" {
+			continue
+		}
+
 		currentURLs := strings.Split(revised.Data[url.Name], ",")
-		sort.Strings(currentURLs)
-		for _, curr := range currentURLs {
-			//scale DOWN
-			if strings.Contains(curr, crName) && !strings.Contains(url.Value, curr) && !deleteCR {
-				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], curr, "")
-			} else if strings.Contains(curr, crName) && deleteCR {
-				revised.Data[url.Name] = strings.ReplaceAll(revised.Data[url.Name], url.Value, "")
+		urlsToRemove := strings.Split(url.Value, ",")
+
+		// Create map of URLs to remove
+		removeMap := make(map[string]bool)
+		for _, removeURL := range urlsToRemove {
+			if strings.TrimSpace(removeURL) != "" {
+				removeMap[strings.TrimSpace(removeURL)] = true
 			}
-			//if deleting "SPLUNK_MULTISITE_MASTER" delete "SPLUNK_SITE"
-			if url.Name == "SPLUNK_SITE" && deleteCR {
-				delete(revised.Data, "SPLUNK_SITE")
+		}
+
+		// Filter out URLs that should be removed
+		var remainingURLs []string
+		for _, currentURL := range currentURLs {
+			trimmedURL := strings.TrimSpace(currentURL)
+			if trimmedURL == "" {
+				continue
 			}
-			if strings.HasPrefix(revised.Data[url.Name], ",") {
-				str := revised.Data[url.Name]
-				revised.Data[url.Name] = strings.TrimPrefix(str, ",")
+
+			shouldRemove := false
+			if deleteCR && strings.Contains(trimmedURL, crName) {
+				shouldRemove = true
+			} else if !deleteCR && removeMap[trimmedURL] && strings.Contains(trimmedURL, crName) {
+				shouldRemove = true
 			}
-			if strings.HasSuffix(revised.Data[url.Name], ",") {
-				str := revised.Data[url.Name]
-				revised.Data[url.Name] = strings.TrimSuffix(str, ",")
+
+			if !shouldRemove {
+				remainingURLs = append(remainingURLs, trimmedURL)
 			}
-			if strings.Contains(revised.Data[url.Name], ",,") {
-				str := revised.Data[url.Name]
-				revised.Data[url.Name] = strings.ReplaceAll(str, ",,", ",")
-			}
-			if revised.Data[url.Name] == "" {
-				delete(revised.Data, url.Name)
-			}
+		}
+
+		// Update or delete the key
+		if len(remainingURLs) == 0 {
+			delete(revised.Data, url.Name)
+		} else {
+			sort.Strings(remainingURLs) // Ensure consistent ordering
+			revised.Data[url.Name] = strings.Join(remainingURLs, ",")
+		}
+
+		// Handle SPLUNK_SITE cleanup
+		if url.Name == "SPLUNK_SITE" && deleteCR {
+			delete(revised.Data, "SPLUNK_SITE")
 		}
 	}
 }
