@@ -75,6 +75,8 @@ type SQSSpec struct {
 	RetryPolicy string `json:"retryPolicy"`
 
 	SendInterval string `json:"sendInterval"`
+
+	EncodingFormat string `json:"encodingFormat"`
 }
 
 type PipelineConfigSpec struct {
@@ -88,7 +90,7 @@ type PipelineConfigSpec struct {
 
 	Typing bool `json:"typing"`
 
-	IndexerPipe bool `json:"indexerPipe,omitempty"`
+	IndexerPipe bool `json:"indexerPipe"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
@@ -116,6 +118,12 @@ type IngestorClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Pipeline configuration status
+	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
+
+	// Push Bus status
+	PushBus PushBusSpec `json:"pushBus"`
 }
 
 // +kubebuilder:object:root=true

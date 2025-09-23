@@ -113,6 +113,12 @@ type IndexerClusterStatus struct {
 	// status of each indexer cluster peer
 	Peers []IndexerClusterMemberStatus `json:"peers"`
 
+	// Pipeline configuration status
+	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
+
+	// Push Bus status
+	PullBus PushBusSpec `json:"pushBus"`
+
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 }

@@ -1605,6 +1605,8 @@ spec:
                         type: string
                       deadLetterQueueName:
                         type: string
+                      encodingFormat:
+                        type: string
                       endpoint:
                         type: string
                       largeMessageStoreEndpoint:
@@ -4559,6 +4561,51 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              pipelineConfig:
+                description: Pipeline configuration status
+                properties:
+                  indexerPipe:
+                    type: boolean
+                  remoteQueueOutput:
+                    type: boolean
+                  remoteQueueRuleset:
+                    type: boolean
+                  remoteQueueTyping:
+                    type: boolean
+                  ruleSet:
+                    type: boolean
+                  typing:
+                    type: boolean
+                type: object
+              pushBus:
+                description: Push Bus status
+                properties:
+                  sqs:
+                    properties:
+                      authRegion:
+                        type: string
+                      deadLetterQueueName:
+                        type: string
+                      encodingFormat:
+                        type: string
+                      endpoint:
+                        type: string
+                      largeMessageStoreEndpoint:
+                        type: string
+                      largeMessageStorePath:
+                        type: string
+                      maxRetriesPerPart:
+                        type: integer
+                      queueName:
+                        type: string
+                      retryPolicy:
+                        type: string
+                      sendInterval:
+                        type: string
+                    type: object
+                  type:
+                    type: string
+                type: object
               readyReplicas:
                 description: Number of ready ingestor pods
                 format: int32

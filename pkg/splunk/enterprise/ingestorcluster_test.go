@@ -234,7 +234,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
-	mockHTTPClient :=  &spltest.MockHTTPClient{}
+	mockHTTPClient := &spltest.MockHTTPClient{}
 	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
 			log: l, cr: cr, secrets: secret,
@@ -243,7 +243,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 			},
 		}
 	}
-	defer func(){ newIngestorClusterPodManager = origNew }()
+	defer func() { newIngestorClusterPodManager = origNew }()
 
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", cr.Spec.PushBus.Type), "s2s"},
@@ -401,17 +401,28 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 					MaxRetriesPerPart:         4,
 					RetryPolicy:               "max_count",
 					SendInterval:              "5s",
+					EncodingFormat:            "s2s",
 				},
+			},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{
+			PipelineConfig: enterpriseApi.PipelineConfigSpec{
+				RemoteQueueRuleset: true,
+				RuleSet:            false,
+				RemoteQueueTyping:  true,
+				RemoteQueueOutput:  true,
+				Typing:             false,
+				IndexerPipe:        false,
 			},
 		},
 	}
 
-	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(newCR)
+	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&newCR.Status, newCR, false)
 
 	assert.Equal(t, 10, len(pushBusChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", newCR.Spec.PushBus.Type},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.EncodingFormat},
 		{fmt.Sprintf("remote_queue.%s.auth_region", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
@@ -628,4 +639,79 @@ func newTestPushBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *inge
 	return &ingestorClusterPodManager{
 		newSplunkClient: newSplunkClientForPushBusPipeline,
 	}
+}
+
+func TestValidateIngestorSpecificInputs(t *testing.T) {
+	cr := &enterpriseApi.IngestorCluster{
+		Spec: enterpriseApi.IngestorClusterSpec{
+			PushBus: enterpriseApi.PushBusSpec{
+				Type: "othertype",
+			},
+		},
+	}
+
+	err := validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "only sqs_smartbus type is supported in pushBus type", err.Error())
+
+	cr.Spec.PushBus.Type = "sqs_smartbus"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs cannot be empty", err.Error())
+
+	cr.Spec.PushBus.SQS.AuthRegion = "us-west-2"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
+
+	cr.Spec.PushBus.SQS.QueueName = "test-queue"
+	cr.Spec.PushBus.SQS.DeadLetterQueueName = "dlq-test"
+	cr.Spec.PushBus.SQS.AuthRegion = ""
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs authRegion cannot be empty", err.Error())
+
+	cr.Spec.PushBus.SQS.AuthRegion = "us-west-2"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
+
+	cr.Spec.PushBus.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
+	cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint = "https://s3.us-west-2.amazonaws.com"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
+
+	cr.Spec.PushBus.SQS.LargeMessageStorePath = "ingestion/smartbus-test"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
+
+	cr.Spec.PushBus.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
+	cr.Spec.PushBus.SQS.MaxRetriesPerPart = -1
+	cr.Spec.PushBus.SQS.RetryPolicy = ""
+	cr.Spec.PushBus.SQS.SendInterval = ""
+	cr.Spec.PushBus.SQS.EncodingFormat = ""
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pipelineConfig spec cannot be empty", err.Error())
+
+	cr.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{
+		RemoteQueueRuleset: true,
+		RemoteQueueTyping:  true,
+		RemoteQueueOutput:  true,
+		Typing:             true,
+		RuleSet:            true,
+		IndexerPipe:        true,
+	}
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.Nil(t, err)
 }
