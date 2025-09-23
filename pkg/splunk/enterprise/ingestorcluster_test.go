@@ -273,7 +273,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
 		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
 		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName, cr.GetName(), cr.GetNamespace())
-		
+
 		for _, field := range propertyKVList {
 			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
 			mockHTTPClient.AddHandler(req, 200, "", nil)
@@ -639,4 +639,79 @@ func newTestPushBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *inge
 	return &ingestorClusterPodManager{
 		newSplunkClient: newSplunkClientForPushBusPipeline,
 	}
+}
+
+func TestValidateIngestorSpecificInputs(t *testing.T) {
+	cr := &enterpriseApi.IngestorCluster{
+		Spec: enterpriseApi.IngestorClusterSpec{
+			PushBus: enterpriseApi.PushBusSpec{
+				Type: "othertype",
+			},
+		},
+	}
+
+	err := validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "only sqs_smartbus type is supported in pushBus type", err.Error())
+
+	cr.Spec.PushBus.Type = "sqs_smartbus"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs cannot be empty", err.Error())
+
+	cr.Spec.PushBus.SQS.AuthRegion = "us-west-2"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
+
+	cr.Spec.PushBus.SQS.QueueName = "test-queue"
+	cr.Spec.PushBus.SQS.DeadLetterQueueName = "dlq-test"
+	cr.Spec.PushBus.SQS.AuthRegion = ""
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs authRegion cannot be empty", err.Error())
+
+	cr.Spec.PushBus.SQS.AuthRegion = "us-west-2"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
+
+	cr.Spec.PushBus.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
+	cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint = "https://s3.us-west-2.amazonaws.com"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
+
+	cr.Spec.PushBus.SQS.LargeMessageStorePath = "ingestion/smartbus-test"
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
+
+	cr.Spec.PushBus.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
+	cr.Spec.PushBus.SQS.MaxRetriesPerPart = -1
+	cr.Spec.PushBus.SQS.RetryPolicy = ""
+	cr.Spec.PushBus.SQS.SendInterval = ""
+	cr.Spec.PushBus.SQS.EncodingFormat = ""
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pipelineConfig spec cannot be empty", err.Error())
+
+	cr.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{
+		RemoteQueueRuleset: true,
+		RemoteQueueTyping:  true,
+		RemoteQueueOutput:  true,
+		Typing:             true,
+		RuleSet:            true,
+		IndexerPipe:        true,
+	}
+
+	err = validateIngestorSpecificInputs(cr)
+	assert.Nil(t, err)
 }

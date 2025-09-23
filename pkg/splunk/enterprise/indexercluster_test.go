@@ -2041,7 +2041,7 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 					MaxRetriesPerPart:         4,
 					RetryPolicy:               "max_count",
 					SendInterval:              "5s",
-					EncodingFormat: 		   "s2s",
+					EncodingFormat:            "s2s",
 				},
 			},
 		},
@@ -2259,17 +2259,17 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 }
 
 func buildFormBody(pairs [][]string) string {
-    var b strings.Builder
-    for i, kv := range pairs {
-        if len(kv) < 2 {
-            continue
-        }
-        fmt.Fprintf(&b, "%s=%s", kv[0], kv[1])
-        if i < len(pairs)-1 {
-            b.WriteByte('&')
-        }
-    }
-    return b.String()
+	var b strings.Builder
+	for i, kv := range pairs {
+		if len(kv) < 2 {
+			continue
+		}
+		fmt.Fprintf(&b, "%s=%s", kv[0], kv[1])
+		if i < len(pairs)-1 {
+			b.WriteByte('&')
+		}
+	}
+	return b.String()
 }
 
 func addRemoteQueueHandlersForIndexer(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IndexerCluster, replicas int32, confName, body string) {
@@ -2291,42 +2291,42 @@ func addRemoteQueueHandlersForIndexer(mockHTTPClient *spltest.MockHTTPClient, cr
 }
 
 func newTestPullBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *indexerClusterPodManager {
-    newSplunkClientForPullBusPipeline = func(uri, user, pass string) *splclient.SplunkClient {
-        return &splclient.SplunkClient{
-            ManagementURI: uri,
-            Username:      user,
-            Password:      pass,
-            Client:        mockHTTPClient,
-        }
-    }
-    return &indexerClusterPodManager{
-        newSplunkClient: newSplunkClientForPullBusPipeline,
-    }
+	newSplunkClientForPullBusPipeline = func(uri, user, pass string) *splclient.SplunkClient {
+		return &splclient.SplunkClient{
+			ManagementURI: uri,
+			Username:      user,
+			Password:      pass,
+			Client:        mockHTTPClient,
+		}
+	}
+	return &indexerClusterPodManager{
+		newSplunkClient: newSplunkClientForPullBusPipeline,
+	}
 }
 
 func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
-    os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	// Object definitions
 	cm := &enterpriseApi.ClusterManager{
-        TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"},
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      "cm",
-            Namespace: "test",
-        },
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm",
+			Namespace: "test",
+		},
 		Status: enterpriseApi.ClusterManagerStatus{
 			Phase: enterpriseApi.PhaseReady,
 		},
-    }
+	}
 
-    cr := &enterpriseApi.IndexerCluster{
-        TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"},
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      "test",
-            Namespace: "test",
-        },
-        Spec: enterpriseApi.IndexerClusterSpec{
-            Replicas: 1,
+	cr := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 1,
 			PipelineConfig: enterpriseApi.PipelineConfigSpec{
 				RemoteQueueRuleset: false,
 				RuleSet:            true,
@@ -2348,50 +2348,50 @@ func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
 					SendInterval:              "5s",
 				},
 			},
-            CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-                ClusterManagerRef: corev1.ObjectReference{
-                    Name: "cm",
-                },
-                Mock: true,
-            },
-        },
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "cm",
+				},
+				Mock: true,
+			},
+		},
 		Status: enterpriseApi.IndexerClusterStatus{
 			Phase: enterpriseApi.PhaseReady,
 		},
-    }
+	}
 
-    secret := &corev1.Secret{
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      "test-secrets",
-            Namespace: "test",
-        },
-        Data: map[string][]byte{
-            "password": []byte("dummy"),
-        },
-    }
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": []byte("dummy"),
+		},
+	}
 
 	cmPod := &corev1.Pod{
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      "splunk-cm-cluster-manager-0",
-            Namespace: "test",
-        },
-        Spec: corev1.PodSpec{
-            Volumes: []corev1.Volume{
-                {
-                    Name: "mnt-splunk-secrets",
-                    VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
-                        SecretName: "test-secrets",
-                    }},
-                },
-            },
-        },
-        Status: corev1.PodStatus{
-            Phase: corev1.PodRunning,
-            ContainerStatuses: []corev1.ContainerStatus{
-                {Ready: true},
-            },
-        },
-    }
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-cm-cluster-manager-0",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+						SecretName: "test-secrets",
+					}},
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
 
 	pod0 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2427,33 +2427,33 @@ func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
 		},
 	}
 
-    replicas := int32(1)
-    sts := &appsv1.StatefulSet{
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      "splunk-test-indexer",
-            Namespace: "test",
-        },
-        Spec: appsv1.StatefulSetSpec{
-            Replicas: &replicas,
-        },
-        Status: appsv1.StatefulSetStatus{
-            Replicas:        1,
-            ReadyReplicas:   1,
-            UpdatedReplicas: 1,
-        },
-    }
+	replicas := int32(1)
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        1,
+			ReadyReplicas:   1,
+			UpdatedReplicas: 1,
+		},
+	}
 
-    svc := &corev1.Service{
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      "splunk-test-indexer-headless",
-            Namespace: "test",
-        },
-    }
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer-headless",
+			Namespace: "test",
+		},
+	}
 
-    // Mock objects
-    c := spltest.NewMockClient()
+	// Mock objects
+	c := spltest.NewMockClient()
 	ctx := context.TODO()
-    c.Create(ctx, secret)
+	c.Create(ctx, secret)
 	c.Create(ctx, cmPod)
 	c.Create(ctx, pod0)
 	c.Create(ctx, sts)
@@ -2461,47 +2461,122 @@ func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
 	c.Create(ctx, cm)
 	c.Create(ctx, cr)
 
-    // outputs.conf
+	// outputs.conf
 	mockHTTPClient := &spltest.MockHTTPClient{}
 
-    base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
-    queue := "remote_queue:test-queue"
+	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
+	queue := "remote_queue:test-queue"
 
-    mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+queue), 200, "", nil)
-    mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs/%s", base, queue), ""), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+queue), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs/%s", base, queue), ""), 200, "", nil)
 
-    // inputs.conf
-    mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs", base), "name="+queue), 200, "", nil)
-    mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs/%s", base, queue), ""), 200, "", nil)
+	// inputs.conf
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs", base), "name="+queue), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs/%s", base, queue), ""), 200, "", nil)
 
-    // default-mode.conf
-    pipelineFields := []string{
-        "pipeline:remotequeueruleset",
-        "pipeline:ruleset",
-        "pipeline:remotequeuetyping",
-        "pipeline:remotequeueoutput",
-        "pipeline:typing",
-    }
-    for range pipelineFields {
-        mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
-        mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
-    }
+	// default-mode.conf
+	pipelineFields := []string{
+		"pipeline:remotequeueruleset",
+		"pipeline:ruleset",
+		"pipeline:remotequeuetyping",
+		"pipeline:remotequeueoutput",
+		"pipeline:typing",
+	}
+	for range pipelineFields {
+		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
+	}
 
-    res, err := ApplyIndexerCluster(ctx, c, cr)
+	res, err := ApplyIndexerCluster(ctx, c, cr)
 	assert.NotNil(t, res)
 	assert.Nil(t, err)
 }
 
 func mustReq(method, url, body string) *http.Request {
-    var r *http.Request
-    var err error
-    if body != "" {
-        r, err = http.NewRequest(method, url, strings.NewReader(body))
-    } else {
-        r, err = http.NewRequest(method, url, nil)
-    }
-    if err != nil {
-        panic(err)
-    }
-    return r
+	var r *http.Request
+	var err error
+	if body != "" {
+		r, err = http.NewRequest(method, url, strings.NewReader(body))
+	} else {
+		r, err = http.NewRequest(method, url, nil)
+	}
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func TestValidateIndexerSpecificInputs(t *testing.T) {
+	cr := &enterpriseApi.IndexerCluster{
+		Spec: enterpriseApi.IndexerClusterSpec{
+			PullBus: enterpriseApi.PushBusSpec{
+				Type: "othertype",
+			},
+		},
+	}
+
+	err := validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "only sqs_smartbus type is supported in pullBus type", err.Error())
+
+	cr.Spec.PullBus.Type = "sqs_smartbus"
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pullBus sqs cannot be empty", err.Error())
+
+	cr.Spec.PullBus.SQS.AuthRegion = "us-west-2"
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pullBus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
+
+	cr.Spec.PullBus.SQS.QueueName = "test-queue"
+	cr.Spec.PullBus.SQS.DeadLetterQueueName = "dlq-test"
+	cr.Spec.PullBus.SQS.AuthRegion = ""
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pullBus sqs authRegion cannot be empty", err.Error())
+
+	cr.Spec.PullBus.SQS.AuthRegion = "us-west-2"
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pullBus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
+
+	cr.Spec.PullBus.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
+	cr.Spec.PullBus.SQS.LargeMessageStoreEndpoint = "https://s3.us-west-2.amazonaws.com"
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pullBus sqs largeMessageStorePath must start with s3://", err.Error())
+
+	cr.Spec.PullBus.SQS.LargeMessageStorePath = "ingestion/smartbus-test"
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pullBus sqs largeMessageStorePath must start with s3://", err.Error())
+
+	cr.Spec.PullBus.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
+	cr.Spec.PullBus.SQS.MaxRetriesPerPart = -1
+	cr.Spec.PullBus.SQS.RetryPolicy = ""
+	cr.Spec.PullBus.SQS.SendInterval = ""
+	cr.Spec.PullBus.SQS.EncodingFormat = ""
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.NotNil(t, err)
+	assert.Equal(t, "pipelineConfig spec cannot be empty", err.Error())
+
+	cr.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{
+		RemoteQueueRuleset: true,
+		RemoteQueueTyping:  true,
+		RemoteQueueOutput:  true,
+		Typing:             true,
+		RuleSet:            true,
+		IndexerPipe:        true,
+	}
+
+	err = validateIndexerSpecificInputs(cr)
+	assert.Nil(t, err)
 }
