@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk
+---
+apiVersion: enterprise.splunk.com/v4
+kind: DatabaseClass
+metadata:
+  name: cnpg-standard
+spec:
+  managedBy: CNPG
+  version: "16"
+  cnpg:
+    instances: 1
+    storage:
+      size: 20Gi
+      storageClassName: gp2   # ⬅️ change if your class is different (e.g., gp3, gp3-csi, standard)
+  backup:
+    enabled: false            # we trigger ad-hoc backups via DatabaseBackup

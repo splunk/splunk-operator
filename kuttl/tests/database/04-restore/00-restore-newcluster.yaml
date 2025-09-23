@@ -1,0 +1,17 @@
+apiVersion: enterprise.splunk.com/v4
+kind: DatabaseRestore
+metadata:
+  name: shc-restore
+  namespace: splunk
+spec:
+  sourceClusterRef:
+    name: shc-db
+  mode: NewCluster
+  from:
+    databaseBackupRef:
+      name: shc-db-bkp
+  newCluster:
+    name: shc-db-restore
+    instances: 1
+    storageClassName: gp2   # ⬅️ adjust if needed
+    storageSize: 20Gi

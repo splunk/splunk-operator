@@ -10,6 +10,12 @@ resources:
 - bases/enterprise.splunk.com_monitoringconsoles.yaml
 - bases/enterprise.splunk.com_searchheadclusters.yaml
 - bases/enterprise.splunk.com_standalones.yaml
+- bases/enterprise.splunk.com_databaseclaims.yaml
+- bases/enterprise.splunk.com_databaseclasses.yaml
+- bases/enterprise.splunk.com_databaseclusters.yaml
+- bases/enterprise.splunk.com_databasebackups.yaml
+- bases/enterprise.splunk.com_databaserestores.yaml
+- bases/enterprise.splunk.com_databasepoolers.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 

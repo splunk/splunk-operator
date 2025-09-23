@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v4
+kind: DatabaseClaim
+metadata:
+  name: shc-db
+  namespace: splunk
+spec:
+  className: cnpg-standard
+  connectionSecretName: shc-db-conn
+  reclaimPolicy: Delete

@@ -27,6 +27,7 @@ import (
 
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	obsrecon "github.com/splunk/splunk-operator/pkg/splunk/enterprise/observability"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -65,6 +66,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
+		return result, err
+	}
+
+	// Ensure DB and summarize
+	err = EnsureDatabaseForSHC(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "EnsureDatabaseForSHC", fmt.Sprintf("ensure database for SHC failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to ensure database for SHC")
 		return result, err
 	}
 
@@ -242,6 +251,14 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
+		}
+		// Observability
+		sum, err := obsrecon.ReconcileObservability(ctx, client, cr)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "observability reconcile failed")
+		} else {
+			// status patch
+			cr.Status.ObservabilitySummary = sum
 		}
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {

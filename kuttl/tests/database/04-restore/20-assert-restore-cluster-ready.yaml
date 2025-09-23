@@ -1,0 +1,7 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: shc-db-restore
+  namespace: splunk
+status:
+  phase: Ready

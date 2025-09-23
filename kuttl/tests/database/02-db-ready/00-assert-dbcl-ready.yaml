@@ -1,0 +1,7 @@
+apiVersion: enterprise.splunk.com/v4
+kind: DatabaseCluster
+metadata:
+  name: shc-db
+  namespace: splunk
+status:
+  phase: Ready

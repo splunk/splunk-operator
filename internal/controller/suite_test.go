@@ -33,11 +33,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"k8s.io/client-go/kubernetes/scheme"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -90,6 +92,9 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = enterprisev4.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme

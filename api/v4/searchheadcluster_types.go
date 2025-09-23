@@ -50,6 +50,11 @@ type SearchHeadClusterSpec struct {
 
 	// Splunk Deployer Node Affinity
 	DeployerNodeAffinity *corev1.NodeAffinity `json:"deployerNodeAffinity,omitempty"`
+
+	// Database integration (Auto/ManagedRef/External)
+	Database *SearchHeadClusterDatabaseSpec `json:"database,omitempty"`
+
+	Observability ObservabilitySpec `json:"observability,omitempty"`
 }
 
 // SearchHeadClusterMemberStatus is used to track the status of each search head cluster member
@@ -134,6 +139,12 @@ type SearchHeadClusterStatus struct {
 	UpgradeStartTimestamp int64 `json:"upgradeStartTimestamp"`
 
 	UpgradeEndTimestamp int64 `json:"upgradeEndTimestamp"`
+
+	// Database summary for UX and gating
+	DatabaseSummary *DatabaseSummary `json:"databaseSummary,omitempty"`
+
+	// Observability wiring summary
+	ObservabilitySummary ObservabilitySummary `json:"observabilitySummary,omitempty"`
 }
 
 type UpgradePhase string
@@ -155,6 +166,7 @@ const (
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready search head cluster members"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of search head cluster"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Obs",type="string",JSONPath=".status.observabilitySummary.message",description="Observability summary"
 // +kubebuilder:storageversion
 type SearchHeadCluster struct {
 	metav1.TypeMeta   `json:",inline"`
