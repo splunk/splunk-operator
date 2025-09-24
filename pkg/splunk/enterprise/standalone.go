@@ -371,6 +371,11 @@ func ApplyStandaloneAdminSecret(ctx context.Context, client splcommon.Controller
 		return err
 	}
 
+	if namespaceSecret.Data == nil || len(namespaceSecret.Data) == 0 {
+		scopedLog.Info("Namespace secret has no data, skipping password sync")
+		return nil
+	}
+
 	nsAdminSecret := string(namespaceSecret.Data["password"])
 	if nsAdminSecret == "" {
 		scopedLog.Info("No admin password found in namespace secret, skipping password sync")

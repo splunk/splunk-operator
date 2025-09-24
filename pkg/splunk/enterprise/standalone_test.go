@@ -1768,4 +1768,58 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 			}
 		}
 	})
+
+	// Test case 6: Namespace secret with no data
+	t.Run("Namespace secret with no data", func(t *testing.T) {
+		c := spltest.NewMockClient()
+
+		// Create namespace secret with no data (empty Data map)
+		nsSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-secret",
+				Namespace: "test",
+			},
+			Data: map[string][]byte{},
+		}
+		c.Create(ctx, nsSecret)
+
+		err := ApplyStandaloneAdminSecret(ctx, c, &cr)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		// Should not attempt password sync with no data
+		for i, changed := range cr.Status.AdminSecretChanged {
+			if changed {
+				t.Errorf("AdminSecretChanged[%d] should be false when namespace secret has no data", i)
+			}
+		}
+	})
+
+	// Test case 7: Namespace secret with nil data
+	t.Run("Namespace secret with nil data", func(t *testing.T) {
+		c := spltest.NewMockClient()
+
+		// Create namespace secret with nil data
+		nsSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-secret",
+				Namespace: "test",
+			},
+			Data: nil,
+		}
+		c.Create(ctx, nsSecret)
+
+		err := ApplyStandaloneAdminSecret(ctx, c, &cr)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		// Should not attempt password sync with nil data
+		for i, changed := range cr.Status.AdminSecretChanged {
+			if changed {
+				t.Errorf("AdminSecretChanged[%d] should be false when namespace secret has nil data", i)
+			}
+		}
+	})
 }
