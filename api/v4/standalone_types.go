@@ -74,6 +74,12 @@ type StandaloneStatus struct {
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
 
+	// Indicates when the admin password has been changed for a replica
+	AdminSecretChanged []bool `json:"adminSecretChangedFlag,omitempty"`
+
+	// Holds secrets whose admin password has changed
+	AdminPasswordChangedSecrets map[string]bool `json:"adminPasswordChangedSecrets,omitempty"`
+
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 }
