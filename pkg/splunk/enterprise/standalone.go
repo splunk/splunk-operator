@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -207,6 +208,31 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 
+	// Check if a new versioned secret was created (indicating password change)
+	// Reset AdminSecretChanged flags so password sync will run again
+	if statefulSet != nil && len(statefulSet.Spec.Template.Spec.Volumes) > 0 {
+		for _, volume := range statefulSet.Spec.Template.Spec.Volumes {
+			if volume.Name == "mnt-splunk-secrets" && volume.Secret != nil {
+				currentSecretName := volume.Secret.SecretName
+				// Check if this is a new versioned secret (contains -v and a number)
+				if strings.Contains(currentSecretName, "-secret-v") {
+					// Reset flags if we haven't seen this secret before
+					if cr.Status.AdminPasswordChangedSecrets == nil {
+						cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
+					}
+					if _, exists := cr.Status.AdminPasswordChangedSecrets[currentSecretName]; !exists {
+						scopedLog.Info("New versioned secret detected, resetting admin password change flags", "secret", currentSecretName)
+						// Reset all AdminSecretChanged flags to false
+						for i := range cr.Status.AdminSecretChanged {
+							cr.Status.AdminSecretChanged[i] = false
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
 	//make changes to respective mc configmap when changing/removing mcRef from spec
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, getStandaloneExtraEnv(cr, cr.Spec.Replicas))
 	if err != nil {
@@ -239,6 +265,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 				eventPublisher.Warning(ctx, "ApplyMonitoringConsoleEnvConfigMap", fmt.Sprintf("apply monitoring console environment config map failed %s", err.Error()))
 				return result, err
 			}
+		}
+
+		// Sync admin password if changed
+		err = ApplyStandaloneAdminSecret(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "ApplyStandaloneAdminSecret", fmt.Sprintf("admin password sync failed %s", err.Error()))
+			scopedLog.Error(err, "Failed to sync admin password")
+			// Don't return error to avoid blocking other operations
 		}
 
 		finalResult := handleAppFrameworkActivity(ctx, client, cr, &cr.Status.AppContext, &cr.Spec.AppFrameworkConfig)
@@ -322,4 +356,100 @@ func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr spl
 	}
 
 	return objectList, nil
+}
+
+// ApplyStandaloneAdminSecret checks if any standalone instances have a different admin password
+// from namespace scoped secret and synchronizes it
+func ApplyStandaloneAdminSecret(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyStandaloneAdminSecret").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	// Get namespace scoped secret
+	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.GetNamespace())
+	if err != nil {
+		scopedLog.Error(err, "Failed to get namespace scoped secret")
+		return err
+	}
+
+	nsAdminSecret := string(namespaceSecret.Data["password"])
+	if nsAdminSecret == "" {
+		scopedLog.Info("No admin password found in namespace secret, skipping password sync")
+		return nil
+	}
+
+	// Initialize status fields if needed
+	if cr.Status.AdminSecretChanged == nil {
+		cr.Status.AdminSecretChanged = make([]bool, cr.Spec.Replicas)
+	}
+	if cr.Status.AdminPasswordChangedSecrets == nil {
+		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
+	}
+
+	// Ensure the status arrays are the right size
+	for len(cr.Status.AdminSecretChanged) < int(cr.Spec.Replicas) {
+		cr.Status.AdminSecretChanged = append(cr.Status.AdminSecretChanged, false)
+	}
+
+	// Check each replica
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("%s-%d", GetSplunkStatefulsetName(SplunkStandalone, cr.GetName()), i)
+
+		// Get current admin password from pod's secret
+		podSecret, err := splutil.GetSecretFromPod(ctx, client, podName, cr.GetNamespace())
+		if err != nil {
+			scopedLog.Info("Could not get secret from pod, skipping", "pod", podName, "error", err.Error())
+			continue // Pod might not be ready yet
+		}
+
+		adminPwd := string(podSecret.Data["password"])
+
+		// If admin secret is different from namespace scoped secret, change it
+		if adminPwd != nsAdminSecret {
+			scopedLog.Info("admin password different from namespace scoped secret, changing admin password", "pod", podName)
+
+			// Skip if already changed for this replica
+			if i < int32(len(cr.Status.AdminSecretChanged)) && cr.Status.AdminSecretChanged[i] {
+				scopedLog.Info("Admin password already changed for this replica, skipping", "replica", i)
+				continue
+			}
+
+			// Change admin password on splunk instance
+			podExecClient := splutil.GetPodExecClient(client, cr, podName)
+			command := fmt.Sprintf("/opt/splunk/bin/splunk cmd splunkd rest --noauth POST /services/admin/users/admin 'password=%s'", nsAdminSecret)
+			streamOptions := splutil.NewStreamOptionsObject(command)
+
+			_, _, err = podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
+			if err != nil {
+				scopedLog.Error(err, "Failed to change admin password on splunk instance", "pod", podName)
+				continue
+			}
+
+			scopedLog.Info("admin password changed on the splunk instance", "pod", podName)
+
+			// Restart Splunk to ensure consistency
+			restartCommand := "/opt/splunk/bin/splunk restart"
+			restartOptions := splutil.NewStreamOptionsObject(restartCommand)
+			_, _, err = podExecClient.RunPodExecCommand(ctx, restartOptions, []string{"/bin/sh"})
+			if err != nil {
+				scopedLog.Error(err, "Failed to restart Splunk", "pod", podName)
+				// Continue even if restart fails - password change might still work
+			} else {
+				scopedLog.Info("Splunk restarted successfully", "pod", podName)
+			}
+
+			// Mark as changed
+			if i < int32(len(cr.Status.AdminSecretChanged)) {
+				cr.Status.AdminSecretChanged[i] = true
+			} else {
+				cr.Status.AdminSecretChanged = append(cr.Status.AdminSecretChanged, true)
+			}
+
+			// Update secret change tracking
+			cr.Status.AdminPasswordChangedSecrets[podSecret.GetName()] = true
+
+			scopedLog.Info("Admin password sync completed for replica", "replica", i)
+		}
+	}
+
+	return nil
 }

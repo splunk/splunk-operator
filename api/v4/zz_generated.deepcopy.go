@@ -1075,6 +1075,18 @@ func (in *StandaloneStatus) DeepCopyInto(out *StandaloneStatus) {
 			(*out)[key] = val
 		}
 	}
+	if in.AdminSecretChanged != nil {
+		in, out := &in.AdminSecretChanged, &out.AdminSecretChanged
+		*out = make([]bool, len(*in))
+		copy(*out, *in)
+	}
+	if in.AdminPasswordChangedSecrets != nil {
+		in, out := &in.AdminPasswordChangedSecrets, &out.AdminPasswordChangedSecrets
+		*out = make(map[string]bool, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	in.AppContext.DeepCopyInto(&out.AppContext)
 }
 
