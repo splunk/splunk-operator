@@ -8,7 +8,7 @@ ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
 ARG BASE_IMAGE_VERSION=8.10-1755105495
 
 # Build the manager binary
-FROM golang:1.24.2 AS builder
+FROM golang:1.24.4 AS builder
 
 WORKDIR /workspace
 

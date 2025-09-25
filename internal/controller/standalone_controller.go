@@ -161,5 +161,6 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("standalone-controller").
 		Complete(r)
 }
