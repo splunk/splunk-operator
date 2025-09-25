@@ -1,0 +1,25 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: apps
+        location: apps/
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: test-bucket/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
