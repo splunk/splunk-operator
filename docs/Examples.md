@@ -699,6 +699,8 @@ spec:
   defaultsUrl: /mnt/license-manager/default.yml
 ```
 
+In the case of an indexer cluster, default.yml will need configuration on the cluster manager custom resource and all indexer cluster custom resource(s).
+
 ## Using an External Indexer Cluster
 
 *Note that this requires using the Splunk Enterprise container version 8.1.0 or later*
