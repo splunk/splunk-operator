@@ -3,7 +3,7 @@ splunk-operator:
 
 # Splunk image
 image:
-  repository: docker.io/splunk/splunk:9.4.3
+  repository: docker.io/splunk/splunk:10.0.0
 
 # Splunk Operator configurations
 splunkOperator:
