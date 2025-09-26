@@ -372,7 +372,12 @@ generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s 
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 
-generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster
+
+generate-crds: manifests kustomize ## Generate CRD artifacts
+	mkdir -p release-${VERSION}
+	$(KUSTOMIZE) build config/crd > release-${VERSION}/splunk-operator-crds.yaml
+
+generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster generate-crds
 	echo "artifacts generation complete"
 
 #############################

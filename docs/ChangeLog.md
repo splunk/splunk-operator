@@ -12,6 +12,7 @@
 * CSPL-3867: SHC and CM Error Message Visibility
 * CSPL-3186: Upgrade Enterprise Security Version 8.0.2
 * 1559: Added SplunkGeneralTerms acceptance
+* CSPL-4005: Remove CRDs from splunk/splunk-operator helm chart
 
 ### Supported Splunk Version
 
