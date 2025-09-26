@@ -22,7 +22,7 @@ Utilizing the App Framework requires one of the following remote storage provide
 
 ### Prerequisites for Azure Blob remote object storage
 * The remote object storage credentials provided as a kubernetes secret.
-* OR, Use "Managed Indentity" role assigment to the Azure blob container. See [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+* OR, Use "Managed Identity" role assigment to the Azure blob container. See [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
 
 ### Prerequisites for GCP bucket based remote object storage
 To use GCP storage in the App Framework, follow these setup requirements:
@@ -63,7 +63,7 @@ In this example, you'll deploy a Standalone CR with a remote storage volume, the
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
    * GCP bucket:
@@ -195,7 +195,7 @@ This example describes the installation of apps on an Indexer Cluster and Cluste
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
    * GCP bucket:
@@ -342,7 +342,7 @@ This example describes the installation of apps on the Deployer and the Search H
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Indentity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure bob access with Managed Indentity](#setup-azure-bob-access-with-managed-indentity)
+       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
    * GCP bucket:

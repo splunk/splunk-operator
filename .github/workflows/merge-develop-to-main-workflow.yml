@@ -100,7 +100,7 @@ jobs:
       # Build and push Distroless image
       - name: Build and push Distroless Image
         run: |
-          make docker-buildx IMG=${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} BASE_IMAGE=gcr.io/distroless/static BASE_IMAGE_VERSION=latest
+          make docker-buildx IMG=${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}-distroless BASE_IMAGE=gcr.io/distroless/static BASE_IMAGE_VERSION=latest
 
       - name: Tag and Push Default UBI RC Image
         run: |
