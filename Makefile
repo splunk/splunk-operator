@@ -174,15 +174,13 @@ docker-buildx:
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
-            BUILD_TAG="${IMG}-distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
-            BUILD_TAG="${IMG}"; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
+            --tag "${IMG}" -f "$$DOCKERFILE" .; \
         - docker buildx rm project-v3-builder || true
 
 
