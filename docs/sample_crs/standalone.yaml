@@ -1,0 +1,7 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: standalone
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc

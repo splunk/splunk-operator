@@ -1,0 +1,24 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: apps
+        location: apps/
+    volumes:
+      - name: volume_app_repo
+        storageType: gcs
+        provider: gcp
+        path: test-bucket/
+        endpoint: https://storage.googleapis.com
+        secretRef: gcs-secret

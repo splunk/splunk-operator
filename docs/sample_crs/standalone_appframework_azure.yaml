@@ -1,0 +1,24 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 60
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: apps
+        location: apps/
+    volumes:
+      - name: volume_app_repo
+        storageType: blob
+        provider: azure
+        path: test-container/
+        endpoint: https://teststorage.blob.core.windows.net
+        secretRef: azureblob-secret  # Can be removed if using Managed Identity

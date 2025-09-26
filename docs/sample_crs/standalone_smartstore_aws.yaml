@@ -1,0 +1,22 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: stdln
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  smartstore:
+    volumes:
+      - name: s3-volume
+        path: test-bucket
+        endpoint: https://s3-us-west-2.amazonaws.com
+        secretRef: s3-secret
+    defaults:
+      volumeName: s3-volume
+    indexes:
+      - name: main
+        remotePath: $index_name
+      - name: _internal
+        remotePath: $index_name
