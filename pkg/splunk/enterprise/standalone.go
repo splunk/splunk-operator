@@ -365,7 +365,7 @@ func ApplyStandaloneAdminSecret(ctx context.Context, client splcommon.Controller
 	scopedLog := reqLogger.WithName("ApplyStandaloneAdminSecret").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get namespace scoped secret
-	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.GetNamespace())
+	namespaceSecret, err := splutil.GetNamespaceScopedSecret(ctx, client, cr.GetNamespace())
 	if err != nil {
 		scopedLog.Error(err, "Failed to get namespace scoped secret")
 		return err

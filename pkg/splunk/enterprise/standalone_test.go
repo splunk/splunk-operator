@@ -1536,22 +1536,14 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 		},
 	}
 
-	// Test case 1: No namespace secret exists - function should create it
+	// Test case 1: No namespace secret exists - function should return error
 	t.Run("No namespace secret", func(t *testing.T) {
 		c := spltest.NewMockClient()
-		// Don't create any secrets - ApplyNamespaceScopedSecretObject will create it
+		// Don't create any secrets - GetNamespaceScopedSecret will return error
 
 		err := ApplyStandaloneAdminSecret(ctx, c, &cr)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-
-		// Should have initialized status fields
-		if cr.Status.AdminSecretChanged == nil {
-			t.Errorf("AdminSecretChanged should be initialized")
-		}
-		if cr.Status.AdminPasswordChangedSecrets == nil {
-			t.Errorf("AdminPasswordChangedSecrets should be initialized")
+		if err == nil {
+			t.Errorf("Expected error when namespace secret doesn't exist")
 		}
 	})
 
@@ -1559,19 +1551,12 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 	t.Run("Namespace secret exists, no pod secrets", func(t *testing.T) {
 		c := spltest.NewMockClient()
 
-		// Create namespace secret
-		nsSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "splunk-test-secret",
-				Namespace: "test",
-			},
-			Data: map[string][]byte{
-				"password": []byte("newpassword123"),
-			},
+		_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+		if err != nil {
+			t.Fatalf("Failed to create namespace secret: %v", err)
 		}
-		c.Create(ctx, nsSecret)
 
-		err := ApplyStandaloneAdminSecret(ctx, c, &cr)
+		err = ApplyStandaloneAdminSecret(ctx, c, &cr)
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -1589,16 +1574,10 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 		c := spltest.NewMockClient()
 
 		// Create namespace secret with new password
-		nsSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "splunk-test-secret",
-				Namespace: "test",
-			},
-			Data: map[string][]byte{
-				"password": []byte("newpassword123"),
-			},
+		_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+		if err != nil {
+			t.Fatalf("Failed to create namespace secret: %v", err)
 		}
-		c.Create(ctx, nsSecret)
 
 		// Create pod secrets with old password
 		for i := 0; i < 2; i++ {
@@ -1648,7 +1627,7 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 
 		// Note: This test will fail at pod exec step, but we can verify the detection logic
-		err := ApplyStandaloneAdminSecret(ctx, c, &cr)
+		err = ApplyStandaloneAdminSecret(ctx, c, &cr)
 		// We expect this to fail since we can't actually exec into pods in unit tests
 		// But we can verify that the function detects password differences correctly
 		if err == nil {
@@ -1668,17 +1647,10 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 	t.Run("Password already synced", func(t *testing.T) {
 		c := spltest.NewMockClient()
 
-		// Create namespace secret
-		nsSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "splunk-test-secret",
-				Namespace: "test",
-			},
-			Data: map[string][]byte{
-				"password": []byte("samepassword123"),
-			},
+		_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+		if err != nil {
+			t.Fatalf("Failed to create namespace secret: %v", err)
 		}
-		c.Create(ctx, nsSecret)
 
 		// Create pod secrets with same password
 		for i := 0; i < 2; i++ {
@@ -1727,7 +1699,7 @@ func TestApplyStandaloneAdminSecret(t *testing.T) {
 		cr.Status.AdminSecretChanged = []bool{false, false}
 		cr.Status.AdminPasswordChangedSecrets = make(map[string]bool)
 
-		err := ApplyStandaloneAdminSecret(ctx, c, &cr)
+		err = ApplyStandaloneAdminSecret(ctx, c, &cr)
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
