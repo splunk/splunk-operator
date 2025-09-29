@@ -114,15 +114,6 @@ jobs:
         exclude: "ChangeLog.md"
         include: "**.md"
 
-    - name: Update Splunk Operator VERSION in DOCS
-      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
-      uses: jacobtomlinson/gha-find-replace@v3
-      with:
-        find: "${{ github.event.inputs.old_operator_version }} or later"
-        replace: "${{ github.event.inputs.new_operator_version }} or later"
-        exclude: "ChangeLog.md"
-        include: "**.md"
-
     - name: Update Splunk Operator upgrade string in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@v3
@@ -172,15 +163,6 @@ jobs:
         replace: "${{ github.event.inputs.new_enterprise_version }}"
         include: "**values.yaml"
 
-    - name: Update Splunk Enterprise image in DOCS
-      if: github.event.inputs.old_enterprise_version != github.event.inputs.new_enterprise_version
-      uses: jacobtomlinson/gha-find-replace@v3
-      with:
-        find: "${{ github.event.inputs.old_enterprise_version }} or later"
-        replace: "${{ github.event.inputs.new_enterprise_version }} or later"
-        exclude: "ChangeLog.md"
-        include: "**.md"
-
     - name: Install Operator SDK
       run: |
         export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
@@ -193,6 +175,10 @@ jobs:
     - name: Run Bundle Creation for the release
       run: |
         make bundle IMAGE_TAG_BASE=docker.io/splunk/splunk-operator VERSION=${{ github.event.inputs.release_version }} IMG=docker.io/splunk/splunk-operator:${{ github.event.inputs.release_version }} SPLUNK_ENTERPRISE_IMAGE=docker.io/splunk/splunk:${{ github.event.inputs.new_enterprise_version }}
+
+    - name: Remove old helm chart dependencies
+      run: |
+        rm -rf helm-chart/splunk-enterprise/charts/splunk-operator-*
 
     - name: Run helm chart package creation
       run: |
