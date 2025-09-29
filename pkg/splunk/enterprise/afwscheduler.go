@@ -1740,6 +1740,8 @@ func getClusterScopedAppsLocOnPod(cr splcommon.MetaObject) string {
 		return idxcAppsLocationOnClusterManager
 	case "SearchHeadCluster":
 		return shcAppsLocationOnDeployer
+	case "Standalone":
+		return standaloneAppsLocationOnDeploymentApps
 	default:
 		return ""
 	}
