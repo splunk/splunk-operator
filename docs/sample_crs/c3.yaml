@@ -5,7 +5,7 @@ metadata:
   name: cm
   namespace: splunk-operator
   finalizers:
-    - "enterprise.splunk.com/delete-pvc"
+    - enterprise.splunk.com/delete-pvc
 ---
 apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
@@ -13,7 +13,7 @@ metadata:
   name: idxc
   namespace: splunk-operator
   finalizers:
-    - "enterprise.splunk.com/delete-pvc"
+    - enterprise.splunk.com/delete-pvc
 spec:
   clusterManagerRef:
     name: cm
@@ -27,7 +27,7 @@ metadata:
   name: shc
   namespace: splunk-operator
   finalizers:
-    - "enterprise.splunk.com/delete-pvc"
+    - enterprise.splunk.com/delete-pvc
 spec:
   clusterManagerRef:
     name: cm
