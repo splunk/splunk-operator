@@ -96,6 +96,15 @@ jobs:
         exclude: "ChangeLog.md"
         include: "helm-chart/splunk-enterprise/**.yaml"
 
+    - name: Update Operator Version in Makefile
+      if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: "${{ github.event.inputs.old_operator_version }}"
+        replace: "${{ github.event.inputs.new_operator_version }}"
+        exclude: "ChangeLog.md"
+        include: "Makefile"
+
     - name: Update Operator Image name in DOCS
       if: github.event.inputs.old_operator_version != github.event.inputs.new_operator_version
       uses: jacobtomlinson/gha-find-replace@v3
