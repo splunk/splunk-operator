@@ -158,12 +158,12 @@ docker-push: ## Push docker image with the manager.
 # Defaults:
 #   Build Platform: linux/amd64,linux/arm64
 #   Build Base OS: registry.access.redhat.com/ubi8/ubi-minimal
-#   Build Base OS Version: 8.10-1755105495
+#   Build Base OS Version: 8.10-1756195339
 # Pass only what is required, the rest will be defaulted
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1755105495
+BASE_IMAGE_VERSION ?= 8.10-1756195339
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -174,15 +174,13 @@ docker-buildx:
         	docker buildx use project-v3-builder; \
         if echo "${BASE_IMAGE}" | grep -q "distroless"; then \
             DOCKERFILE="Dockerfile.distroless"; \
-            BUILD_TAG="${IMG}-distroless"; \
         else \
             DOCKERFILE="Dockerfile"; \
-            BUILD_TAG="${IMG}"; \
         fi; \
         docker buildx build --push --platform="${PLATFORMS}" \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-            --tag "$$BUILD_TAG" -f "$$DOCKERFILE" .; \
+            --tag "${IMG}" -f "$$DOCKERFILE" .; \
         - docker buildx rm project-v3-builder || true
 
 
@@ -372,7 +370,12 @@ generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s 
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/default > release-${VERSION}/splunk-operator-cluster.yaml
 
-generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster
+
+generate-crds: manifests kustomize ## Generate CRD artifacts
+	mkdir -p release-${VERSION}
+	$(KUSTOMIZE) build config/crd > release-${VERSION}/splunk-operator-crds.yaml
+
+generate-artifacts: generate-artifacts-namespace generate-artifacts-cluster generate-crds
 	echo "artifacts generation complete"
 
 #############################
