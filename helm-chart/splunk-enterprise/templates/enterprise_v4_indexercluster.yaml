@@ -163,5 +163,63 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
+    {{- with $.Values.indexerCluster.pipelineConfig }}
+    pipelineConfig:
+      {{- if .remoteQueueRuleset }}
+      remoteQueueRuleset: {{ .remoteQueueRuleset }}
+      {{- end }}
+      {{- if .ruleSet }}
+      ruleSet: {{ .ruleSet }}
+      {{- end }}
+      {{- if .remoteQueueTyping }}
+      remoteQueueTyping: {{ .remoteQueueTyping }}
+      {{- end }}
+      {{- if .remoteQueueOutput }}
+      remoteQueueOutput: {{ .remoteQueueOutput }}
+      {{- end }}
+      {{- if .typing }}
+      typing: {{ .typing }}
+      {{- end }}
+      {{- if .indexerPipe }}
+      indexerPipe: {{ .indexerPipe }}
+      {{- end }}
+    {{- end }}
+    {{- with $.Values.indexerCluster.pullBus }}
+    pullBus:
+      type: {{ .type | quote }}
+      {{- with .sqs }}
+      sqs:
+        {{- if .queueName }}
+        queueName: {{ .queueName | quote }}
+        {{- end }}
+        {{- if .authRegion }}
+        authRegion: {{ .authRegion | quote }}
+        {{- end }}
+        {{- if .endpoint }}
+        endpoint: {{ .endpoint | quote }}
+        {{- end }}
+        {{- if .largeMessageStoreEndpoint }}
+        largeMessageStoreEndpoint: {{ .largeMessageStoreEndpoint | quote }}
+        {{- end }}
+        {{- if .largeMessageStorePath }}
+        largeMessageStorePath: {{ .largeMessageStorePath | quote }}
+        {{- end }}
+        {{- if .deadLetterQueueName }}
+        deadLetterQueueName: {{ .deadLetterQueueName | quote }}
+        {{- end }}
+        {{- if not (eq .maxRetriesPerPart nil) }}
+        maxRetriesPerPart: {{ .maxRetriesPerPart }}
+        {{- end }}
+        {{- if .retryPolicy }}
+        retryPolicy: {{ .retryPolicy | quote }}
+        {{- end }}
+        {{- if .sendInterval }}
+        sendInterval: {{ .sendInterval | quote }}
+        {{- end }}
+        {{- if .encodingFormat }}
+        encodingFormat: {{ .encodingFormat | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
 {{- end }}
 {{- end }}

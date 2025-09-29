@@ -8397,8 +8397,8 @@ spec:
                   typing:
                     type: boolean
                 type: object
-              pushBus:
-                description: Push Bus status
+              pullBus:
+                description: Pull Bus status
                 properties:
                   sqs:
                     properties:
