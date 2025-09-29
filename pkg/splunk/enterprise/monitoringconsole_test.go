@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"testing"
 	"time"
 
@@ -1270,5 +1271,68 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	annotations := monitoringConsole.GetAnnotations()
 	if annotations["splunk/image-tag"] != cm.Spec.Image {
 		t.Errorf("changeMonitoringConsoleAnnotations should have set the checkUpdateImage annotation field to the current image")
+	}
+}
+
+func TestAddURLsConfigMap_StringLengthComparisonBug(t *testing.T) {
+	// Test the flawed length-based comparison logic
+	revised := &corev1.ConfigMap{
+		Data: map[string]string{
+			"SPLUNK_STANDALONE_URL": "http://pod-1:8089,http://pod-2:8089",
+		},
+	}
+
+	newURLs := []corev1.EnvVar{
+		{Name: "SPLUNK_STANDALONE_URL", Value: "http://pod-3:8089"}, // Different length but should be added
+	}
+
+	AddURLsConfigMap(revised, "test", newURLs)
+
+	// Current implementation incorrectly compares lengths and may not add the URL
+	result := revised.Data["SPLUNK_STANDALONE_URL"]
+	if !strings.Contains(result, "http://pod-3:8089") {
+		t.Errorf("URL should have been added but wasn't due to length comparison bug")
+	}
+}
+
+func TestDeleteURLsConfigMap_MalformedCommaCleanup(t *testing.T) {
+	// Test the multiple string replacement issue that creates malformed lists
+	revised := &corev1.ConfigMap{
+		Data: map[string]string{
+			"SPLUNK_STANDALONE_URL": "http://test-pod-1:8089,http://test-pod-2:8089,http://other-pod:8089",
+		},
+	}
+
+	newURLs := []corev1.EnvVar{
+		{Name: "SPLUNK_STANDALONE_URL", Value: "http://test-pod-1:8089"},
+	}
+
+	DeleteURLsConfigMap(revised, "test", newURLs, false)
+
+	result := revised.Data["SPLUNK_STANDALONE_URL"]
+	// Check for malformed comma patterns that the current implementation creates
+	if strings.Contains(result, ",,") || strings.HasPrefix(result, ",") || strings.HasSuffix(result, ",") {
+		t.Errorf("Current implementation creates malformed comma-separated list: %s", result)
+	}
+}
+
+func TestDeleteURLsConfigMap_PartialStringMatching(t *testing.T) {
+	// Test the strings.Contains() bug that matches partial URLs incorrectly
+	revised := &corev1.ConfigMap{
+		Data: map[string]string{
+			"SPLUNK_STANDALONE_URL": "http://test-pod:8089,http://test-pod-extended:8089",
+		},
+	}
+
+	newURLs := []corev1.EnvVar{
+		{Name: "SPLUNK_STANDALONE_URL", Value: "http://test-pod:8089"},
+	}
+
+	DeleteURLsConfigMap(revised, "test", newURLs, false)
+
+	result := revised.Data["SPLUNK_STANDALONE_URL"]
+	// Current implementation might incorrectly remove "test-pod-extended" due to partial matching
+	if !strings.Contains(result, "http://test-pod-extended:8089") {
+		t.Errorf("Partial string matching incorrectly removed extended pod URL")
 	}
 }
