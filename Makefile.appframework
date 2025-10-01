@@ -1,0 +1,274 @@
+# App Framework Controller Makefile
+
+# Image URL to use all building/pushing image targets
+IMG_CONTROLLER ?= splunk/app-framework-controller:latest
+IMG_WORKER ?= splunk/app-framework-worker:latest
+
+# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
+ENVTEST_K8S_VERSION = 1.28.0
+
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+# CONTAINER_TOOL defines the container tool to be used for building images.
+CONTAINER_TOOL ?= docker
+
+# Setting SHELL to bash allows bash commands to be executed by recipes.
+SHELL = /usr/bin/env bash -o pipefail
+.SHELLFLAGS = -ec
+
+.PHONY: all
+all: build
+
+##@ General
+
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk commands is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+.PHONY: help
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+##@ Development
+
+.PHONY: manifests
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) rbac:roleName=app-framework-controller-role crd webhook paths="./api/appframework/..." output:crd:artifacts:config=config/crd/bases
+
+.PHONY: generate
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./api/appframework/..."
+
+.PHONY: fmt
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
+
+.PHONY: test
+test: manifests generate fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/controller/appframework/... -coverprofile cover.out
+
+.PHONY: test-integration
+test-integration: manifests generate fmt vet ## Run integration tests.
+	go test ./test/integration/appframework/... -v
+
+.PHONY: test-e2e
+test-e2e: ## Run end-to-end tests.
+	go test ./test/e2e/appframework/... -v
+
+##@ Build
+
+.PHONY: build
+build: manifests generate fmt vet ## Build app framework controller and worker binaries.
+	go build -o bin/app-framework-controller cmd/app-framework-controller/main.go
+	go build -o bin/app-framework-worker cmd/app-framework-worker/main.go
+
+.PHONY: run-controller
+run-controller: manifests generate fmt vet ## Run app framework controller from your host.
+	go run cmd/app-framework-controller/main.go
+
+.PHONY: run-worker
+run-worker: manifests generate fmt vet ## Run app framework worker from your host.
+	go run cmd/app-framework-worker/main.go
+
+# If you wish built the manager image targeting other platforms you can use the --platform flag.
+# (i.e. docker build --platform linux/arm64 ). However, you must enable docker buildKit for it.
+# More info: https://docs.docker.com/develop/dev-best-practices/
+.PHONY: docker-build-controller
+docker-build-controller: ## Build docker image for app framework controller.
+	$(CONTAINER_TOOL) build -t ${IMG_CONTROLLER} -f Dockerfile.controller .
+
+.PHONY: docker-build-worker
+docker-build-worker: ## Build docker image for app framework worker.
+	$(CONTAINER_TOOL) build -t ${IMG_WORKER} -f Dockerfile.worker .
+
+.PHONY: docker-build
+docker-build: docker-build-controller docker-build-worker ## Build both docker images.
+
+.PHONY: docker-push-controller
+docker-push-controller: ## Push docker image for app framework controller.
+	$(CONTAINER_TOOL) push ${IMG_CONTROLLER}
+
+.PHONY: docker-push-worker
+docker-push-worker: ## Push docker image for app framework worker.
+	$(CONTAINER_TOOL) push ${IMG_WORKER}
+
+.PHONY: docker-push
+docker-push: docker-push-controller docker-push-worker ## Push both docker images.
+
+##@ Deployment
+
+ifndef ignore-not-found
+  ignore-not-found = false
+endif
+
+.PHONY: install-crds
+install-crds: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
+
+.PHONY: uninstall-crds
+uninstall-crds: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+
+.PHONY: deploy
+deploy: manifests kustomize ## Deploy app framework controller to the K8s cluster specified in ~/.kube/config.
+	cd config/appframework && $(KUSTOMIZE) edit set image controller=${IMG_CONTROLLER}
+	cd config/appframework && $(KUSTOMIZE) edit set image worker=${IMG_WORKER}
+	$(KUSTOMIZE) build config/appframework | $(KUBECTL) apply -f -
+
+.PHONY: undeploy
+undeploy: ## Undeploy app framework controller from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/appframework | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+
+##@ Examples
+
+.PHONY: apply-examples
+apply-examples: ## Apply example configurations.
+	$(KUBECTL) apply -f config/samples/appframework/
+
+.PHONY: delete-examples
+delete-examples: ## Delete example configurations.
+	$(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f config/samples/appframework/
+
+##@ Cleanup
+
+.PHONY: clean
+clean: ## Clean up build artifacts.
+	rm -rf bin/
+	rm -f cover.out
+
+.PHONY: clean-jobs
+clean-jobs: ## Clean up app framework jobs.
+	$(KUBECTL) delete jobs -l app.kubernetes.io/name=app-framework --ignore-not-found=$(ignore-not-found)
+
+.PHONY: clean-all
+clean-all: clean undeploy delete-examples clean-jobs ## Clean up everything.
+
+##@ Build Dependencies
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+KUBECTL ?= kubectl
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+
+## Tool Versions
+KUSTOMIZE_VERSION ?= v5.0.4
+CONTROLLER_TOOLS_VERSION ?= v0.13.0
+
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+$(KUSTOMIZE): $(LOCALBIN)
+	@if test -x $(LOCALBIN)/kustomize && ! $(LOCALBIN)/kustomize version | grep -q $(KUSTOMIZE_VERSION); then \
+		echo "$(LOCALBIN)/kustomize version is not expected $(KUSTOMIZE_VERSION). Removing it before installing."; \
+		rm -rf $(LOCALBIN)/kustomize; \
+	fi
+	test -s $(LOCALBIN)/kustomize || GOBIN=$(LOCALBIN) GO111MODULE=on go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	test -s $(LOCALBIN)/controller-gen && $(LOCALBIN)/controller-gen --version | grep -q $(CONTROLLER_TOOLS_VERSION) || \
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+##@ Linting and Security
+
+.PHONY: lint
+lint: ## Run golangci-lint.
+	golangci-lint run ./pkg/controller/appframework/...
+
+.PHONY: security-scan
+security-scan: ## Run security scan with gosec.
+	gosec ./pkg/controller/appframework/...
+
+##@ Documentation
+
+.PHONY: docs
+docs: ## Generate documentation.
+	@echo "Generating API documentation..."
+	@go run hack/gen-docs.go
+
+.PHONY: serve-docs
+serve-docs: ## Serve documentation locally.
+	@echo "Serving documentation at http://localhost:8080"
+	@cd docs && python3 -m http.server 8080
+
+##@ Monitoring
+
+.PHONY: port-forward-metrics
+port-forward-metrics: ## Port forward to metrics endpoint.
+	$(KUBECTL) port-forward svc/app-framework-controller-metrics 8080:8080
+
+.PHONY: view-metrics
+view-metrics: ## View Prometheus metrics.
+	curl http://localhost:8080/metrics
+
+##@ Development Helpers
+
+.PHONY: dev-setup
+dev-setup: ## Set up development environment.
+	@echo "Setting up development environment..."
+	go mod download
+	$(MAKE) controller-gen
+	$(MAKE) kustomize
+	$(MAKE) envtest
+	@echo "Development environment ready!"
+
+.PHONY: quick-test
+quick-test: fmt vet ## Run quick tests without full setup.
+	go test ./pkg/controller/appframework/... -short
+
+.PHONY: watch-test
+watch-test: ## Watch and run tests on file changes.
+	@echo "Watching for changes... Press Ctrl+C to stop"
+	@while true; do \
+		inotifywait -e modify -r pkg/controller/appframework/ --exclude '.*\.swp' -q && \
+		echo "Running tests..." && \
+		$(MAKE) quick-test; \
+	done
+
+.PHONY: debug-controller
+debug-controller: ## Run controller with debug logging.
+	LOG_LEVEL=debug go run cmd/app-framework-controller/main.go
+
+.PHONY: debug-worker
+debug-worker: ## Run worker with debug logging.
+	LOG_LEVEL=debug go run cmd/app-framework-worker/main.go
+
+##@ Validation
+
+.PHONY: validate-examples
+validate-examples: ## Validate example configurations.
+	@echo "Validating example configurations..."
+	@for file in config/samples/appframework/*.yaml; do \
+		echo "Validating $$file"; \
+		$(KUBECTL) --dry-run=client apply -f $$file; \
+	done
+
+.PHONY: validate-crds
+validate-crds: manifests ## Validate CRD schemas.
+	@echo "Validating CRD schemas..."
+	@for file in config/crd/bases/*.yaml; do \
+		echo "Validating $$file"; \
+		$(KUBECTL) --dry-run=server apply -f $$file; \
+	done

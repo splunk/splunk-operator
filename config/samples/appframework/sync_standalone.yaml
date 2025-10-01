@@ -1,0 +1,58 @@
+apiVersion: appframework.splunk.com/v1
+kind: AppFrameworkSync
+metadata:
+  name: standalone-apps-sync
+  namespace: splunk-operator
+spec:
+  repositoryRef:
+    name: s3-app-repo
+    namespace: splunk-operator
+  targetRef:
+    apiVersion: enterprise.splunk.com/v4
+    kind: Standalone
+    name: my-standalone
+    namespace: splunk-operator
+  appSources:
+    - name: networkApps
+      location: network/
+      scope: local
+      includePatterns:
+        - "*.tgz"
+        - "*.spl"
+      excludePatterns:
+        - "*test*"
+        - "*debug*"
+    - name: securityApps
+      location: security/
+      scope: local
+      deletionPolicy:
+        enabled: true
+        strategy: manual  # Require manual approval for security apps
+        safeguards:
+          requireConfirmation:
+            - "*"  # All security apps require confirmation
+    - name: adminApps
+      location: admin/
+      scope: local
+      deletionPolicy:
+        enabled: false  # Never auto-delete admin apps
+  syncPolicy:
+    automatic: true
+    prune: true  # Remove apps not in repository
+    syncTimeout: 1800s
+    retryPolicy:
+      maxRetries: 3
+      backoffMultiplier: 2
+    hooks:
+      preSync:
+        - name: backup-current-apps
+          command: ["/bin/backup-apps.sh"]
+          failurePolicy: Ignore
+      postSync:
+        - name: validate-apps
+          command: ["/bin/validate-apps.sh"]
+          failurePolicy: Fail
+  deletionPolicy:
+    enabled: true
+    strategy: graceful
+    gracePeriod: 600s  # 10 minutes grace period for standalone

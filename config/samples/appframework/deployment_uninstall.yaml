@@ -1,0 +1,78 @@
+apiVersion: appframework.splunk.com/v1
+kind: AppFrameworkDeployment
+metadata:
+  name: uninstall-old-app
+  namespace: splunk-operator
+  annotations:
+    # Manual confirmation for deletion
+    appframework.splunk.com/deletion-confirmed: "true"
+    appframework.splunk.com/deletion-confirmed-at: "2024-01-01T12:00:00Z"
+    # Manual approval for deletion
+    appframework.splunk.com/deletion-approved: "true"
+    appframework.splunk.com/deletion-approved-by: "admin@company.com"
+    appframework.splunk.com/deletion-approved-at: "2024-01-01T12:00:00Z"
+spec:
+  appName: old-legacy-app.tgz
+  appSource: networkApps
+  targetPods:
+    - splunk-my-standalone-0
+  operation: uninstall
+  scope: local
+  priority: 1
+  deletionPolicy:
+    enabled: true
+    strategy: graceful
+    gracePeriod: 300s
+    safeguards:
+      protectedApps: []
+      requireConfirmation:
+        - "old-legacy-app.tgz"
+      bulkDeletionThreshold: 3
+      backupBeforeDeletion: true
+      approvalWorkflow:
+        required: true
+        approvers:
+          - "admin@company.com"
+          - "splunk-ops-team"
+        timeout: 24h
+    retentionPolicy:
+      keepDeletedApps: true
+      retentionDuration: 168h  # 1 week
+      backupLocation: "s3://app-backups/uninstalls/"
+      compressBackups: true
+    notifications:
+      webhook: "https://alerts.company.com/app-deletions"
+      slack: "#splunk-ops"
+  deletionConditions:
+    - type: AppNotUsed
+      checkCommand: 
+        - "/opt/splunk/bin/splunk"
+        - "search"
+        - "index=_internal source=*splunkd.log* app=old-legacy-app earliest=-7d | head 1"
+      expectedResult: "empty"
+      timeout: 300s
+      failurePolicy: Fail
+    - type: NoActiveDashboards
+      checkCommand:
+        - "find"
+        - "/opt/splunk/etc/apps/old-legacy-app"
+        - "-name"
+        - "*.xml"
+        - "-path"
+        - "*/data/ui/views/*"
+      expectedResult: "empty"
+      timeout: 60s
+      failurePolicy: Ignore
+  rollbackPolicy:
+    enabled: true
+    retentionPeriod: 72h
+    backupLocation: "s3://app-backups/rollbacks/"
+  dependencies: []
+  jobTemplate:
+    labels:
+      app.kubernetes.io/component: app-uninstall
+    annotations:
+      appframework.splunk.com/operation: uninstall
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 1800

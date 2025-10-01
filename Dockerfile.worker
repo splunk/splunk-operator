@@ -1,0 +1,48 @@
+# Build the app framework worker binary
+FROM golang:1.21 as builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
+
+# Copy the go source
+COPY cmd/app-framework-worker/ cmd/app-framework-worker/
+COPY api/ api/
+COPY pkg/controller/appframework/ pkg/controller/appframework/
+COPY pkg/splunk/client/ pkg/splunk/client/
+
+# Build
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o app-framework-worker cmd/app-framework-worker/main.go
+
+# Use a more complete base image for the worker since it needs to interact with Splunk pods
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+
+# Install kubectl for pod operations
+RUN microdnf update -y && \
+    microdnf install -y curl tar gzip && \
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/ && \
+    microdnf clean all
+
+# Create app-cache directory
+RUN mkdir -p /app-cache && chmod 755 /app-cache
+
+# Create non-root user
+RUN groupadd -r appframework && useradd -r -g appframework -u 1001 appframework
+
+WORKDIR /
+COPY --from=builder /workspace/app-framework-worker .
+
+# Change ownership of app-cache to appframework user
+RUN chown -R appframework:appframework /app-cache
+
+USER 1001:1001
+
+ENTRYPOINT ["/app-framework-worker"]
