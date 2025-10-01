@@ -57,18 +57,35 @@ rm -rf /usr/local/go && tar -C /usr/local -xzf go1.24.2.linux-amd64.tar.gz
 export PATH=$PATH:/usr/local/go/bin
 go version
 ```
-6. Install ginkgo - DOES NOT WORK
+6. Install ginkgo and gomega
 ```bash
-apt install ginkgo
 go install github.com/onsi/ginkgo/v2/ginkgo
-go get github.com/onsi/gomega/...
-go mod tidy
+go get github.com/onsi/gomega@v1.38.0
+sudo apt-get install net-tools
+export PATH=$HOME/go/bin:$PATH
 ```
-7. Install K3s
+7. Install Kind Cluster
+    1. Set the TEST_CLUSTER_PLATFORM environment variable to "kind
+    ```bash
+    export TEST_CLUSTER_PLATFORM=kind
+    ```
+    2. Install kind
+    ```bash
+    curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64
+    chmod +x ./kind
+    sudo mv ./kind /usr/local/bin/kind
+    ```
+    3. Create the cluster
+    ```bash
+    make cluster-up
+    ```
+8. Install kubectl
 ```bash
-curl -sfL https://get.k3s.io | sh -
-alias kubectl="/usr/local/bin/k3s kubectl"
-kubectl get nodes
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256"
+echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check  # Verify "kubectl: OK"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+kubectl version --client
 ```
 8. Run the test case
 ```bash
