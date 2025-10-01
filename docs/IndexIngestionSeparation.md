@@ -7,6 +7,12 @@ This separation enables:
 - Data durability: Off‑load buffer management and retry logic to a durable message bus.
 - Operational clarity: Separate monitoring dashboards for ingestion throughput vs indexing latency.
 
+# Important Note
+
+> [!WARNING]
+> **As of now, only brand new deployments are supported for Index and Ingestion Separation. No migration path is implemented, described or tested for existing deployments to move from a standard model to Index & Ingestion separation model.**
+
+
 # IngestorCluster
 
 IngestorCluster is introduced for high‑throughput data ingestion into a durable message bus. Its Splunk pods are configured to receive events (outputs.conf) and publish them to a message bus. 
@@ -18,8 +24,8 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| pushBus   | PushBus | Message bus configuration for publishing messages |
-| pipelineConfig   | PipelineConfig | Configuration for pipeline |
+| pushBus   | PushBus | Message bus configuration for publishing messages (required) |
+| pipelineConfig   | PipelineConfig | Configuration for pipeline (required) |
 
 PushBus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
 
@@ -38,9 +44,10 @@ SQS message bus inputs can be found in the table below.
 | largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint (e.g. https://s3.us-west-2.amazonaws.com) |
 | largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
 | deadLetterQueueName   | string | Name of the SQS dead letter queue |
-| maxRetriesPerPart   | integer | Max retries per part for retry policy max_count (The only one supported as of now) |
-| retryPolicy   | string | Retry policy (max_retry is the only one supported as of now) |
+| maxRetriesPerPart   | integer | Max retries per part for max_count retry policy |
+| retryPolicy   | string | Retry policy (e.g. max_count) |
 | sendInterval   | string | Send interval (e.g. 5s) |
+| encodingFormat | string | Encoding format (e.g. s2s) |
 
 PipelineConfig inputs can be found in the table below.
 
@@ -84,6 +91,7 @@ spec:
       maxRetriesPerPart: 4
       retryPolicy: max_count
       sendInterval: 5s
+      encodingFormat: s2s
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
@@ -104,8 +112,8 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| pullBus   | PushBus | Message bus configuration for pulling messages |
-| pipelineConfig   | PipelineConfig | Configuration for pipeline |
+| pullBus   | PushBus | Message bus configuration for pulling messages (required) |
+| pipelineConfig   | PipelineConfig | Configuration for pipeline (required) |
 
 PullBus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
 
@@ -124,9 +132,10 @@ SQS message bus inputs can be found in the table below.
 | largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint (e.g. https://s3.us-west-2.amazonaws.com) |
 | largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
 | deadLetterQueueName   | string | Name of SQS dead letter queue |
-| maxRetriesPerPart   | integer | Max retries per part for retry policy max_count (The only one supported as of now) |
-| retryPolicy   | string | Retry policy (max_retry is the only one supported as of now) |
+| maxRetriesPerPart   | integer | Max retries per part for max_count retry policy |
+| retryPolicy   | string | Retry policy (e.g. max_count) |
 | sendInterval   | string | Send interval (e.g. 5s) |
+| encodingFormat | string | Encoding format (e.g. s2s) |
 
 PipelineConfig inputs can be found in the table below.
 
@@ -182,6 +191,7 @@ spec:
       maxRetriesPerPart: 4
       retryPolicy: max_count
       sendInterval: 5s
+      encodingFormat: s2s
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
@@ -226,6 +236,78 @@ The following additional configuration parameters may be used for all Splunk Ent
 | readinessInitialDelaySeconds | number | Defines initialDelaySeconds for readiness probe |
 | livenessInitialDelaySeconds | number | Defines initialDelaySeconds for the liveness probe |
 | imagePullSecrets | [ImagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry (Use in conjunction with image config from [common spec](#common-spec-parameters-for-all-resources)) |
+
+# Helm Charts
+
+IngestorCluster can be deployed using a dedicated Helm chart. IndexerCluster helm chart has as well been enhanced to support new inputs.
+
+## Example
+
+Below examples describe how to define values for IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
+
+```
+ingestorCluster:
+  enabled: true
+  name: ingestor
+  replicaCount: 3
+  serviceAccount: ingestion-role-sa 
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pushBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: ing-ind-separation-q
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://ing-ind-separation/smartbus-test
+      deadLetterQueueName: ing-ind-separation-dlq
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+```
+
+```
+clusterManager:
+  enabled: true
+  name: cm
+  replicaCount: 1
+  serviceAccount: ingestion-role-sa 
+
+indexerCluster:
+  enabled: true
+  name: indexer
+  replicaCount: 3
+  serviceAccount: ingestion-role-sa 
+  clusterManagerRef:
+    name: cm
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pullBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: ing-ind-separation-q
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://ing-ind-separation/smartbus-test
+      deadLetterQueueName: ing-ind-separation-dlq
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+```
 
 # Service Account
 
@@ -552,6 +634,7 @@ spec:
       maxRetriesPerPart: 4
       retryPolicy: max_count
       sendInterval: 5s
+      encodingFormat: s2s
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
@@ -712,6 +795,7 @@ spec:
       maxRetriesPerPart: 4
       retryPolicy: max_count
       sendInterval: 5s
+      encodingFormat: s2s
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
