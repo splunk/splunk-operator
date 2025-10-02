@@ -239,7 +239,7 @@ The following additional configuration parameters may be used for all Splunk Ent
 
 # Helm Charts
 
-IngestorCluster can be deployed using a dedicated Helm chart. IndexerCluster helm chart has as well been enhanced to support new inputs.
+An IngestorCluster template has been added to the splunk/splunk-enterprise Helm chart. The IndexerCluster template has also been enhanced to support new inputs.
 
 ## Example
 
