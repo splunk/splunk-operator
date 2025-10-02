@@ -1219,3 +1219,33 @@ func DeleteConfigMap(ns string, ConfigMapName string) error {
 	}
 	return nil
 }
+
+// GetConfFile gets config file from pod
+func GetConfFile(podName, filePath, ns string) (string, error) {
+	var config string
+	var err error
+
+	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return config, err
+	}
+
+	return string(output), err
+}
+
+// GetAWSEnv gets AWS environment variables from pod
+func GetAWSEnv(podName, ns string) (string, error) {
+	var config string
+	var err error
+
+	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "env", "|", "grep", "-i", "aws").Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl exec -n %s %s -- env | grep -i aws", ns, podName)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return config, err
+	}
+
+	return string(output), err
+}
