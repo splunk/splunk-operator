@@ -64,6 +64,7 @@ jobs:
             managercrcrud,
             licensemanager,
             managerdeletecr,
+            indexingestseparation,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image-distroless

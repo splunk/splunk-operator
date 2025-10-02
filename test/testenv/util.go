@@ -357,7 +357,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, busSpec enterpriseApi.PushBusSpec, pipelineConfig enterpriseApi.PipelineConfigSpec, serviceAccountName string) *enterpriseApi.IndexerCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -374,7 +374,8 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
+				ServiceAccount: serviceAccountName,
+				Volumes:        []corev1.Volume{},
 				Spec: enterpriseApi.Spec{
 					ImagePullPolicy: "Always",
 					Image:           splunkImage,
@@ -393,11 +394,41 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				},
 				Defaults: ansibleConfig,
 			},
-			Replicas: int32(replicas),
+			Replicas:       int32(replicas),
+			PipelineConfig: pipelineConfig,
+			PullBus:        busSpec,
 		},
 	}
 
 	return &new
+}
+
+// newIngestorCluster creates and initialize the CR for IngestorCluster Kind
+func newIngestorCluster(name, ns string, replicas int, splunkImage string, busSpec enterpriseApi.PushBusSpec, pipelineConfig enterpriseApi.PipelineConfigSpec, serviceAccountName string) *enterpriseApi.IngestorCluster {
+	return &enterpriseApi.IngestorCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IngestorCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  ns,
+			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+		},
+
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ServiceAccount: serviceAccountName,
+				Volumes:        []corev1.Volume{},
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           splunkImage,
+				},
+			},
+			Replicas:       int32(replicas),
+			PipelineConfig: pipelineConfig,
+			PushBus:        busSpec,
+		},
+	}
 }
 
 func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName, ansibleConfig, splunkImage string) *enterpriseApi.SearchHeadCluster {

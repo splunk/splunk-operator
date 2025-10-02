@@ -166,6 +166,7 @@ jobs:
                 managerappframeworkm4,
                 managersecret,
                 managermc,
+                indexingestseparation,
                ]
     runs-on: ubuntu-latest
     env:

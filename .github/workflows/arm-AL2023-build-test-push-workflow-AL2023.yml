@@ -120,6 +120,7 @@ jobs:
                 appframeworksS1,
                 managersecret,
                 managermc,
+                indexingestseparation,
                ]
     runs-on: ubuntu-latest
     env:
