@@ -137,16 +137,14 @@ ClusterManager:
 
 		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
 		// further reconcile operations on custom resource until CM is ready
-		if clusterManager.Status.Phase != enterpriseApi.PhaseReady || cmImage != spec.Image {
-			if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
-				return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
-			}
-			if cmImage != spec.Image {
-				return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
-			}
+		if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
+			return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
 		}
-		goto IndexerCluster
+		if cmImage != spec.Image {
+			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
+		}
 	}
+	goto IndexerCluster
 
 IndexerCluster:
 	if cr.GroupVersionKind().Kind == "IndexerCluster" {
