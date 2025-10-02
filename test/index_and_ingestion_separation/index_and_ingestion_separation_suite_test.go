@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -35,6 +36,59 @@ const (
 var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
+
+	bus = enterpriseApi.PushBusSpec{
+		Type: "sqs_smartbus",
+		SQS: enterpriseApi.SQSSpec{
+			QueueName:                 "test-queue",
+			AuthRegion:                "us-west-2",
+			Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+			LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+			LargeMessageStorePath:     "s3://test-bucket/smartbus-test",
+			DeadLetterQueueName:       "test-dead-letter-queue",
+			MaxRetriesPerPart:         4,
+			RetryPolicy:               "max_count",
+			SendInterval:              "5s",
+			EncodingFormat:            "s2s",
+		},
+	}
+	pipelineConfig = enterpriseApi.PipelineConfigSpec{
+		RemoteQueueRuleset: false,
+		RuleSet:            true,
+		RemoteQueueTyping:  false,
+		RemoteQueueOutput:  false,
+		Typing:             true,
+		IndexerPipe:        true,
+	}
+	serviceAccountName = "index-ingest-sa"
+
+	inputs = []string{
+		"[remote_queue:test-queue]",
+		"remote_queue.type = sqs_smartbus",
+		"remote_queue.sqs_smartbus.auth_region = us-west-2",
+		"remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue",
+		"remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com",
+		"remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com",
+		"remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test",
+		"remote_queue.sqs_smartbus.retry_policy = max_count",
+		"remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"}
+	outputs     = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
+	defaultsAll = []string{
+		"[pipeline:remotequeueruleset]\ndisabled = false",
+		"[pipeline:ruleset]\ndisabled = true",
+		"[pipeline:remotequeuetyping]\ndisabled = false",
+		"[pipeline:remotequeueoutput]\ndisabled = false",
+		"[pipeline:typing]\ndisabled = true",
+	}
+	defaultsIngest = append(defaultsAll, "[pipeline:indexerPipe]\ndisabled = true")
+
+	awsEnvVars = []string{
+		"AWS_REGION=us-west-2",
+		"AWS_DEFAULT_REGION=us-west-2",
+		"AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
+		"AWS_ROLE_ARN=arn:aws:iam::",
+		"AWS_STS_REGIONAL_ENDPOINTS=regional",
+	}
 )
 
 // TestBasic is the main entry point

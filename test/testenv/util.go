@@ -30,6 +30,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	. "github.com/onsi/gomega"
+
 	"github.com/onsi/ginkgo/v2"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -1248,4 +1250,12 @@ func GetAWSEnv(podName, ns string) (string, error) {
 	}
 
 	return string(output), err
+}
+
+func ValidateConfFileContent(confFileContent string, listOfStringsForValidation []string) {
+	for _, str := range listOfStringsForValidation {
+		if !strings.Contains(confFileContent, str) {
+			Expect(confFileContent).To(ContainSubstring(str), "Failed to find string "+str+" in conf file")
+		}
+	}
 }

@@ -32,6 +32,8 @@ var _ = Describe("indingsep test", func() {
 	var testcaseEnvInst *testenv.TestCaseEnv
 	var deployment *testenv.Deployment
 
+	var cmSpec enterpriseApi.ClusterManagerSpec
+
 	ctx := context.TODO()
 
 	BeforeEach(func() {
@@ -43,6 +45,15 @@ var _ = Describe("indingsep test", func() {
 
 		deployment, err = testcaseEnvInst.NewDeployment(testenv.RandomDNSName(3))
 		Expect(err).To(Succeed(), "Unable to create deployment")
+
+		cmSpec = enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           testcaseEnvInst.GetSplunkImage(),
+				},
+			},
+		}
 	})
 
 	AfterEach(func() {
@@ -59,33 +70,9 @@ var _ = Describe("indingsep test", func() {
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, smoke, indingsep: Splunk Operator can configure Ingestors and Indexers", func() {
-			bus := enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://test-bucket/smartbus-test",
-					DeadLetterQueueName:       "test-dead-letter-queue",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-					EncodingFormat:            "s2s",
-				},
-			}
-			pipelineConfig := enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			}
-			serviceAccountName := "index-ingest-sa"
-
+		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", func() {
 			// Create Service Account
+			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Deploy Ingestor Cluster
@@ -95,14 +82,6 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Cluster Manager
 			testcaseEnvInst.Log.Info("Deploy Cluster Manager")
-			cmSpec := enterpriseApi.ClusterManagerSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-				},
-			}
 			_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
@@ -112,44 +91,23 @@ var _ = Describe("indingsep test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
 			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that Cluster Manager is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that Indexer Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 		})
 	})
 
 	Context("Ingestor and Indexer deployment", func() {
-		It("indingsep, integration, indingsep: Splunk Operator can configure Ingestors and Indexers", func() {
-			bus := enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://test-bucket/smartbus-test",
-					DeadLetterQueueName:       "test-dead-letter-queue",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-					EncodingFormat:            "s2s",
-				},
-			}
-			pipelineConfig := enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			}
-			serviceAccountName := "index-ingest-sa"
-
+		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
 			// Create Service Account
+			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
 			// Deploy Ingestor Cluster
@@ -159,14 +117,6 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Cluster Manager
 			testcaseEnvInst.Log.Info("Deploy Cluster Manager")
-			cmSpec := enterpriseApi.ClusterManagerSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-				},
-			}
 			_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
 
@@ -176,90 +126,78 @@ var _ = Describe("indingsep test", func() {
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
 			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that Cluster Manager is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
 			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
 
 			// Ensure that Indexer Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Get instance of current Ingestor Cluster CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
 			ingest := &enterpriseApi.IngestorCluster{}
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
 			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
 
 			// Verify Ingestor Cluster Status
+			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
 			Expect(ingest.Status.PushBus).To(Equal(bus), "Ingestor PushBus status is not the same as provided as input")
 			Expect(ingest.Status.PipelineConfig).To(Equal(pipelineConfig), "Ingestor PipelineConfig status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
 			index := &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
 			// Verify Indexer Cluster Status
+			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
 			Expect(index.Status.PullBus).To(Equal(bus), "Indexer PullBus status is not the same as provided as input")
 			Expect(index.Status.PipelineConfig).To(Equal(pipelineConfig), "Indexer PipelineConfig status is not the same as provided as input")
 
 			// Verify conf files
+			testcaseEnvInst.Log.Info("Verify conf files")
 			pods := testenv.DumpGetPods(deployment.GetName())
 			for _, pod := range pods {
 				defaultsConf := ""
 
 				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
-					// Get outputs.conf
+					// Verify outputs.conf
+					testcaseEnvInst.Log.Info("Verify outputs.conf")
 					outputsPath := "opt/splunk/etc/system/local/outputs.conf"
 					outputsConf, err := testenv.GetConfFile(pod, outputsPath, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get outputs.conf from Ingestor Cluster pod")
-					Expect(outputsConf).To(ContainSubstring("[remote_queue:test-queue]"), "outputs.conf does not contain smartbus queue name configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.type = sqs_smartbus"), "outputs.conf does not contain smartbus type configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.auth_region = us-west-2"), "outputs.conf does not contain smartbus region configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue"), "outputs.conf does not contain smartbus dead letter queue configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.encoding_format = s2s"), "outputs.conf does not contain smartbus encoding format configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com"), "outputs.conf does not contain smartbus endpoint configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com"), "outputs.conf does not contain smartbus large message store endpoint configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test"), "outputs.conf does not contain smartbus large message store path configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.retry_policy = max_count"), "outputs.conf does not contain smartbus retry policy configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.send_interval = 5s"), "outputs.conf does not contain smartbus send interval configuration")
-					Expect(outputsConf).To(ContainSubstring("remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"), "outputs.conf does not contain smartbus max retries per part configuration")
+					testenv.ValidateConfFileContent(outputsConf, outputs)
 
-					// Get default-mode.conf
+					// Verify default-mode.conf
+					testcaseEnvInst.Log.Info("Verify default-mode.conf")
 					defaultsPath := "opt/splunk/etc/system/local/default-mode.conf"
 					defaultsConf, err := testenv.GetConfFile(pod, defaultsPath, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get default-mode.conf from Ingestor Cluster pod")
-					Expect(defaultsConf).To(ContainSubstring("[pipeline:remotequeueruleset]\ndisabled = false"), "default-mode.conf does not contain remote queue ruleset stanza")
-					Expect(defaultsConf).To(ContainSubstring("[pipeline:ruleset]\ndisabled = true"), "default-mode.conf does not contain ruleset stanza")
-					Expect(defaultsConf).To(ContainSubstring("[pipeline:remotequeuetyping]\ndisabled = false"), "default-mode.conf does not contain remote queue typing stanza")
-					Expect(defaultsConf).To(ContainSubstring("[pipeline:remotequeueoutput]\ndisabled = false"), "default-mode.conf does not contain remote queue output stanza")
-					Expect(defaultsConf).To(ContainSubstring("[pipeline:typing]\ndisabled = true"), "default-mode.conf does not contain typing stanza")
+					testenv.ValidateConfFileContent(defaultsConf, defaultsAll)
 
-					// Get AWS env variables
+					// Verify AWS env variables
+					testcaseEnvInst.Log.Info("Verify AWS env variables")
 					envVars, err := testenv.GetAWSEnv(pod, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get AWS env variables from Ingestor Cluster pod")
-					Expect(envVars).To(ContainSubstring("AWS_REGION=us-west-2"), "AWS env variables do not contain region")
-					Expect(envVars).To(ContainSubstring("AWS_DEFAULT_REGION=us-west-2"), "AWS env variables do not contain default region")
-					Expect(envVars).To(ContainSubstring("AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token"), "AWS env variables do not contain web identity token file")
-					Expect(envVars).To(ContainSubstring("AWS_ROLE_ARN=arn:aws:iam::"), "AWS env variables do not contain role arn")
-					Expect(envVars).To(ContainSubstring("AWS_STS_REGIONAL_ENDPOINTS=regional"), "AWS env variables do not contain STS regional endpoints")
+					testenv.ValidateConfFileContent(envVars, awsEnvVars)
 				}
 
 				if strings.Contains(pod, "ingest") {
-					Expect(defaultsConf).To(ContainSubstring("[pipeline:indexerPipe]\ndisabled = true"), "default-mode.conf does not contain indexer pipe stanza")
+					// Verify default-mode.conf
+					testcaseEnvInst.Log.Info("Verify default-mode.conf")
+					testenv.ValidateConfFileContent(defaultsConf, defaultsIngest)
 				} else if strings.Contains(pod, "idxc") {
-					// Get inputs.conf
+					// Verify inputs.conf
+					testcaseEnvInst.Log.Info("Verify inputs.conf")
 					inputsPath := "opt/splunk/etc/system/local/inputs.conf"
 					inputsConf, err := testenv.GetConfFile(pod, inputsPath, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod")
-					Expect(inputsConf).To(ContainSubstring("[remote_queue:test-queue]"), "inputs.conf does not contain smartbus queue name configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.type = sqs_smartbus"), "inputs.conf does not contain smartbus type configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.auth_region = us-west-2"), "inputs.conf does not contain smartbus region configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue"), "inputs.conf does not contain smartbus dead letter queue configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com"), "inputs.conf does not contain smartbus endpoint configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com"), "inputs.conf does not contain smartbus large message store endpoint configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test"), "inputs.conf does not contain smartbus large message store path configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.sqs_smartbus.retry_policy = max_count"), "inputs.conf does not contain smartbus retry policy configuration")
-					Expect(inputsConf).To(ContainSubstring("remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"), "inputs.conf does not contain smartbus max retries per part configuration")
+					testenv.ValidateConfFileContent(inputsConf, inputs)
 				}
 			}
 		})
