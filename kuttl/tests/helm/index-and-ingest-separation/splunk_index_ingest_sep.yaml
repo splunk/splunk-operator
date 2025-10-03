@@ -1,0 +1,66 @@
+splunk-operator:
+  enabled: false
+  splunkOperator:
+    clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
+
+ingestorCluster:
+  enabled: true
+  name: ingestor
+  replicaCount: 3
+  # serviceAccount: ingestion-role-sa 
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pushBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: kkoziol-sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://kkoziol-ingestion/smartbus-test-kkoziol
+      deadLetterQueueName: kkoziol-sqs-dlq-test
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+
+clusterManager:
+  enabled: true
+  name: cm
+  replicaCount: 1
+  # serviceAccount: ingestion-role-sa 
+
+indexerCluster:
+  enabled: true
+  name: indexer
+  replicaCount: 3
+  # serviceAccount: ingestion-role-sa 
+  clusterManagerRef:
+    name: cm
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pullBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: kkoziol-sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://kkoziol-ingestion/smartbus-test-kkoziol
+      deadLetterQueueName: kkoziol-sqs-dlq-test
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s

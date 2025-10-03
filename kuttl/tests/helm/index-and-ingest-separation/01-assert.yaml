@@ -1,0 +1,156 @@
+---
+# assert for cluster manager custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+status:
+  phase: Ready
+
+---
+# check if stateful sets are created
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-cm-cluster-manager
+status:
+  replicas: 1
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-cm-cluster-manager-secret-v1
+
+---
+# assert for indexer cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: idxc
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pullBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: kkoziol-sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://kkoziol-ingestion/smartbus-test-kkoziol
+      deadLetterQueueName: kkoziol-sqs-dlq-test
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+status:
+  phase: Ready
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pullBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: kkoziol-sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://kkoziol-ingestion/smartbus-test-kkoziol
+      deadLetterQueueName: kkoziol-sqs-dlq-test
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+
+---
+# check for stateful set and replicas as configured
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-idxc-indexer
+status:
+  replicas: 3
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-idxc-indexer-secret-v1
+
+---
+# assert for indexer cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: ingestor
+spec:
+  replicas: 3
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pushBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: kkoziol-sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://kkoziol-ingestion/smartbus-test-kkoziol
+      deadLetterQueueName: kkoziol-sqs-dlq-test
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+status:
+  phase: Ready
+  pipelineConfig:
+    remoteQueueRuleset: false
+    ruleSet: true
+    remoteQueueTyping: false
+    remoteQueueOutput: false
+    typing: true
+    indexerPipe: true
+  pushBus:
+    type: sqs_smartbus
+    sqs:
+      queueName: kkoziol-sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://kkoziol-ingestion/smartbus-test-kkoziol
+      deadLetterQueueName: kkoziol-sqs-dlq-test
+      maxRetriesPerPart: 4
+      retryPolicy: max_count
+      sendInterval: 5s
+      encodingFormat: s2s
+
+---
+# check for stateful set and replicas as configured
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-ingestor-ingestor
+status:
+  replicas: 3
+
+---
+# check if secret object are created
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-ingestor-ingestor-secret-v1
