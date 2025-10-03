@@ -1252,10 +1252,16 @@ func GetAWSEnv(podName, ns string) (string, error) {
 	return string(output), err
 }
 
-func ValidateConfFileContent(confFileContent string, listOfStringsForValidation []string) {
+func ValidateContent(confFileContent string, listOfStringsForValidation []string, shouldContain bool) {
 	for _, str := range listOfStringsForValidation {
-		if !strings.Contains(confFileContent, str) {
-			Expect(confFileContent).To(ContainSubstring(str), "Failed to find string "+str+" in conf file")
+		if shouldContain {
+			if !strings.Contains(confFileContent, str) {
+				Expect(confFileContent).To(ContainSubstring(str), "Failed to find string "+str+" in conf file")
+			}
+		} else {
+			if strings.Contains(confFileContent, str) {
+				Expect(confFileContent).ToNot(ContainSubstring(str), "Found string "+str+" in conf file, but it should not be there")
+			}
 		}
 	}
 }

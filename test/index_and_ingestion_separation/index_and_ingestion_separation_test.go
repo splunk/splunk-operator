@@ -101,6 +101,20 @@ var _ = Describe("indingsep test", func() {
 			// Ensure that Indexer Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Delete the Indexer Cluster
+			idxc := &enterpriseApi.IndexerCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", idxc)
+			Expect(err).To(Succeed(), "Unable to get Indexer Cluster instance", "Indexer Cluster Name", idxc)
+			err = deployment.DeleteCR(ctx, idxc)
+			Expect(err).To(Succeed(), "Unable to delete Indexer Cluster instance", "Indexer Cluster Name", idxc)
+
+			// Delete the Ingestor Cluster
+			ingest := &enterpriseApi.IngestorCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
+			Expect(err).To(Succeed(), "Unable to get Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
+			err = deployment.DeleteCR(ctx, ingest)
+			Expect(err).To(Succeed(), "Unable to delete Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
 		})
 	})
 
@@ -171,33 +185,240 @@ var _ = Describe("indingsep test", func() {
 					outputsPath := "opt/splunk/etc/system/local/outputs.conf"
 					outputsConf, err := testenv.GetConfFile(pod, outputsPath, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get outputs.conf from Ingestor Cluster pod")
-					testenv.ValidateConfFileContent(outputsConf, outputs)
+					testenv.ValidateContent(outputsConf, outputs, true)
 
 					// Verify default-mode.conf
 					testcaseEnvInst.Log.Info("Verify default-mode.conf")
 					defaultsPath := "opt/splunk/etc/system/local/default-mode.conf"
 					defaultsConf, err := testenv.GetConfFile(pod, defaultsPath, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get default-mode.conf from Ingestor Cluster pod")
-					testenv.ValidateConfFileContent(defaultsConf, defaultsAll)
+					testenv.ValidateContent(defaultsConf, defaultsAll, true)
 
 					// Verify AWS env variables
 					testcaseEnvInst.Log.Info("Verify AWS env variables")
 					envVars, err := testenv.GetAWSEnv(pod, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get AWS env variables from Ingestor Cluster pod")
-					testenv.ValidateConfFileContent(envVars, awsEnvVars)
+					testenv.ValidateContent(envVars, awsEnvVars, true)
 				}
 
 				if strings.Contains(pod, "ingest") {
 					// Verify default-mode.conf
 					testcaseEnvInst.Log.Info("Verify default-mode.conf")
-					testenv.ValidateConfFileContent(defaultsConf, defaultsIngest)
+					testenv.ValidateContent(defaultsConf, defaultsIngest, true)
 				} else if strings.Contains(pod, "idxc") {
 					// Verify inputs.conf
 					testcaseEnvInst.Log.Info("Verify inputs.conf")
 					inputsPath := "opt/splunk/etc/system/local/inputs.conf"
 					inputsConf, err := testenv.GetConfFile(pod, inputsPath, deployment.GetName())
 					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod")
-					testenv.ValidateConfFileContent(inputsConf, inputs)
+					testenv.ValidateContent(inputsConf, inputs, true)
+				}
+			}
+		})
+	})
+
+	Context("Ingestor and Indexer deployment", func() {
+		It("indingsep, integration, indingsep: Splunk Operator can update Ingestors and Indexers with correct setup", func() {
+			// Create Service Account
+			testcaseEnvInst.Log.Info("Create Service Account")
+			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+
+			// Deploy Ingestor Cluster
+			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
+			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, pipelineConfig, serviceAccountName)
+			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
+
+			// Deploy Cluster Manager
+			testcaseEnvInst.Log.Info("Deploy Cluster Manager")
+			_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
+			Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+
+			// Deploy Indexer Cluster
+			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, pipelineConfig, serviceAccountName)
+			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
+
+			// Ensure that Ingestor Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure that Cluster Manager is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
+			testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+			// Ensure that Indexer Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Get instance of current Ingestor Cluster CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
+			ingest := &enterpriseApi.IngestorCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
+			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
+
+			// Update instance of Ingestor Cluster CR with new pushbus config
+			testcaseEnvInst.Log.Info("Update instance of Ingestor Cluster CR with new pushbus config")
+			ingest.Spec.PushBus = updateBus
+			err = deployment.UpdateCR(ctx, ingest)
+			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster with updated CR")
+
+			// Verify Ingestor Cluster Status
+			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
+			Expect(ingest.Status.PushBus).To(Equal(updateBus), "Ingestor PushBus status is not the same as provided as input")
+			Expect(ingest.Status.PipelineConfig).To(Equal(pipelineConfig), "Ingestor PipelineConfig status is not the same as provided as input")
+
+			// Ensure that Ingestor Cluster has not been restarted
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster has not been restarted")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+			// Get instance of current Indexer Cluster CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
+			index := &enterpriseApi.IndexerCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)
+			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+
+			// Update instance of Indexer Cluster CR with new pullbus config
+			testcaseEnvInst.Log.Info("Update instance of Indexer Cluster CR with new pullbus config")
+			index.Spec.PullBus = updateBus
+			err = deployment.UpdateCR(ctx, index)
+			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
+
+			// Verify Indexer Cluster Status
+			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
+			Expect(index.Status.PullBus).To(Equal(updateBus), "Indexer PullBus status is not the same as provided as input")
+			Expect(index.Status.PipelineConfig).To(Equal(pipelineConfig), "Indexer PipelineConfig status is not the same as provided as input")
+
+			// Ensure that Indexer Cluster has not been restarted
+			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster has not been restarted")
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify conf files
+			testcaseEnvInst.Log.Info("Verify conf files")
+			pods := testenv.DumpGetPods(deployment.GetName())
+			for _, pod := range pods {
+				defaultsConf := ""
+
+				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
+					// Verify outputs.conf
+					testcaseEnvInst.Log.Info("Verify outputs.conf")
+					outputsPath := "opt/splunk/etc/system/local/outputs.conf"
+					outputsConf, err := testenv.GetConfFile(pod, outputsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get outputs.conf from Ingestor Cluster pod")
+					testenv.ValidateContent(outputsConf, updatedOutputs, true)
+					testenv.ValidateContent(outputsConf, outputsShouldNotContain, false)
+
+					// Verify default-mode.conf
+					testcaseEnvInst.Log.Info("Verify default-mode.conf")
+					defaultsPath := "opt/splunk/etc/system/local/default-mode.conf"
+					defaultsConf, err := testenv.GetConfFile(pod, defaultsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get default-mode.conf from Ingestor Cluster pod")
+					testenv.ValidateContent(defaultsConf, defaultsAll, true)
+
+					// Verify AWS env variables
+					testcaseEnvInst.Log.Info("Verify AWS env variables")
+					envVars, err := testenv.GetAWSEnv(pod, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get AWS env variables from Ingestor Cluster pod")
+					testenv.ValidateContent(envVars, awsEnvVars, true)
+				}
+
+				if strings.Contains(pod, "ingest") {
+					// Verify default-mode.conf
+					testcaseEnvInst.Log.Info("Verify default-mode.conf")
+					testenv.ValidateContent(defaultsConf, defaultsIngest, true)
+				} else if strings.Contains(pod, "idxc") {
+					// Verify inputs.conf
+					testcaseEnvInst.Log.Info("Verify inputs.conf")
+					inputsPath := "opt/splunk/etc/system/local/inputs.conf"
+					inputsConf, err := testenv.GetConfFile(pod, inputsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod")
+					testenv.ValidateContent(inputsConf, updatedInputs, true)
+					testenv.ValidateContent(inputsConf, inputsShouldNotContain, false)
+				}
+			}
+
+			// Get instance of current Ingestor Cluster CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
+			ingest = &enterpriseApi.IngestorCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
+			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
+
+			// Update instance of Ingestor Cluster CR with new pipelineconfig config
+			testcaseEnvInst.Log.Info("Update instance of Ingestor Cluster CR with new pipelineconfig config")
+			ingest.Spec.PipelineConfig = updatePipelineConfig
+			err = deployment.UpdateCR(ctx, ingest)
+			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster with updated CR")
+
+			// Verify Ingestor Cluster Status
+			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
+			Expect(ingest.Status.PushBus).To(Equal(updateBus), "Ingestor PushBus status is not the same as provided as input")
+			Expect(ingest.Status.PipelineConfig).To(Equal(updatePipelineConfig), "Ingestor PipelineConfig status is not the same as provided as input")
+
+			// Ensure that Ingestor Cluster has not been restarted
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster has not been restarted")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+			// Get instance of current Indexer Cluster CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
+			index = &enterpriseApi.IndexerCluster{}
+			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)
+			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
+
+			// Update instance of Indexer Cluster CR with new pipelineconfig config
+			testcaseEnvInst.Log.Info("Update instance of Indexer Cluster CR with new pipelineconfig config")
+			index.Spec.PipelineConfig = updatePipelineConfig
+			err = deployment.UpdateCR(ctx, index)
+			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
+
+			// Verify Indexer Cluster Status
+			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
+			Expect(index.Status.PullBus).To(Equal(updateBus), "Indexer PullBus status is not the same as provided as input")
+			Expect(index.Status.PipelineConfig).To(Equal(updatePipelineConfig), "Indexer PipelineConfig status is not the same as provided as input")
+
+			// Ensure that Indexer Cluster has not been restarted
+			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster has not been restarted")
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+			// Verify conf files
+			testcaseEnvInst.Log.Info("Verify conf files")
+			pods = testenv.DumpGetPods(deployment.GetName())
+			for _, pod := range pods {
+				defaultsConf := ""
+
+				if strings.Contains(pod, "ingest") || strings.Contains(pod, "idxc") {
+					// Verify outputs.conf
+					testcaseEnvInst.Log.Info("Verify outputs.conf")
+					outputsPath := "opt/splunk/etc/system/local/outputs.conf"
+					outputsConf, err := testenv.GetConfFile(pod, outputsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get outputs.conf from Ingestor Cluster pod")
+					testenv.ValidateContent(outputsConf, updatedOutputs, true)
+					testenv.ValidateContent(outputsConf, outputsShouldNotContain, false)
+
+					// Verify default-mode.conf
+					testcaseEnvInst.Log.Info("Verify default-mode.conf")
+					defaultsPath := "opt/splunk/etc/system/local/default-mode.conf"
+					defaultsConf, err := testenv.GetConfFile(pod, defaultsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get default-mode.conf from Ingestor Cluster pod")
+					testenv.ValidateContent(defaultsConf, updatedDefaultsAll, true)
+
+					// Verify AWS env variables
+					testcaseEnvInst.Log.Info("Verify AWS env variables")
+					envVars, err := testenv.GetAWSEnv(pod, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get AWS env variables from Ingestor Cluster pod")
+					testenv.ValidateContent(envVars, awsEnvVars, true)
+				}
+
+				if strings.Contains(pod, "ingest") {
+					// Verify default-mode.conf
+					testcaseEnvInst.Log.Info("Verify default-mode.conf")
+					testenv.ValidateContent(defaultsConf, updatedDefaultsIngest, true)
+				} else if strings.Contains(pod, "idxc") {
+					// Verify inputs.conf
+					testcaseEnvInst.Log.Info("Verify inputs.conf")
+					inputsPath := "opt/splunk/etc/system/local/inputs.conf"
+					inputsConf, err := testenv.GetConfFile(pod, inputsPath, deployment.GetName())
+					Expect(err).To(Succeed(), "Failed to get inputs.conf from Indexer Cluster pod")
+					testenv.ValidateContent(inputsConf, updatedInputs, true)
+					testenv.ValidateContent(inputsConf, inputsShouldNotContain, false)
 				}
 			}
 		})

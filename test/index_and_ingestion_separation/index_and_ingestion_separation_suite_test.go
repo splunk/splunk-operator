@@ -89,6 +89,58 @@ var (
 		"AWS_ROLE_ARN=arn:aws:iam::",
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
+
+	updateBus = enterpriseApi.PushBusSpec{
+		Type: "sqs_smartbus",
+		SQS: enterpriseApi.SQSSpec{
+			QueueName:                 "test-queue-updated",
+			AuthRegion:                "us-west-2",
+			Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+			LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+			LargeMessageStorePath:     "s3://test-bucket-updated/smartbus-test",
+			DeadLetterQueueName:       "test-dead-letter-queue-updated",
+			MaxRetriesPerPart:         5,
+			RetryPolicy:               "max",
+			SendInterval:              "4s",
+			EncodingFormat:            "s2s",
+		},
+	}
+	updatePipelineConfig = enterpriseApi.PipelineConfigSpec{
+		RemoteQueueRuleset: false,
+		RuleSet:            false,
+		RemoteQueueTyping:  false,
+		RemoteQueueOutput:  false,
+		Typing:             true,
+		IndexerPipe:        true,
+	}
+
+	updatedInputs = []string{
+		"[remote_queue:test-queue-updated]",
+		"remote_queue.type = sqs_smartbus",
+		"remote_queue.sqs_smartbus.auth_region = us-west-2",
+		"remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue-updated",
+		"remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com",
+		"remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com",
+		"remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket-updated/smartbus-test",
+		"remote_queue.sqs_smartbus.retry_policy = max",
+		"remote_queue.max.sqs_smartbus.max_retries_per_part = 5"}
+	updatedOutputs     = append(updatedInputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 4s")
+	updatedDefaultsAll = []string{
+		"[pipeline:remotequeueruleset]\ndisabled = false",
+		"[pipeline:ruleset]\ndisabled = false",
+		"[pipeline:remotequeuetyping]\ndisabled = false",
+		"[pipeline:remotequeueoutput]\ndisabled = false",
+		"[pipeline:typing]\ndisabled = true",
+	}
+	updatedDefaultsIngest = append(updatedDefaultsAll, "[pipeline:indexerPipe]\ndisabled = true")
+
+	inputsShouldNotContain = []string{
+		"[remote_queue:test-queue]",
+		"remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue",
+		"remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test",
+		"remote_queue.sqs_smartbus.retry_policy = max_count",
+		"remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"}
+	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
 )
 
 // TestBasic is the main entry point
