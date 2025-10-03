@@ -118,6 +118,42 @@ var _ = Describe("indingsep test", func() {
 		})
 	})
 
+	// 	Context("Ingestor and Indexer deployment", func() {
+	// 	It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
+	// 		// Create Service Account
+	// 		testcaseEnvInst.Log.Info("Create Service Account")
+	// 		testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+
+	// 		// Deploy Ingestor Cluster
+	// 		testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
+	// 		_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, pipelineConfig, serviceAccountName)
+	// 		Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
+
+	// 		// Deploy Cluster Manager
+	// 		testcaseEnvInst.Log.Info("Deploy Cluster Manager")
+	// 		_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
+	// 		Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+
+	// 		// Deploy Indexer Cluster
+	// 		testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
+	// 		_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, pipelineConfig, serviceAccountName)
+	// 		Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
+
+	// 		// Ensure that Ingestor Cluster is in Ready phase
+	// 		testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
+	// 		testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+	// 		// Ensure that Cluster Manager is in Ready phase
+	// 		testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
+	// 		testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
+
+	// 		// Ensure that Indexer Cluster is in Ready phase
+	// 		testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
+	// 		testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
+
+	// 	})
+	// })
+
 	Context("Ingestor and Indexer deployment", func() {
 		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
 			// Create Service Account
