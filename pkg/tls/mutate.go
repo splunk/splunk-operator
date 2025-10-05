@@ -13,16 +13,16 @@ import (
 // InjectTLSForPodTemplate wires TLS mounts/env/annotations into the PodTemplate.
 //
 // It expects that the reconciler already:
-//   * created/updated a ConfigMap named preTasksCMName with key splunk.PreTasksCMKey holding the rendered pretasks YAML
-//   * computed observedTLSChecksum (e.g., sha256 of Secret data or CSI attributes)
-//   * computed preTasksHash (sha256 of rendered pretasks content)
+//   - created/updated a ConfigMap named preTasksCMName with key splunk.PreTasksCMKey holding the rendered pretasks YAML
+//   - computed observedTLSChecksum (e.g., sha256 of Secret data or CSI attributes)
+//   - computed preTasksHash (sha256 of rendered pretasks content)
 //
 // This function:
-//   * mounts the pretasks CM at /mnt/pre/tls.yml and sets SPLUNK_ANSIBLE_PRE_TASKS
-//   * mounts Secret or CSI at /mnt/certs
-//   * mounts optional trust-bundle Secret at /mnt/trust
-//   * mounts optional KV password Secret at /mnt/kvpass (and returns its file path for renderer convenience)
-//   * annotates the pod template with TLS and pretask checksums (visible diff with OnDelete strategy)
+//   - mounts the pretasks CM at /mnt/pre/tls.yml and sets SPLUNK_ANSIBLE_PRE_TASKS
+//   - mounts Secret or CSI at /mnt/certs
+//   - mounts optional trust-bundle Secret at /mnt/trust
+//   - mounts optional KV password Secret at /mnt/kvpass (and returns its file path for renderer convenience)
+//   - annotates the pod template with TLS and pretask checksums (visible diff with OnDelete strategy)
 func InjectTLSForPodTemplate(
 	podTemplate *corev1.PodTemplateSpec,
 	spec *v4.TLSConfig,
@@ -85,9 +85,9 @@ func InjectTLSForPodTemplate(
 		}
 		attrs := map[string]string{
 			"csi.storage.k8s.io/ephemeral": "true",
-			"issuer-name":                   spec.CSI.IssuerRefName,
-			"issuer-kind":                   spec.CSI.IssuerRefKind,
-			"issuer-group":                  "cert-manager.io",
+			"issuer-name":                  spec.CSI.IssuerRefName,
+			"issuer-kind":                  spec.CSI.IssuerRefKind,
+			"issuer-group":                 "cert-manager.io",
 		}
 		if len(spec.CSI.DNSNames) > 0 {
 			attrs["dns-names"] = joinCSV(spec.CSI.DNSNames)
@@ -168,17 +168,25 @@ func InjectTLSForPodTemplate(
 		return kvPassFile, fmt.Errorf("no containers in pod template")
 	}
 	spl := &podTemplate.Spec.Containers[0]
-	add := func(n, v string) { 
+	add := func(n, v string) {
 		found := false
-		for i := range spl.Env { if spl.Env[i].Name == n { spl.Env[i].Value = v; found = true; break } }
-		if !found { spl.Env = append(spl.Env, corev1.EnvVar{Name: n, Value: v}) }
+		for i := range spl.Env {
+			if spl.Env[i].Name == n {
+				spl.Env[i].Value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			spl.Env = append(spl.Env, corev1.EnvVar{Name: n, Value: v})
+		}
 	}
 
 	// Web SSL (keeps Ansible roles consistent with our file layout)
 	add("SPLUNK_HTTP_ENABLESSL", "1")
 	add("SPLUNK_HTTP_ENABLESSL_CERT", fmt.Sprintf("%s/%s", CanonicalTLSDir, TLSCrtName))
 	add("SPLUNK_HTTP_ENABLESSL_PRIVKEY", fmt.Sprintf("%s/%s", CanonicalTLSDir, TLSKeyName))
-	add("SPLUNK_HTTP_ENABLESSL_PRIVKEY_PASSWORD", "")
+	//add("SPLUNK_HTTP_ENABLESSL_PRIVKEY_PASSWORD", "")
 
 	// splunkd SSL (we point to our combined server.pem and CA)
 	add("SPLUNKD_SSL_ENABLE", "true")

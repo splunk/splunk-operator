@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	EnvVarName          = "SPLUNK_GENERAL_TERMS"
-	ExpectedFlag        = "--accept-sgt-current-at-splunk-com"
+	EnvVarName   = "SPLUNK_GENERAL_TERMS"
+	ExpectedFlag = "--accept-sgt-current-at-splunk-com"
 )
 
 var accepted atomic.Bool

@@ -24,9 +24,9 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/tls"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/tls"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"

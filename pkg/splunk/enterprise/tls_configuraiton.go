@@ -15,8 +15,8 @@ import (
 
 	v4 "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	tls "github.com/splunk/splunk-operator/pkg/tls"
 	"github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
+	tls "github.com/splunk/splunk-operator/pkg/tls"
 )
 
 func mutateTLS(ctx context.Context, c splcommon.ControllerClient, ss *appsv1.StatefulSet, cr *v4.Standalone) error {

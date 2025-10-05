@@ -71,7 +71,7 @@ func TestRender_Success_WithAndWithoutKV(t *testing.T) {
 	withTempTemplate(t, goodTemplate, func() {
 		// Case 1: KV disabled, no serverName
 		spec := &v4.TLSConfig{
-			CanonicalDir: "/opt/splunk/etc/auth/tls",
+			CanonicalDir: "/opt/splunk/etc/auth",
 			// KVEncryptedKey is nil, so KVEnable=false
 		}
 		yml, sum, err := Render(spec, "", "")
@@ -93,7 +93,7 @@ func TestRender_Success_WithAndWithoutKV(t *testing.T) {
 
 		// Case 2: KV enabled, with serverName
 		spec2 := &v4.TLSConfig{
-			CanonicalDir: "/opt/splunk/etc/auth/tls",
+			CanonicalDir: "/opt/splunk/etc/auth",
 			KVEncryptedKey: &v4.KVEncryptedKeySpec{
 				Enabled:    true,
 				BundleFile: "", // default path from renderer
@@ -117,7 +117,7 @@ func TestRender_Success_WithAndWithoutKV(t *testing.T) {
 
 func TestRender_Failure_ParseError(t *testing.T) {
 	withTempTemplate(t, badTemplate, func() {
-		spec := &v4.TLSConfig{CanonicalDir: "/opt/splunk/etc/auth/tls"}
+		spec := &v4.TLSConfig{CanonicalDir: "/opt/splunk/etc/auth"}
 		_, _, err := Render(spec, "", "")
 		if err == nil {
 			t.Fatal("expected parse error, got nil")
@@ -130,7 +130,7 @@ func TestRender_Failure_ParseError(t *testing.T) {
 
 func TestRender_Failure_MissingKey(t *testing.T) {
 	withTempTemplate(t, missingKeyTpl, func() {
-		spec := &v4.TLSConfig{CanonicalDir: "/opt/splunk/etc/auth/tls"}
+		spec := &v4.TLSConfig{CanonicalDir: "/opt/splunk/etc/auth"}
 		_, _, err := Render(spec, "", "")
 		if err == nil {
 			t.Fatal("expected missingkey error, got nil")

@@ -272,7 +272,6 @@ func upsert(list []v4.TLSCondition, c v4.TLSCondition) []v4.TLSCondition {
 	return list
 }
 
-
 // parseFirstCert handles both PEM and raw DER; returns the first cert if found.
 func parseFirstCert(b []byte) *x509.Certificate {
 	// Try PEM first (possibly a chain)

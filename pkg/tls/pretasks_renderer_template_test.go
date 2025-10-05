@@ -16,7 +16,7 @@ import (
 func render(t *testing.T, kv bool, serverName string) string {
 	t.Helper()
 	spec := &v4.TLSConfig{
-		CanonicalDir: "/opt/splunk/etc/auth/tls",
+		CanonicalDir: "/opt/splunk/etc/auth",
 	}
 	if kv {
 		spec.KVEncryptedKey = &v4.KVEncryptedKeySpec{Enabled: true}

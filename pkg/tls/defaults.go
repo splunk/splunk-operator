@@ -33,6 +33,9 @@ type Data struct {
 
 	// Optional serverName for [general]; the caller sets if desired
 	ServerName string
+
+    KVBundleAliasCRT string // CanonicalDir + "/splunk-bundle-pass.crt"
+    KVBundleAliasPEM string // CanonicalDir + "/splunk-bundle-pass.pem"
 }
 
 // defaultsFor applies operator defaults using constants from constants.go.
@@ -76,6 +79,10 @@ func defaultsFor(spec *v4.TLSConfig) Data {
 		d.KVBundlePath = filepath.Join(canon, bundleFile)
 		// d.KVPasswordFile is set by the mutator if you mount a password Secret at KVPassSrcMountDir.
 	}
+
+	// Always expose the two common alias names in the canonical dir
+    d.KVBundleAliasCRT = d.CanonicalDir + "/splunk-bundle-pass.crt"
+    d.KVBundleAliasPEM = d.CanonicalDir + "/splunk-bundle-pass.pem"
 
 	// d.ServerName (and d.KVPasswordFile) are set by the caller (renderer/mutator) as needed.
 	return d

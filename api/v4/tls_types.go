@@ -82,7 +82,7 @@ type TLSConfig struct {
 	SecretRef *TLSSecretRef `json:"secretRef,omitempty"`
 	// +optional
 	CSI *TLSCSI `json:"csi,omitempty"`
-	// Canonical destination inside $SPLUNK_HOME, defaults to /opt/splunk/etc/auth/tls
+	// Canonical destination inside $SPLUNK_HOME, defaults to /opt/splunk/etc/auth
 	// +optional
 	CanonicalDir string `json:"canonicalDir,omitempty"`
 	// Optional Trust Bundle mounted as a Secret produced by trust-manager
@@ -90,24 +90,24 @@ type TLSConfig struct {
 	TrustBundle *TrustBundle `json:"trustBundle,omitempty"`
 
 	// KVEncryptedKey enables building a separate PEM for KV store
-    // that contains an AES-256 encrypted private key, and writes
-    // [kvstore] sslPassword + serverCert in server.conf accordingly.
-    // Defaults to disabled for simplicity and reliability.
-    KVEncryptedKey *KVEncryptedKeySpec `json:"kvEncryptedKey,omitempty"`
+	// that contains an AES-256 encrypted private key, and writes
+	// [kvstore] sslPassword + serverCert in server.conf accordingly.
+	// Defaults to disabled for simplicity and reliability.
+	KVEncryptedKey *KVEncryptedKeySpec `json:"kvEncryptedKey,omitempty"`
 }
 
 type KVEncryptedKeySpec struct {
-    // Enabled toggles the feature on or off. Default: false.
-    Enabled bool `json:"enabled"`
+	// Enabled toggles the feature on or off. Default: false.
+	Enabled bool `json:"enabled"`
 
-    // PasswordSecretRef, if set, provides the passphrase (utf-8, no newline)
-    // to encrypt the key. If omitted, we will auto-generate a random
-    // base64 passphrase at runtime inside the pod.
-    PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
+	// PasswordSecretRef, if set, provides the passphrase (utf-8, no newline)
+	// to encrypt the key. If omitted, we will auto-generate a random
+	// base64 passphrase at runtime inside the pod.
+	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
-    // BundleFile is the filename (under canonicalDir) for the KV bundle PEM.
-    // Default: "kvstore.pem"
-    BundleFile string `json:"bundleFile,omitempty"`
+	// BundleFile is the filename (under canonicalDir) for the KV bundle PEM.
+	// Default: "kvstore.pem"
+	BundleFile string `json:"bundleFile,omitempty"`
 }
 
 type TLSCondition struct {
