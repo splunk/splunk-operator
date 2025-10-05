@@ -1238,6 +1238,7 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
+                default: IfNotPresent
                 description: 'Sets pull policy for all images (either “Always” or
                   the default: “IfNotPresent”)'
                 enum:
@@ -2074,6 +2075,112 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              tls:
+                description: |-
+                  TLSConfig controls how certs/keys/CA are presented to Splunk.
+                  All content is copied/symlinked into CanonicalDir under $SPLUNK_HOME.
+                properties:
+                  canonicalDir:
+                    description: Canonical destination inside $SPLUNK_HOME, defaults
+                      to /opt/splunk/etc/auth/tls
+                    type: string
+                  csi:
+                    properties:
+                      dnsNames:
+                        description: DNS SANs for the leaf
+                        items:
+                          type: string
+                        type: array
+                      duration:
+                        description: Durations parsed by cert-manager (example "2160h")
+                        type: string
+                      issuerRefKind:
+                        description: cert-manager CSI driver attributes
+                        enum:
+                        - Issuer
+                        - ClusterIssuer
+                        type: string
+                      issuerRefName:
+                        minLength: 1
+                        type: string
+                      keyAlgorithm:
+                        enum:
+                        - rsa
+                        - ecdsa
+                        type: string
+                      keySize:
+                        type: integer
+                      renewBefore:
+                        type: string
+                    type: object
+                  kvEncryptedKey:
+                    description: |-
+                      KVEncryptedKey enables building a separate PEM for KV store
+                      that contains an AES-256 encrypted private key, and writes
+                      [kvstore] sslPassword + serverCert in server.conf accordingly.
+                      Defaults to disabled for simplicity and reliability.
+                    properties:
+                      bundleFile:
+                        description: |-
+                          BundleFile is the filename (under canonicalDir) for the KV bundle PEM.
+                          Default: "kvstore.pem"
+                        type: string
+                      enabled:
+                        description: 'Enabled toggles the feature on or off. Default:
+                          false.'
+                        type: boolean
+                      passwordSecretRef:
+                        description: |-
+                          PasswordSecretRef, if set, provides the passphrase (utf-8, no newline)
+                          to encrypt the key. If omitted, we will auto-generate a random
+                          base64 passphrase at runtime inside the pod.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    type: object
+                  provider:
+                    enum:
+                    - Secret
+                    - CSI
+                    type: string
+                  secretRef:
+                    properties:
+                      name:
+                        description: 'Secret with keys: tls.crt, tls.key, ca.crt (optional)'
+                        minLength: 1
+                        type: string
+                    type: object
+                  trustBundle:
+                    description: Optional Trust Bundle mounted as a Secret produced
+                      by trust-manager
+                    properties:
+                      key:
+                        type: string
+                      secretName:
+                        description: Optional trust-manager bundle Secret containing
+                          the CA bundle
+                        type: string
+                    type: object
+                type: object
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -2307,6 +2414,7 @@ spec:
                     type: string
                 type: object
               volumes:
+                default: []
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
                 items:
@@ -5410,6 +5518,7 @@ spec:
                   environment variables)
                 type: string
               imagePullPolicy:
+                default: IfNotPresent
                 description: 'Sets pull policy for all images (either “Always” or
                   the default: “IfNotPresent”)'
                 enum:
@@ -6246,6 +6355,112 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              tls:
+                description: |-
+                  TLSConfig controls how certs/keys/CA are presented to Splunk.
+                  All content is copied/symlinked into CanonicalDir under $SPLUNK_HOME.
+                properties:
+                  canonicalDir:
+                    description: Canonical destination inside $SPLUNK_HOME, defaults
+                      to /opt/splunk/etc/auth/tls
+                    type: string
+                  csi:
+                    properties:
+                      dnsNames:
+                        description: DNS SANs for the leaf
+                        items:
+                          type: string
+                        type: array
+                      duration:
+                        description: Durations parsed by cert-manager (example "2160h")
+                        type: string
+                      issuerRefKind:
+                        description: cert-manager CSI driver attributes
+                        enum:
+                        - Issuer
+                        - ClusterIssuer
+                        type: string
+                      issuerRefName:
+                        minLength: 1
+                        type: string
+                      keyAlgorithm:
+                        enum:
+                        - rsa
+                        - ecdsa
+                        type: string
+                      keySize:
+                        type: integer
+                      renewBefore:
+                        type: string
+                    type: object
+                  kvEncryptedKey:
+                    description: |-
+                      KVEncryptedKey enables building a separate PEM for KV store
+                      that contains an AES-256 encrypted private key, and writes
+                      [kvstore] sslPassword + serverCert in server.conf accordingly.
+                      Defaults to disabled for simplicity and reliability.
+                    properties:
+                      bundleFile:
+                        description: |-
+                          BundleFile is the filename (under canonicalDir) for the KV bundle PEM.
+                          Default: "kvstore.pem"
+                        type: string
+                      enabled:
+                        description: 'Enabled toggles the feature on or off. Default:
+                          false.'
+                        type: boolean
+                      passwordSecretRef:
+                        description: |-
+                          PasswordSecretRef, if set, provides the passphrase (utf-8, no newline)
+                          to encrypt the key. If omitted, we will auto-generate a random
+                          base64 passphrase at runtime inside the pod.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    type: object
+                  provider:
+                    enum:
+                    - Secret
+                    - CSI
+                    type: string
+                  secretRef:
+                    properties:
+                      name:
+                        description: 'Secret with keys: tls.crt, tls.key, ca.crt (optional)'
+                        minLength: 1
+                        type: string
+                    type: object
+                  trustBundle:
+                    description: Optional Trust Bundle mounted as a Secret produced
+                      by trust-manager
+                    properties:
+                      key:
+                        type: string
+                      secretName:
+                        description: Optional trust-manager bundle Secret containing
+                          the CA bundle
+                        type: string
+                    type: object
+                type: object
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -6479,6 +6694,7 @@ spec:
                     type: string
                 type: object
               volumes:
+                default: []
                 description: List of one or more Kubernetes volumes. These will be
                   mounted in all pod containers as as /mnt/<name>
                 items:
