@@ -909,6 +909,11 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	readinessProbe := getReadinessProbe(ctx, cr, instanceType, spec)
 	startupProbe := getStartupProbe(ctx, cr, instanceType, spec)
 
+	rolePath, _, err := AddRoleDefaultsToPodTemplate(ctx, client, podTemplateSpec, cr, instanceType)
+	if err != nil {
+		return // bubble up or handle
+	}
+
 	// prepare defaults variable
 	splunkDefaults := "/mnt/splunk-secrets/default.yml"
 	// Check for apps defaults and add it to only the standalone or deployer/cm/mc instances
@@ -921,6 +926,8 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	if spec.Defaults != "" {
 		splunkDefaults = fmt.Sprintf("%s,%s", "/mnt/splunk-defaults/default.yml", splunkDefaults)
 	}
+	// finally prepend the role baseline
+	splunkDefaults = PrependDefaultsURL(splunkDefaults, rolePath)
 
 	// prepare container env variables
 	role := instanceType.ToRole()
