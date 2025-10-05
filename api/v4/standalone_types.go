@@ -76,6 +76,9 @@ type StandaloneStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// +optional
+	TLS *TLSStatus `json:"tls,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -1,0 +1,52 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-enterprise-splunk-com-v4-standalone
+  failurePolicy: Fail
+  name: mstandalone-v4.kb.io
+  rules:
+  - apiGroups:
+    - enterprise.splunk.com
+    apiVersions:
+    - v4
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - standalones
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-enterprise-splunk-com-v4-standalone
+  failurePolicy: Fail
+  name: vstandalone-v4.kb.io
+  rules:
+  - apiGroups:
+    - enterprise.splunk.com
+    apiVersions:
+    - v4
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - standalones
+  sideEffects: None

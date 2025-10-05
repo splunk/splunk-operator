@@ -3,6 +3,8 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
   name: system
 ---
 apiVersion: apps/v1
@@ -12,28 +14,51 @@ metadata:
   namespace: system
   labels:
     control-plane: controller-manager
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-      name: splunk-operator
+      app.kubernetes.io/name: splunk-operator
   strategy:
     type: Recreate
   replicas: 1
   template:
     metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
-        name: splunk-operator
-      annotations:
-        kubectl.kubernetes.io/default-logs-container: manager
-        kubectl.kubernetes.io/default-container: manager
+        app.kubernetes.io/name: splunk-operator
     spec:
+      # TODO(user): Uncomment the following code to configure the nodeAffinity expression
+      # according to the platforms which are supported by your solution.
+      # It is considered best practice to support multiple architectures. You can
+      # build your manager image using the makefile target docker-buildx.
+      # affinity:
+      #   nodeAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       nodeSelectorTerms:
+      #         - matchExpressions:
+      #           - key: kubernetes.io/arch
+      #             operator: In
+      #             values:
+      #               - amd64
+      #               - arm64
+      #               - ppc64le
+      #               - s390x
+      #           - key: kubernetes.io/os
+      #             operator: In
+      #             values:
+      #               - linux
       securityContext:
         runAsUser: 1001
         fsGroup: 1001
         runAsNonRoot: true
         fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
       hostNetwork: false
       hostPID: false
       hostIPC: false
@@ -41,12 +66,13 @@ spec:
       - command:
         - /manager
         args:
-        - --leader-elect
-        - --health-probe-bind-address=:8081
-        - --pprof
+          - --leader-elect
+          - --health-probe-bind-address=:8081
+          - --pprof
         image: controller:latest
         imagePullPolicy: Always
         name: manager
+        ports: []
         env:
         - name: POD_NAME
           valueFrom:
@@ -58,7 +84,7 @@ spec:
           runAsNonRoot: true
           capabilities:
             drop:
-              - "ALL"
+            - "ALL"
             add:
               - "NET_BIND_SERVICE"
           seccompProfile:
@@ -75,6 +101,8 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+        # TODO(user): Configure the resources accordingly based on the project requirements.
+        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources:
           limits:
             cpu: 1000m

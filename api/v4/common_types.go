@@ -93,6 +93,7 @@ type Spec struct {
 
 	// Sets pull policy for all images (either “Always” or the default: “IfNotPresent”)
 	// +kubebuilder:validation:Enum=Always;IfNotPresent
+	// +kubebuilder:default:=IfNotPresent
 	ImagePullPolicy string `json:"imagePullPolicy"`
 
 	// Name of Scheduler to use for pod placement (defaults to “default-scheduler”)
@@ -170,6 +171,8 @@ type CommonSplunkSpec struct {
 	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig"`
 
 	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:={}
 	Volumes []corev1.Volume `json:"volumes"`
 
 	// Inline map of default.yml overrides used to initialize the environment
@@ -238,6 +241,9 @@ type CommonSplunkSpec struct {
 	// Sets imagePullSecrets if image is being pulled from a private registry.
 	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// +optional
+	TLS *TLSConfig `json:"tls,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration

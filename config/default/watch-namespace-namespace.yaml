@@ -1,0 +1,13 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: WATCH_NAMESPACE
+    valueFrom:
+      fieldRef:
+        fieldPath: metadata.namespace
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SPLUNK_GENERAL_TERMS
+    value: "--accept-sgt-current-at-splunk-com"
