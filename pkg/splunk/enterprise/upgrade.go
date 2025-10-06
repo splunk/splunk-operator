@@ -143,8 +143,8 @@ ClusterManager:
 		if cmImage != spec.Image {
 			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
 		}
+		goto IndexerCluster
 	}
-	goto IndexerCluster
 
 IndexerCluster:
 	if cr.GroupVersionKind().Kind == "IndexerCluster" {
