@@ -23,3 +23,5 @@ owners: # (optional, used to claim repository ownership)
     email: igorg@splunk.com
   - name: Kasia Kozioł
     email: kkoziol@splunk.com
+  - name: Jakub Buczak
+    email: jbuczak@splunk.com

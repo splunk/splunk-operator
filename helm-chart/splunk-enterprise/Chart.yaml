@@ -33,6 +33,8 @@ maintainers:
     email: igorg@splunk.com
   - name: Kasia Kozioł
     email: kkoziol@splunk.com
+  - name: Jakub Buczak
+    email: jbuczak@splunk.com
 dependencies:
 - name: splunk-operator
   version: "3.0.0"
