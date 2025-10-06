@@ -330,6 +330,129 @@ By default, the App Framework polls the remote object storage location for new o
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields)
 
+##### How to install apps for both local and cluster scopes on Indexer Cluster
+
+If there is a case where the same app needs to be installed for both local (on the cluster manager) and cluster (on the indexer peers) scopes, the same remote bucket folder can be used in multiple spec.appRepo.appSources, with different scopes. **Keep in mind that each appSource.name must be unique, but the appSource.location can be the same.** 
+
+1. Confirm your remote storage volume path and URL.
+
+2. Configure credentials to connect to remote store by:
+   * s3 based remote storage:
+       * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations.
+       * Or, create a Kubernetes Secret Object with the static storage credentials.
+           * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
+   * azure blob:
+       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
+       * Or, create a Kubernetes Secret Object with the static storage credentials.
+           * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
+   * GCP bucket:
+       * Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
+          * Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
+            * Example: `kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json`
+          * Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
+
+3. Create a folder on the remote storage volume to use as App Source locations.
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run both locally on the cluster manager, and to be distributed to all cluster peers by the cluster manager.
+   * The apps are placed in a folder named `globalApps`.
+
+4. Copy your Splunk app or add-on archive files to the App Source.
+   * In this example, the Splunk apps for the cluster manager and cluster peers are located at `bucket-app-framework/idxcAndCmApps/globalApps/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and https://storage.googleapis.com for GCP bucket.
+
+5. Update the ClusterManager CR specification and append the volume, App Source configuration, and scope.
+   * In this example, the cluster manager will install the same apps locally on the cluster manager, and the same apps to the cluster peers. Note that the appSources.name values must unique, but the appSources.location values can be the same.
+
+Example using S3: ClusterManager.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: globalApps-cluster
+        location: globalApps/
+      - name: globalApps-local
+        location: globalApps/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: s3
+        provider: aws
+        path: bucket-app-framework/idxcAndCmApps/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
+```
+
+Example using Azure Blob: ClusterManager.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: globalApps-cluster
+        location: globalApps/
+      - name: globalApps-local
+        location: globalApps/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: blob
+        provider: azure
+        path: bucket-app-framework/idxcAndCmApps/
+        endpoint: https://mystorageaccount.blob.core.windows.net
+        secretRef: azureblob-secret
+```
+
+Example using GCP Bucket: ClusterManager.yaml
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: globalApps-cluster
+        location: globalApps/
+      - name: globalApps-local
+        location: globalApps/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: gcs
+        provider: gcp
+        path: bucket-app-framework/idxcAndCmApps/
+        endpoint: https://storage.googleapis.com
+        secretRef: gcs-secret
+```
+
+6. Apply the Custom Resource specification: `kubectl apply -f ClusterManager.yaml`
+
 #### How to use the App Framework on Search Head Cluster
 
 This example describes the installation of apps on the Deployer and the Search Head Cluster. This is achieved by deploying a SearchHeadCluster CR with a storage volume, the location of the app archives, and set the installation scope to support both local and cluster app distribution.
@@ -480,6 +603,133 @@ By default, the App Framework polls the remote object storage location for new o
 
 For more information, see the [Description of App Framework Specification fields](#description-of-app-framework-specification-fields).
 
+##### How to install apps for both local and cluster scopes on Search Head Cluster
+
+If there is a case where the same app needs to be installed for both local (on the search head deployer) and cluster (on the search head peers) scopes, the same remote bucket folder can be used in multiple spec.appRepo.appSources, with different scopes. **Keep in mind that each appSource.name must be unique, but the appSource.location can be the same.** 
+
+1. Confirm your remote storage volume path and URL.
+
+2. Configure credentials to connect to remote store by:
+   * s3 based remote storage:
+       * Configuring an IAM role for the Operator and Splunk instance pods using a service account or annotations.
+       * Or, create a Kubernetes Secret Object with the static storage credentials.
+           * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
+   * azure blob:
+       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
+       * Or, create a Kubernetes Secret Object with the static storage credentials.
+           * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
+   * GCP bucket:
+       * Configure credentials through either a Kubernetes secret (e.g., storing a GCP service account key in key.json) or use Workload Identity for secure access:
+          * Kubernetes Secret: Create a Kubernetes secret using the service account JSON key file for GCP access.
+            * Example: `kubectl create secret generic gcs-secret --from-file=key.json=path/to/your-service-account-key.json`
+          * Workload Identity: Use Workload Identity to associate the Kubernetes service account used by the Splunk Operator with a GCP service account that has the Storage Object Viewer IAM role for the required bucket.
+
+3. Create a folder on the remote storage volume to use as App Source locations.
+   * An App Source is a folder on the remote storage volume containing a select subset of Splunk apps and add-ons. In this example, there are Splunk apps installed and run both locally on the search head deployer, and to be distributed to all search head peers by the search head deployer.
+   * The apps are placed in a folder named `globalApps`.
+
+4. Copy your Splunk app or add-on archive files to the App Source.
+   * In this example, the Splunk apps for the search head deployer and search head peers peers are located at `bucket-app-framework/shcLoc-us/globalApps/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and https://storage.googleapis.com for GCP bucket.
+
+5. Update the SearchHeadCluster CR specification and append the volume, App Source configuration, and scope.
+   * In this example, the search head deployer will install the same apps locally on the search head deployer, and the same apps to the search head peers. Note that the appSources.name values must unique, but the appSources.location values can be the same.
+
+Example using S3: SearchHeadCluster.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: globalApps-cluster
+        location: globalApps/
+      - name: globalApps-local
+        location: globalApps/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: s3
+        provider: aws
+        path: bucket-app-framework/shcLoc-us/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
+```
+
+Example using Azure blob: SearchHeadCluster.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+  - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: globalApps-cluster
+        location: globalApps/
+      - name: globalApps-local
+        location: globalApps/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: blob
+        provider: azure
+        path: bucket-app-framework/shcLoc-us/
+        endpoint: https://mystorageaccount.blob.core.windows.net
+        secretRef: azureblob-secret
+```
+
+Example using GCP bucket: SearchHeadCluster.yaml
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  appRepo:
+    appsRepoPollIntervalSeconds: 900
+    defaults:
+      volumeName: volume_app_repo_us
+      scope: cluster
+    appSources:
+      - name: globalApps-cluster
+        location: globalApps/
+      - name: globalApps-local
+        location: globalApps/
+        scope: local
+    volumes:
+      - name: volume_app_repo_us
+        storageType: gcs
+        provider: gcp
+        path: bucket-app-framework/idxcAndCmApps/
+        endpoint: https://storage.googleapis.com
+        secretRef: gcs-secret
+
+```
+
+6. Apply the Custom Resource specification: `kubectl apply -f SearchHeadCluster.yaml`
+
 ## Description of App Framework Specification fields
 The App Framework configuration is supported on the following Custom Resources: Standalone, ClusterManager, SearchHeadCluster, MonitoringConsole and LicenseManager. Configuring the App framework requires:
 
@@ -593,14 +843,14 @@ NOTE: If an app source name needs to be changed, make sure the name change is pe
   * If the scope is `cluster`, the apps will be placed onto the configuration management node (Deployer, Cluster Manager) for deployment across the cluster referred to by the CR.
   * The cluster scope is only supported on CRs that manage cluster-wide app deployment.
 
-    | CRD Type          | Scope support                          | App Framework support |
-    | :---------------- | :------------------------------------- | :-------------------- |
-    | ClusterManager    | cluster, local                         | Yes                   |
-    | SearchHeadCluster | cluster, local                         | Yes                   |
-    | Standalone        | local                                  | Yes                   |
-    | LicenseManager    | local                                  | Yes                   |
-    | MonitoringConsole | local                                  | Yes                   |
-    | IndexerCluster    | N/A                                    | No                    |
+    | CRD Type          | Scope support                          | App Framework support | Local Scope Install Location     | Cluster Scope Install Location |
+    | :---------------- | :------------------------------------- | :-------------------- | :------------------------------- | :----------------------------- |
+    | ClusterManager    | cluster, local                         | Yes                   | $SPLUNK_HOME/etc/apps            | $SPLUNK_HOME/manager/apps      |
+    | SearchHeadCluster | cluster, local                         | Yes                   | $SPLUNK_HOME/etc/apps (deployer) | $SPLUNK_HOME/etc/shcluster/apps/ (deployer), $SPLUNK_HOME/etc/apps (peers) |
+    | Standalone        | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
+    | LicenseManager    | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
+    | MonitoringConsole | local                                  | Yes                   | $SPLUNK_HOME/etc/apps            | N/A |
+    | IndexerCluster    | N/A                                    | No                    | N/A                              | $SPLUNK_HOME/etc/peer-apps |
 
 * `volume` refers to the remote storage volume name configured under the `volumes` stanza (see previous section.)
 * `location` helps configure the specific appSource present under the `path` within the `volume`, containing the apps to be installed.
