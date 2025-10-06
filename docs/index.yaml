@@ -48,6 +48,8 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
     name: splunk-enterprise
     type: application
     urls:
@@ -74,6 +76,8 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
     name: splunk-enterprise
     type: application
     urls:
@@ -100,6 +104,8 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
     name: splunk-enterprise
     type: application
     urls:
@@ -351,6 +357,8 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
     name: splunk-operator
     type: application
     urls:
@@ -372,6 +380,8 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
     name: splunk-operator
     type: application
     urls:
@@ -393,6 +403,8 @@ entries:
       name: Igor Grzankowski
     - email: kkoziol@splunk.com
       name: Kasia Kozioł
+    - email: jbuczak@splunk.com
+      name: Jakub Buczak
     name: splunk-operator
     type: application
     urls:
