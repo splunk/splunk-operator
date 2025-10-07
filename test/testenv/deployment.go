@@ -460,6 +460,21 @@ func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, cou
 	return deployed.(*enterpriseApi.IngestorCluster), err
 }
 
+// DeployIngestorClusterWithAdditionalConfiguration deploys the ingestor cluster with additional configuration
+func (d *Deployment) DeployIngestorClusterWithAdditionalConfiguration(ctx context.Context, ic *enterpriseApi.IngestorCluster) (*enterpriseApi.IngestorCluster, error) {
+	d.testenv.Log.Info("Deploying ingestor cluster with additional configuration", "name", ic.Name)
+
+	pdata, _ := json.Marshal(ic)
+
+	d.testenv.Log.Info("ingestor cluster spec", "cr", string(pdata))
+	deployed, err := d.deployCR(ctx, ic.Name, ic)
+	if err != nil {
+		return nil, err
+	}
+
+	return deployed.(*enterpriseApi.IngestorCluster), err
+}
+
 // DeploySearchHeadCluster deploys a search head cluster
 func (d *Deployment) DeploySearchHeadCluster(ctx context.Context, name, ClusterManagerRef, LicenseManagerName string, ansibleConfig string, mcRef string) (*enterpriseApi.SearchHeadCluster, error) {
 	d.testenv.Log.Info("Deploying search head cluster", "name", name)

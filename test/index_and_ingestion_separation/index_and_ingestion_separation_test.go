@@ -18,11 +18,14 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/onsi/ginkgo/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 
 	"github.com/splunk/splunk-operator/test/testenv"
 )
@@ -33,6 +36,8 @@ var _ = Describe("indingsep test", func() {
 	var deployment *testenv.Deployment
 
 	var cmSpec enterpriseApi.ClusterManagerSpec
+	var s3TestDir string
+	var appSourceVolumeName string
 
 	ctx := context.TODO()
 
@@ -54,6 +59,8 @@ var _ = Describe("indingsep test", func() {
 				},
 			},
 		}
+		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
+		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
 	AfterEach(func() {
@@ -118,41 +125,93 @@ var _ = Describe("indingsep test", func() {
 		})
 	})
 
-	// 	Context("Ingestor and Indexer deployment", func() {
-	// 	It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
-	// 		// Create Service Account
-	// 		testcaseEnvInst.Log.Info("Create Service Account")
-	// 		testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+	Context("Ingestor and Indexer deployment", func() {
+		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
+			// Create Service Account
+			testcaseEnvInst.Log.Info("Create Service Account")
+			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-	// 		// Deploy Ingestor Cluster
-	// 		testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-	// 		_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, pipelineConfig, serviceAccountName)
-	// 		Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
+			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
+			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
+			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
+			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(5)
+			ic := &enterpriseApi.IngestorCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      deployment.GetName() + "-ingest",
+					Namespace: testcaseEnvInst.GetName(),
+				},
+				Spec: enterpriseApi.IngestorClusterSpec{
+					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+						ServiceAccount:               serviceAccountName,
+						LivenessInitialDelaySeconds:  600,
+						ReadinessInitialDelaySeconds: 50,
+						StartupProbe: &enterpriseApi.Probe{
+							InitialDelaySeconds: 40,
+							TimeoutSeconds:      30,
+							PeriodSeconds:       30,
+							FailureThreshold:    12,
+						},
+						LivenessProbe: &enterpriseApi.Probe{
+							InitialDelaySeconds: 400,
+							TimeoutSeconds:      30,
+							PeriodSeconds:       30,
+							FailureThreshold:    12,
+						},
+						ReadinessProbe: &enterpriseApi.Probe{
+							InitialDelaySeconds: 20,
+							TimeoutSeconds:      30,
+							PeriodSeconds:       30,
+							FailureThreshold:    12,
+						},
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+					},
+					PushBus:            bus,
+					PipelineConfig:     pipelineConfig,
+					Replicas:           3,
+					AppFrameworkConfig: appFrameworkSpec,
+				},
+			}
 
-	// 		// Deploy Cluster Manager
-	// 		testcaseEnvInst.Log.Info("Deploy Cluster Manager")
-	// 		_, err = deployment.DeployClusterManagerWithGivenSpec(ctx, deployment.GetName(), cmSpec)
-	// 		Expect(err).To(Succeed(), "Unable to deploy Cluster Manager")
+			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster with additional configurations")
+			_, err := deployment.DeployIngestorClusterWithAdditionalConfiguration(ctx, ic)
+			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
-	// 		// Deploy Indexer Cluster
-	// 		testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-	// 		_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, pipelineConfig, serviceAccountName)
-	// 		Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
+			// Ensure that Ingestor Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
 
-	// 		// Ensure that Ingestor Cluster is in Ready phase
-	// 		testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
-	// 		testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+			// Verify Ingestor Cluster Pods have apps installed
+			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Pods have apps installed")
+			ingestorPod := []string{fmt.Sprintf(testenv.IngestorPod, deployment.GetName()+"-ingest", 0)}
+			ingestorAppSourceInfo := testenv.AppSourceInfo{
+				CrKind:          ic.Kind,
+				CrName:          ic.Name,
+				CrAppSourceName: appSourceName,
+				CrPod:           ingestorPod,
+				CrAppVersion:    "V1",
+				CrAppScope:      enterpriseApi.ScopeLocal,
+				CrAppList:       testenv.BasicApps,
+				CrAppFileList:   testenv.GetAppFileList(testenv.BasicApps),
+				CrReplicas:      3,
+			}
+			allAppSourceInfo := []testenv.AppSourceInfo{ingestorAppSourceInfo}
+			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
+			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
-	// 		// Ensure that Cluster Manager is in Ready phase
-	// 		testcaseEnvInst.Log.Info("Ensure that Cluster Manager is in Ready phase")
-	// 		testenv.ClusterManagerReady(ctx, deployment, testcaseEnvInst)
-
-	// 		// Ensure that Indexer Cluster is in Ready phase
-	// 		testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
-	// 		testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
-	// 	})
-	// })
+			// Verify probe configuration
+			testcaseEnvInst.Log.Info("Get config map for probes")
+			ConfigMapName := enterprise.GetProbeConfigMapName(testcaseEnvInst.GetName())
+			_, err = testenv.GetConfigMap(ctx, deployment, testcaseEnvInst.GetName(), ConfigMapName)
+			Expect(err).To(Succeed(), "Unable to get config map for probes", "ConfigMap", ConfigMapName)
+			testcaseEnvInst.Log.Info("Verify probe configurations on Ingestor pods")
+			scriptsNames := []string{enterprise.GetLivenessScriptName(), enterprise.GetReadinessScriptName(), enterprise.GetStartupScriptName()}
+			allPods := testenv.DumpGetPods(testcaseEnvInst.GetName())
+			testenv.VerifyFilesInDirectoryOnPod(ctx, deployment, testcaseEnvInst, testcaseEnvInst.GetName(), allPods, scriptsNames, enterprise.GetProbeMountDirectory(), false, true)
+		})
+	})
 
 	Context("Ingestor and Indexer deployment", func() {
 		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
