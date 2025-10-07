@@ -1,7 +1,0 @@
-apiVersion: enterprise.splunk.com/v4
-kind: ClusterManager
-metadata:
-  name: cm
-  namespace: splunk-operator
-  finalizers:
-    - enterprise.splunk.com/delete-pvc
