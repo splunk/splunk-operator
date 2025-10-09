@@ -342,7 +342,7 @@ If there is a case where the same app needs to be installed for both local (on t
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
+       * Configuring an IAM through  "Managed Identity" role assignment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
    * GCP bucket:
@@ -497,7 +497,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
+  replicas: 3
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
@@ -531,7 +531,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
+  replicas: 3
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
@@ -615,7 +615,7 @@ If there is a case where the same app needs to be installed for both local (on t
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic s3-secret --from-literal=s3_access_key=AKIAIOSFODNN7EXAMPLE --from-literal=s3_secret_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE_S3_SECRET_KEY`
    * azure blob:
-       * Configuring an IAM through  "Managed Identity" role assigment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
+       * Configuring an IAM through  "Managed Identity" role assignment to give read access for your bucket (azure blob container). For more details see [Setup Azure blob access with Managed Identity](#setup-azure-blob-access-with-managed-identity)
        * Or, create a Kubernetes Secret Object with the static storage credentials.
            * Example: `kubectl create secret generic azureblob-secret --from-literal=azure_sa_name=mystorageaccount --from-literal=azure_sa_secret_key=wJalrXUtnFEMI/K7MDENG/EXAMPLE_AZURE_SHARED_ACCESS_KEY`
    * GCP bucket:
@@ -629,7 +629,7 @@ If there is a case where the same app needs to be installed for both local (on t
    * The apps are placed in a folder named `globalApps`.
 
 4. Copy your Splunk app or add-on archive files to the App Source.
-   * In this example, the Splunk apps for the search head deployer and search head peers peers are located at `bucket-app-framework/shcLoc-us/globalApps/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and https://storage.googleapis.com for GCP bucket.
+   * In this example, the Splunk apps for the search head deployer and search head peers are located at `bucket-app-framework/shcLoc-us/globalApps/`. They are all accessible through the end point `https://s3-us-west-2.amazonaws.com` for s3, https://mystorageaccount.blob.core.windows.net for azure blob and https://storage.googleapis.com for GCP bucket.
 
 5. Update the SearchHeadCluster CR specification and append the volume, App Source configuration, and scope.
    * In this example, the search head deployer will install the same apps locally on the search head deployer, and the same apps to the search head peers. Note that the appSources.name values must unique, but the appSources.location values can be the same.
@@ -644,7 +644,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
+  replicas: 3
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
@@ -676,7 +676,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
+  replicas: 3
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
@@ -707,6 +707,7 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
+  replicas: 3
   appRepo:
     appsRepoPollIntervalSeconds: 900
     defaults:
@@ -722,7 +723,7 @@ spec:
       - name: volume_app_repo_us
         storageType: gcs
         provider: gcp
-        path: bucket-app-framework/idxcAndCmApps/
+        path: bucket-app-framework/shcLoc-us/
         endpoint: https://storage.googleapis.com
         secretRef: gcs-secret
 
@@ -2074,7 +2075,7 @@ metadata:
   finalizers:
   - enterprise.splunk.com/delete-pvc
 spec:
-  replicas: 1
+  replicas: 3
   appRepo:
     appsRepoPollIntervalSeconds: 100
     defaults:
