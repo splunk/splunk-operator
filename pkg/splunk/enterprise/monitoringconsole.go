@@ -320,7 +320,7 @@ func AddURLsConfigMap(revised *corev1.ConfigMap, crName string, newURLs []corev1
 			//2. if length of both same then just reconcile
 			if len(crURLs) == len(url.Value) {
 				//reconcile
-				break
+				continue
 			} else if len(crURLs) < len(url.Value) { //3. incoming URLs are more than current scaling up
 				//scaling UP
 				for _, newEntry := range newInsURLs {
