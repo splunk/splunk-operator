@@ -1402,7 +1402,7 @@ func createOrTruncateAppFileLocally(appFileName string, size int64) error {
 
 func areAppsDownloadedSuccessfully(appDeployInfoList []*enterpriseApi.AppDeploymentInfo) (bool, error) {
 	for _, appInfo := range appDeployInfoList {
-		if appInfo.PhaseInfo.Status != enterpriseApi.AppPkgDownloadComplete {
+		if appInfo.PhaseInfo.Status != enterpriseApi.AppPkgDownloadComplete || appInfo.ObjectHash == "" {
 			err := fmt.Errorf("App:%s is not downloaded yet", appInfo.AppName)
 			return false, err
 		}
