@@ -13,7 +13,7 @@
 : "${EKS_INSTANCE_TYPE:=m5.2xlarge}"
 : "${VPC_PUBLIC_SUBNET_STRING:=}"
 : "${VPC_PRIVATE_SUBNET_STRING:=}"
-: "${EKS_CLUSTER_K8_VERSION:=1.33}"
+: "${EKS_CLUSTER_K8_VERSION:=1.31}"
 # Below env variables required to run license master test cases
 : "${ENTERPRISE_LICENSE_S3_PATH:=test_licenses/}"
 : "${TEST_S3_BUCKET:=splk-test-data-bucket}"

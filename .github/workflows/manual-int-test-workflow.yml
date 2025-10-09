@@ -120,8 +120,7 @@ jobs:
           make cluster-up
       - name: install metric server
         run: |
-          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-          kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml

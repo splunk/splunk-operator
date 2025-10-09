@@ -14,6 +14,8 @@
 package indingsep
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -141,6 +143,15 @@ var (
 		"remote_queue.sqs_smartbus.retry_policy = max_count",
 		"remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"}
 	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
+
+	testDataS3Bucket    = os.Getenv("TEST_BUCKET")
+	testS3Bucket        = os.Getenv("TEST_INDEXES_S3_BUCKET")
+	currDir, _          = os.Getwd()
+	downloadDirV1       = filepath.Join(currDir, "icappfwV1-"+testenv.RandomDNSName(4))
+	appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
+	s3TestDir           = "icappfw-" + testenv.RandomDNSName(4)
+	appListV1           = testenv.BasicApps
+	s3AppDirV1          = testenv.AppLocationV1
 )
 
 // TestBasic is the main entry point
@@ -154,10 +165,20 @@ var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
+
+	appListV1 = testenv.BasicApps
+	appFileList := testenv.GetAppFileList(appListV1)
+
+	// Download V1 Apps from S3
+	err = testenv.DownloadFilesFromS3(testDataS3Bucket, s3AppDirV1, downloadDirV1, appFileList)
+	Expect(err).To(Succeed(), "Unable to download V1 app files")
 })
 
 var _ = AfterSuite(func() {
 	if testenvInstance != nil {
 		Expect(testenvInstance.Teardown()).ToNot(HaveOccurred())
 	}
+
+	err := os.RemoveAll(downloadDirV1)
+	Expect(err).To(Succeed(), "Unable to delete locally downloaded V1 app files")
 })

@@ -100,8 +100,8 @@ jobs:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install kuttl
         run: |
-          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.12.0/kuttl_0.12.0_linux_x86_64.tar.gz
-          sudo tar -xvzf kuttl_0.12.0_linux_x86_64.tar.gz
+          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.22.0/kuttl_0.22.0_linux_x86_64.tar.gz
+          sudo tar -xvzf kuttl_0.22.0_linux_x86_64.tar.gz
           sudo chmod +x  kubectl-kuttl
           sudo mv kubectl-kuttl /usr/local/bin/kubectl-kuttl
       - name: Install Python
@@ -165,11 +165,18 @@ jobs:
           make cluster-up
       - name: install metric server
         run: |
-          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-          kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
       - name: install k8s dashboard
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+      - name: Setup Kustomize
+        run: |
+          sudo snap install kustomize
+          mkdir -p ./bin
+          cp /snap/bin/kustomize ./bin/kustomize
+      - name: Install CRDs on cluster
+        run: |
+          make install
       - name: Add splunk helm repo for main branch
         if: github.ref == 'refs/heads/main'
         run: |

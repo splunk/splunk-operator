@@ -228,8 +228,7 @@ jobs:
   
       - name: Install Metrics Server
         run: |
-          curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-          kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 
       - name: Install Kubernetes Dashboard
         run: |

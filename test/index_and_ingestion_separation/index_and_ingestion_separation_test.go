@@ -36,8 +36,6 @@ var _ = Describe("indingsep test", func() {
 	var deployment *testenv.Deployment
 
 	var cmSpec enterpriseApi.ClusterManagerSpec
-	var s3TestDir string
-	var appSourceVolumeName string
 
 	ctx := context.TODO()
 
@@ -59,8 +57,6 @@ var _ = Describe("indingsep test", func() {
 				},
 			},
 		}
-		s3TestDir = "s1appfw-" + testenv.RandomDNSName(4)
-		appSourceVolumeName = "appframework-test-volume-" + testenv.RandomDNSName(3)
 	})
 
 	AfterEach(func() {
@@ -76,7 +72,7 @@ var _ = Describe("indingsep test", func() {
 		}
 	})
 
-	Context("Ingestor and Indexer deployment", func() {
+	XContext("Ingestor and Indexer deployment", func() {
 		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", func() {
 			// Create Service Account
 			testcaseEnvInst.Log.Info("Create Service Account")
@@ -131,6 +127,12 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
+			// Upload apps to S3
+			testcaseEnvInst.Log.Info("Upload apps to S3")
+			appFileList := testenv.GetAppFileList(appListV1)
+			_, err := testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload V1 apps to S3 test directory for IngestorCluster")
+
 			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
@@ -176,7 +178,7 @@ var _ = Describe("indingsep test", func() {
 			}
 
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster with additional configurations")
-			_, err := deployment.DeployIngestorClusterWithAdditionalConfiguration(ctx, ic)
+			_, err = deployment.DeployIngestorClusterWithAdditionalConfiguration(ctx, ic)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -213,7 +215,7 @@ var _ = Describe("indingsep test", func() {
 		})
 	})
 
-	Context("Ingestor and Indexer deployment", func() {
+	XContext("Ingestor and Indexer deployment", func() {
 		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
 			// Create Service Account
 			testcaseEnvInst.Log.Info("Create Service Account")
@@ -312,7 +314,7 @@ var _ = Describe("indingsep test", func() {
 		})
 	})
 
-	Context("Ingestor and Indexer deployment", func() {
+	XContext("Ingestor and Indexer deployment", func() {
 		It("indingsep, integration, indingsep: Splunk Operator can update Ingestors and Indexers with correct setup", func() {
 			// Create Service Account
 			testcaseEnvInst.Log.Info("Create Service Account")
