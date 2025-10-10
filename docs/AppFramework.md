@@ -39,7 +39,7 @@
 
 ## About App Framework
 
-The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise cluster and standalone [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR).
+The Splunk Operator provides support for Splunk app and add-on deployment using the App Framework. The App Framework specification supports configuration management using the Splunk Enterprise [custom resources](https://splunk.github.io/splunk-operator/CustomResources.html) (CR) for both clustered and standalone deployments.
 
 Splunk apps and add-ons deployed or installed outside of the App Framework are not managed, and are unsupported.
 
@@ -56,7 +56,7 @@ The App Framework maintains a checksum for each app or add-on archive file in th
    * Azure blob storage
    * GCP Cloud Storage
 2) The App framework requires read-only access to the path used to host the apps. DO NOT give any other access to the operator to maintain the integrity of data in S3 bucket , Azure blob container or GCP bucket.
-3) Splunk apps and add-ons should be stored in a .tgz or .spl archive format.
+3) Splunk apps and add-ons should be stored in a .tgz, .tar.gz, or .spl archive format.
 4) Connections to the remote object storage endpoint need to be secured using a minimum version of TLS 1.2.
 5) A persistent storage volume and path for the Operator Pod. See [Add a persistent storage volume to the Operator pod](#add-a-persistent-storage-volume-to-the-operator-pod).
 
