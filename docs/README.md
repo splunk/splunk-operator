@@ -113,12 +113,12 @@ For production environments, we are requiring the use of Splunk SmartStore. As a
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for specific namespace by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-namespace.yaml --server-side
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-namespace.yaml --server-side
 ```
 
 A Kubernetes cluster administrator can install and start the Splunk Operator for cluster-wide by running:
 ```
-kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/2.8.1/splunk-operator-cluster.yaml --server-side
+kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-cluster.yaml --server-side
 ```
 
 The reason for appending `--server-side` to the apply command is that some of the CRDs are getting too long according to the CRD standards. There are no real implications caused by this.
@@ -136,7 +136,9 @@ splunk-operator-75f5d4d85b-8pshn   1/1     Running   0          5s
 
 ### Installation using Helm charts
 
-Installing the Splunk Operator using Helm allows you to quickly deploy the operator and Splunk Enterprise in a Kubernetes cluster. The operator and custom resources are easily configurable allowing for advanced installations including support for Splunk Validated Architectures. Helm also provides a number of features to manage the operator and custom resource lifecycle. The [Installation using Helm](Helm.md) page will walk you through installing and configuring Splunk Enterprise deployments using Helm charts.
+Installing the Splunk Operator using Helm allows you to quickly deploy the operator and Splunk Enterprise in a Kubernetes cluster. The operator is easily configurable allowing for advanced installations including support for Splunk Validated Architectures. Helm also provides a number of features to manage the operator lifecycle. The [Installation using Helm](Helm.md) page will walk you through installing and configuring Splunk Enterprise deployments using Helm charts.
+
+Splunk Operator CRDs are not deployed as part of the helm installation. Users need to deploy the latest CRDs manually. See the [Installation using Helm](Helm.md) documentation on how to deploy the CRDs before installing the helm charts.
 
 ## Upgrading the Splunk Operator
 

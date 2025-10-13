@@ -43,7 +43,7 @@ make deploy IMG=docker.io/splunk/splunk-operator:<tag name> SPLUNK_GENERAL_TERMS
 ```
 3. Set the value in a `helm install` command
 ```
-helm install -f new_values.yaml --set installCRDs=true --set splunkOperator.splunkGeneralTerms="[required value]" <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+helm install -f new_values.yaml --set splunkOperator.splunkGeneralTerms="[required value]" <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
 ```
 4. Edit the splunk-operator-controller-manager deployment after it is deployed
 ```
