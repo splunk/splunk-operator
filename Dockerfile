@@ -3,9 +3,9 @@ ARG PLATFORMS=linux/amd64,linux/arm64
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-# This sha relates to ubi minimal version 8.10-1755105495, which is tagged as 8.10 and latest as of Aug 17, 2025
+# This sha relates to ubi minimal version 8.10-1756195339, which is tagged as 8.10 and latest as of Sep 3, 2025
 ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal
-ARG BASE_IMAGE_VERSION=8.10-1755105495
+ARG BASE_IMAGE_VERSION=8.10-1756195339
 
 # Build the manager binary
 FROM golang:1.24.2 AS builder
@@ -73,7 +73,7 @@ RUN if grep -q 'Ubuntu' /etc/os-release; then \
 LABEL name="splunk" \
       maintainer="support@splunk.com" \
       vendor="splunk" \
-      version="2.8.1" \
+      version="3.0.0" \
       release="1" \
       summary="Simplify the Deployment & Management of Splunk Products on Kubernetes" \
       description="The Splunk Operator for Kubernetes (SOK) makes it easy for Splunk Administrators to deploy and operate Enterprise deployments in a Kubernetes infrastructure. Packaged as a container, it uses the operator pattern to manage Splunk-specific custom resources, following best practices to manage all the underlying Kubernetes objects for you."
