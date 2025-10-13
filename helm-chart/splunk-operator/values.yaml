@@ -3,7 +3,7 @@ splunk-operator:
 
 # Splunk image
 image:
-  repository: docker.io/splunk/splunk:9.4.3
+  repository: docker.io/splunk/splunk:10.0.0
 
 # Splunk Operator configurations
 splunkOperator:
@@ -11,7 +11,7 @@ splunkOperator:
   # Splunk operator image and pull policy
   # reference: https://github.com/splunk/splunk-operator
   image:
-    repository: docker.io/splunk/splunk-operator:2.8.1
+    repository: docker.io/splunk/splunk-operator:3.0.0
     pullPolicy: IfNotPresent
 
   # Set image pull secrets to pull image from a private registry
