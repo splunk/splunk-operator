@@ -223,6 +223,32 @@ rules:
   - patch
   - update
 - apiGroups:
+    - enterprise.splunk.com
+  resources:
+  - ingestorclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - ingestorclusters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - ingestorclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - enterprise.splunk.com
   resources:
   - licensemasters

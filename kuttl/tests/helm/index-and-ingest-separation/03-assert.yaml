@@ -3,7 +3,7 @@
 apiVersion: enterprise.splunk.com/v4
 kind: IngestorCluster
 metadata:
-  name: ingestor
+  name: ingestor-sep
 spec:
   replicas: 4
   pipelineConfig:
@@ -54,6 +54,6 @@ status:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: splunk-ingestor-ingestor
+  name: splunk-ingestor-sep-ingestor
 status:
   replicas: 4

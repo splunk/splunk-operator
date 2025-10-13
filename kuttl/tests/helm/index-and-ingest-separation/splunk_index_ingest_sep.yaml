@@ -7,9 +7,8 @@ splunk-operator:
 
 ingestorCluster:
   enabled: true
-  name: ingestor
+  name: ingestor-sep
   replicaCount: 3
-  # serviceAccount: ingestion-role-sa 
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
@@ -33,17 +32,16 @@ ingestorCluster:
 
 clusterManager:
   enabled: true
-  name: cm
+  name: cm-sep
   replicaCount: 1
-  # serviceAccount: ingestion-role-sa 
+  serviceAccount: ingestion-role-sa 
 
 indexerCluster:
   enabled: true
-  name: indexer
+  name: indexer-sep
   replicaCount: 3
-  # serviceAccount: ingestion-role-sa 
   clusterManagerRef:
-    name: cm
+    name: cm-sep
   pipelineConfig:
     remoteQueueRuleset: false
     ruleSet: true
