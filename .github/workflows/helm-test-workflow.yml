@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-4113-k8s-update
   workflow_dispatch:
 jobs:
   build-operator-image:

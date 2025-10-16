@@ -5,6 +5,7 @@ on:
     branches:
     - main
     - develop
+    - CSPL-4113-k8s-update
 jobs:
   check-formating:
     runs-on: ubuntu-latest
