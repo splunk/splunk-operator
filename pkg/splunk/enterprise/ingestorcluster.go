@@ -218,14 +218,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-		err = mgr.handlePushBusOrPipelineConfigChange(ctx, cr, client)
+		err = mgr.handlePushBusChange(ctx, cr, client)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")
 			return result, err
 		}
 
 		cr.Status.PushBus = cr.Spec.PushBus
-		cr.Status.PipelineConfig = cr.Spec.PipelineConfig
 
 		// Upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
@@ -356,11 +355,6 @@ func validateIngestorSpecificInputs(cr *enterpriseApi.IngestorCluster) error {
 		cr.Spec.PushBus.SQS.EncodingFormat = "s2s"
 	}
 
-	// PipelineConfig cannot be empty
-	if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
-		return errors.New("pipelineConfig spec cannot be empty")
-	}
-
 	return nil
 }
 
@@ -378,7 +372,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // Checks if only PushBus or Pipeline config changed, and updates the conf file if so
-func (mgr *ingestorClusterPodManager) handlePushBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, k8s client.Client) error {
+func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, k8s client.Client) error {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
@@ -426,14 +420,12 @@ func (mgr *ingestorClusterPodManager) handlePushBusOrPipelineConfigChange(ctx co
 func getChangedPushBusAndPipelineFields(oldCrStatus *enterpriseApi.IngestorClusterStatus, newCR *enterpriseApi.IngestorCluster, afterDelete bool) (pushBusChangedFields, pipelineChangedFields [][]string) {
 	oldPB := oldCrStatus.PushBus
 	newPB := newCR.Spec.PushBus
-	oldPC := oldCrStatus.PipelineConfig
-	newPC := newCR.Spec.PipelineConfig
 
 	// Push changed PushBus fields
 	pushBusChangedFields = pushBusChanged(oldPB, newPB, afterDelete)
 
 	// Always changed pipeline fields
-	pipelineChangedFields = pipelineConfigChanged(oldPC, newPC, oldCrStatus.PushBus.SQS.QueueName != "", false)
+	pipelineChangedFields = pipelineConfig(false)
 
 	return
 }
@@ -455,25 +447,16 @@ var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Inges
 	}
 }
 
-func pipelineConfigChanged(oldPipelineConfig, newPipelineConfig enterpriseApi.PipelineConfigSpec, pushBusStatusExists bool, isIndexer bool) (output [][]string) {
-	//  || !pushBusStatusExists - added to make it work for initial creation because if any field is false (which is the default of bool for Go), then it wouldn't be added to output
-	if oldPipelineConfig.RemoteQueueRuleset != newPipelineConfig.RemoteQueueRuleset || !pushBusStatusExists {
-		output = append(output, []string{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueRuleset)})
-	}
-	if oldPipelineConfig.RuleSet != newPipelineConfig.RuleSet || !pushBusStatusExists {
-		output = append(output, []string{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newPipelineConfig.RuleSet)})
-	}
-	if oldPipelineConfig.RemoteQueueTyping != newPipelineConfig.RemoteQueueTyping || !pushBusStatusExists {
-		output = append(output, []string{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueTyping)})
-	}
-	if oldPipelineConfig.RemoteQueueOutput != newPipelineConfig.RemoteQueueOutput || !pushBusStatusExists {
-		output = append(output, []string{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newPipelineConfig.RemoteQueueOutput)})
-	}
-	if oldPipelineConfig.Typing != newPipelineConfig.Typing || !pushBusStatusExists {
-		output = append(output, []string{"pipeline:typing", "disabled", fmt.Sprintf("%t", newPipelineConfig.Typing)})
-	}
-	if (oldPipelineConfig.IndexerPipe != newPipelineConfig.IndexerPipe || !pushBusStatusExists) && !isIndexer {
-		output = append(output, []string{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newPipelineConfig.IndexerPipe)})
+func pipelineConfig(isIndexer bool) (output [][]string) {
+	output = append(output,
+		[]string{"pipeline:remotequeueruleset", "disabled", "false"},
+		[]string{"pipeline:ruleset", "disabled", "true"},
+		[]string{"pipeline:remotequeuetyping", "disabled", "false"},
+		[]string{"pipeline:remotequeueoutput", "disabled", "false"},
+		[]string{"pipeline:typing", "disabled", "true"},
+	)
+	if !isIndexer {
+		output = append(output, []string{"pipeline:indexerPipe", "disabled", "true"})
 	}
 	return output
 }

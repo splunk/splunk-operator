@@ -44,9 +44,6 @@ type IngestorClusterSpec struct {
 
 	// Push Bus spec
 	PushBus PushBusSpec `json:"pushBus"`
-
-	// Pipeline configuration
-	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
 }
 
 // Helper types
@@ -79,20 +76,6 @@ type SQSSpec struct {
 	EncodingFormat string `json:"encodingFormat"`
 }
 
-type PipelineConfigSpec struct {
-	RemoteQueueRuleset bool `json:"remoteQueueRuleset"`
-
-	RuleSet bool `json:"ruleSet"`
-
-	RemoteQueueTyping bool `json:"remoteQueueTyping"`
-
-	RemoteQueueOutput bool `json:"remoteQueueOutput"`
-
-	Typing bool `json:"typing"`
-
-	IndexerPipe bool `json:"indexerPipe"`
-}
-
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
 type IngestorClusterStatus struct {
 	// Phase of the ingestor pods
@@ -118,9 +101,6 @@ type IngestorClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
-
-	// Pipeline configuration status
-	PipelineConfig PipelineConfigSpec `json:"pipelineConfig"`
 
 	// Push Bus status
 	PushBus PushBusSpec `json:"pushBus"`

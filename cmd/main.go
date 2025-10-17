@@ -110,11 +110,11 @@ func main() {
 		// as certificates issued by a trusted Certificate Authority (CA). The primary risk is potentially allowing
 		// unauthorized access to sensitive metrics data. Consider replacing with CertDir, CertName, and KeyName
 		// to provide certificates, ensuring the server communicates using trusted and secure certificates.
-		TLSOpts: tlsOpts,
+		TLSOpts:        tlsOpts,
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
-	// TODO: enable https for /metrics endpoint by default  
+	// TODO: enable https for /metrics endpoint by default
 	// if secureMetrics {
 	// 	// FilterProvider is used to protect the metrics endpoint with authn/authz.
 	// 	// These configurations ensure that only authorized users and service accounts

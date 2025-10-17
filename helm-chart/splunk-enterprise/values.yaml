@@ -350,8 +350,6 @@ indexerCluster:
   #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
   #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
-  pipelineConfig: {}
-
   pullBus: {}
 
 searchHeadCluster:
@@ -900,7 +898,5 @@ ingestorCluster:
   tolerations: []
 
   affinity: {}
-
-  pipelineConfig: {}
 
   pushBus: {}

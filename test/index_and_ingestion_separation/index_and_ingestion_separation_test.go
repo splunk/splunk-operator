@@ -80,7 +80,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, pipelineConfig, serviceAccountName)
+			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -90,7 +90,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, pipelineConfig, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -171,7 +171,6 @@ var _ = Describe("indingsep test", func() {
 						},
 					},
 					PushBus:            bus,
-					PipelineConfig:     pipelineConfig,
 					Replicas:           3,
 					AppFrameworkConfig: appFrameworkSpec,
 				},
@@ -223,7 +222,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, pipelineConfig, serviceAccountName)
+			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -233,7 +232,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, pipelineConfig, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -257,7 +256,6 @@ var _ = Describe("indingsep test", func() {
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
 			Expect(ingest.Status.PushBus).To(Equal(bus), "Ingestor PushBus status is not the same as provided as input")
-			Expect(ingest.Status.PipelineConfig).To(Equal(pipelineConfig), "Ingestor PipelineConfig status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -268,7 +266,6 @@ var _ = Describe("indingsep test", func() {
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
 			Expect(index.Status.PullBus).To(Equal(bus), "Indexer PullBus status is not the same as provided as input")
-			Expect(index.Status.PipelineConfig).To(Equal(pipelineConfig), "Indexer PipelineConfig status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -322,7 +319,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, pipelineConfig, serviceAccountName)
+			_, err := deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, bus, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -332,7 +329,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, pipelineConfig, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", bus, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -372,7 +369,6 @@ var _ = Describe("indingsep test", func() {
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
 			Expect(ingest.Status.PushBus).To(Equal(updateBus), "Ingestor PushBus status is not the same as provided as input")
-			Expect(ingest.Status.PipelineConfig).To(Equal(pipelineConfig), "Ingestor PipelineConfig status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -399,7 +395,6 @@ var _ = Describe("indingsep test", func() {
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
 			Expect(index.Status.PullBus).To(Equal(updateBus), "Indexer PullBus status is not the same as provided as input")
-			Expect(index.Status.PipelineConfig).To(Equal(pipelineConfig), "Indexer PipelineConfig status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -445,59 +440,11 @@ var _ = Describe("indingsep test", func() {
 				}
 			}
 
-			// Get instance of current Ingestor Cluster CR with latest config
-			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
-			ingest = &enterpriseApi.IngestorCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
-			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
-
-			// Update instance of Ingestor Cluster CR with new pipelineconfig config
-			testcaseEnvInst.Log.Info("Update instance of Ingestor Cluster CR with new pipelineconfig config")
-			ingest.Spec.PipelineConfig = updatePipelineConfig
-			err = deployment.UpdateCR(ctx, ingest)
-			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster with updated CR")
-
-			// Ensure that Ingestor Cluster has not been restarted
-			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster has not been restarted")
-			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
-
-			// Get instance of current Ingestor Cluster CR with latest config
-			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
-			ingest = &enterpriseApi.IngestorCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
-			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
-
-			// Verify Ingestor Cluster Status
-			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.PushBus).To(Equal(updateBus), "Ingestor PushBus status is not the same as provided as input")
-			Expect(ingest.Status.PipelineConfig).To(Equal(updatePipelineConfig), "Ingestor PipelineConfig status is not the same as provided as input")
-
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
 			index = &enterpriseApi.IndexerCluster{}
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
-
-			// Update instance of Indexer Cluster CR with new pipelineconfig config
-			testcaseEnvInst.Log.Info("Update instance of Indexer Cluster CR with new pipelineconfig config")
-			index.Spec.PipelineConfig = updatePipelineConfig
-			err = deployment.UpdateCR(ctx, index)
-			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
-
-			// Ensure that Indexer Cluster has not been restarted
-			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster has not been restarted")
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
-			// Get instance of current Indexer Cluster CR with latest config
-			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
-			index = &enterpriseApi.IndexerCluster{}
-			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)
-			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
-
-			// Verify Indexer Cluster Status
-			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.PullBus).To(Equal(updateBus), "Indexer PullBus status is not the same as provided as input")
-			Expect(index.Status.PipelineConfig).To(Equal(updatePipelineConfig), "Indexer PipelineConfig status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")

@@ -33,12 +33,6 @@ spec:
   replicas: 3
 status:
   phase: Ready
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
   pullBus:
     type: sqs_smartbus
     sqs:
@@ -79,13 +73,6 @@ spec:
   replicas: 3
 status:
   phase: Ready
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
-    indexerPipe: true
   pushBus:
     type: sqs_smartbus
     sqs:

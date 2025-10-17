@@ -8,12 +8,6 @@ spec:
   replicas: 4
 status:
   phase: Ready
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
   pushBus:
     type: sqs_smartbus
     sqs:

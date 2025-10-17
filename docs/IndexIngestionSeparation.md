@@ -25,7 +25,6 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | pushBus   | PushBus | Message bus configuration for publishing messages (required) |
-| pipelineConfig   | PipelineConfig | Configuration for pipeline (required) |
 
 PushBus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
 
@@ -49,24 +48,13 @@ SQS message bus inputs can be found in the table below.
 | sendInterval   | string | Send interval (e.g. 5s) |
 | encodingFormat | string | Encoding format (e.g. s2s) |
 
-PipelineConfig inputs can be found in the table below.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| remoteQueueRuleset   | bool | Disable remote queue ruleset |
-| ruleSet   | bool | Disable rule set  |
-| remoteQueueTyping   | bool | Disable remote queue typing  |
-| remoteQueueOutput   | bool | Disable remote queue output  |
-| typing   | bool | Disable typing  |
-| indexerPipe   | bool | Disable indexer pipe  |
-
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Push Bus and Pipeline Config inputs allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Push Bus inputs allow the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, it is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Retry policy is set to max count with max retries per part equal to 4 and send interval set to 5 seconds. Pipeline config either enables (false) or disables (true) settings such as remote queue ruleset, ruleset, remote quee typing, typing, remote queue output and indexer pipe. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, it is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Retry policy is set to max count with max retries per part equal to 4 and send interval set to 5 seconds. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
-Change of any of the pushBus or pipelineConfig inputs does not restart Splunk. It just updates the config values with no disruptions.
+Change of any of the pushBus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -92,13 +80,6 @@ spec:
       retryPolicy: max_count
       sendInterval: 5s
       encodingFormat: s2s
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
-    indexerPipe: true
 ```
 
 # IndexerCluster
@@ -113,7 +94,6 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | pullBus   | PushBus | Message bus configuration for pulling messages (required) |
-| pipelineConfig   | PipelineConfig | Configuration for pipeline (required) |
 
 PullBus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
 
@@ -137,24 +117,13 @@ SQS message bus inputs can be found in the table below.
 | sendInterval   | string | Send interval (e.g. 5s) |
 | encodingFormat | string | Encoding format (e.g. s2s) |
 
-PipelineConfig inputs can be found in the table below.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| remoteQueueRuleset   | bool | Disable remote queue ruleset |
-| ruleSet   | bool | Disable rule set  |
-| remoteQueueTyping   | bool | Disable remote queue typing  |
-| remoteQueueOutput   | bool | Disable remote queue output  |
-| typing   | bool | Disable typing  |
-| indexerPipe   | bool | Disable indexer pipe  |
-
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Pull Bus and Pipeline Config inputs allow the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Pull Bus inputs allow the user to specify queue and bucket settings for the indexing process. 
 
-In this case, it is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Retry policy is set to max count with max retries per part equal to 4 and send interval set to 5 seconds. Pipeline config either enables (false) or disables (true) settings such as remote queue ruleset, ruleset, remote quee typing, typing and remote queue output. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
+In this case, it is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Retry policy is set to max count with max retries per part equal to 4 and send interval set to 5 seconds. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
-Change of any of the pullBus or pipelineConfig inputs does not restart Splunk. It just updates the config values with no disruptions.
+Change of any of the pullBus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -192,12 +161,6 @@ spec:
       retryPolicy: max_count
       sendInterval: 5s
       encodingFormat: s2s
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
 ```
 
 # Common Spec
@@ -251,13 +214,6 @@ ingestorCluster:
   name: ingestor
   replicaCount: 3
   serviceAccount: ingestion-role-sa 
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
-    indexerPipe: true
   pushBus:
     type: sqs_smartbus
     sqs:
@@ -287,13 +243,6 @@ indexerCluster:
   serviceAccount: ingestion-role-sa 
   clusterManagerRef:
     name: cm
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
-    indexerPipe: true
   pullBus:
     type: sqs_smartbus
     sqs:
@@ -635,13 +584,6 @@ spec:
       retryPolicy: max_count
       sendInterval: 5s
       encodingFormat: s2s
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
-    indexerPipe: true
 ```
 
 ```
@@ -671,13 +613,6 @@ Metadata:
   UID:                 12345678-1234-1234-1234-1234567890123
 Spec:
   Image:  splunk/splunk:9.4.4
-  Pipeline Config:
-    Indexer Pipe:          true
-    Remote Queue Output:   false
-    Remote Queue Ruleset:  false
-    Remote Queue Typing:   false
-    Rule Set:              true
-    Typing:                true
   Push Bus:
     Sqs:
       Auth Region:                   us-west-2
@@ -796,12 +731,6 @@ spec:
       retryPolicy: max_count
       sendInterval: 5s
       encodingFormat: s2s
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
 ```
 
 ```

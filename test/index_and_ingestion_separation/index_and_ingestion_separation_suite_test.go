@@ -54,14 +54,6 @@ var (
 			EncodingFormat:            "s2s",
 		},
 	}
-	pipelineConfig = enterpriseApi.PipelineConfigSpec{
-		RemoteQueueRuleset: false,
-		RuleSet:            true,
-		RemoteQueueTyping:  false,
-		RemoteQueueOutput:  false,
-		Typing:             true,
-		IndexerPipe:        true,
-	}
 	serviceAccountName = "index-ingest-sa"
 
 	inputs = []string{
@@ -106,14 +98,6 @@ var (
 			SendInterval:              "4s",
 			EncodingFormat:            "s2s",
 		},
-	}
-	updatePipelineConfig = enterpriseApi.PipelineConfigSpec{
-		RemoteQueueRuleset: false,
-		RuleSet:            false,
-		RemoteQueueTyping:  false,
-		RemoteQueueOutput:  false,
-		Typing:             true,
-		IndexerPipe:        true,
 	}
 
 	updatedInputs = []string{

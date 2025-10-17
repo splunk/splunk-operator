@@ -95,27 +95,6 @@ spec:
   topologySpreadConstraints:
 {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .Values.ingestorCluster.pipelineConfig }}
-  pipelineConfig:
-    {{- if hasKey . "remoteQueueRuleset" }}
-    remoteQueueRuleset: {{ .remoteQueueRuleset }}
-    {{- end }}
-    {{- if hasKey . "ruleSet" }}
-    ruleSet: {{ .ruleSet }}
-    {{- end }}
-    {{- if hasKey . "remoteQueueTyping" }}
-    remoteQueueTyping: {{ .remoteQueueTyping }}
-    {{- end }}
-    {{- if hasKey . "remoteQueueOutput" }}
-    remoteQueueOutput: {{ .remoteQueueOutput }}
-    {{- end }}
-    {{- if hasKey . "typing" }}
-    typing: {{ .typing }}
-    {{- end }}
-    {{- if hasKey . "indexerPipe" }}
-    indexerPipe: {{ .indexerPipe }}
-    {{- end }}
-  {{- end }}
   {{- with .Values.ingestorCluster.pushBus }}
   pushBus:
     type: {{ .type | quote }}

@@ -242,7 +242,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		if cr.Spec.PullBus.Type != "" {
-			err = mgr.handlePullBusOrPipelineConfigChange(ctx, cr, client)
+			err = mgr.handlePullBusChange(ctx, cr, client)
 			if err != nil {
 				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
 				return result, err
@@ -250,7 +250,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 
 		cr.Status.PullBus = cr.Spec.PullBus
-		cr.Status.PipelineConfig = cr.Spec.PipelineConfig
 
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
@@ -509,7 +508,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		if cr.Spec.PullBus.Type != "" {
-			err = mgr.handlePullBusOrPipelineConfigChange(ctx, cr, client)
+			err = mgr.handlePullBusChange(ctx, cr, client)
 			if err != nil {
 				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
 				return result, err
@@ -517,7 +516,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		cr.Status.PullBus = cr.Spec.PullBus
-		cr.Status.PipelineConfig = cr.Spec.PipelineConfig
 
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
@@ -1172,10 +1170,6 @@ func validateIndexerSpecificInputs(cr *enterpriseApi.IndexerCluster) error {
 		if cr.Spec.PullBus.SQS.EncodingFormat == "" {
 			cr.Spec.PullBus.SQS.EncodingFormat = "s2s"
 		}
-
-		if cr.Spec.PipelineConfig == (enterpriseApi.PipelineConfigSpec{}) {
-			return errors.New("pipelineConfig spec cannot be empty")
-		}
 	}
 
 	return nil
@@ -1262,7 +1256,7 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 var newSplunkClientForPullBusPipeline = splclient.NewSplunkClient
 
 // Checks if only PullBus or Pipeline config changed, and updates the conf file if so
-func (mgr *indexerClusterPodManager) handlePullBusOrPipelineConfigChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) error {
+func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, k8s client.Client) error {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
@@ -1319,14 +1313,12 @@ func getChangedPullBusAndPipelineFieldsIndexer(oldCrStatus *enterpriseApi.Indexe
 	// Compare PullBus fields
 	oldPB := oldCrStatus.PullBus
 	newPB := newCR.Spec.PullBus
-	oldPC := oldCrStatus.PipelineConfig
-	newPC := newCR.Spec.PipelineConfig
 
 	// Push all PullBus fields
 	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs = pullBusChanged(oldPB, newPB, afterDelete)
 
 	// Always set all pipeline fields, not just changed ones
-	pipelineChangedFields = pipelineConfigChanged(oldPC, newPC, oldCrStatus.PullBus.SQS.QueueName != "", true)
+	pipelineChangedFields = pipelineConfig(true)
 
 	return
 }

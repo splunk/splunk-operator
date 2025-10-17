@@ -163,27 +163,6 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.pipelineConfig }}
-    pipelineConfig:
-      {{- if .remoteQueueRuleset }}
-      remoteQueueRuleset: {{ .remoteQueueRuleset }}
-      {{- end }}
-      {{- if .ruleSet }}
-      ruleSet: {{ .ruleSet }}
-      {{- end }}
-      {{- if .remoteQueueTyping }}
-      remoteQueueTyping: {{ .remoteQueueTyping }}
-      {{- end }}
-      {{- if .remoteQueueOutput }}
-      remoteQueueOutput: {{ .remoteQueueOutput }}
-      {{- end }}
-      {{- if .typing }}
-      typing: {{ .typing }}
-      {{- end }}
-      {{- if .indexerPipe }}
-      indexerPipe: {{ .indexerPipe }}
-      {{- end }}
-    {{- end }}
     {{- with $.Values.indexerCluster.pullBus }}
     pullBus:
       type: {{ .type | quote }}

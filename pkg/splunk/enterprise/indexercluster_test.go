@@ -2022,13 +2022,6 @@ func TestImageUpdatedTo9(t *testing.T) {
 func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 	newCR := &enterpriseApi.IndexerCluster{
 		Spec: enterpriseApi.IndexerClusterSpec{
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-			},
 			PullBus: enterpriseApi.PushBusSpec{
 				Type: "sqs_smartbus",
 				SQS: enterpriseApi.SQSSpec{
@@ -2076,15 +2069,15 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 
 	assert.Equal(t, 5, len(pipelineChangedFields))
 	assert.Equal(t, [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.Typing)},
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
 	}, pipelineChangedFields)
 }
 
-func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
+func TestHandlePullBusChange(t *testing.T) {
 	// Object definitions
 	newCR := &enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -2095,13 +2088,6 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-			},
 			PullBus: enterpriseApi.PushBusSpec{
 				Type: "sqs_smartbus",
 				SQS: enterpriseApi.SQSSpec{
@@ -2181,7 +2167,7 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 
 	// Negative test case: secret not found
 	mgr := &indexerClusterPodManager{}
-	err := mgr.handlePullBusOrPipelineConfigChange(ctx, newCR, c)
+	err := mgr.handlePullBusChange(ctx, newCR, c)
 	assert.NotNil(t, err)
 
 	// Mock secret
@@ -2192,7 +2178,7 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestPullBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePullBusChange(ctx, newCR, c)
 	assert.NotNil(t, err)
 
 	// outputs.conf
@@ -2216,7 +2202,7 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestPullBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePullBusChange(ctx, newCR, c)
 	assert.NotNil(t, err)
 
 	// inputs.conf
@@ -2226,16 +2212,16 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 	// Negative test case: failure in updating remote queue stanza
 	mgr = newTestPullBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePullBusChange(ctx, newCR, c)
 	assert.NotNil(t, err)
 
 	// default-mode.conf
 	propertyKVList = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.Typing)},
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
 	}
 
 	for i := 0; i < int(newCR.Status.ReadyReplicas); i++ {
@@ -2254,7 +2240,7 @@ func TestHandlePullBusOrPipelineConfigChange(t *testing.T) {
 
 	mgr = newTestPullBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePullBusChange(ctx, newCR, c)
 	assert.Nil(t, err)
 }
 
@@ -2327,13 +2313,6 @@ func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 1,
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-			},
 			PullBus: enterpriseApi.PushBusSpec{
 				Type: "sqs_smartbus",
 				SQS: enterpriseApi.SQSSpec{
@@ -2563,19 +2542,6 @@ func TestValidateIndexerSpecificInputs(t *testing.T) {
 	cr.Spec.PullBus.SQS.RetryPolicy = ""
 	cr.Spec.PullBus.SQS.SendInterval = ""
 	cr.Spec.PullBus.SQS.EncodingFormat = ""
-
-	err = validateIndexerSpecificInputs(cr)
-	assert.NotNil(t, err)
-	assert.Equal(t, "pipelineConfig spec cannot be empty", err.Error())
-
-	cr.Spec.PipelineConfig = enterpriseApi.PipelineConfigSpec{
-		RemoteQueueRuleset: true,
-		RemoteQueueTyping:  true,
-		RemoteQueueOutput:  true,
-		Typing:             true,
-		RuleSet:            true,
-		IndexerPipe:        true,
-	}
 
 	err = validateIndexerSpecificInputs(cr)
 	assert.Nil(t, err)

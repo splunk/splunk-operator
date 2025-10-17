@@ -1580,22 +1580,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              pipelineConfig:
-                description: Pipeline configuration
-                properties:
-                  indexerPipe:
-                    type: boolean
-                  remoteQueueOutput:
-                    type: boolean
-                  remoteQueueRuleset:
-                    type: boolean
-                  remoteQueueTyping:
-                    type: boolean
-                  ruleSet:
-                    type: boolean
-                  typing:
-                    type: boolean
-                type: object
               pushBus:
                 description: Push Bus spec
                 properties:
@@ -4561,22 +4545,6 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              pipelineConfig:
-                description: Pipeline configuration status
-                properties:
-                  indexerPipe:
-                    type: boolean
-                  remoteQueueOutput:
-                    type: boolean
-                  remoteQueueRuleset:
-                    type: boolean
-                  remoteQueueTyping:
-                    type: boolean
-                  ruleSet:
-                    type: boolean
-                  typing:
-                    type: boolean
-                type: object
               pushBus:
                 description: Push Bus status
                 properties:

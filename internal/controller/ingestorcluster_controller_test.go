@@ -184,14 +184,6 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 				},
 			},
 			Replicas: 3,
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
 			PushBus: enterpriseApi.PushBusSpec{
 				Type: "sqs_smartbus",
 				SQS: enterpriseApi.SQSSpec{

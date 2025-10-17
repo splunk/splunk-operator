@@ -69,14 +69,6 @@ func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
 					EncodingFormat:            "s2s",
 				},
 			},
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
 		},
 	}
 }
@@ -315,14 +307,6 @@ func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 
 	ad.Spec = enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: *cs,
-		PipelineConfig: enterpriseApi.PipelineConfigSpec{
-			RemoteQueueRuleset: false,
-			RuleSet:            true,
-			RemoteQueueTyping:  false,
-			RemoteQueueOutput:  false,
-			Typing:             true,
-			IndexerPipe:        true,
-		},
 		PullBus: enterpriseApi.PushBusSpec{
 			Type: "sqs_smartbus",
 			SQS: enterpriseApi.SQSSpec{

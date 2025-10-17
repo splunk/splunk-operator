@@ -9,13 +9,6 @@ ingestorCluster:
   enabled: true
   name: ingestor
   replicaCount: 3
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
-    indexerPipe: true
   pushBus:
     type: sqs_smartbus
     sqs:
@@ -41,12 +34,6 @@ indexerCluster:
   replicaCount: 3
   clusterManagerRef:
     name: cm
-  pipelineConfig:
-    remoteQueueRuleset: false
-    ruleSet: true
-    remoteQueueTyping: false
-    remoteQueueOutput: false
-    typing: true
   pullBus:
     type: sqs_smartbus
     sqs:
