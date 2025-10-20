@@ -5,7 +5,6 @@ on:
       - develop
       - main
       - feature**
-      - CSPL-4113-k8s-update
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
