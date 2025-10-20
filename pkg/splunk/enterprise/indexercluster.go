@@ -1153,23 +1153,6 @@ func validateIndexerSpecificInputs(cr *enterpriseApi.IndexerCluster) error {
 		if !strings.HasPrefix(cr.Spec.PullBus.SQS.LargeMessageStorePath, "s3://") {
 			return errors.New("pullBus sqs largeMessageStorePath must start with s3://")
 		}
-
-		// Assign default values if not provided
-		if cr.Spec.PullBus.SQS.MaxRetriesPerPart < 0 {
-			cr.Spec.PullBus.SQS.MaxRetriesPerPart = 4
-		}
-
-		if cr.Spec.PullBus.SQS.RetryPolicy == "" {
-			cr.Spec.PullBus.SQS.RetryPolicy = "max_count"
-		}
-
-		if cr.Spec.PullBus.SQS.SendInterval == "" {
-			cr.Spec.PullBus.SQS.SendInterval = "5s"
-		}
-
-		if cr.Spec.PullBus.SQS.EncodingFormat == "" {
-			cr.Spec.PullBus.SQS.EncodingFormat = "s2s"
-		}
 	}
 
 	return nil
@@ -1273,8 +1256,7 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 
 		afterDelete := false
 		if (newCR.Spec.PullBus.SQS.QueueName != "" && newCR.Status.PullBus.SQS.QueueName != "" && newCR.Spec.PullBus.SQS.QueueName != newCR.Status.PullBus.SQS.QueueName) ||
-			(newCR.Spec.PullBus.Type != "" && newCR.Status.PullBus.Type != "" && newCR.Spec.PullBus.Type != newCR.Status.PullBus.Type) ||
-			(newCR.Spec.PullBus.SQS.RetryPolicy != "" && newCR.Status.PullBus.SQS.RetryPolicy != "" && newCR.Spec.PullBus.SQS.RetryPolicy != newCR.Status.PullBus.SQS.RetryPolicy) {
+			(newCR.Spec.PullBus.Type != "" && newCR.Status.PullBus.Type != "" && newCR.Spec.PullBus.Type != newCR.Status.PullBus.Type) {
 			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.PullBus.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
@@ -1353,20 +1335,16 @@ func pullBusChanged(oldPullBus, newPullBus enterpriseApi.PushBusSpec, afterDelet
 	if oldPullBus.SQS.DeadLetterQueueName != newPullBus.SQS.DeadLetterQueueName || afterDelete {
 		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPullBus.Type), newPullBus.SQS.DeadLetterQueueName})
 	}
-	if oldPullBus.SQS.MaxRetriesPerPart != newPullBus.SQS.MaxRetriesPerPart || oldPullBus.SQS.RetryPolicy != newPullBus.SQS.RetryPolicy || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPullBus.SQS.RetryPolicy, newPullBus.Type), fmt.Sprintf("%d", newPullBus.SQS.MaxRetriesPerPart)})
-	}
-	if oldPullBus.SQS.RetryPolicy != newPullBus.SQS.RetryPolicy || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.retry_policy", newPullBus.Type), newPullBus.SQS.RetryPolicy})
-	}
+	inputs = append(inputs,
+		[]string{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newPullBus.Type), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newPullBus.Type), "max_count"},
+	)
 
 	outputs = inputs
-	if oldPullBus.SQS.SendInterval != newPullBus.SQS.SendInterval || afterDelete {
-		outputs = append(outputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", newPullBus.Type), newPullBus.SQS.SendInterval})
-	}
-	if oldPullBus.SQS.EncodingFormat != newPullBus.SQS.EncodingFormat || afterDelete {
-		outputs = append(outputs, []string{fmt.Sprintf("remote_queue.%s.encoding_format", newPullBus.Type), newPullBus.SQS.EncodingFormat})
-	}
+	outputs = append(outputs,
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newPullBus.Type), "5s"},
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newPullBus.Type), "s2s"},
+	)
 
 	return inputs, outputs
 }

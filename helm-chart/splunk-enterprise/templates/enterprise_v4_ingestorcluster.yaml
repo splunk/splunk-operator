@@ -118,18 +118,6 @@ spec:
       {{- if .deadLetterQueueName }}
       deadLetterQueueName: {{ .deadLetterQueueName | quote }}
       {{- end }}
-      {{- if not (eq .maxRetriesPerPart nil) }}
-      maxRetriesPerPart: {{ .maxRetriesPerPart }}
-      {{- end }}
-      {{- if .retryPolicy }}
-      retryPolicy: {{ .retryPolicy | quote }}
-      {{- end }}
-      {{- if .sendInterval }}
-      sendInterval: {{ .sendInterval | quote }}
-      {{- end }}
-      {{- if .encodingFormat }}
-      encodingFormat: {{ .encodingFormat | quote }}
-      {{- end }}
     {{- end }}
   {{- end }}
   {{- with .Values.ingestorCluster.extraEnv }}

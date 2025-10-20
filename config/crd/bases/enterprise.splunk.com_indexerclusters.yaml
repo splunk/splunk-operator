@@ -5615,21 +5615,13 @@ spec:
                         type: string
                       deadLetterQueueName:
                         type: string
-                      encodingFormat:
-                        type: string
                       endpoint:
                         type: string
                       largeMessageStoreEndpoint:
                         type: string
                       largeMessageStorePath:
                         type: string
-                      maxRetriesPerPart:
-                        type: integer
                       queueName:
-                        type: string
-                      retryPolicy:
-                        type: string
-                      sendInterval:
                         type: string
                     type: object
                   type:
@@ -8375,21 +8367,13 @@ spec:
                         type: string
                       deadLetterQueueName:
                         type: string
-                      encodingFormat:
-                        type: string
                       endpoint:
                         type: string
                       largeMessageStoreEndpoint:
                         type: string
                       largeMessageStorePath:
                         type: string
-                      maxRetriesPerPart:
-                        type: integer
                       queueName:
-                        type: string
-                      retryPolicy:
-                        type: string
-                      sendInterval:
                         type: string
                     type: object
                   type:

@@ -18,10 +18,6 @@ ingestorCluster:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ingestion/smartbus-test
       deadLetterQueueName: sqs-dlq-test
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 
 clusterManager:
   enabled: true

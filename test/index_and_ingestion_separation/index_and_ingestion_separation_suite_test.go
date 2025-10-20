@@ -48,10 +48,6 @@ var (
 			LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 			LargeMessageStorePath:     "s3://test-bucket/smartbus-test",
 			DeadLetterQueueName:       "test-dead-letter-queue",
-			MaxRetriesPerPart:         4,
-			RetryPolicy:               "max_count",
-			SendInterval:              "5s",
-			EncodingFormat:            "s2s",
 		},
 	}
 	serviceAccountName = "index-ingest-sa"
@@ -93,10 +89,6 @@ var (
 			LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 			LargeMessageStorePath:     "s3://test-bucket-updated/smartbus-test",
 			DeadLetterQueueName:       "test-dead-letter-queue-updated",
-			MaxRetriesPerPart:         5,
-			RetryPolicy:               "max",
-			SendInterval:              "4s",
-			EncodingFormat:            "s2s",
 		},
 	}
 

@@ -76,9 +76,6 @@ func TestApplyIngestorCluster(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
 				},
 			},
 		},
@@ -244,9 +241,9 @@ func TestApplyIngestorCluster(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.LargeMessageStorePath},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.Type), fmt.Sprintf("%d", cr.Spec.PushBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", cr.Spec.PushBus.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", cr.Spec.PushBus.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", cr.Spec.PushBus.Type), "5s"},
 	}
 
 	body := buildFormBody(propertyKVList)
@@ -306,9 +303,6 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
 				},
 			},
 		},
@@ -374,10 +368,6 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-					EncodingFormat:            "s2s",
 				},
 			},
 		},
@@ -389,15 +379,15 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 	assert.Equal(t, 10, len(pushBusChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", newCR.Spec.PushBus.Type},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.EncodingFormat},
 		{fmt.Sprintf("remote_queue.%s.auth_region", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStorePath},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PushBus.SQS.RetryPolicy, newCR.Spec.PushBus.Type), fmt.Sprintf("%d", newCR.Spec.PushBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newCR.Spec.PushBus.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PushBus.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PushBus.Type), "5s"},
 	}, pushBusChangedFields)
 
 	assert.Equal(t, 6, len(pipelineChangedFields))
@@ -431,9 +421,6 @@ func TestHandlePushBusChange(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
 				},
 			},
 		},
@@ -524,9 +511,9 @@ func TestHandlePushBusChange(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStorePath},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PushBus.SQS.RetryPolicy, newCR.Spec.PushBus.Type), fmt.Sprintf("%d", newCR.Spec.PushBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newCR.Spec.PushBus.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PushBus.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PushBus.Type), "5s"},
 	}
 
 	body := buildFormBody(propertyKVList)
@@ -653,10 +640,6 @@ func TestValidateIngestorSpecificInputs(t *testing.T) {
 	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
 
 	cr.Spec.PushBus.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
-	cr.Spec.PushBus.SQS.MaxRetriesPerPart = -1
-	cr.Spec.PushBus.SQS.RetryPolicy = ""
-	cr.Spec.PushBus.SQS.SendInterval = ""
-	cr.Spec.PushBus.SQS.EncodingFormat = ""
 
 	err = validateIngestorSpecificInputs(cr)
 	assert.Nil(t, err)

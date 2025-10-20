@@ -338,23 +338,6 @@ func validateIngestorSpecificInputs(cr *enterpriseApi.IngestorCluster) error {
 		return errors.New("pushBus sqs largeMessageStorePath must start with s3://")
 	}
 
-	// Assign default values if not provided
-	if cr.Spec.PushBus.SQS.MaxRetriesPerPart < 0 {
-		cr.Spec.PushBus.SQS.MaxRetriesPerPart = 4
-	}
-
-	if cr.Spec.PushBus.SQS.RetryPolicy == "" {
-		cr.Spec.PushBus.SQS.RetryPolicy = "max_count"
-	}
-
-	if cr.Spec.PushBus.SQS.SendInterval == "" {
-		cr.Spec.PushBus.SQS.SendInterval = "5s"
-	}
-
-	if cr.Spec.PushBus.SQS.EncodingFormat == "" {
-		cr.Spec.PushBus.SQS.EncodingFormat = "s2s"
-	}
-
 	return nil
 }
 
@@ -389,8 +372,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 
 		afterDelete := false
 		if (newCR.Spec.PushBus.SQS.QueueName != "" && newCR.Status.PushBus.SQS.QueueName != "" && newCR.Spec.PushBus.SQS.QueueName != newCR.Status.PushBus.SQS.QueueName) ||
-			(newCR.Spec.PushBus.Type != "" && newCR.Status.PushBus.Type != "" && newCR.Spec.PushBus.Type != newCR.Status.PushBus.Type) ||
-			(newCR.Spec.PushBus.SQS.RetryPolicy != "" && newCR.Status.PushBus.SQS.RetryPolicy != "" && newCR.Spec.PushBus.SQS.RetryPolicy != newCR.Status.PushBus.SQS.RetryPolicy) {
+			(newCR.Spec.PushBus.Type != "" && newCR.Status.PushBus.Type != "" && newCR.Spec.PushBus.Type != newCR.Status.PushBus.Type) {
 			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.PushBus.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
@@ -465,9 +447,6 @@ func pushBusChanged(oldPushBus, newPushBus enterpriseApi.PushBusSpec, afterDelet
 	if oldPushBus.Type != newPushBus.Type || afterDelete {
 		output = append(output, []string{"remote_queue.type", newPushBus.Type})
 	}
-	if oldPushBus.SQS.EncodingFormat != newPushBus.SQS.EncodingFormat || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.encoding_format", newPushBus.Type), newPushBus.SQS.EncodingFormat})
-	}
 	if oldPushBus.SQS.AuthRegion != newPushBus.SQS.AuthRegion || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", newPushBus.Type), newPushBus.SQS.AuthRegion})
 	}
@@ -483,14 +462,12 @@ func pushBusChanged(oldPushBus, newPushBus enterpriseApi.PushBusSpec, afterDelet
 	if oldPushBus.SQS.DeadLetterQueueName != newPushBus.SQS.DeadLetterQueueName || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPushBus.Type), newPushBus.SQS.DeadLetterQueueName})
 	}
-	if oldPushBus.SQS.MaxRetriesPerPart != newPushBus.SQS.MaxRetriesPerPart || oldPushBus.SQS.RetryPolicy != newPushBus.SQS.RetryPolicy || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newPushBus.SQS.RetryPolicy, newPushBus.Type), fmt.Sprintf("%d", newPushBus.SQS.MaxRetriesPerPart)})
-	}
-	if oldPushBus.SQS.RetryPolicy != newPushBus.SQS.RetryPolicy || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.retry_policy", newPushBus.Type), newPushBus.SQS.RetryPolicy})
-	}
-	if oldPushBus.SQS.SendInterval != newPushBus.SQS.SendInterval || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.send_interval", newPushBus.Type), newPushBus.SQS.SendInterval})
-	}
+
+	output = append(output,
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newPushBus.Type), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newPushBus.Type), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newPushBus.Type), "max_count"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newPushBus.Type), "5s"})
+
 	return output
 }

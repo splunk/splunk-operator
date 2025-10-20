@@ -66,14 +66,6 @@ type SQSSpec struct {
 	LargeMessageStorePath string `json:"largeMessageStorePath"`
 
 	DeadLetterQueueName string `json:"deadLetterQueueName"`
-
-	MaxRetriesPerPart int `json:"maxRetriesPerPart"`
-
-	RetryPolicy string `json:"retryPolicy"`
-
-	SendInterval string `json:"sendInterval"`
-
-	EncodingFormat string `json:"encodingFormat"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster

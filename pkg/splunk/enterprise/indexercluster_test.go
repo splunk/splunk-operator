@@ -2031,10 +2031,6 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-					EncodingFormat:            "s2s",
 				},
 			},
 		},
@@ -2049,8 +2045,8 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.LargeMessageStoreEndpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.LargeMessageStorePath},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PullBus.SQS.RetryPolicy, newCR.Spec.PullBus.Type), fmt.Sprintf("%d", newCR.Spec.PullBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.RetryPolicy},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newCR.Spec.PullBus.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), "max_count"},
 	}, pullBusChangedFieldsInputs)
 
 	assert.Equal(t, 10, len(pullBusChangedFieldsOutputs))
@@ -2061,9 +2057,9 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.LargeMessageStoreEndpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.LargeMessageStorePath},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PullBus.SQS.RetryPolicy, newCR.Spec.PullBus.Type), fmt.Sprintf("%d", newCR.Spec.PullBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newCR.Spec.PullBus.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PullBus.Type), "5s"},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PullBus.Type), "s2s"},
 	}, pullBusChangedFieldsOutputs)
 
@@ -2097,9 +2093,6 @@ func TestHandlePullBusChange(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
 				},
 			},
 		},
@@ -2188,13 +2181,13 @@ func TestHandlePullBusChange(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.LargeMessageStoreEndpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.LargeMessageStorePath},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PullBus.SQS.RetryPolicy, newCR.Spec.PullBus.Type), fmt.Sprintf("%d", newCR.Spec.PullBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.RetryPolicy},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newCR.Spec.PullBus.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PullBus.Type), "max_count"},
 	}
 	propertyKVListOutputs := propertyKVList
 
 	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PullBus.Type), "s2s"})
-	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PullBus.Type), newCR.Spec.PullBus.SQS.SendInterval})
+	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PullBus.Type), "5s"})
 
 	body := buildFormBody(propertyKVListOutputs)
 	addRemoteQueueHandlersForIndexer(mockHTTPClient, newCR, newCR.Status.ReadyReplicas, "conf-outputs", body)
@@ -2322,9 +2315,6 @@ func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
 					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
 					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
 					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
 				},
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2538,10 +2528,6 @@ func TestValidateIndexerSpecificInputs(t *testing.T) {
 	assert.Equal(t, "pullBus sqs largeMessageStorePath must start with s3://", err.Error())
 
 	cr.Spec.PullBus.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
-	cr.Spec.PullBus.SQS.MaxRetriesPerPart = -1
-	cr.Spec.PullBus.SQS.RetryPolicy = ""
-	cr.Spec.PullBus.SQS.SendInterval = ""
-	cr.Spec.PullBus.SQS.EncodingFormat = ""
 
 	err = validateIndexerSpecificInputs(cr)
 	assert.Nil(t, err)

@@ -43,16 +43,12 @@ SQS message bus inputs can be found in the table below.
 | largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint (e.g. https://s3.us-west-2.amazonaws.com) |
 | largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
 | deadLetterQueueName   | string | Name of the SQS dead letter queue |
-| maxRetriesPerPart   | integer | Max retries per part for max_count retry policy |
-| retryPolicy   | string | Retry policy (e.g. max_count) |
-| sendInterval   | string | Send interval (e.g. 5s) |
-| encodingFormat | string | Encoding format (e.g. s2s) |
 
 ## Example
 
 The example presented below configures IngestorCluster named ingestor with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Push Bus inputs allow the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, it is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Retry policy is set to max count with max retries per part equal to 4 and send interval set to 5 seconds. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, it is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
 Change of any of the pushBus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
@@ -76,10 +72,6 @@ spec:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ingestion/smartbus-test
       deadLetterQueueName: sqs-dlq-test
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 ```
 
 # IndexerCluster
@@ -112,16 +104,12 @@ SQS message bus inputs can be found in the table below.
 | largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint (e.g. https://s3.us-west-2.amazonaws.com) |
 | largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
 | deadLetterQueueName   | string | Name of SQS dead letter queue |
-| maxRetriesPerPart   | integer | Max retries per part for max_count retry policy |
-| retryPolicy   | string | Retry policy (e.g. max_count) |
-| sendInterval   | string | Send interval (e.g. 5s) |
-| encodingFormat | string | Encoding format (e.g. s2s) |
 
 ## Example
 
 The example presented below configures IndexerCluster named indexer with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Pull Bus inputs allow the user to specify queue and bucket settings for the indexing process. 
 
-In this case, it is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Retry policy is set to max count with max retries per part equal to 4 and send interval set to 5 seconds. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
+In this case, it is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
 Change of any of the pullBus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
@@ -223,10 +211,6 @@ ingestorCluster:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ing-ind-separation/smartbus-test
       deadLetterQueueName: ing-ind-separation-dlq
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 ```
 
 ```
@@ -580,10 +564,6 @@ spec:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ing-ind-separation/smartbus-test
       deadLetterQueueName: ing-ind-separation-dlq
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 ```
 
 ```
