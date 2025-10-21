@@ -137,6 +137,11 @@ func TestGetRegion(t *testing.T) {
 			endpoint:    "https://storage.googleapis.com",
 			expectError: true,
 		},
+		{
+			name:        "Invalid endpoint - malformed domain",
+			endpoint:    "https://s3.us-west-2.amazonawsXcom",
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
