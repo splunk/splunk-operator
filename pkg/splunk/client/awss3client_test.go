@@ -69,6 +69,96 @@ func TestGetTLSVersion(t *testing.T) {
 		getTLSVersion(&tr)
 	}
 }
+
+func TestGetRegion(t *testing.T) {
+	ctx := context.TODO()
+
+	tests := []struct {
+		name           string
+		endpoint       string
+		expectedRegion string
+		expectError    bool
+	}{
+		{
+			name:           "Standard 3-part region - us-west-2",
+			endpoint:       "https://s3.us-west-2.amazonaws.com",
+			expectedRegion: "us-west-2",
+			expectError:    false,
+		},
+		{
+			name:           "Standard 3-part region - eu-west-1",
+			endpoint:       "https://s3-eu-west-1.amazonaws.com",
+			expectedRegion: "eu-west-1",
+			expectError:    false,
+		},
+		{
+			name:           "GovCloud 4-part region - us-gov-west-1",
+			endpoint:       "https://s3.us-gov-west-1.amazonaws.com",
+			expectedRegion: "us-gov-west-1",
+			expectError:    false,
+		},
+		{
+			name:           "GovCloud 4-part region - us-gov-east-1",
+			endpoint:       "https://s3-us-gov-east-1.amazonaws.com",
+			expectedRegion: "us-gov-east-1",
+			expectError:    false,
+		},
+		{
+			name:           "ISO region - us-iso-east-1",
+			endpoint:       "https://s3.us-iso-east-1.amazonaws.com",
+			expectedRegion: "us-iso-east-1",
+			expectError:    false,
+		},
+		{
+			name:           "ISOB region - us-isob-east-1",
+			endpoint:       "https://s3.us-isob-east-1.amazonaws.com",
+			expectedRegion: "us-isob-east-1",
+			expectError:    false,
+		},
+		{
+			name:           "With bucket prefix",
+			endpoint:       "https://mybucket.s3.us-west-2.amazonaws.com",
+			expectedRegion: "us-west-2",
+			expectError:    false,
+		},
+		{
+			name:           "GovCloud with bucket prefix",
+			endpoint:       "https://mybucket.s3.us-gov-west-1.amazonaws.com",
+			expectedRegion: "us-gov-west-1",
+			expectError:    false,
+		},
+		{
+			name:        "Invalid endpoint - no region",
+			endpoint:    "https://s3.amazonaws.com",
+			expectError: true,
+		},
+		{
+			name:        "Invalid endpoint - non-AWS",
+			endpoint:    "https://storage.googleapis.com",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var region string
+			err := GetRegion(ctx, tt.endpoint, &region)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for endpoint %s, but got none", tt.endpoint)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for endpoint %s: %v", tt.endpoint, err)
+				}
+				if region != tt.expectedRegion {
+					t.Errorf("Expected region %s, got %s for endpoint %s", tt.expectedRegion, region, tt.endpoint)
+				}
+			}
+		})
+	}
+}
 func TestNewAWSS3Client(t *testing.T) {
 	ctx := context.TODO()
 	fn := InitAWSClientWrapper
