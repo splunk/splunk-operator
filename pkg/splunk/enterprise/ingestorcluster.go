@@ -232,7 +232,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
 		if err != nil {
-			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")
+			scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 			return result, err
 		}
 
@@ -303,7 +303,7 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 func validateIngestorSpecificInputs(busConfig *enterpriseApi.BusConfiguration) error {
 	// sqs_smartbus type is supported for now
 	if busConfig.Spec.Type != "sqs_smartbus" {
-		return errors.New("only sqs_smartbus type is supported in pushBus type")
+		return errors.New("only sqs_smartbus type is supported in bus type")
 	}
 
 	// Cannot be empty fields check
@@ -321,7 +321,7 @@ func validateIngestorSpecificInputs(busConfig *enterpriseApi.BusConfiguration) e
 	}
 
 	if len(cannotBeEmptyFields) > 0 {
-		return errors.New("pushBus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
+		return errors.New("bus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
 	}
 
 	// Have to start with https:// or s3:// checks
@@ -335,11 +335,11 @@ func validateIngestorSpecificInputs(busConfig *enterpriseApi.BusConfiguration) e
 	}
 
 	if len(haveToStartWithHttps) > 0 {
-		return errors.New("pushBus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
+		return errors.New("bus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
 	}
 
 	if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStorePath, "s3://") {
-		return errors.New("pushBus sqs largeMessageStorePath must start with s3://")
+		return errors.New("bus sqs largeMessageStorePath must start with s3://")
 	}
 
 	return nil
@@ -358,7 +358,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	return ss, nil
 }
 
-// Checks if only PushBus or Pipeline config changed, and updates the conf file if so
+// Checks if only Bus or Pipeline config changed, and updates the conf file if so
 func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
@@ -383,9 +383,9 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 			afterDelete = true
 		}
 
-		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&busConfig, newCR, afterDelete)
+		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&busConfig, newCR, afterDelete)
 
-		for _, pbVal := range pushBusChangedFields {
+		for _, pbVal := range busChangedFields {
 			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
@@ -402,13 +402,13 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 	return updateErr
 }
 
-// Returns the names of PushBus and PipelineConfig fields that changed between oldCR and newCR.
-func getChangedPushBusAndPipelineFields(busConfig *enterpriseApi.BusConfiguration, busConfigIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (pushBusChangedFields, pipelineChangedFields [][]string) {
+// Returns the names of Bus and PipelineConfig fields that changed between oldCR and newCR.
+func getChangedBusFieldsForIngestor(busConfig *enterpriseApi.BusConfiguration, busConfigIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (busChangedFields, pipelineChangedFields [][]string) {
 	oldPB := &busConfigIngestorStatus.Status.BusConfiguration
 	newPB := &busConfig.Spec
 
-	// Push changed PushBus fields
-	pushBusChangedFields = pushBusChanged(oldPB, newPB, afterDelete)
+	// Push changed bus fields
+	busChangedFields = pushBusChanged(oldPB, newPB, afterDelete)
 
 	// Always changed pipeline fields
 	pipelineChangedFields = pipelineConfig(false)
@@ -447,31 +447,31 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 	return output
 }
 
-func pushBusChanged(oldPushBus, newPushBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (output [][]string) {
-	if oldPushBus.Type != newPushBus.Type || afterDelete {
-		output = append(output, []string{"remote_queue.type", newPushBus.Type})
+func pushBusChanged(oldBus, newBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (output [][]string) {
+	if oldBus.Type != newBus.Type || afterDelete {
+		output = append(output, []string{"remote_queue.type", newBus.Type})
 	}
-	if oldPushBus.SQS.AuthRegion != newPushBus.SQS.AuthRegion || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", newPushBus.Type), newPushBus.SQS.AuthRegion})
+	if oldBus.SQS.AuthRegion != newBus.SQS.AuthRegion || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", newBus.Type), newBus.SQS.AuthRegion})
 	}
-	if oldPushBus.SQS.Endpoint != newPushBus.SQS.Endpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", newPushBus.Type), newPushBus.SQS.Endpoint})
+	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", newBus.Type), newBus.SQS.Endpoint})
 	}
-	if oldPushBus.SQS.LargeMessageStoreEndpoint != newPushBus.SQS.LargeMessageStoreEndpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPushBus.Type), newPushBus.SQS.LargeMessageStoreEndpoint})
+	if oldBus.SQS.LargeMessageStoreEndpoint != newBus.SQS.LargeMessageStoreEndpoint || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newBus.Type), newBus.SQS.LargeMessageStoreEndpoint})
 	}
-	if oldPushBus.SQS.LargeMessageStorePath != newPushBus.SQS.LargeMessageStorePath || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPushBus.Type), newPushBus.SQS.LargeMessageStorePath})
+	if oldBus.SQS.LargeMessageStorePath != newBus.SQS.LargeMessageStorePath || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newBus.Type), newBus.SQS.LargeMessageStorePath})
 	}
-	if oldPushBus.SQS.DeadLetterQueueName != newPushBus.SQS.DeadLetterQueueName || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPushBus.Type), newPushBus.SQS.DeadLetterQueueName})
+	if oldBus.SQS.DeadLetterQueueName != newBus.SQS.DeadLetterQueueName || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newBus.Type), newBus.SQS.DeadLetterQueueName})
 	}
 
 	output = append(output,
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newPushBus.Type), "s2s"},
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newPushBus.Type), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newPushBus.Type), "max_count"},
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newPushBus.Type), "5s"})
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newBus.Type), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newBus.Type), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newBus.Type), "max_count"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newBus.Type), "5s"})
 
 	return output
 }

@@ -2047,7 +2047,7 @@ func TestImageUpdatedTo9(t *testing.T) {
 	}
 }
 
-func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
+func TestGetChangedBusFieldsForIndexer(t *testing.T) {
 	busConfig := enterpriseApi.BusConfiguration{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "BusConfiguration",
@@ -2077,8 +2077,8 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		},
 	}
 
-	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(&busConfig, newCR, false)
-	assert.Equal(t, 8, len(pullBusChangedFieldsInputs))
+	busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, false)
+	assert.Equal(t, 8, len(busChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", busConfig.Spec.Type},
 		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
@@ -2088,9 +2088,9 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
-	}, pullBusChangedFieldsInputs)
+	}, busChangedFieldsInputs)
 
-	assert.Equal(t, 10, len(pullBusChangedFieldsOutputs))
+	assert.Equal(t, 10, len(busChangedFieldsOutputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", busConfig.Spec.Type},
 		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
@@ -2102,7 +2102,7 @@ func TestGetChangedPullBusAndPipelineFieldsIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
 		{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", busConfig.Spec.Type), "s2s"},
-	}, pullBusChangedFieldsOutputs)
+	}, busChangedFieldsOutputs)
 
 	assert.Equal(t, 5, len(pipelineChangedFields))
 	assert.Equal(t, [][]string{
@@ -2327,7 +2327,7 @@ func addRemoteQueueHandlersForIndexer(mockHTTPClient *spltest.MockHTTPClient, cr
 }
 
 func newTestPullBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *indexerClusterPodManager {
-	newSplunkClientForPullBusPipeline = func(uri, user, pass string) *splclient.SplunkClient {
+	newSplunkClientForBusPipeline = func(uri, user, pass string) *splclient.SplunkClient {
 		return &splclient.SplunkClient{
 			ManagementURI: uri,
 			Username:      user,
@@ -2336,11 +2336,11 @@ func newTestPullBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *inde
 		}
 	}
 	return &indexerClusterPodManager{
-		newSplunkClient: newSplunkClientForPullBusPipeline,
+		newSplunkClient: newSplunkClientForBusPipeline,
 	}
 }
 
-func TestApplyIndexerClusterManager_PullBusConfig_Success(t *testing.T) {
+func TestApplyIndexerClusterManager_BusConfig_Success(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -2568,19 +2568,19 @@ func TestValidateIndexerSpecificInputs(t *testing.T) {
 
 	err := validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "only sqs_smartbus type is supported in pullBus type", err.Error())
+	assert.Equal(t, "only sqs_smartbus type is supported in bus type", err.Error())
 
 	busConfig.Spec.Type = "sqs_smartbus"
 
 	err = validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pullBus sqs cannot be empty", err.Error())
+	assert.Equal(t, "bus sqs cannot be empty", err.Error())
 
 	busConfig.Spec.SQS.AuthRegion = "us-west-2"
 
 	err = validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pullBus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
+	assert.Equal(t, "bus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
 
 	busConfig.Spec.SQS.QueueName = "test-queue"
 	busConfig.Spec.SQS.DeadLetterQueueName = "dlq-test"
@@ -2588,26 +2588,26 @@ func TestValidateIndexerSpecificInputs(t *testing.T) {
 
 	err = validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pullBus sqs authRegion cannot be empty", err.Error())
+	assert.Equal(t, "bus sqs authRegion cannot be empty", err.Error())
 
 	busConfig.Spec.SQS.AuthRegion = "us-west-2"
 
 	err = validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pullBus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
+	assert.Equal(t, "bus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
 
 	busConfig.Spec.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
 	busConfig.Spec.SQS.LargeMessageStoreEndpoint = "https://s3.us-west-2.amazonaws.com"
 
 	err = validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pullBus sqs largeMessageStorePath must start with s3://", err.Error())
+	assert.Equal(t, "bus sqs largeMessageStorePath must start with s3://", err.Error())
 
 	busConfig.Spec.SQS.LargeMessageStorePath = "ingestion/smartbus-test"
 
 	err = validateIndexerBusSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pullBus sqs largeMessageStorePath must start with s3://", err.Error())
+	assert.Equal(t, "bus sqs largeMessageStorePath must start with s3://", err.Error())
 
 	busConfig.Spec.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
 

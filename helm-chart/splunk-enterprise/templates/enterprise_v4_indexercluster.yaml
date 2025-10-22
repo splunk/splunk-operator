@@ -163,29 +163,12 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.pullBus }}
-    pullBus:
-      type: {{ .type | quote }}
-      {{- with .sqs }}
-      sqs:
-        {{- if .queueName }}
-        queueName: {{ .queueName | quote }}
-        {{- end }}
-        {{- if .authRegion }}
-        authRegion: {{ .authRegion | quote }}
-        {{- end }}
-        {{- if .endpoint }}
-        endpoint: {{ .endpoint | quote }}
-        {{- end }}
-        {{- if .largeMessageStoreEndpoint }}
-        largeMessageStoreEndpoint: {{ .largeMessageStoreEndpoint | quote }}
-        {{- end }}
-        {{- if .largeMessageStorePath }}
-        largeMessageStorePath: {{ .largeMessageStorePath | quote }}
-        {{- end }}
-        {{- if .deadLetterQueueName }}
-        deadLetterQueueName: {{ .deadLetterQueueName | quote }}
-        {{- end }}
+  {{- if $.Values.indexerCluster.busConfigurationRef }}
+    {{- with $.Values.indexerCluster.busConfigurationRef }}
+    busConfigurationRef:
+      name: {{ $.Values.indexerCluster.busConfigurationRef.name }}
+      {{- if $.Values.indexerCluster.busConfigurationRef.namespace }}
+      namespace: {{ $.Values.indexerCluster.busConfigurationRef.namespace }}
       {{- end }}
     {{- end }}
 {{- end }}

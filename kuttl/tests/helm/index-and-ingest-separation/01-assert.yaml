@@ -1,4 +1,22 @@
 ---
+# assert for bus configurtion custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: BusConfiguration
+metadata:
+  name: bus-config
+spec:
+  type: sqs_smartbus
+  sqs:
+    queueName: sqs-test
+    authRegion: us-west-2
+    endpoint: https://sqs.us-west-2.amazonaws.com
+    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+    largeMessageStorePath: s3://ingestion/smartbus-test
+    deadLetterQueueName: sqs-dlq-test
+status:
+  phase: Ready
+
+---
 # assert for cluster manager custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
@@ -31,9 +49,11 @@ metadata:
   name: indexer
 spec:
   replicas: 3
+  busConfigurationRef:
+    name: bus-config
 status:
   phase: Ready
-  pullBus:
+  busConfiguration:
     type: sqs_smartbus
     sqs:
       queueName: sqs-test
@@ -67,9 +87,11 @@ metadata:
   name: ingestor
 spec:
   replicas: 3
+  busConfigurationRef:
+    name: bus-config
 status:
   phase: Ready
-  pushBus:
+  busConfiguration:
     type: sqs_smartbus
     sqs:
       queueName: sqs-test

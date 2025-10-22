@@ -6,9 +6,11 @@ metadata:
   name: ingestor
 spec:
   replicas: 4
+  busConfigurationRef:
+    name: bus-config
 status:
   phase: Ready
-  pushBus:
+  busConfiguration:
     type: sqs_smartbus
     sqs:
       queueName: sqs-test

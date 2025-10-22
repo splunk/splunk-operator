@@ -350,7 +350,7 @@ indexerCluster:
   #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
   #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
-  pullBus: {}
+  busConfigurationRef: {}
 
 searchHeadCluster:
 
@@ -899,4 +899,4 @@ ingestorCluster:
 
   affinity: {}
 
-  pushBus: {}
+  busConfigurationRef: {}

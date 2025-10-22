@@ -95,28 +95,11 @@ spec:
   topologySpreadConstraints:
 {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .Values.ingestorCluster.pushBus }}
-  pushBus:
-    type: {{ .type | quote }}
-    {{- with .sqs }}
-    sqs:
-      {{- if .queueName }}
-      queueName: {{ .queueName | quote }}
-      {{- end }}
-      {{- if .authRegion }}
-      authRegion: {{ .authRegion | quote }}
-      {{- end }}
-      {{- if .endpoint }}
-      endpoint: {{ .endpoint | quote }}
-      {{- end }}
-      {{- if .largeMessageStoreEndpoint }}
-      largeMessageStoreEndpoint: {{ .largeMessageStoreEndpoint | quote }}
-      {{- end }}
-      {{- if .largeMessageStorePath }}
-      largeMessageStorePath: {{ .largeMessageStorePath | quote }}
-      {{- end }}
-      {{- if .deadLetterQueueName }}
-      deadLetterQueueName: {{ .deadLetterQueueName | quote }}
+    {{- with $.Values.ingestorCluster.busConfigurationRef }}
+    busConfigurationRef:
+      name: {{ $.Values.ingestorCluster.busConfigurationRef.name }}
+      {{- if $.Values.ingestorCluster.busConfigurationRef.namespace }}
+      namespace: {{ $.Values.ingestorCluster.busConfigurationRef.namespace }}
       {{- end }}
     {{- end }}
   {{- end }}

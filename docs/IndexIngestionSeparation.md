@@ -12,21 +12,13 @@ This separation enables:
 > [!WARNING]
 > **As of now, only brand new deployments are supported for Index and Ingestion Separation. No migration path is implemented, described or tested for existing deployments to move from a standard model to Index & Ingestion separation model.**
 
+# BusConfiguration
 
-# IngestorCluster
-
-IngestorCluster is introduced for high‑throughput data ingestion into a durable message bus. Its Splunk pods are configured to receive events (outputs.conf) and publish them to a message bus. 
+BusConfiguration is introduced to store message bus configuration to be shared among IngestorCluster and IndexerCluster.
 
 ## Spec
 
-In addition to common spec inputs, the IngestorCluster resource provides the following Spec configuration parameters.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| replicas   | integer | The number of replicas (defaults to 3) |
-| pushBus   | PushBus | Message bus configuration for publishing messages (required) |
-
-PushBus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
+BusConfiguration inputs can be found in the table below. As of now, only SQS type of message bus is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
@@ -44,13 +36,44 @@ SQS message bus inputs can be found in the table below.
 | largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
 | deadLetterQueueName   | string | Name of the SQS dead letter queue |
 
+
+## Example
+```
+apiVersion: enterprise.splunk.com/v4
+kind: BusConfiguration
+metadata:
+  name: bus-config
+spec:
+  type: sqs_smartbus
+  sqs:
+    queueName: sqs-test
+    authRegion: us-west-2
+    endpoint: https://sqs.us-west-2.amazonaws.com
+    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+    largeMessageStorePath: s3://ingestion/smartbus-test
+    deadLetterQueueName: sqs-dlq-test
+```
+
+# IngestorCluster
+
+IngestorCluster is introduced for high‑throughput data ingestion into a durable message bus. Its Splunk pods are configured to receive events (outputs.conf) and publish them to a message bus. 
+
+## Spec
+
+In addition to common spec inputs, the IngestorCluster resource provides the following Spec configuration parameters.
+
+| Key        | Type    | Description                                       |
+| ---------- | ------- | ------------------------------------------------- |
+| replicas   | integer | The number of replicas (defaults to 3) |
+| busConfigurationRef   | corev1.ObjectReference | Message bus configuration reference |
+
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Push Bus inputs allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Push Bus inputs allow the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, it is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses bus configuration resource reference that is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
-Change of any of the pushBus inputs does not restart Splunk. It just updates the config values with no disruptions.
+Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -60,18 +83,11 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  serviceAccount: ingestion-sa 
+  serviceAccount: ingestor-sa 
   replicas: 3
   image: splunk/splunk:9.4.4
-  pushBus:
-    type: sqs_smartbus
-    sqs:
-      queueName: sqs-test
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ingestion/smartbus-test
-      deadLetterQueueName: sqs-dlq-test
+  busConfigurationRef:
+    name: bus-config
 ```
 
 # IndexerCluster
@@ -85,33 +101,15 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| pullBus   | PushBus | Message bus configuration for pulling messages (required) |
-
-PullBus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| type   | string | Type of message bus (Only sqs_smartbus as of now) |
-| sqs   | SQS | SQS message bus inputs  |
-
-SQS message bus inputs can be found in the table below.
-
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| queueName   | string | Name of SQS queue |
-| authRegion   | string | Region where the SQS is located  |
-| endpoint   | string | AWS SQS endpoint (e.g. https://sqs.us-west-2.amazonaws.com) |
-| largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint (e.g. https://s3.us-west-2.amazonaws.com) |
-| largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
-| deadLetterQueueName   | string | Name of SQS dead letter queue |
+| busConfigurationRef   | corev1.ObjectReference | Message bus configuration reference |
 
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestion-role-sa allowing it to perform SQS and S3 operations. Pull Bus inputs allow the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Pull Bus inputs allow the user to specify queue and bucket settings for the indexing process. 
 
-In this case, it is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
+In this case, In this case, the setup uses bus configuration resource reference that is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
-Change of any of the pullBus inputs does not restart Splunk. It just updates the config values with no disruptions.
+Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -121,7 +119,7 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  serviceAccount: ingestion-sa 
+  serviceAccount: ingestor-sa 
   image: splunk/splunk:9.4.4
 ---
 apiVersion: enterprise.splunk.com/v4
@@ -133,24 +131,17 @@ metadata:
 spec:
   clusterManagerRef:
     name: cm
-  serviceAccount: ingestion-role-sa
+  serviceAccount: ingestor-sa
   replicas: 3 
   image: splunk/splunk:9.4.4
-  pullBus:
-    type: sqs_smartbus
-    sqs:
-      queueName: sqs-test
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ingestion/smartbus-test
-      deadLetterQueueName: sqs-dlq-test
+  busConfigurationRef:
+    name: bus-config
 ```
 
 # Common Spec
 
-The spec section is used to define the desired state for a resource. All custom resources provided by the Splunk Operator include the following
-configuration parameters.
+The spec section is used to define the desired state for a resource. All custom resources provided by the Splunk Operator (with an exception for BusConfiguration) include the following
+configuration parameters. 
 
 | Key                   | Type       | Description                                                                                                |
 | --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
@@ -190,23 +181,30 @@ An IngestorCluster template has been added to the splunk/splunk-enterprise Helm 
 
 ## Example
 
-Below examples describe how to define values for IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
+Below examples describe how to define values for BusConfiguration, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
+
+```
+busConfiguration::
+  enabled: true
+  name: bus-config
+  type: sqs_smartbus
+  sqs:
+    queueName: sqs-test
+    authRegion: us-west-2
+    endpoint: https://sqs.us-west-2.amazonaws.com
+    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+    largeMessageStorePath: s3://ingestion/smartbus-test
+    deadLetterQueueName: sqs-dlq-test
+```
 
 ```
 ingestorCluster:
   enabled: true
   name: ingestor
   replicaCount: 3
-  serviceAccount: ingestion-role-sa 
-  pushBus:
-    type: sqs_smartbus
-    sqs:
-      queueName: ing-ind-separation-q
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ing-ind-separation/smartbus-test
-      deadLetterQueueName: ing-ind-separation-dlq
+  serviceAccount: ingestor-sa 
+  busConfigurationRef:
+    name: bus-config
 ```
 
 ```
@@ -214,24 +212,17 @@ clusterManager:
   enabled: true
   name: cm
   replicaCount: 1
-  serviceAccount: ingestion-role-sa 
+  serviceAccount: ingestor-sa 
 
 indexerCluster:
   enabled: true
   name: indexer
   replicaCount: 3
-  serviceAccount: ingestion-role-sa 
+  serviceAccount: ingestor-sa 
   clusterManagerRef:
     name: cm
-  pullBus:
-    type: sqs_smartbus
-    sqs:
-      queueName: ing-ind-separation-q
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ing-ind-separation/smartbus-test
-      deadLetterQueueName: ing-ind-separation-dlq
+  busConfigurationRef:
+    name: bus-config
 ```
 
 # Service Account
@@ -240,7 +231,7 @@ To be able to configure ingestion and indexing resources correctly in a secure m
 
 ## Example
 
-The example presented below configures the ingestion-sa service account by using esctl utility. It sets up the service account for cluster-name cluster in region us-west-2 with AmazonS3FullAccess and AmazonSQSFullAccess access policies. 
+The example presented below configures the ingestor-sa service account by using esctl utility. It sets up the service account for cluster-name cluster in region us-west-2 with AmazonS3FullAccess and AmazonSQSFullAccess access policies. 
 
 ```
 eksctl create iamserviceaccount \                                                                                                                                          
@@ -286,7 +277,7 @@ $ aws iam get-role --role-name eksctl-ind-ing-sep-demo-addon-iamserviceac-Role1-
                     "Condition": {
                         "StringEquals": {
                             "oidc.eks.us-west-2.amazonaws.com/id/1234567890123456789012345678901:aud": "sts.amazonaws.com",
-                            "oidc.eks.us-west-2.amazonaws.com/id/1234567890123456789012345678901:sub": "system:serviceaccount:default:ingestion-sa"
+                            "oidc.eks.us-west-2.amazonaws.com/id/1234567890123456789012345678901:sub": "system:serviceaccount:default:ingestor-sa"
                         }
                     }
                 }
@@ -301,7 +292,7 @@ $ aws iam get-role --role-name eksctl-ind-ing-sep-demo-addon-iamserviceac-Role1-
             },
             {
                 "Key": "alpha.eksctl.io/iamserviceaccount-name",
-                "Value": "default/ingestion-sa"
+                "Value": "default/ingestor-sa"
             },
             {
                 "Key": "alpha.eksctl.io/eksctl-version",
@@ -483,7 +474,7 @@ $ aws iam get-role --role-name eksctl-ind-ing-sep-demo-addon-iamserviceac-Role1-
                     "Condition": {
                         "StringEquals": {
                             "oidc.eks.us-west-2.amazonaws.com/id/1234567890123456789012345678901:aud": "sts.amazonaws.com",
-                            "oidc.eks.us-west-2.amazonaws.com/id/1234567890123456789012345678901:sub": "system:serviceaccount:default:ingestion-sa"
+                            "oidc.eks.us-west-2.amazonaws.com/id/1234567890123456789012345678901:sub": "system:serviceaccount:default:ingestor-sa"
                         }
                     }
                 }
@@ -547,15 +538,8 @@ spec:
   serviceAccount: ingestor-sa 
   replicas: 3
   image: splunk/splunk:9.4.4
-  pushBus:
-    type: sqs_smartbus
-    sqs:
-      queueName: ing-ind-separation-q
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ing-ind-separation/smartbus-test
-      deadLetterQueueName: ing-ind-separation-dlq
+  busConfigurationRef:
+    name: bus-config
 ```
 
 ```
@@ -690,15 +674,8 @@ spec:
   clusterManagerRef:
     name: cm
   serviceAccount: ingestor-sa 
-  pullBus:
-    type: sqs_smartbus
-    sqs:
-      queueName: ing-ind-separation-q
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ing-ind-separation/smartbus-test
-      deadLetterQueueName: ing-ind-separation-dlq
+  busConfigurationRef:
+    name: bus-config
 ```
 
 ```

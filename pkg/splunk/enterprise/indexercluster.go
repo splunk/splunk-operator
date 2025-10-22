@@ -256,7 +256,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		if cr.Spec.BusConfigurationRef.Name != "" {
 			err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
 			if err != nil {
-				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
+				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 				return result, err
 			}
 		}
@@ -542,7 +542,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 			err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
 			if err != nil {
-				scopedLog.Error(err, "Failed to update conf file for PullBus/Pipeline config change after pod creation")
+				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 				return result, err
 			}
 		}
@@ -1145,11 +1145,11 @@ func validateIndexerBusSpecificInputs(busConfig *enterpriseApi.BusConfiguration)
 	// Otherwise, it means that no Ingestion & Index separation is applied
 	if busConfig.Spec != (enterpriseApi.BusConfigurationSpec{}) {
 		if busConfig.Spec.Type != "sqs_smartbus" {
-			return errors.New("only sqs_smartbus type is supported in pullBus type")
+			return errors.New("only sqs_smartbus type is supported in bus type")
 		}
 
 		if busConfig.Spec.SQS == (enterpriseApi.SQSSpec{}) {
-			return errors.New("pullBus sqs cannot be empty")
+			return errors.New("bus sqs cannot be empty")
 		}
 
 		// Cannot be empty fields check
@@ -1167,7 +1167,7 @@ func validateIndexerBusSpecificInputs(busConfig *enterpriseApi.BusConfiguration)
 		}
 
 		if len(cannotBeEmptyFields) > 0 {
-			return errors.New("pullBus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
+			return errors.New("bus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
 		}
 
 		// Have to start with https:// or s3:// checks
@@ -1181,11 +1181,11 @@ func validateIndexerBusSpecificInputs(busConfig *enterpriseApi.BusConfiguration)
 		}
 
 		if len(haveToStartWithHttps) > 0 {
-			return errors.New("pullBus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
+			return errors.New("bus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
 		}
 
 		if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStorePath, "s3://") {
-			return errors.New("pullBus sqs largeMessageStorePath must start with s3://")
+			return errors.New("bus sqs largeMessageStorePath must start with s3://")
 		}
 	}
 
@@ -1270,7 +1270,7 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	return extractedValue
 }
 
-var newSplunkClientForPullBusPipeline = splclient.NewSplunkClient
+var newSplunkClientForBusPipeline = splclient.NewSplunkClient
 
 // Checks if only PullBus or Pipeline config changed, and updates the conf file if so
 func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
@@ -1286,7 +1286,7 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		if err != nil {
 			return err
 		}
-		splunkClient := newSplunkClientForPullBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+		splunkClient := newSplunkClientForBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		afterDelete := false
 		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
@@ -1300,15 +1300,15 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 			afterDelete = true
 		}
 
-		pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields := getChangedPullBusAndPipelineFieldsIndexer(&busConfig, newCR, afterDelete)
+		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, afterDelete)
 
-		for _, pbVal := range pullBusChangedFieldsOutputs {
+		for _, pbVal := range busChangedFieldsOutputs {
 			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
-		for _, pbVal := range pullBusChangedFieldsInputs {
+		for _, pbVal := range busChangedFieldsInputs {
 			if err := splunkClient.UpdateConfFile("inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
@@ -1325,13 +1325,13 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 	return updateErr
 }
 
-func getChangedPullBusAndPipelineFieldsIndexer(busConfig *enterpriseApi.BusConfiguration, busConfigIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs, pipelineChangedFields [][]string) {
-	// Compare PullBus fields
+func getChangedBusFieldsForIndexer(busConfig *enterpriseApi.BusConfiguration, busConfigIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
+	// Compare bus fields
 	oldPB := busConfigIndexerStatus.Status.BusConfiguration
 	newPB := busConfig.Spec
 
-	// Push all PullBus fields
-	pullBusChangedFieldsInputs, pullBusChangedFieldsOutputs = pullBusChanged(&oldPB, &newPB, afterDelete)
+	// Push all bus fields
+	busChangedFieldsInputs, busChangedFieldsOutputs = pullBusChanged(&oldPB, &newPB, afterDelete)
 
 	// Always set all pipeline fields, not just changed ones
 	pipelineChangedFields = pipelineConfig(true)
@@ -1350,34 +1350,34 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
 }
 
-func pullBusChanged(oldPullBus, newPullBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (inputs, outputs [][]string) {
-	if oldPullBus.Type != newPullBus.Type || afterDelete {
-		inputs = append(inputs, []string{"remote_queue.type", newPullBus.Type})
+func pullBusChanged(oldBus, newBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (inputs, outputs [][]string) {
+	if oldBus.Type != newBus.Type || afterDelete {
+		inputs = append(inputs, []string{"remote_queue.type", newBus.Type})
 	}
-	if oldPullBus.SQS.AuthRegion != newPullBus.SQS.AuthRegion || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", newPullBus.Type), newPullBus.SQS.AuthRegion})
+	if oldBus.SQS.AuthRegion != newBus.SQS.AuthRegion || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", newBus.Type), newBus.SQS.AuthRegion})
 	}
-	if oldPullBus.SQS.Endpoint != newPullBus.SQS.Endpoint || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", newPullBus.Type), newPullBus.SQS.Endpoint})
+	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", newBus.Type), newBus.SQS.Endpoint})
 	}
-	if oldPullBus.SQS.LargeMessageStoreEndpoint != newPullBus.SQS.LargeMessageStoreEndpoint || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newPullBus.Type), newPullBus.SQS.LargeMessageStoreEndpoint})
+	if oldBus.SQS.LargeMessageStoreEndpoint != newBus.SQS.LargeMessageStoreEndpoint || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newBus.Type), newBus.SQS.LargeMessageStoreEndpoint})
 	}
-	if oldPullBus.SQS.LargeMessageStorePath != newPullBus.SQS.LargeMessageStorePath || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newPullBus.Type), newPullBus.SQS.LargeMessageStorePath})
+	if oldBus.SQS.LargeMessageStorePath != newBus.SQS.LargeMessageStorePath || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newBus.Type), newBus.SQS.LargeMessageStorePath})
 	}
-	if oldPullBus.SQS.DeadLetterQueueName != newPullBus.SQS.DeadLetterQueueName || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newPullBus.Type), newPullBus.SQS.DeadLetterQueueName})
+	if oldBus.SQS.DeadLetterQueueName != newBus.SQS.DeadLetterQueueName || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newBus.Type), newBus.SQS.DeadLetterQueueName})
 	}
 	inputs = append(inputs,
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newPullBus.Type), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newPullBus.Type), "max_count"},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newBus.Type), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newBus.Type), "max_count"},
 	)
 
 	outputs = inputs
 	outputs = append(outputs,
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newPullBus.Type), "5s"},
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newPullBus.Type), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newBus.Type), "5s"},
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newBus.Type), "s2s"},
 	)
 
 	return inputs, outputs

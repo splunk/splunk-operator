@@ -278,7 +278,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.BusConfiguration).To(Equal(bus), "Ingestor PushBus status is not the same as provided as input")
+			Expect(ingest.Status.BusConfiguration).To(Equal(bus), "Ingestor bus configuration status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -288,7 +288,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.BusConfiguration).To(Equal(bus), "Indexer PullBus status is not the same as provided as input")
+			Expect(index.Status.BusConfiguration).To(Equal(bus), "Indexer bus configuration status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -378,8 +378,8 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-ingest", ingest)
 			Expect(err).To(Succeed(), "Failed to get instance of Ingestor Cluster")
 
-			// Update instance of Ingestor Cluster CR with new pushbus config
-			testcaseEnvInst.Log.Info("Update instance of Ingestor Cluster CR with new pushbus config")
+			// Update instance of Ingestor Cluster CR with new bus configuration
+			testcaseEnvInst.Log.Info("Update instance of Ingestor Cluster CR with new bus configuration")
 			ingest.Spec.BusConfigurationRef = v1.ObjectReference{Name: bc.Name}
 			err = deployment.UpdateCR(ctx, ingest)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster with updated CR")
@@ -396,7 +396,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.BusConfiguration).To(Equal(updateBus), "Ingestor PushBus status is not the same as provided as input")
+			Expect(ingest.Status.BusConfiguration).To(Equal(updateBus), "Ingestor bus configuration status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -404,8 +404,8 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.GetInstance(ctx, deployment.GetName()+"-idxc", index)
 			Expect(err).To(Succeed(), "Failed to get instance of Indexer Cluster")
 
-			// Update instance of Indexer Cluster CR with new pullbus config
-			testcaseEnvInst.Log.Info("Update instance of Indexer Cluster CR with new pullbus config")
+			// Update instance of Indexer Cluster CR with new bus configuration
+			testcaseEnvInst.Log.Info("Update instance of Indexer Cluster CR with new bus configuration")
 			index.Spec.BusConfigurationRef = v1.ObjectReference{Name: bc.Name}
 			err = deployment.UpdateCR(ctx, index)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster with updated CR")
@@ -422,7 +422,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.BusConfiguration).To(Equal(updateBus), "Indexer PullBus status is not the same as provided as input")
+			Expect(index.Status.BusConfiguration).To(Equal(updateBus), "Indexer bus configuration status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")

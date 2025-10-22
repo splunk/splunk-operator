@@ -395,7 +395,7 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-test-ingestor","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"ownerReferences":[{"apiVersion":"","kind":"IngestorCluster","name":"test","uid":"","controller":true}]},"spec":{"replicas":3,"selector":{"matchLabels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-test-ingestor-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"},{"name":"user-defined","containerPort":32000,"protocol":"UDP"}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-test-ingestor"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-test-ingestor-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 }
 
-func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
+func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 	busConfig := enterpriseApi.BusConfiguration{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "BusConfiguration",
@@ -426,9 +426,9 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 		Status: enterpriseApi.IngestorClusterStatus{},
 	}
 
-	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&busConfig, newCR, false)
+	busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&busConfig, newCR, false)
 
-	assert.Equal(t, 10, len(pushBusChangedFields))
+	assert.Equal(t, 10, len(busChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", busConfig.Spec.Type},
 		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
@@ -440,7 +440,7 @@ func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
 		{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"},
-	}, pushBusChangedFields)
+	}, busChangedFields)
 
 	assert.Equal(t, 6, len(pipelineChangedFields))
 	assert.Equal(t, [][]string{
@@ -669,19 +669,19 @@ func TestValidateIngestorSpecificInputs(t *testing.T) {
 
 	err := validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "only sqs_smartbus type is supported in pushBus type", err.Error())
+	assert.Equal(t, "only sqs_smartbus type is supported in bus type", err.Error())
 
 	busConfig.Spec.Type = "sqs_smartbus"
 
 	err = validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pushBus sqs queueName, authRegion, deadLetterQueueName cannot be empty", err.Error())
+	assert.Equal(t, "bus sqs queueName, authRegion, deadLetterQueueName cannot be empty", err.Error())
 
 	busConfig.Spec.SQS.AuthRegion = "us-west-2"
 
 	err = validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pushBus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
+	assert.Equal(t, "bus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
 
 	busConfig.Spec.SQS.QueueName = "test-queue"
 	busConfig.Spec.SQS.DeadLetterQueueName = "dlq-test"
@@ -689,26 +689,26 @@ func TestValidateIngestorSpecificInputs(t *testing.T) {
 
 	err = validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pushBus sqs authRegion cannot be empty", err.Error())
+	assert.Equal(t, "bus sqs authRegion cannot be empty", err.Error())
 
 	busConfig.Spec.SQS.AuthRegion = "us-west-2"
 
 	err = validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pushBus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
+	assert.Equal(t, "bus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
 
 	busConfig.Spec.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
 	busConfig.Spec.SQS.LargeMessageStoreEndpoint = "https://s3.us-west-2.amazonaws.com"
 
 	err = validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
+	assert.Equal(t, "bus sqs largeMessageStorePath must start with s3://", err.Error())
 
 	busConfig.Spec.SQS.LargeMessageStorePath = "ingestion/smartbus-test"
 
 	err = validateIngestorSpecificInputs(&busConfig)
 	assert.NotNil(t, err)
-	assert.Equal(t, "pushBus sqs largeMessageStorePath must start with s3://", err.Error())
+	assert.Equal(t, "bus sqs largeMessageStorePath must start with s3://", err.Error())
 
 	busConfig.Spec.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
 
