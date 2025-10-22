@@ -163,7 +163,7 @@ docker-push: ## Push docker image with the manager.
 # Setup defaults for build arguments
 PLATFORMS ?= linux/amd64,linux/arm64
 BASE_IMAGE ?= registry.access.redhat.com/ubi8/ubi-minimal
-BASE_IMAGE_VERSION ?= 8.10-1756195339
+BASE_IMAGE_VERSION ?= 8.10-1761032271
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
