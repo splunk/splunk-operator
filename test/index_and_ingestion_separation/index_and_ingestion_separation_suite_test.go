@@ -39,7 +39,7 @@ var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
 
-	bus = enterpriseApi.PushBusSpec{
+	bus = enterpriseApi.BusConfigurationSpec{
 		Type: "sqs_smartbus",
 		SQS: enterpriseApi.SQSSpec{
 			QueueName:                 "test-queue",
@@ -61,7 +61,7 @@ var (
 		"remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com",
 		"remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test",
 		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"}
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4"}
 	outputs     = append(inputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 5s")
 	defaultsAll = []string{
 		"[pipeline:remotequeueruleset]\ndisabled = false",
@@ -80,7 +80,7 @@ var (
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
 
-	updateBus = enterpriseApi.PushBusSpec{
+	updateBus = enterpriseApi.BusConfigurationSpec{
 		Type: "sqs_smartbus",
 		SQS: enterpriseApi.SQSSpec{
 			QueueName:                 "test-queue-updated",
@@ -117,7 +117,7 @@ var (
 		"remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue",
 		"remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test",
 		"remote_queue.sqs_smartbus.retry_policy = max_count",
-		"remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4"}
+		"remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4"}
 	outputsShouldNotContain = append(inputs, "remote_queue.sqs_smartbus.send_interval = 5s")
 
 	testDataS3Bucket    = os.Getenv("TEST_BUCKET")

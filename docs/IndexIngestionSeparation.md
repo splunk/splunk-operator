@@ -145,10 +145,6 @@ spec:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ingestion/smartbus-test
       deadLetterQueueName: sqs-dlq-test
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 ```
 
 # Common Spec
@@ -236,10 +232,6 @@ indexerCluster:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ing-ind-separation/smartbus-test
       deadLetterQueueName: ing-ind-separation-dlq
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 ```
 
 # Service Account
@@ -660,7 +652,7 @@ disabled = true
     
 sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
 [remote_queue:ing-ind-separation-q]
-remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4
+remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
 remote_queue.sqs_smartbus.encoding_format = s2s
@@ -707,10 +699,6 @@ spec:
       largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
       largeMessageStorePath: s3://ing-ind-separation/smartbus-test
       deadLetterQueueName: ing-ind-separation-dlq
-      maxRetriesPerPart: 4
-      retryPolicy: max_count
-      sendInterval: 5s
-      encodingFormat: s2s
 ```
 
 ```
@@ -745,7 +733,7 @@ sh-4.4$ cat /opt/splunk/etc/system/local/inputs.conf
 disabled = 0
 
 [remote_queue:ing-ind-separation-q]
-remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4
+remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
@@ -755,7 +743,7 @@ remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.type = sqs_smartbus
 sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
 [remote_queue:ing-ind-separation-q]
-remote_queue.max_count.sqs_smartbus.max_retries_per_part = 4
+remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
 remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
 remote_queue.sqs_smartbus.encoding_format = s2s

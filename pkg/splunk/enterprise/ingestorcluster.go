@@ -66,8 +66,20 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 
+	// Bus config
+	busConfig := enterpriseApi.BusConfiguration{}
+	if cr.Spec.BusConfigurationRef.Name != "" {
+		err = client.Get(context.Background(), types.NamespacedName{
+			Name:      cr.Spec.BusConfigurationRef.Name,
+			Namespace: cr.Spec.BusConfigurationRef.Namespace,
+		}, &busConfig)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// Validate and updates defaults for CR
-	err = validateIngestorClusterSpec(ctx, client, cr)
+	err = validateIngestorClusterSpec(ctx, client, cr, &busConfig)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateIngestorClusterSpec", fmt.Sprintf("validate ingestor cluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate ingestor cluster spec")
@@ -218,13 +230,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-		err = mgr.handlePushBusChange(ctx, cr, client)
+		err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
 		if err != nil {
 			scopedLog.Error(err, "Failed to update conf file for PushBus/Pipeline config change after pod creation")
 			return result, err
 		}
 
-		cr.Status.PushBus = cr.Spec.PushBus
+		cr.Status.BusConfiguration = busConfig.Spec
 
 		// Upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
@@ -267,7 +279,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 }
 
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
-func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
+func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, busConfig *enterpriseApi.BusConfiguration) error {
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
@@ -280,7 +292,7 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		}
 	}
 
-	err := validateIngestorSpecificInputs(cr)
+	err := validateIngestorSpecificInputs(busConfig)
 	if err != nil {
 		return err
 	}
@@ -288,31 +300,23 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
-func validateIngestorSpecificInputs(cr *enterpriseApi.IngestorCluster) error {
-	if cr.Spec.PushBus == (enterpriseApi.PushBusSpec{}) {
-		return errors.New("pushBus cannot be empty")
-	}
-
+func validateIngestorSpecificInputs(busConfig *enterpriseApi.BusConfiguration) error {
 	// sqs_smartbus type is supported for now
-	if cr.Spec.PushBus.Type != "sqs_smartbus" {
+	if busConfig.Spec.Type != "sqs_smartbus" {
 		return errors.New("only sqs_smartbus type is supported in pushBus type")
-	}
-
-	if cr.Spec.PushBus.SQS == (enterpriseApi.SQSSpec{}) {
-		return errors.New("pushBus sqs cannot be empty")
 	}
 
 	// Cannot be empty fields check
 	cannotBeEmptyFields := []string{}
-	if cr.Spec.PushBus.SQS.QueueName == "" {
+	if busConfig.Spec.SQS.QueueName == "" {
 		cannotBeEmptyFields = append(cannotBeEmptyFields, "queueName")
 	}
 
-	if cr.Spec.PushBus.SQS.AuthRegion == "" {
+	if busConfig.Spec.SQS.AuthRegion == "" {
 		cannotBeEmptyFields = append(cannotBeEmptyFields, "authRegion")
 	}
 
-	if cr.Spec.PushBus.SQS.DeadLetterQueueName == "" {
+	if busConfig.Spec.SQS.DeadLetterQueueName == "" {
 		cannotBeEmptyFields = append(cannotBeEmptyFields, "deadLetterQueueName")
 	}
 
@@ -322,11 +326,11 @@ func validateIngestorSpecificInputs(cr *enterpriseApi.IngestorCluster) error {
 
 	// Have to start with https:// or s3:// checks
 	haveToStartWithHttps := []string{}
-	if !strings.HasPrefix(cr.Spec.PushBus.SQS.Endpoint, "https://") {
+	if !strings.HasPrefix(busConfig.Spec.SQS.Endpoint, "https://") {
 		haveToStartWithHttps = append(haveToStartWithHttps, "endpoint")
 	}
 
-	if !strings.HasPrefix(cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint, "https://") {
+	if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStoreEndpoint, "https://") {
 		haveToStartWithHttps = append(haveToStartWithHttps, "largeMessageStoreEndpoint")
 	}
 
@@ -334,7 +338,7 @@ func validateIngestorSpecificInputs(cr *enterpriseApi.IngestorCluster) error {
 		return errors.New("pushBus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
 	}
 
-	if !strings.HasPrefix(cr.Spec.PushBus.SQS.LargeMessageStorePath, "s3://") {
+	if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStorePath, "s3://") {
 		return errors.New("pushBus sqs largeMessageStorePath must start with s3://")
 	}
 
@@ -355,7 +359,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // Checks if only PushBus or Pipeline config changed, and updates the conf file if so
-func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, k8s client.Client) error {
+func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
@@ -371,18 +375,18 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		afterDelete := false
-		if (newCR.Spec.PushBus.SQS.QueueName != "" && newCR.Status.PushBus.SQS.QueueName != "" && newCR.Spec.PushBus.SQS.QueueName != newCR.Status.PushBus.SQS.QueueName) ||
-			(newCR.Spec.PushBus.Type != "" && newCR.Status.PushBus.Type != "" && newCR.Spec.PushBus.Type != newCR.Status.PushBus.Type) {
-			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.PushBus.SQS.QueueName)); err != nil {
+		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
+			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
+			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
 		}
 
-		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&newCR.Status, newCR, afterDelete)
+		pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(&busConfig, newCR, afterDelete)
 
 		for _, pbVal := range pushBusChangedFields {
-			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", newCR.Spec.PushBus.SQS.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
@@ -399,9 +403,9 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 }
 
 // Returns the names of PushBus and PipelineConfig fields that changed between oldCR and newCR.
-func getChangedPushBusAndPipelineFields(oldCrStatus *enterpriseApi.IngestorClusterStatus, newCR *enterpriseApi.IngestorCluster, afterDelete bool) (pushBusChangedFields, pipelineChangedFields [][]string) {
-	oldPB := oldCrStatus.PushBus
-	newPB := newCR.Spec.PushBus
+func getChangedPushBusAndPipelineFields(busConfig *enterpriseApi.BusConfiguration, busConfigIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (pushBusChangedFields, pipelineChangedFields [][]string) {
+	oldPB := &busConfigIngestorStatus.Status.BusConfiguration
+	newPB := &busConfig.Spec
 
 	// Push changed PushBus fields
 	pushBusChangedFields = pushBusChanged(oldPB, newPB, afterDelete)
@@ -443,7 +447,7 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 	return output
 }
 
-func pushBusChanged(oldPushBus, newPushBus enterpriseApi.PushBusSpec, afterDelete bool) (output [][]string) {
+func pushBusChanged(oldPushBus, newPushBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (output [][]string) {
 	if oldPushBus.Type != newPushBus.Type || afterDelete {
 		output = append(output, []string{"remote_queue.type", newPushBus.Type})
 	}
@@ -465,7 +469,7 @@ func pushBusChanged(oldPushBus, newPushBus enterpriseApi.PushBusSpec, afterDelet
 
 	output = append(output,
 		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newPushBus.Type), "s2s"},
-		[]string{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", newPushBus.Type), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newPushBus.Type), "4"},
 		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newPushBus.Type), "max_count"},
 		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newPushBus.Type), "5s"})
 

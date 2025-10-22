@@ -54,16 +54,26 @@ func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
 				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
 			},
 			Replicas: 3,
-			PushBus: enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					DeadLetterQueueName:       "sqs-dlq-test",
-				},
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: "busConfig",
+			},
+		},
+	}
+}
+
+// NewBusConfiguration returns new BusConfiguration instance with its config hash
+func NewBusConfiguration(name, ns, image string) *enterpriseApi.BusConfiguration {
+	return &enterpriseApi.BusConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
 			},
 		},
 	}
@@ -303,16 +313,8 @@ func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 
 	ad.Spec = enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: *cs,
-		PullBus: enterpriseApi.PushBusSpec{
-			Type: "sqs_smartbus",
-			SQS: enterpriseApi.SQSSpec{
-				QueueName:                 "test-queue",
-				AuthRegion:                "us-west-2",
-				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-				DeadLetterQueueName:       "sqs-dlq-test",
-			},
+		BusConfigurationRef: corev1.ObjectReference{
+			Name: "busConfig",
 		},
 	}
 	return ad

@@ -42,30 +42,8 @@ type IngestorClusterSpec struct {
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
-	// Push Bus spec
-	PushBus PushBusSpec `json:"pushBus"`
-}
-
-// Helper types
-// Only SQS as of now
-type PushBusSpec struct {
-	Type string `json:"type"`
-
-	SQS SQSSpec `json:"sqs"`
-}
-
-type SQSSpec struct {
-	QueueName string `json:"queueName"`
-
-	AuthRegion string `json:"authRegion"`
-
-	Endpoint string `json:"endpoint"`
-
-	LargeMessageStoreEndpoint string `json:"largeMessageStoreEndpoint"`
-
-	LargeMessageStorePath string `json:"largeMessageStorePath"`
-
-	DeadLetterQueueName string `json:"deadLetterQueueName"`
+	// Bus configuration reference
+	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
@@ -94,8 +72,8 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Push Bus status
-	PushBus PushBusSpec `json:"pushBus"`
+	// Bus configuration
+	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
