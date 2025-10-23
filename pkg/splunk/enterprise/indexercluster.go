@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -66,24 +67,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 
-	// Bus config
-	busConfig := enterpriseApi.BusConfiguration{}
-	if cr.Spec.BusConfigurationRef.Name != "" {
-		ns := cr.GetNamespace()
-		if cr.Spec.BusConfigurationRef.Namespace != "" {
-			ns = cr.Spec.BusConfigurationRef.Namespace
-		}
-		err = client.Get(context.Background(), types.NamespacedName{
-			Name:      cr.Spec.BusConfigurationRef.Name,
-			Namespace: ns,
-		}, &busConfig)
-		if err != nil {
-			return result, err
-		}
-	}
-
 	// validate and updates defaults for CR
-	err = validateIndexerClusterSpec(ctx, client, cr, &busConfig)
+	err = validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateIndexerClusterSpec", fmt.Sprintf("validate indexercluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate indexercluster spec")
@@ -92,6 +77,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -257,14 +245,36 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// Bus config
+		busConfig := enterpriseApi.BusConfiguration{}
 		if cr.Spec.BusConfigurationRef.Name != "" {
-			err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+			ns := cr.GetNamespace()
+			if cr.Spec.BusConfigurationRef.Namespace != "" {
+				ns = cr.Spec.BusConfigurationRef.Namespace
+			}
+			err = client.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Spec.BusConfigurationRef.Name,
+				Namespace: ns,
+			}, &busConfig)
 			if err != nil {
-				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 				return result, err
 			}
 		}
-		cr.Status.BusConfiguration = busConfig.Spec
+
+		// If bus config is updated
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+
+				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+				if err != nil {
+					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					return result, err
+				}
+
+				cr.Status.BusConfiguration = busConfig.Spec
+			}
+		}
 
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
@@ -345,24 +355,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	cr.Kind = "IndexerCluster"
 
-	// Bus config
-	busConfig := enterpriseApi.BusConfiguration{}
-	if cr.Spec.BusConfigurationRef.Name != "" {
-		ns := cr.GetNamespace()
-		if cr.Spec.BusConfigurationRef.Namespace != "" {
-			ns = cr.Spec.BusConfigurationRef.Namespace
-		}
-		err := client.Get(context.Background(), types.NamespacedName{
-			Name:      cr.Spec.BusConfigurationRef.Name,
-			Namespace: ns,
-		}, &busConfig)
-		if err != nil {
-			return result, err
-		}
-	}
-
 	// validate and updates defaults for CR
-	err := validateIndexerClusterSpec(ctx, client, cr, &busConfig)
+	err := validateIndexerClusterSpec(ctx, client, cr)
 	if err != nil {
 		return result, err
 	}
@@ -370,6 +364,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -538,28 +535,36 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// Bus config
+		busConfig := enterpriseApi.BusConfiguration{}
 		if cr.Spec.BusConfigurationRef.Name != "" {
-			busConfig := enterpriseApi.BusConfiguration{}
 			ns := cr.GetNamespace()
 			if cr.Spec.BusConfigurationRef.Namespace != "" {
 				ns = cr.Spec.BusConfigurationRef.Namespace
 			}
-			err := client.Get(context.Background(), types.NamespacedName{
+			err = client.Get(context.Background(), types.NamespacedName{
 				Name:      cr.Spec.BusConfigurationRef.Name,
 				Namespace: ns,
 			}, &busConfig)
 			if err != nil {
 				return result, err
 			}
-
-			err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
-			if err != nil {
-				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
-				return result, err
-			}
 		}
 
-		cr.Status.BusConfiguration = busConfig.Spec
+		// If bus config is updated
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+
+				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+				if err != nil {
+					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					return result, err
+				}
+
+				cr.Status.BusConfiguration = busConfig.Spec
+			}
+		}
 
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
@@ -1126,7 +1131,7 @@ func getIndexerStatefulSet(ctx context.Context, client splcommon.ControllerClien
 }
 
 // validateIndexerClusterSpec checks validity and makes default updates to a IndexerClusterSpec, and returns error if something is wrong.
-func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, busConfig *enterpriseApi.BusConfiguration) error {
+func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) error {
 	// We cannot have 0 replicas in IndexerCluster spec, since this refers to number of indexers in an indexer cluster
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
@@ -1231,7 +1236,7 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
-	// List all pods for this IngestorCluster StatefulSet
+	// List all pods for this IndexerCluster StatefulSet
 	var updateErr error
 	for n := 0; n < int(readyReplicas); n++ {
 		memberName := GetSplunkStatefulsetPodName(SplunkIndexer, newCR.GetName(), int32(n))
@@ -1245,10 +1250,10 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		afterDelete := false
 		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
 			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
-			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
-			if err := splunkClient.DeleteConfFileProperty("inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty("inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true

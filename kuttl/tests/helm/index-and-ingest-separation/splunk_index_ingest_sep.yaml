@@ -5,7 +5,7 @@ splunk-operator:
     persistentVolumeClaim:
       storageClassName: gp2
 
-busConfiguration::
+busConfiguration:
   enabled: true
   name: bus-config
   type: sqs_smartbus

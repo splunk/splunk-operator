@@ -357,7 +357,7 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 
 	test := func(want string) {
 		f := func() (interface{}, error) {
-			if err := validateIngestorClusterSpec(ctx, c, &cr, &busConfig); err != nil {
+			if err := validateIngestorClusterSpec(ctx, c, &cr); err != nil {
 				t.Errorf("validateIngestorClusterSpec() returned error: %v", err)
 			}
 			return getIngestorStatefulSet(ctx, c, &cr)
@@ -490,6 +490,7 @@ func TestHandlePushBusChange(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
+			Replicas:      3,
 			ReadyReplicas: 3,
 		},
 	}

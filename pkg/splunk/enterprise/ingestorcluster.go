@@ -58,36 +58,23 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	cr.Kind = "IngestorCluster"
 
-	// Initialize phase
-	cr.Status.Phase = enterpriseApi.PhaseError
-
-	// Update the CR Status
-	defer updateCRStatus(ctx, client, cr, &err)
-
-	// Bus config
-	busConfig := enterpriseApi.BusConfiguration{}
-	if cr.Spec.BusConfigurationRef.Name != "" {
-		ns := cr.GetNamespace()
-		if cr.Spec.BusConfigurationRef.Namespace != "" {
-			ns = cr.Spec.BusConfigurationRef.Namespace
-		}
-		err = client.Get(context.Background(), types.NamespacedName{
-			Name:      cr.Spec.BusConfigurationRef.Name,
-			Namespace: ns,
-		}, &busConfig)
-		if err != nil {
-			return result, err
-		}
-	}
-
 	// Validate and updates defaults for CR
-	err = validateIngestorClusterSpec(ctx, client, cr, &busConfig)
+	err = validateIngestorClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateIngestorClusterSpec", fmt.Sprintf("validate ingestor cluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate ingestor cluster spec")
 		return result, err
 	}
 
+	// Initialize phase
+	cr.Status.Phase = enterpriseApi.PhaseError
+
+	// Update the CR Status
+	defer updateCRStatus(ctx, client, cr, &err)
+
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, migrate the app framework status
@@ -111,7 +98,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-ingestor", cr.GetName())
 
 	// Create or update general config resources
-	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
+	namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
 		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
@@ -223,22 +210,34 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		namespaceScopedSecret, err := ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkIngestor)
-		if err != nil {
-			scopedLog.Error(err, "create or update general config failed", "error", err.Error())
-			eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
-			return result, err
+		// Bus config
+		busConfig := enterpriseApi.BusConfiguration{}
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.BusConfigurationRef.Namespace != "" {
+				ns = cr.Spec.BusConfigurationRef.Namespace
+			}
+			err = client.Get(ctx, types.NamespacedName{
+				Name:      cr.Spec.BusConfigurationRef.Name,
+				Namespace: ns,
+			}, &busConfig)
+			if err != nil {
+				return result, err
+			}
 		}
 
-		mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+		// If bus config is updated
+		if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-		err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
-		if err != nil {
-			scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
-			return result, err
+			err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
+			if err != nil {
+				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+				return result, err
+			}
+
+			cr.Status.BusConfiguration = busConfig.Spec
 		}
-
-		cr.Status.BusConfiguration = busConfig.Spec
 
 		// Upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
@@ -281,7 +280,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 }
 
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
-func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, busConfig *enterpriseApi.BusConfiguration) error {
+func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
@@ -313,7 +312,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 // Checks if only Bus or Pipeline config changed, and updates the conf file if so
 func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
 	// Only update config for pods that exist
-	readyReplicas := newCR.Status.ReadyReplicas
+	readyReplicas := newCR.Status.Replicas
 
 	// List all pods for this IngestorCluster StatefulSet
 	var updateErr error

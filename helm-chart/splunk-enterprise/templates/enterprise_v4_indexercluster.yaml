@@ -163,13 +163,12 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
-  {{- if $.Values.indexerCluster.busConfigurationRef }}
     {{- with $.Values.indexerCluster.busConfigurationRef }}
     busConfigurationRef:
-      name: {{ $.Values.indexerCluster.busConfigurationRef.name }}
-      {{- if $.Values.indexerCluster.busConfigurationRef.namespace }}
-      namespace: {{ $.Values.indexerCluster.busConfigurationRef.namespace }}
-      {{- end }}
+      name: {{ .name }}
+    {{- if .namespace }}
+      namespace: {{ .namespace }}
     {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

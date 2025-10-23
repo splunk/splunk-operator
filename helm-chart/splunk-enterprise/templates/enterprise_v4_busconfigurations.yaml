@@ -6,15 +6,15 @@ metadata:
   namespace: {{ default .Release.Namespace .Values.busConfiguration.namespaceOverride }}
   {{- with .Values.busConfiguration.additionalLabels }}
   labels:
-  {{ toYaml . | nindent 4 }}
+{{ toYaml . | nindent 4 }}
   {{- end }}
   {{- with .Values.busConfiguration.additionalAnnotations }}
   annotations:
-  {{ toYaml . | nindent 4 }}
+{{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .type | quote }}
-  {{- with .sqs }}
+  type: {{ .Values.busConfiguration.type | quote }}
+  {{- with .Values.busConfiguration.sqs }}
   sqs:
     {{- if .queueName }}
     queueName: {{ .queueName | quote }}
@@ -34,4 +34,5 @@ spec:
     {{- if .deadLetterQueueName }}
     deadLetterQueueName: {{ .deadLetterQueueName | quote }}
     {{- end }}
+  {{- end }}
 {{- end }}
