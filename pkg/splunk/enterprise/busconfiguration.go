@@ -95,17 +95,9 @@ func validateBusConfigurationSpec(ctx context.Context, c splcommon.ControllerCli
 }
 
 func validateBusConfigurationInputs(cr *enterpriseApi.BusConfiguration) error {
-	if cr.Spec == (enterpriseApi.BusConfigurationSpec{}) {
-		return errors.New("bus configuration spec cannot be empty")
-	}
-
 	// sqs_smartbus type is supported for now
 	if cr.Spec.Type != "sqs_smartbus" {
 		return errors.New("only sqs_smartbus type is supported in bus configuration")
-	}
-
-	if cr.Spec.SQS == (enterpriseApi.SQSSpec{}) {
-		return errors.New("bus configuration sqs cannot be empty")
 	}
 
 	// Cannot be empty fields check

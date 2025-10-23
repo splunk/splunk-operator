@@ -632,6 +632,15 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			ucr := cr.(*enterpriseApi.IngestorCluster)
 			current.Spec = ucr.Spec
 			cobject = current
+		case "BusConfiguration":
+			current := &enterpriseApi.BusConfiguration{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.BusConfiguration)
+			current.Spec = ucr.Spec
+			cobject = current
 		case "ClusterMaster":
 			current := &enterpriseApiV3.ClusterMaster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)

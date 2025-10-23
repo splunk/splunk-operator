@@ -1143,65 +1143,7 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 		return fmt.Errorf("multisite cluster does not support cluster manager to be located in a different namespace")
 	}
 
-	if busConfig != nil {
-		err := validateIndexerBusSpecificInputs(busConfig)
-		if err != nil {
-			return err
-		}
-	}
-
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-func validateIndexerBusSpecificInputs(busConfig *enterpriseApi.BusConfiguration) error {
-	// Otherwise, it means that no Ingestion & Index separation is applied
-	if busConfig.Spec != (enterpriseApi.BusConfigurationSpec{}) {
-		if busConfig.Spec.Type != "sqs_smartbus" {
-			return errors.New("only sqs_smartbus type is supported in bus type")
-		}
-
-		if busConfig.Spec.SQS == (enterpriseApi.SQSSpec{}) {
-			return errors.New("bus sqs cannot be empty")
-		}
-
-		// Cannot be empty fields check
-		cannotBeEmptyFields := []string{}
-		if busConfig.Spec.SQS.QueueName == "" {
-			cannotBeEmptyFields = append(cannotBeEmptyFields, "queueName")
-		}
-
-		if busConfig.Spec.SQS.AuthRegion == "" {
-			cannotBeEmptyFields = append(cannotBeEmptyFields, "authRegion")
-		}
-
-		if busConfig.Spec.SQS.DeadLetterQueueName == "" {
-			cannotBeEmptyFields = append(cannotBeEmptyFields, "deadLetterQueueName")
-		}
-
-		if len(cannotBeEmptyFields) > 0 {
-			return errors.New("bus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
-		}
-
-		// Have to start with https:// or s3:// checks
-		haveToStartWithHttps := []string{}
-		if !strings.HasPrefix(busConfig.Spec.SQS.Endpoint, "https://") {
-			haveToStartWithHttps = append(haveToStartWithHttps, "endpoint")
-		}
-
-		if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStoreEndpoint, "https://") {
-			haveToStartWithHttps = append(haveToStartWithHttps, "largeMessageStoreEndpoint")
-		}
-
-		if len(haveToStartWithHttps) > 0 {
-			return errors.New("bus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
-		}
-
-		if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStorePath, "s3://") {
-			return errors.New("bus sqs largeMessageStorePath must start with s3://")
-		}
-	}
-
-	return nil
 }
 
 // helper function to get the list of IndexerCluster types in the current namespace

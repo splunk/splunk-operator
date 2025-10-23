@@ -140,6 +140,12 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IngestorCluster{},
 			)).
+		Watches(&enterpriseApi.BusConfiguration{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterpriseApi.IngestorCluster{},
+			)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).

@@ -2358,7 +2358,8 @@ func TestApplyIndexerClusterManager_BusConfig_Success(t *testing.T) {
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "busConfig",
+			Name:      "busConfig",
+			Namespace: "test",
 		},
 		Spec: enterpriseApi.BusConfigurationSpec{
 			Type: "sqs_smartbus",
@@ -2395,7 +2396,7 @@ func TestApplyIndexerClusterManager_BusConfig_Success(t *testing.T) {
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 1,
 			BusConfigurationRef: corev1.ObjectReference{
-				Name: busConfig.Name,
+				Name:      busConfig.Name,
 				Namespace: busConfig.Namespace,
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
@@ -2549,68 +2550,4 @@ func mustReq(method, url, body string) *http.Request {
 		panic(err)
 	}
 	return r
-}
-
-func TestValidateIndexerSpecificInputs(t *testing.T) {
-	busConfig := enterpriseApi.BusConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "BusConfiguration",
-			APIVersion: "enterprise.splunk.com/v4",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "busConfig",
-		},
-		Spec: enterpriseApi.BusConfigurationSpec{
-			Type: "othertype",
-			SQS:  enterpriseApi.SQSSpec{},
-		},
-	}
-
-	err := validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "only sqs_smartbus type is supported in bus type", err.Error())
-
-	busConfig.Spec.Type = "sqs_smartbus"
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "bus sqs cannot be empty", err.Error())
-
-	busConfig.Spec.SQS.AuthRegion = "us-west-2"
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "bus sqs queueName, deadLetterQueueName cannot be empty", err.Error())
-
-	busConfig.Spec.SQS.QueueName = "test-queue"
-	busConfig.Spec.SQS.DeadLetterQueueName = "dlq-test"
-	busConfig.Spec.SQS.AuthRegion = ""
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "bus sqs authRegion cannot be empty", err.Error())
-
-	busConfig.Spec.SQS.AuthRegion = "us-west-2"
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "bus sqs endpoint, largeMessageStoreEndpoint must start with https://", err.Error())
-
-	busConfig.Spec.SQS.Endpoint = "https://sqs.us-west-2.amazonaws.com"
-	busConfig.Spec.SQS.LargeMessageStoreEndpoint = "https://s3.us-west-2.amazonaws.com"
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "bus sqs largeMessageStorePath must start with s3://", err.Error())
-
-	busConfig.Spec.SQS.LargeMessageStorePath = "ingestion/smartbus-test"
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.NotNil(t, err)
-	assert.Equal(t, "bus sqs largeMessageStorePath must start with s3://", err.Error())
-
-	busConfig.Spec.SQS.LargeMessageStorePath = "s3://ingestion/smartbus-test"
-
-	err = validateIndexerBusSpecificInputs(&busConfig)
-	assert.Nil(t, err)
 }

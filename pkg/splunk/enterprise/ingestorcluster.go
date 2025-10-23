@@ -18,10 +18,8 @@ package enterprise
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -296,57 +294,7 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 		}
 	}
 
-	err := validateIngestorSpecificInputs(busConfig)
-	if err != nil {
-		return err
-	}
-
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
-}
-
-func validateIngestorSpecificInputs(busConfig *enterpriseApi.BusConfiguration) error {
-	// sqs_smartbus type is supported for now
-	if busConfig.Spec.Type != "sqs_smartbus" {
-		return errors.New("only sqs_smartbus type is supported in bus type")
-	}
-
-	// Cannot be empty fields check
-	cannotBeEmptyFields := []string{}
-	if busConfig.Spec.SQS.QueueName == "" {
-		cannotBeEmptyFields = append(cannotBeEmptyFields, "queueName")
-	}
-
-	if busConfig.Spec.SQS.AuthRegion == "" {
-		cannotBeEmptyFields = append(cannotBeEmptyFields, "authRegion")
-	}
-
-	if busConfig.Spec.SQS.DeadLetterQueueName == "" {
-		cannotBeEmptyFields = append(cannotBeEmptyFields, "deadLetterQueueName")
-	}
-
-	if len(cannotBeEmptyFields) > 0 {
-		return errors.New("bus sqs " + strings.Join(cannotBeEmptyFields, ", ") + " cannot be empty")
-	}
-
-	// Have to start with https:// or s3:// checks
-	haveToStartWithHttps := []string{}
-	if !strings.HasPrefix(busConfig.Spec.SQS.Endpoint, "https://") {
-		haveToStartWithHttps = append(haveToStartWithHttps, "endpoint")
-	}
-
-	if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStoreEndpoint, "https://") {
-		haveToStartWithHttps = append(haveToStartWithHttps, "largeMessageStoreEndpoint")
-	}
-
-	if len(haveToStartWithHttps) > 0 {
-		return errors.New("bus sqs " + strings.Join(haveToStartWithHttps, ", ") + " must start with https://")
-	}
-
-	if !strings.HasPrefix(busConfig.Spec.SQS.LargeMessageStorePath, "s3://") {
-		return errors.New("bus sqs largeMessageStorePath must start with s3://")
-	}
-
-	return nil
 }
 
 // getIngestorStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise ingestors
