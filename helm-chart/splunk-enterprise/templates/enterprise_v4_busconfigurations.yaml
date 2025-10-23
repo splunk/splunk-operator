@@ -1,0 +1,37 @@
+{{- if .Values.busConfiguration.enabled }}
+apiVersion: enterprise.splunk.com/v4
+kind: BusConfiguration
+metadata:
+  name: {{ .Values.busConfiguration.name }}
+  namespace: {{ default .Release.Namespace .Values.busConfiguration.namespaceOverride }}
+  {{- with .Values.busConfiguration.additionalLabels }}
+  labels:
+  {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.busConfiguration.additionalAnnotations }}
+  annotations:
+  {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .type | quote }}
+  {{- with .sqs }}
+  sqs:
+    {{- if .queueName }}
+    queueName: {{ .queueName | quote }}
+    {{- end }}
+    {{- if .authRegion }}
+    authRegion: {{ .authRegion | quote }}
+    {{- end }}
+    {{- if .endpoint }}
+    endpoint: {{ .endpoint | quote }}
+    {{- end }}
+    {{- if .largeMessageStoreEndpoint }}
+    largeMessageStoreEndpoint: {{ .largeMessageStoreEndpoint | quote }}
+    {{- end }}
+    {{- if .largeMessageStorePath }}
+    largeMessageStorePath: {{ .largeMessageStorePath | quote }}
+    {{- end }}
+    {{- if .deadLetterQueueName }}
+    deadLetterQueueName: {{ .deadLetterQueueName | quote }}
+    {{- end }}
+{{- end }}

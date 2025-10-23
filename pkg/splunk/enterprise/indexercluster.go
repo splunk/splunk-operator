@@ -69,9 +69,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// Bus config
 	busConfig := enterpriseApi.BusConfiguration{}
 	if cr.Spec.BusConfigurationRef.Name != "" {
+		ns := cr.GetNamespace()
+		if cr.Spec.BusConfigurationRef.Namespace != "" {
+			ns = cr.Spec.BusConfigurationRef.Namespace
+		}
 		err = client.Get(context.Background(), types.NamespacedName{
 			Name:      cr.Spec.BusConfigurationRef.Name,
-			Namespace: cr.Spec.BusConfigurationRef.Namespace,
+			Namespace: ns,
 		}, &busConfig)
 		if err != nil {
 			return result, err
@@ -344,9 +348,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// Bus config
 	busConfig := enterpriseApi.BusConfiguration{}
 	if cr.Spec.BusConfigurationRef.Name != "" {
+		ns := cr.GetNamespace()
+		if cr.Spec.BusConfigurationRef.Namespace != "" {
+			ns = cr.Spec.BusConfigurationRef.Namespace
+		}
 		err := client.Get(context.Background(), types.NamespacedName{
 			Name:      cr.Spec.BusConfigurationRef.Name,
-			Namespace: cr.Spec.BusConfigurationRef.Namespace,
+			Namespace: ns,
 		}, &busConfig)
 		if err != nil {
 			return result, err
@@ -532,9 +540,13 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		if cr.Spec.BusConfigurationRef.Name != "" {
 			busConfig := enterpriseApi.BusConfiguration{}
+			ns := cr.GetNamespace()
+			if cr.Spec.BusConfigurationRef.Namespace != "" {
+				ns = cr.Spec.BusConfigurationRef.Namespace
+			}
 			err := client.Get(context.Background(), types.NamespacedName{
 				Name:      cr.Spec.BusConfigurationRef.Name,
-				Namespace: cr.Spec.BusConfigurationRef.Namespace,
+				Namespace: ns,
 			}, &busConfig)
 			if err != nil {
 				return result, err

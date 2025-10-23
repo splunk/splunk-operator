@@ -69,9 +69,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Bus config
 	busConfig := enterpriseApi.BusConfiguration{}
 	if cr.Spec.BusConfigurationRef.Name != "" {
+		ns := cr.GetNamespace()
+		if cr.Spec.BusConfigurationRef.Namespace != "" {
+			ns = cr.Spec.BusConfigurationRef.Namespace
+		}
 		err = client.Get(context.Background(), types.NamespacedName{
 			Name:      cr.Spec.BusConfigurationRef.Name,
-			Namespace: cr.Spec.BusConfigurationRef.Namespace,
+			Namespace: ns,
 		}, &busConfig)
 		if err != nil {
 			return result, err
