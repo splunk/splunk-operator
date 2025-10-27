@@ -31,11 +31,12 @@ SQS message bus inputs can be found in the table below.
 | ---------- | ------- | ------------------------------------------------- |
 | queueName   | string | Name of the SQS queue |
 | authRegion   | string | Region where the SQS queue is located  |
-| endpoint   | string | AWS SQS endpoint (e.g. https://sqs.us-west-2.amazonaws.com) |
-| largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint (e.g. https://s3.us-west-2.amazonaws.com) |
-| largeMessageStorePath   | string | S3 path for Large Message Store (e.g. s3://bucket-name/directory) |
+| endpoint   | string | AWS SQS endpoint
+| largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint |
+| largeMessageStorePath   | string | S3 path for Large Message Store |
 | deadLetterQueueName   | string | Name of the SQS dead letter queue |
 
+Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
 
 ## Example
 ```
@@ -69,11 +70,9 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Push Bus inputs allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk 10.0.0 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Push Bus reference allows the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, the setup uses bus configuration resource reference that is the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
-
-Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
+In this case, the setup the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -85,7 +84,7 @@ metadata:
 spec:
   serviceAccount: ingestor-sa 
   replicas: 3
-  image: splunk/splunk:9.4.4
+  image: splunk/splunk:10.0.0
   busConfigurationRef:
     name: bus-config
 ```
@@ -105,11 +104,9 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk 9.4.4 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Pull Bus inputs allow the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk 10.0.0 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Pull Bus reference allows the user to specify queue and bucket settings for the indexing process. 
 
-In this case, In this case, the setup uses bus configuration resource reference that is the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
-
-Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -120,7 +117,7 @@ metadata:
     - enterprise.splunk.com/delete-pvc
 spec:
   serviceAccount: ingestor-sa 
-  image: splunk/splunk:9.4.4
+  image: splunk/splunk:10.0.0
 ---
 apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
@@ -133,7 +130,7 @@ spec:
     name: cm
   serviceAccount: ingestor-sa
   replicas: 3 
-  image: splunk/splunk:9.4.4
+  image: splunk/splunk:10.0.0
   busConfigurationRef:
     name: bus-config
 ```
@@ -419,7 +416,7 @@ $ make install
 ```
 
 ```
-$ kubectl apply -f SOK_IMAGE_VERSION/splunk-operator-cluster.yaml --server-side
+$ kubectl apply -f ${SOK_IMAGE_VERSION}/splunk-operator-cluster.yaml --server-side
 ```
 
 ```
@@ -524,7 +521,69 @@ $ aws iam list-attached-role-policies --role-name eksctl-ind-ing-sep-demo-addon-
 }
 ```
 
-3. Install IngestorCluster resource.
+3. Install BusConfiguration resource.
+
+```
+$ cat bus.yaml          
+apiVersion: enterprise.splunk.com/v4
+kind: BusConfiguration
+metadata:
+  name: bus
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  type: sqs_smartbus
+  sqs:
+    queueName: sqs-test
+    authRegion: us-west-2
+    endpoint: https://sqs.us-west-2.amazonaws.com
+    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+    largeMessageStorePath: s3://ingestion/smartbus-test
+    deadLetterQueueName: sqs-dlq-test
+```
+
+```
+$ kubectl apply -f bus.yaml     
+```
+
+```
+$ kubectl get busconfiguration                        
+NAME   PHASE   AGE   MESSAGE
+bus    Ready   20s  
+```
+
+```
+kubectl describe busconfiguration                                
+Name:         bus
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+API Version:  enterprise.splunk.com/v4
+Kind:         BusConfiguration
+Metadata:
+  Creation Timestamp:  2025-10-27T10:25:53Z
+  Finalizers:
+    enterprise.splunk.com/delete-pvc
+  Generation:        1
+  Resource Version:  12345678
+  UID:               12345678-1234-5678-1234-012345678911
+Spec:
+  Sqs:
+    Auth Region:                   us-west-2
+    Dead Letter Queue Name:        sqs-dlq-test
+    Endpoint:                      https://sqs.us-west-2.amazonaws.com
+    Large Message Store Endpoint:  https://s3.us-west-2.amazonaws.com
+    Large Message Store Path:      s3://ingestion/smartbus-test
+    Queue Name:                    sqs-test
+  Type:                            sqs_smartbus
+Status:
+  Message:  
+  Phase:    Ready
+  Resource Rev Map:
+Events:  <none>
+```
+
+4. Install IngestorCluster resource.
 
 ```
 $ cat ingestor.yaml          
@@ -537,7 +596,7 @@ metadata:
 spec:
   serviceAccount: ingestor-sa 
   replicas: 3
-  image: splunk/splunk:9.4.4
+  image: splunk/splunk:10.0.0
   busConfigurationRef:
     name: bus-config
 ```
@@ -568,19 +627,10 @@ Metadata:
   Resource Version:    12345678
   UID:                 12345678-1234-1234-1234-1234567890123
 Spec:
-  Image:  splunk/splunk:9.4.4
-  Push Bus:
-    Sqs:
-      Auth Region:                   us-west-2
-      Dead Letter Queue Name:        ing-ind-separation-dlq
-      Endpoint:                      https://sqs.us-west-2.amazonaws.com
-      Large Message Store Endpoint:  https://s3.us-west-2.amazonaws.com
-      Large Message Store Path:      s3://ing-ind-separation/smartbus-test
-      Max Retries Per Part:          4
-      Queue Name:                    ing-ind-separation-q
-      Retry Policy:                  max_count
-      Send Interval:                 3s
-    Type:                            sqs_smartbus
+  Bus Configuration Ref:
+    Name:           bus-config
+    Namespace:      default
+  Image:  splunk/splunk:10.0.0
   Replicas:                          3
   Service Account:                   ingestor-sa
 Status:
@@ -595,6 +645,15 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
+  Bus Configuration:
+    Sqs:
+      Auth Region:                   us-west-2
+      Dead Letter Queue Name:        sqs-dlq-test
+      Endpoint:                      https://sqs.us-west-2.amazonaws.com
+      Large Message Store Endpoint:  https://s3.us-west-2.amazonaws.com
+      Large Message Store Path:      s3://ingestion/smartbus-test
+      Queue Name:                    sqs-test
+    Type:                            sqs_smartbus
   Message:                      
   Phase:                        Ready
   Ready Replicas:               3
@@ -635,20 +694,20 @@ disabled = true
 disabled = true
     
 sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
-[remote_queue:ing-ind-separation-q]
+[remote_queue:sqs-test]
 remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
-remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
+remote_queue.sqs_smartbus.dead_letter_queue.name = sqs-dlq-test
 remote_queue.sqs_smartbus.encoding_format = s2s
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
-remote_queue.sqs_smartbus.large_message_store.path = s3://ing-ind-separation/smartbus-test
+remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
 remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
 ```
 
-4. Install IndexerCluster resource.
+5. Install IndexerCluster resource.
 
 ```
 $ cat idxc.yaml 
@@ -659,7 +718,7 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  image: splunk/splunk:9.4.4
+  image: splunk/splunk:10.0.0
   serviceAccount: ingestor-sa 
 ---
 apiVersion: enterprise.splunk.com/v4
@@ -669,7 +728,7 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  image: splunk/splunk:9.4.4
+  image: splunk/splunk:10.0.0
   replicas: 3
   clusterManagerRef:
     name: cm
@@ -709,24 +768,24 @@ sh-4.4$ cat /opt/splunk/etc/system/local/inputs.conf
 [splunktcp://9997]
 disabled = 0
 
-[remote_queue:ing-ind-separation-q]
+[remote_queue:sqs-test]
 remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
-remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
+remote_queue.sqs_smartbus.dead_letter_queue.name = sqs-dlq-test
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
-remote_queue.sqs_smartbus.large_message_store.path = s3://ing-ind-separation/smartbus-test
+remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
 remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.type = sqs_smartbus
 sh-4.4$ cat /opt/splunk/etc/system/local/outputs.conf 
-[remote_queue:ing-ind-separation-q]
+[remote_queue:sqs-test]
 remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
 remote_queue.sqs_smartbus.auth_region = us-west-2
-remote_queue.sqs_smartbus.dead_letter_queue.name = ing-ind-separation-dlq
+remote_queue.sqs_smartbus.dead_letter_queue.name = sqs-dlq-test
 remote_queue.sqs_smartbus.encoding_format = s2s
 remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
 remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
-remote_queue.sqs_smartbus.large_message_store.path = s3://ing-ind-separation/smartbus-test
+remote_queue.sqs_smartbus.large_message_store.path = s3://ingestion/smartbus-test
 remote_queue.sqs_smartbus.retry_policy = max_count
 remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
@@ -747,7 +806,7 @@ disabled = false
 disabled = true
 ```
 
-5. Install Horizontal Pod Autoscaler for IngestorCluster.
+6. Install Horizontal Pod Autoscaler for IngestorCluster.
 
 ```
 $ cat hpa-ing.yaml 
@@ -830,7 +889,7 @@ NAME      REFERENCE                  TARGETS         MINPODS   MAXPODS   REPLICA
 ing-hpa   IngestorCluster/ingestor   cpu: 115%/50%   3         10        10         8m54s
 ```
 
-6. Generate fake load.
+7. Generate fake load.
 
 - HEC_TOKEN: HEC token for making fake calls
 
@@ -991,7 +1050,7 @@ splunk-ingestor-ingestor-2       1/1     Running   0          45m
 ```
 
 ```
-$ aws s3 ls s3://ing-ind-separation/smartbus-test/
+$ aws s3 ls s3://ingestion/smartbus-test/
                            PRE 29DDC1B4-D43E-47D1-AC04-C87AC7298201/
                            PRE 43E16731-7146-4397-8553-D68B5C2C8634/
                            PRE C8A4D060-DE0D-4DCB-9690-01D8902825DC/
