@@ -359,7 +359,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, busSpec enterpriseApi.PushBusSpec, pipelineConfig enterpriseApi.PipelineConfigSpec, serviceAccountName string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, busConfig corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IndexerCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -396,9 +396,8 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				},
 				Defaults: ansibleConfig,
 			},
-			Replicas:       int32(replicas),
-			PipelineConfig: pipelineConfig,
-			PullBus:        busSpec,
+			Replicas:            int32(replicas),
+			BusConfigurationRef: busConfig,
 		},
 	}
 
@@ -406,7 +405,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 }
 
 // newIngestorCluster creates and initialize the CR for IngestorCluster Kind
-func newIngestorCluster(name, ns string, replicas int, splunkImage string, busSpec enterpriseApi.PushBusSpec, pipelineConfig enterpriseApi.PipelineConfigSpec, serviceAccountName string) *enterpriseApi.IngestorCluster {
+func newIngestorCluster(name, ns string, replicas int, splunkImage string, busConfig corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IngestorCluster {
 	return &enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngestorCluster",
@@ -426,10 +425,24 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, busSp
 					Image:           splunkImage,
 				},
 			},
-			Replicas:       int32(replicas),
-			PipelineConfig: pipelineConfig,
-			PushBus:        busSpec,
+			Replicas:            int32(replicas),
+			BusConfigurationRef: busConfig,
 		},
+	}
+}
+
+// newBusConfiguration creates and initializes the CR for BusConfiguration Kind
+func newBusConfiguration(name, ns string, busConfig enterpriseApi.BusConfigurationSpec) *enterpriseApi.BusConfiguration {
+	return &enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "BusConfiguration",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: busConfig,
+
 	}
 }
 

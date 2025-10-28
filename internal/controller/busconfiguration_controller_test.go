@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("IngestorCluster Controller", func() {
+var _ = Describe("BusConfiguration Controller", func() {
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
 	})
@@ -43,47 +43,47 @@ var _ = Describe("IngestorCluster Controller", func() {
 
 	})
 
-	Context("IngestorCluster Management", func() {
+	Context("BusConfiguration Management", func() {
 
-		It("Get IngestorCluster custom resource should fail", func() {
-			namespace := "ns-splunk-ing-1"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+		It("Get BusConfiguration custom resource should fail", func() {
+			namespace := "ns-splunk-bus-1"
+			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			_, err := GetIngestorCluster("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("ingestorclusters.enterprise.splunk.com \"test\" not found"))
+			_, err := GetBusConfiguration("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("busconfigurations.enterprise.splunk.com \"test\" not found"))
 
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create IngestorCluster custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-ing-2"
+		It("Create BusConfiguration custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-bus-2"
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = ""
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			annotations[enterpriseApi.BusConfigurationPausedAnnotation] = ""
+			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			icSpec, _ := GetIngestorCluster("test", nsSpecs.Name)
+			CreateBusConfiguration("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			icSpec, _ := GetBusConfiguration("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
 			icSpec.Status.Phase = "Ready"
-			UpdateIngestorCluster(icSpec, enterpriseApi.PhaseReady)
-			DeleteIngestorCluster("test", nsSpecs.Name)
+			UpdateBusConfiguration(icSpec, enterpriseApi.PhaseReady)
+			DeleteBusConfiguration("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create IngestorCluster custom resource should succeeded", func() {
-			namespace := "ns-splunk-ing-3"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+		It("Create BusConfiguration custom resource should succeeded", func() {
+			namespace := "ns-splunk-bus-3"
+			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -91,14 +91,14 @@ var _ = Describe("IngestorCluster Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteIngestorCluster("test", nsSpecs.Name)
+			CreateBusConfiguration("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			DeleteBusConfiguration("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-ing-4"
-			ApplyIngestorCluster = func(ctx context.Context, client client.Client, instance *enterpriseApi.IngestorCluster) (reconcile.Result, error) {
+			namespace := "ns-splunk-bus-4"
+			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -108,7 +108,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := IngestorClusterReconciler{
+			instance := BusConfigurationReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -121,25 +121,25 @@ var _ = Describe("IngestorCluster Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
-			icSpec := testutils.NewIngestorCluster("test", namespace, "image")
-			Expect(c.Create(ctx, icSpec)).Should(Succeed())
+			bcSpec := testutils.NewBusConfiguration("test", namespace, "image")
+			Expect(c.Create(ctx, bcSpec)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.IngestorClusterPausedAnnotation] = ""
-			icSpec.Annotations = annotations
-			Expect(c.Update(ctx, icSpec)).Should(Succeed())
+			annotations[enterpriseApi.BusConfigurationPausedAnnotation] = ""
+			bcSpec.Annotations = annotations
+			Expect(c.Update(ctx, bcSpec)).Should(Succeed())
 
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
 			annotations = map[string]string{}
-			icSpec.Annotations = annotations
-			Expect(c.Update(ctx, icSpec)).Should(Succeed())
+			bcSpec.Annotations = annotations
+			Expect(c.Update(ctx, bcSpec)).Should(Succeed())
 
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
-			icSpec.DeletionTimestamp = &metav1.Time{}
+			bcSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -147,97 +147,86 @@ var _ = Describe("IngestorCluster Controller", func() {
 	})
 })
 
-func GetIngestorCluster(name string, namespace string) (*enterpriseApi.IngestorCluster, error) {
-	By("Expecting IngestorCluster custom resource to be retrieved successfully")
+func GetBusConfiguration(name string, namespace string) (*enterpriseApi.BusConfiguration, error) {
+	By("Expecting BusConfiguration custom resource to be retrieved successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ic := &enterpriseApi.IngestorCluster{}
+	bc := &enterpriseApi.BusConfiguration{}
 
-	err := k8sClient.Get(context.Background(), key, ic)
+	err := k8sClient.Get(context.Background(), key, bc)
 	if err != nil {
 		return nil, err
 	}
 
-	return ic, err
+	return bc, err
 }
 
-func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.IngestorCluster {
-	By("Expecting IngestorCluster custom resource to be created successfully")
+func CreateBusConfiguration(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.BusConfiguration {
+	By("Expecting BusConfiguration custom resource to be created successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ingSpec := &enterpriseApi.IngestorCluster{
+	ingSpec := &enterpriseApi.BusConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
 			Annotations: annotations,
-		},
-		Spec: enterpriseApi.IngestorClusterSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "IfNotPresent",
-				},
-			},
-			Replicas: 3,
-			BusConfigurationRef: corev1.ObjectReference{
-				Name: "busConfig",
-			},
 		},
 	}
 
 	Expect(k8sClient.Create(context.Background(), ingSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	ic := &enterpriseApi.IngestorCluster{}
+	bc := &enterpriseApi.BusConfiguration{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, ic)
+		_ = k8sClient.Get(context.Background(), key, bc)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
-			ic.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), ic)).Should(Succeed())
+			bc.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), bc)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())
 
-	return ic
+	return bc
 }
 
-func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enterpriseApi.Phase) *enterpriseApi.IngestorCluster {
-	By("Expecting IngestorCluster custom resource to be updated successfully")
+func UpdateBusConfiguration(instance *enterpriseApi.BusConfiguration, status enterpriseApi.Phase) *enterpriseApi.BusConfiguration {
+	By("Expecting BusConfiguration custom resource to be updated successfully")
 
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	icSpec := testutils.NewIngestorCluster(instance.Name, instance.Namespace, "image")
-	icSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), icSpec)).Should(Succeed())
+	bcSpec := testutils.NewBusConfiguration(instance.Name, instance.Namespace, "image")
+	bcSpec.ResourceVersion = instance.ResourceVersion
+	Expect(k8sClient.Update(context.Background(), bcSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	ic := &enterpriseApi.IngestorCluster{}
+	bc := &enterpriseApi.BusConfiguration{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, ic)
+		_ = k8sClient.Get(context.Background(), key, bc)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
-			ic.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), ic)).Should(Succeed())
+			bc.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), bc)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())
 
-	return ic
+	return bc
 }
 
-func DeleteIngestorCluster(name string, namespace string) {
-	By("Expecting IngestorCluster custom resource to be deleted successfully")
+func DeleteBusConfiguration(name string, namespace string) {
+	By("Expecting BusConfiguration custom resource to be deleted successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
@@ -245,9 +234,9 @@ func DeleteIngestorCluster(name string, namespace string) {
 	}
 
 	Eventually(func() error {
-		ic := &enterpriseApi.IngestorCluster{}
-		_ = k8sClient.Get(context.Background(), key, ic)
-		err := k8sClient.Delete(context.Background(), ic)
+		bc := &enterpriseApi.BusConfiguration{}
+		_ = k8sClient.Get(context.Background(), key, bc)
+		err := k8sClient.Delete(context.Background(), bc)
 		return err
 	}, timeout, interval).Should(Succeed())
 }
