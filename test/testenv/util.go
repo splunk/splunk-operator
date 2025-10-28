@@ -30,6 +30,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	. "github.com/onsi/gomega"
+
 	"github.com/onsi/ginkgo/v2"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
@@ -357,7 +359,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, busSpec enterpriseApi.PushBusSpec, pipelineConfig enterpriseApi.PipelineConfigSpec, serviceAccountName string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, busConfig corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IndexerCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -394,9 +396,8 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				},
 				Defaults: ansibleConfig,
 			},
-			Replicas:       int32(replicas),
-			PipelineConfig: pipelineConfig,
-			PullBus:        busSpec,
+			Replicas:            int32(replicas),
+			BusConfigurationRef: busConfig,
 		},
 	}
 
@@ -404,7 +405,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 }
 
 // newIngestorCluster creates and initialize the CR for IngestorCluster Kind
-func newIngestorCluster(name, ns string, replicas int, splunkImage string, busSpec enterpriseApi.PushBusSpec, pipelineConfig enterpriseApi.PipelineConfigSpec, serviceAccountName string) *enterpriseApi.IngestorCluster {
+func newIngestorCluster(name, ns string, replicas int, splunkImage string, busConfig corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IngestorCluster {
 	return &enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngestorCluster",
@@ -424,10 +425,24 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, busSp
 					Image:           splunkImage,
 				},
 			},
-			Replicas:       int32(replicas),
-			PipelineConfig: pipelineConfig,
-			PushBus:        busSpec,
+			Replicas:            int32(replicas),
+			BusConfigurationRef: busConfig,
 		},
+	}
+}
+
+// newBusConfiguration creates and initializes the CR for BusConfiguration Kind
+func newBusConfiguration(name, ns string, busConfig enterpriseApi.BusConfigurationSpec) *enterpriseApi.BusConfiguration {
+	return &enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "BusConfiguration",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: busConfig,
+
 	}
 }
 
@@ -1218,4 +1233,48 @@ func DeleteConfigMap(ns string, ConfigMapName string) error {
 		return err
 	}
 	return nil
+}
+
+// GetConfFile gets config file from pod
+func GetConfFile(podName, filePath, ns string) (string, error) {
+	var config string
+	var err error
+
+	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "cat", filePath).Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl exec -n %s %s -- cat %s", ns, podName, filePath)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return config, err
+	}
+
+	return string(output), err
+}
+
+// GetAWSEnv gets AWS environment variables from pod
+func GetAWSEnv(podName, ns string) (string, error) {
+	var config string
+	var err error
+
+	output, err := exec.Command("kubectl", "exec", "-n", ns, podName, "--", "env", "|", "grep", "-i", "aws").Output()
+	if err != nil {
+		cmd := fmt.Sprintf("kubectl exec -n %s %s -- env | grep -i aws", ns, podName)
+		logf.Log.Error(err, "Failed to execute command", "command", cmd)
+		return config, err
+	}
+
+	return string(output), err
+}
+
+func ValidateContent(confFileContent string, listOfStringsForValidation []string, shouldContain bool) {
+	for _, str := range listOfStringsForValidation {
+		if shouldContain {
+			if !strings.Contains(confFileContent, str) {
+				Expect(confFileContent).To(ContainSubstring(str), "Failed to find string "+str+" in conf file")
+			}
+		} else {
+			if strings.Contains(confFileContent, str) {
+				Expect(confFileContent).ToNot(ContainSubstring(str), "Found string "+str+" in conf file, but it should not be there")
+			}
+		}
+	}
 }

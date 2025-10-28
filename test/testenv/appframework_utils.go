@@ -250,6 +250,28 @@ func GetAppDeploymentInfoStandalone(ctx context.Context, deployment *Deployment,
 	return appDeploymentInfo, err
 }
 
+// GetAppDeploymentInfoIngestorCluster returns AppDeploymentInfo for given IngestorCluster, appSourceName and appName
+func GetAppDeploymentInfoIngestorCluster(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
+	ingestor := &enterpriseApi.IngestorCluster{}
+	appDeploymentInfo := enterpriseApi.AppDeploymentInfo{}
+	err := deployment.GetInstance(ctx, name, ingestor)
+	if err != nil {
+		testenvInstance.Log.Error(err, "Failed to get CR ", "CR Name", name)
+		return appDeploymentInfo, err
+	}
+	appInfoList := ingestor.Status.AppContext.AppsSrcDeployStatus[appSourceName].AppDeploymentInfoList
+	for _, appInfo := range appInfoList {
+		testenvInstance.Log.Info("Checking Ingestor AppInfo Struct", "App Name", appName, "App Source", appSourceName, "Ingestor Name", name, "AppDeploymentInfo", appInfo)
+		if strings.Contains(appName, appInfo.AppName) {
+			testenvInstance.Log.Info("App Deployment Info found.", "App Name", appName, "App Source", appSourceName, "Ingestor Name", name, "AppDeploymentInfo", appInfo)
+			appDeploymentInfo = appInfo
+			return appDeploymentInfo, nil
+		}
+	}
+	testenvInstance.Log.Info("App Info not found in App Info List", "App Name", appName, "App Source", appSourceName, "Ingestor Name", name, "App Info List", appInfoList)
+	return appDeploymentInfo, err
+}
+
 // GetAppDeploymentInfoMonitoringConsole returns AppDeploymentInfo for given Monitoring Console, appSourceName and appName
 func GetAppDeploymentInfoMonitoringConsole(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv, name string, appSourceName string, appName string) (enterpriseApi.AppDeploymentInfo, error) {
 	mc := &enterpriseApi.MonitoringConsole{}
@@ -345,6 +367,8 @@ func GetAppDeploymentInfo(ctx context.Context, deployment *Deployment, testenvIn
 	switch crKind {
 	case "Standalone":
 		appDeploymentInfo, err = GetAppDeploymentInfoStandalone(ctx, deployment, testenvInstance, name, appSourceName, appName)
+	case "IngestorCluster":
+		appDeploymentInfo, err = GetAppDeploymentInfoIngestorCluster(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "MonitoringConsole":
 		appDeploymentInfo, err = GetAppDeploymentInfoMonitoringConsole(ctx, deployment, testenvInstance, name, appSourceName, appName)
 	case "SearchHeadCluster":

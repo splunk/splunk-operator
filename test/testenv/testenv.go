@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -76,6 +77,9 @@ const (
 
 	// LicenseMasterPod Template String for standalone pod
 	LicenseMasterPod = "splunk-%s-" + splcommon.LicenseManager + "-%d"
+
+	// IngestorPod Template String for ingestor pod
+	IngestorPod = "splunk-%s-ingestor-%d"
 
 	// IndexerPod Template String for indexer pod
 	IndexerPod = "splunk-%s-idxc-indexer-%d"

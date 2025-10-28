@@ -95,62 +95,11 @@ spec:
   topologySpreadConstraints:
 {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .Values.ingestorCluster.pipelineConfig }}
-  pipelineConfig:
-    {{- if hasKey . "remoteQueueRuleset" }}
-    remoteQueueRuleset: {{ .remoteQueueRuleset }}
-    {{- end }}
-    {{- if hasKey . "ruleSet" }}
-    ruleSet: {{ .ruleSet }}
-    {{- end }}
-    {{- if hasKey . "remoteQueueTyping" }}
-    remoteQueueTyping: {{ .remoteQueueTyping }}
-    {{- end }}
-    {{- if hasKey . "remoteQueueOutput" }}
-    remoteQueueOutput: {{ .remoteQueueOutput }}
-    {{- end }}
-    {{- if hasKey . "typing" }}
-    typing: {{ .typing }}
-    {{- end }}
-    {{- if hasKey . "indexerPipe" }}
-    indexerPipe: {{ .indexerPipe }}
-    {{- end }}
-  {{- end }}
-  {{- with .Values.ingestorCluster.pushBus }}
-  pushBus:
-    type: {{ .type | quote }}
-    {{- with .sqs }}
-    sqs:
-      {{- if .queueName }}
-      queueName: {{ .queueName | quote }}
-      {{- end }}
-      {{- if .authRegion }}
-      authRegion: {{ .authRegion | quote }}
-      {{- end }}
-      {{- if .endpoint }}
-      endpoint: {{ .endpoint | quote }}
-      {{- end }}
-      {{- if .largeMessageStoreEndpoint }}
-      largeMessageStoreEndpoint: {{ .largeMessageStoreEndpoint | quote }}
-      {{- end }}
-      {{- if .largeMessageStorePath }}
-      largeMessageStorePath: {{ .largeMessageStorePath | quote }}
-      {{- end }}
-      {{- if .deadLetterQueueName }}
-      deadLetterQueueName: {{ .deadLetterQueueName | quote }}
-      {{- end }}
-      {{- if not (eq .maxRetriesPerPart nil) }}
-      maxRetriesPerPart: {{ .maxRetriesPerPart }}
-      {{- end }}
-      {{- if .retryPolicy }}
-      retryPolicy: {{ .retryPolicy | quote }}
-      {{- end }}
-      {{- if .sendInterval }}
-      sendInterval: {{ .sendInterval | quote }}
-      {{- end }}
-      {{- if .encodingFormat }}
-      encodingFormat: {{ .encodingFormat | quote }}
-      {{- end }}
+  {{- with $.Values.ingestorCluster.busConfigurationRef }}
+  busConfigurationRef:
+    name: {{ $.Values.ingestorCluster.busConfigurationRef.name }}
+    {{- if $.Values.ingestorCluster.busConfigurationRef.namespace }}
+    namespace: {{ $.Values.ingestorCluster.busConfigurationRef.namespace }}
     {{- end }}
   {{- end }}
   {{- with .Values.ingestorCluster.extraEnv }}

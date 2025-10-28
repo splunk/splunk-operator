@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -140,6 +141,34 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IngestorCluster{},
 			)).
+		Watches(&enterpriseApi.BusConfiguration{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				bc, ok := obj.(*enterpriseApi.BusConfiguration)
+				if !ok {
+					return nil
+				}
+				var list enterpriseApi.IngestorClusterList
+				if err := r.Client.List(ctx, &list); err != nil {
+					return nil
+				}
+				var reqs []reconcile.Request
+				for _, ic := range list.Items {
+					ns := ic.Spec.BusConfigurationRef.Namespace
+					if ns == "" {
+						ns = ic.Namespace
+					}
+					if ic.Spec.BusConfigurationRef.Name == bc.Name && ns == bc.Namespace {
+						reqs = append(reqs, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ic.Name,
+								Namespace: ic.Namespace,
+							},
+						})
+					}
+				}
+				return reqs
+			}),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).

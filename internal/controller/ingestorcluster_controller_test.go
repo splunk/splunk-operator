@@ -184,28 +184,8 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 				},
 			},
 			Replicas: 3,
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
-			PushBus: enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-					EncodingFormat:            "s2s",
-				},
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: "busConfig",
 			},
 		},
 	}

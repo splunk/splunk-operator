@@ -1,0 +1,39 @@
+splunk-operator:
+  enabled: false
+  splunkOperator:
+    clusterWideAccess: false
+    persistentVolumeClaim:
+      storageClassName: gp2
+
+busConfiguration:
+  enabled: true
+  name: bus-config
+  type: sqs_smartbus
+  sqs:
+    queueName: sqs-test
+    authRegion: us-west-2
+    endpoint: https://sqs.us-west-2.amazonaws.com
+    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+    largeMessageStorePath: s3://ingestion/smartbus-test
+    deadLetterQueueName: sqs-dlq-test
+
+ingestorCluster:
+  enabled: true
+  name: ingestor
+  replicaCount: 3
+  busConfigurationRef:
+    name: bus-config
+
+clusterManager:
+  enabled: true
+  name: cm
+  replicaCount: 1
+
+indexerCluster:
+  enabled: true
+  name: indexer
+  replicaCount: 3
+  clusterManagerRef:
+    name: cm
+  busConfigurationRef:
+    name: bus-config

@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: List
 items:
-{{- range default (default (until 1) .Values.sva.c3.indexerClusters) .Values.sva.m4.indexerClusters }}
+{{- range default (default (list (dict "name" .Values.indexerCluster.name)) .Values.sva.c3.indexerClusters) .Values.sva.m4.indexerClusters }}
 - apiVersion:  enterprise.splunk.com/v4
   kind: IndexerCluster
   metadata:
@@ -147,7 +147,7 @@ items:
 {{ toYaml . | indent 6 }}
 {{- end }}
 {{- end }}
-  {{- if and ($.Values.sva.m4.enabled) (.zone) }}
+  {{- if and ($.Values.sva.m4.enabled) (.name) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -156,70 +156,19 @@ items:
             - key: topology.kubernetes.io/zone
               operator: In
               values:
-              - {{ .zone }}
+              - {{ .name }}
   {{- else }}
     {{- with $.Values.indexerCluster.affinity }}
     affinity:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.pipelineConfig }}
-    pipelineConfig:
-      {{- if .remoteQueueRuleset }}
-      remoteQueueRuleset: {{ .remoteQueueRuleset }}
-      {{- end }}
-      {{- if .ruleSet }}
-      ruleSet: {{ .ruleSet }}
-      {{- end }}
-      {{- if .remoteQueueTyping }}
-      remoteQueueTyping: {{ .remoteQueueTyping }}
-      {{- end }}
-      {{- if .remoteQueueOutput }}
-      remoteQueueOutput: {{ .remoteQueueOutput }}
-      {{- end }}
-      {{- if .typing }}
-      typing: {{ .typing }}
-      {{- end }}
-      {{- if .indexerPipe }}
-      indexerPipe: {{ .indexerPipe }}
-      {{- end }}
+    {{- with $.Values.indexerCluster.busConfigurationRef }}
+    busConfigurationRef:
+      name: {{ .name }}
+    {{- if .namespace }}
+      namespace: {{ .namespace }}
     {{- end }}
-    {{- with $.Values.indexerCluster.pullBus }}
-    pullBus:
-      type: {{ .type | quote }}
-      {{- with .sqs }}
-      sqs:
-        {{- if .queueName }}
-        queueName: {{ .queueName | quote }}
-        {{- end }}
-        {{- if .authRegion }}
-        authRegion: {{ .authRegion | quote }}
-        {{- end }}
-        {{- if .endpoint }}
-        endpoint: {{ .endpoint | quote }}
-        {{- end }}
-        {{- if .largeMessageStoreEndpoint }}
-        largeMessageStoreEndpoint: {{ .largeMessageStoreEndpoint | quote }}
-        {{- end }}
-        {{- if .largeMessageStorePath }}
-        largeMessageStorePath: {{ .largeMessageStorePath | quote }}
-        {{- end }}
-        {{- if .deadLetterQueueName }}
-        deadLetterQueueName: {{ .deadLetterQueueName | quote }}
-        {{- end }}
-        {{- if not (eq .maxRetriesPerPart nil) }}
-        maxRetriesPerPart: {{ .maxRetriesPerPart }}
-        {{- end }}
-        {{- if .retryPolicy }}
-        retryPolicy: {{ .retryPolicy | quote }}
-        {{- end }}
-        {{- if .sendInterval }}
-        sendInterval: {{ .sendInterval | quote }}
-        {{- end }}
-        {{- if .encodingFormat }}
-        encodingFormat: {{ .encodingFormat | quote }}
-        {{- end }}
-      {{- end }}
-    {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

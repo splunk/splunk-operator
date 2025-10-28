@@ -59,7 +59,7 @@ jobs:
             managerscaling,
             managercrcrud,
             licensemanager,
-            indexingestseparation,
+            indingsep,
           ]
     runs-on: ubuntu-latest
     needs: build-operator-image
