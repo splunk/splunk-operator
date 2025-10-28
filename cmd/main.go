@@ -23,10 +23,11 @@ import (
 	"os"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -110,11 +111,11 @@ func main() {
 		// as certificates issued by a trusted Certificate Authority (CA). The primary risk is potentially allowing
 		// unauthorized access to sensitive metrics data. Consider replacing with CertDir, CertName, and KeyName
 		// to provide certificates, ensuring the server communicates using trusted and secure certificates.
-		TLSOpts: tlsOpts,
+		TLSOpts:        tlsOpts,
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
 	}
 
-	// TODO: enable https for /metrics endpoint by default  
+	// TODO: enable https for /metrics endpoint by default
 	// if secureMetrics {
 	// 	// FilterProvider is used to protect the metrics endpoint with authn/authz.
 	// 	// These configurations ensure that only authorized users and service accounts
@@ -229,6 +230,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
+		os.Exit(1)
+	}
+	if err := (&controller.BusConfigurationReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BusConfiguration")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

@@ -31,7 +31,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -53,11 +55,42 @@ func TestApplyIngestorCluster(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
-	c := spltest.NewMockClient()
+
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
+	busConfig := &enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "busConfig",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+	c.Create(ctx, busConfig)
+
 	cr := &enterpriseApi.IngestorCluster{
-		TypeMeta: metav1.TypeMeta{Kind: "IngestorCluster"},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "IngestorCluster",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
@@ -67,27 +100,9 @@ func TestApplyIngestorCluster(t *testing.T) {
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
-			PushBus: enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-				},
+			BusConfigurationRef: corev1.ObjectReference{
+				Name:      busConfig.Name,
+				Namespace: busConfig.Namespace,
 			},
 		},
 	}
@@ -234,7 +249,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
-	mockHTTPClient :=  &spltest.MockHTTPClient{}
+	mockHTTPClient := &spltest.MockHTTPClient{}
 	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
 			log: l, cr: cr, secrets: secret,
@@ -243,31 +258,31 @@ func TestApplyIngestorCluster(t *testing.T) {
 			},
 		}
 	}
-	defer func(){ newIngestorClusterPodManager = origNew }()
+	defer func() { newIngestorClusterPodManager = origNew }()
 
 	propertyKVList := [][]string{
-		{fmt.Sprintf("remote_queue.%s.encoding_format", cr.Spec.PushBus.Type), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.LargeMessageStorePath},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", cr.Spec.PushBus.SQS.RetryPolicy, cr.Spec.PushBus.Type), fmt.Sprintf("%d", cr.Spec.PushBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", cr.Spec.PushBus.Type), cr.Spec.PushBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", busConfig.Spec.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"},
 	}
 
 	body := buildFormBody(propertyKVList)
-	addRemoteQueueHandlersForIngestor(mockHTTPClient, cr, cr.Status.ReadyReplicas, "conf-outputs", body)
+	addRemoteQueueHandlersForIngestor(mockHTTPClient, cr, busConfig, cr.Status.ReadyReplicas, "conf-outputs", body)
 
 	// default-mode.conf
 	propertyKVList = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", cr.Spec.PipelineConfig.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", cr.Spec.PipelineConfig.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", cr.Spec.PipelineConfig.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", cr.Spec.PipelineConfig.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", cr.Spec.PipelineConfig.Typing)},
-		{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", cr.Spec.PipelineConfig.IndexerPipe)},
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+		{"pipeline:indexerPipe", "disabled", "true"},
 	}
 
 	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
@@ -295,6 +310,27 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	// Object definitions
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "busConfig",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+
 	cr := enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngestorCluster",
@@ -305,27 +341,8 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 2,
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
-			PushBus: enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-				},
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: busConfig.Name,
 			},
 		},
 	}
@@ -378,63 +395,87 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-test-ingestor","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"ownerReferences":[{"apiVersion":"","kind":"IngestorCluster","name":"test","uid":"","controller":true}]},"spec":{"replicas":3,"selector":{"matchLabels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-test-ingestor-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"},{"name":"user-defined","containerPort":32000,"protocol":"UDP"}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-test-ingestor"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-test-ingestor-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 }
 
-func TestGetChangedPushBusAndPipelineFieldsIngestor(t *testing.T) {
-	newCR := &enterpriseApi.IngestorCluster{
-		Spec: enterpriseApi.IngestorClusterSpec{
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
-			PushBus: enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-				},
+func TestGetChangedBusFieldsForIngestor(t *testing.T) {
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "busConfig",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
 			},
 		},
 	}
 
-	pushBusChangedFields, pipelineChangedFields := getChangedPushBusAndPipelineFields(newCR)
+	newCR := &enterpriseApi.IngestorCluster{
+		Spec: enterpriseApi.IngestorClusterSpec{
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: busConfig.Name,
+			},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{},
+	}
 
-	assert.Equal(t, 10, len(pushBusChangedFields))
+	busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&busConfig, newCR, false)
+
+	assert.Equal(t, 10, len(busChangedFields))
 	assert.Equal(t, [][]string{
-		{"remote_queue.type", newCR.Spec.PushBus.Type},
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStorePath},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PushBus.SQS.RetryPolicy, newCR.Spec.PushBus.Type), fmt.Sprintf("%d", newCR.Spec.PushBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.SendInterval},
-	}, pushBusChangedFields)
+		{"remote_queue.type", busConfig.Spec.Type},
+		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", busConfig.Spec.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"},
+	}, busChangedFields)
 
 	assert.Equal(t, 6, len(pipelineChangedFields))
 	assert.Equal(t, [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.Typing)},
-		{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.IndexerPipe)},
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+		{"pipeline:indexerPipe", "disabled", "true"},
 	}, pipelineChangedFields)
 }
 
-func TestHandlePushBusOrPipelineConfigChange(t *testing.T) {
+func TestHandlePushBusChange(t *testing.T) {
 	// Object definitions
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "busConfig",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+
 	newCR := &enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngestorCluster",
@@ -444,30 +485,12 @@ func TestHandlePushBusOrPipelineConfigChange(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
-			PipelineConfig: enterpriseApi.PipelineConfigSpec{
-				RemoteQueueRuleset: false,
-				RuleSet:            true,
-				RemoteQueueTyping:  false,
-				RemoteQueueOutput:  false,
-				Typing:             true,
-				IndexerPipe:        true,
-			},
-			PushBus: enterpriseApi.PushBusSpec{
-				Type: "sqs_smartbus",
-				SQS: enterpriseApi.SQSSpec{
-					QueueName:                 "test-queue",
-					AuthRegion:                "us-west-2",
-					Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-					LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-					LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-					DeadLetterQueueName:       "sqs-dlq-test",
-					MaxRetriesPerPart:         4,
-					RetryPolicy:               "max_count",
-					SendInterval:              "5s",
-				},
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: busConfig.Name,
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
+			Replicas:      3,
 			ReadyReplicas: 3,
 		},
 	}
@@ -532,7 +555,7 @@ func TestHandlePushBusOrPipelineConfigChange(t *testing.T) {
 	// Negative test case: secret not found
 	mgr := &ingestorClusterPodManager{}
 
-	err := mgr.handlePushBusOrPipelineConfigChange(ctx, newCR, c)
+	err := mgr.handlePushBusChange(ctx, newCR, busConfig, c)
 	assert.NotNil(t, err)
 
 	// Mock secret
@@ -543,39 +566,39 @@ func TestHandlePushBusOrPipelineConfigChange(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestPushBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePushBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePushBusChange(ctx, newCR, busConfig, c)
 	assert.NotNil(t, err)
 
 	// outputs.conf
 	propertyKVList := [][]string{
-		{fmt.Sprintf("remote_queue.%s.encoding_format", newCR.Spec.PushBus.Type), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.AuthRegion},
-		{fmt.Sprintf("remote_queue.%s.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStoreEndpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.LargeMessageStorePath},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.DeadLetterQueueName},
-		{fmt.Sprintf("remote_queue.%s.%s.max_retries_per_part", newCR.Spec.PushBus.SQS.RetryPolicy, newCR.Spec.PushBus.Type), fmt.Sprintf("%d", newCR.Spec.PushBus.SQS.MaxRetriesPerPart)},
-		{fmt.Sprintf("remote_queue.%s.retry_policy", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.RetryPolicy},
-		{fmt.Sprintf("remote_queue.%s.send_interval", newCR.Spec.PushBus.Type), newCR.Spec.PushBus.SQS.SendInterval},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", busConfig.Spec.Type), "s2s"},
+		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", busConfig.Spec.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"},
 	}
 
 	body := buildFormBody(propertyKVList)
-	addRemoteQueueHandlersForIngestor(mockHTTPClient, newCR, newCR.Status.ReadyReplicas, "conf-outputs", body)
+	addRemoteQueueHandlersForIngestor(mockHTTPClient, newCR, &busConfig, newCR.Status.ReadyReplicas, "conf-outputs", body)
 
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestPushBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePushBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePushBusChange(ctx, newCR, busConfig, c)
 	assert.NotNil(t, err)
 
 	// default-mode.conf
 	propertyKVList = [][]string{
-		{"pipeline:remotequeueruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueRuleset)},
-		{"pipeline:ruleset", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RuleSet)},
-		{"pipeline:remotequeuetyping", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueTyping)},
-		{"pipeline:remotequeueoutput", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.RemoteQueueOutput)},
-		{"pipeline:typing", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.Typing)},
-		{"pipeline:indexerPipe", "disabled", fmt.Sprintf("%t", newCR.Spec.PipelineConfig.IndexerPipe)},
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+		{"pipeline:indexerPipe", "disabled", "true"},
 	}
 
 	for i := 0; i < int(newCR.Status.ReadyReplicas); i++ {
@@ -594,11 +617,11 @@ func TestHandlePushBusOrPipelineConfigChange(t *testing.T) {
 
 	mgr = newTestPushBusPipelineManager(mockHTTPClient)
 
-	err = mgr.handlePushBusOrPipelineConfigChange(ctx, newCR, c)
+	err = mgr.handlePushBusChange(ctx, newCR, busConfig, c)
 	assert.Nil(t, err)
 }
 
-func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IngestorCluster, replicas int32, confName, body string) {
+func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IngestorCluster, busConfig *enterpriseApi.BusConfiguration, replicas int32, confName, body string) {
 	for i := 0; i < int(replicas); i++ {
 		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.GetName(), i)
 		baseURL := fmt.Sprintf(
@@ -606,11 +629,11 @@ func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, c
 			podName, cr.GetName(), cr.GetNamespace(), confName,
 		)
 
-		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", cr.Spec.PushBus.SQS.QueueName))
+		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName))
 		reqCreate, _ := http.NewRequest("POST", baseURL, strings.NewReader(createReqBody))
 		mockHTTPClient.AddHandler(reqCreate, 200, "", nil)
 
-		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", cr.Spec.PushBus.SQS.QueueName))
+		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName))
 		reqUpdate, _ := http.NewRequest("POST", updateURL, strings.NewReader(body))
 		mockHTTPClient.AddHandler(reqUpdate, 200, "", nil)
 	}

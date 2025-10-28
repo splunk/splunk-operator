@@ -350,6 +350,8 @@ indexerCluster:
   #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
   #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
+  busConfigurationRef: {}
+
 searchHeadCluster:
 
   enabled: false
@@ -808,3 +810,93 @@ extraManifests: []
 #    spec:
 #      securityPolicy:
 #        name: "gcp-cloud-armor-policy-test"
+
+ingestorCluster:
+
+  enabled: false
+
+  name: "ingestor"
+
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  additionalAnnotations: {}
+
+  replicaCount: 3
+
+  appRepo: {}
+    # appsRepoPollIntervalSeconds:
+    # defaults:
+    #   volumeName:
+    #   scope:
+    # appSources:
+    #   - name:
+    #     location:
+    # volumes:
+    #   - name:
+    #     storageType:
+    #     provider:
+    #     path:
+    #     endpoint:
+    #     region:
+    #     secretRef:
+
+  volumes: []
+
+  extraEnv: []
+  # - name:
+  #   value:
+
+  livenessInitialDelaySeconds: 300
+
+  readinessInitialDelaySeconds: 10
+
+  # Set Probes for Splunk instance pod containers
+  # reference: https://github.com/splunk/splunk-operator/blob/main/docs/HealthCheck.md
+  startupProbe: {}
+    # initialDelaySeconds: 40
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 12
+  livenessProbe: {}
+    # initialDelaySeconds: 30
+    # timeoutSeconds: 30
+    # periodSeconds: 30
+    # failureThreshold: 3
+  readinessProbe: {}
+    # initialDelaySeconds: 10
+    # timeoutSeconds: 5
+    # periodSeconds: 5
+    # failureThreshold: 3
+
+  etcVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 10Gi
+  # storageClassName: gp2
+
+  varVolumeStorageConfig:
+    ephemeralStorage: false
+    storageCapacity: 100Gi
+  # storageClassName: gp2
+
+  resources: {}
+    # requests:
+    #   memory: "2Gi"
+    #   cpu: "4"
+    # limits:
+    #   memory: "12Gi"
+    #   cpu: "24"
+
+  serviceAccount: ""
+
+  # ServiceTemplate is a template used to create Kubernetes services
+  serviceTemplate: {}
+
+  topologySpreadConstraints: []
+
+  tolerations: []
+
+  affinity: {}
+
+  busConfigurationRef: {}

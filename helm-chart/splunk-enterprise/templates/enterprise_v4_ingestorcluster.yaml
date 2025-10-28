@@ -1,0 +1,130 @@
+{{- if .Values.ingestorCluster.enabled }}
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: {{ .Values.ingestorCluster.name }}
+  namespace: {{ default .Release.Namespace .Values.ingestorCluster.namespaceOverride }}
+  {{- with .Values.ingestorCluster.additionalLabels }}
+  labels:
+  {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.additionalAnnotations }}
+  annotations:
+  {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ default 3 .Values.ingestorCluster.replicaCount }}
+  {{- if .Values.image.repository }}
+  image: {{ .Values.image.repository }}
+  {{- end }}
+  {{- if .Values.image.imagePullPolicy }}
+  imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+  {{- end }}
+  {{- with .Values.image.imagePullSecrets }}
+  imagePullSecrets:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.ingestorCluster.serviceAccount }}
+  serviceAccount: {{ .Values.ingestorCluster.serviceAccount }}
+  {{- end }}
+  {{- if .Values.existingLicenseManager.name }}
+  licenseManagerRef:
+    name: {{ .Values.existingLicenseManager.name }}
+    {{- if .Values.existingLicenseManager.namespace }}
+    namespace: {{ .Values.existingLicenseManager.namespace }}
+    {{- end }}
+  {{- else if and .Values.licenseManager.enabled .Values.licenseManager.name }}
+  licenseManagerRef:
+    name: {{ .Values.licenseManager.name }}
+    {{- if .Values.licenseManager.namespaceOverride }}
+    namespace: {{ .Values.licenseManager.namespaceOverride }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.existingMonitoringConsole.name }}
+  monitoringConsoleRef:
+    name: {{ .Values.existingMonitoringConsole.name }}
+    {{- if .Values.existingMonitoringConsole.namespace }}
+    namespace: {{ .Values.existingMonitoringConsole.namespace }}
+    {{- end }}
+  {{- else if and .Values.monitoringConsole.enabled .Values.monitoringConsole.name }}
+  monitoringConsoleRef:
+    name: {{ .Values.monitoringConsole.name }}
+    {{- if .Values.monitoringConsole.namespaceOverride }}
+    namespace: {{ .Values.monitoringConsole.namespaceOverride }}
+    {{- end }}
+  {{- end }}
+  livenessInitialDelaySeconds: {{ default 300 .Values.ingestorCluster.livenessInitialDelaySeconds }}
+  readinessInitialDelaySeconds: {{ default 10 .Values.ingestorCluster.readinessInitialDelaySeconds }}
+  {{- with .Values.ingestorCluster.startupProbe }}
+  startupProbe:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.livenessProbe }}
+  livenessProbe:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.readinessProbe }}
+  readinessProbe:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.etcVolumeStorageConfig }}
+  etcVolumeStorageConfig:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.varVolumeStorageConfig }}
+  varVolumeStorageConfig:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.resources }}
+  resources:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.serviceTemplate }}
+  serviceTemplate:
+{{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.tolerations }}
+  tolerations:
+{{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.affinity }}
+  affinity:
+{{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.topologySpreadConstraints }}
+  topologySpreadConstraints:
+{{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $.Values.ingestorCluster.busConfigurationRef }}
+  busConfigurationRef:
+    name: {{ $.Values.ingestorCluster.busConfigurationRef.name }}
+    {{- if $.Values.ingestorCluster.busConfigurationRef.namespace }}
+    namespace: {{ $.Values.ingestorCluster.busConfigurationRef.namespace }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.extraEnv }}
+  extraEnv:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.appRepo }}
+  appRepo:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.ingestorCluster.volumes }}
+  volumes:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+  {{- if .Values.ingestorCluster.licenseUrl }}
+    licenseUrl: {{ .Values.ingestorCluster.licenseUrl }}
+  {{- end }}
+  {{- if .Values.ingestorCluster.defaultsUrl }}
+    defaultsUrl: {{ .Values.ingestorCluster.defaultsUrl }}
+  {{- end }}
+  {{- if .Values.ingestorCluster.defaults }}
+    defaults: |-
+  {{ toYaml .Values.ingestorCluster.defaults | indent 4 }}
+  {{- end }}
+  {{- if .Values.ingestorCluster.defaultsUrlApps }}
+    defaultsUrlApps: {{ .Values.ingestorCluster.defaultsUrlApps }}
+  {{- end }}
+{{- end }}

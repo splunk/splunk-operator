@@ -38,9 +38,8 @@ const (
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
-	PipelineConfig PipelineConfigSpec `json:"pipelineConfig,omitempty"`
-
-	PullBus PushBusSpec `json:"pullBus,omitempty"`
+	// Bus configuration reference
+	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef,omitempty"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
@@ -115,6 +114,9 @@ type IndexerClusterStatus struct {
 
 	// Auxillary message describing CR status
 	Message string `json:"message"`
+
+	// Bus configuration
+	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

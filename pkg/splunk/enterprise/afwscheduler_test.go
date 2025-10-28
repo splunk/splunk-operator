@@ -4232,7 +4232,7 @@ func TestGetTelAppNameExtension(t *testing.T) {
 		"SearchHeadCluster": "shc",
 		"ClusterMaster":     "cmaster",
 		"ClusterManager":    "cmanager",
-		"IngestorCluster":    "ingestor",
+		"IngestorCluster":   "ingestor",
 	}
 
 	// Test all CR kinds

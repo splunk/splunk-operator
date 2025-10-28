@@ -47,36 +47,36 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 
 // NewIngestorCluster returns new IngestorCluster instance with its config hash
 func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
-	c := &enterpriseApi.Spec{
-		ImagePullPolicy: string(pullPolicy),
-	}
-
-	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
-		MonitoringConsoleRef: corev1.ObjectReference{
-			Name: "mcName",
+	return &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
+			},
+			Replicas: 3,
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: "busConfig",
+			},
 		},
 	}
+}
 
-	ic := &enterpriseApi.IngestorCluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "enterprise.splunk.com/v4",
-			Kind:       "IngestorCluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  ns,
-			Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
+// NewBusConfiguration returns new BusConfiguration instance with its config hash
+func NewBusConfiguration(name, ns, image string) *enterpriseApi.BusConfiguration {
+	return &enterpriseApi.BusConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
 		},
 	}
-
-	ic.Spec = enterpriseApi.IngestorClusterSpec{
-		CommonSplunkSpec: *cs,
-	}
-
-	return ic
 }
 
 // NewSearchHeadCluster returns new serach head cluster instance with its config hash
@@ -313,6 +313,9 @@ func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 
 	ad.Spec = enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: *cs,
+		BusConfigurationRef: corev1.ObjectReference{
+			Name: "busConfig",
+		},
 	}
 	return ad
 }

@@ -100,8 +100,8 @@ jobs:
           version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
       - name: Install kuttl
         run: |
-          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.12.0/kuttl_0.12.0_linux_x86_64.tar.gz
-          sudo tar -xvzf kuttl_0.12.0_linux_x86_64.tar.gz
+          sudo curl -LO https://github.com/kudobuilder/kuttl/releases/download/v0.22.0/kuttl_0.22.0_linux_x86_64.tar.gz
+          sudo tar -xvzf kuttl_0.22.0_linux_x86_64.tar.gz
           sudo chmod +x  kubectl-kuttl
           sudo mv kubectl-kuttl /usr/local/bin/kubectl-kuttl
       - name: Install Python

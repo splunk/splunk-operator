@@ -185,6 +185,34 @@ func SingleSiteIndexersReady(ctx context.Context, deployment *Deployment, testen
 	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
 }
 
+// IngestorsReady verify ingestors go to ready state
+func IngestorReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
+	ingest := &enterpriseApi.IngestorCluster{}
+	instanceName := fmt.Sprintf("%s-ingest", deployment.GetName())
+
+	gomega.Eventually(func() enterpriseApi.Phase {
+		err := deployment.GetInstance(ctx, instanceName, ingest)
+		if err != nil {
+			return enterpriseApi.PhaseError
+		}
+
+		testenvInstance.Log.Info("Waiting for ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+		DumpGetPods(testenvInstance.GetName())
+
+		return ingest.Status.Phase
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+
+	// In a steady state, we should stay in Ready and not flip-flop around
+	gomega.Consistently(func() enterpriseApi.Phase {
+		_ = deployment.GetInstance(ctx, instanceName, ingest)
+
+		testenvInstance.Log.Info("Check for Consistency ingestor instance's phase to be ready", "instance", instanceName, "phase", ingest.Status.Phase)
+		DumpGetSplunkVersion(ctx, testenvInstance.GetName(), deployment, "-ingest-")
+
+		return ingest.Status.Phase
+	}, ConsistentDuration, ConsistentPollInterval).Should(gomega.Equal(enterpriseApi.PhaseReady))
+}
+
 // ClusterManagerReady verify Cluster Manager Instance is in ready status
 func ClusterManagerReady(ctx context.Context, deployment *Deployment, testenvInstance *TestCaseEnv) {
 	// Ensure that the cluster-manager goes to Ready phase

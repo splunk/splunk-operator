@@ -2288,6 +2288,20 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
 		return latestIngCR, nil
 
+	case "BusConfiguration":
+		latestBusCR := &enterpriseApi.BusConfiguration{}
+		err = client.Get(ctx, namespacedName, latestBusCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.BusConfiguration).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.BusConfiguration).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.BusConfiguration).Status.DeepCopyInto(&latestBusCR.Status)
+		return latestBusCR, nil
+
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
 		err = client.Get(ctx, namespacedName, latestLmCR)

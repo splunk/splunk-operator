@@ -991,7 +991,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy the Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
 			indexerReplicas := 3
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", indexerReplicas, deployment.GetName(), "")
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", indexerReplicas, deployment.GetName(), "", corev1.ObjectReference{}, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Deploy the Search Head Cluster

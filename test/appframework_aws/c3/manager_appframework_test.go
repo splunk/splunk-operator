@@ -355,7 +355,7 @@ var _ = Describe("c3appfw test", func() {
 			shcName := fmt.Sprintf("%s-shc", deployment.GetName())
 			idxName := fmt.Sprintf("%s-idxc", deployment.GetName())
 			shc, err := deployment.DeploySearchHeadCluster(ctx, shcName, cm.GetName(), lm.GetName(), "", mcName)
-			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "")
+			idxc, err := deployment.DeployIndexerCluster(ctx, idxName, lm.GetName(), 3, cm.GetName(), "", corev1.ObjectReference{}, "")
 
 			// Wait for License Manager to be in READY phase
 			testenv.LicenseManagerReady(ctx, deployment, testcaseEnvInst)
@@ -3324,7 +3324,7 @@ var _ = Describe("c3appfw test", func() {
 			// Deploy the Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster")
 			indexerReplicas := 3
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", indexerReplicas, deployment.GetName(), "")
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", indexerReplicas, deployment.GetName(), "", corev1.ObjectReference{}, "")
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster")
 
 			// Deploy the Search Head Cluster

@@ -431,9 +431,9 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 }
 
 // DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string) (*enterpriseApi.IndexerCluster, error) {
+func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string, busConfig corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
-	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage)
+	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage, busConfig, serviceAccountName)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
@@ -442,6 +442,53 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseMana
 	}
 
 	return deployed.(*enterpriseApi.IndexerCluster), err
+}
+
+// DeployIngestorCluster deploys the ingestor cluster
+func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, count int, busConfig corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IngestorCluster, error) {
+	d.testenv.Log.Info("Deploying ingestor cluster", "name", name)
+
+	ingestor := newIngestorCluster(name, d.testenv.namespace, count, d.testenv.splunkImage, busConfig, serviceAccountName)
+	pdata, _ := json.Marshal(ingestor)
+
+	d.testenv.Log.Info("ingestor cluster spec", "cr", string(pdata))
+	deployed, err := d.deployCR(ctx, name, ingestor)
+	if err != nil {
+		return nil, err
+	}
+
+	return deployed.(*enterpriseApi.IngestorCluster), err
+}
+
+// DeployBusConfiguration deploys the bus configuration
+func (d *Deployment) DeployBusConfiguration(ctx context.Context, name string, busConfig enterpriseApi.BusConfigurationSpec) (*enterpriseApi.BusConfiguration, error) {
+	d.testenv.Log.Info("Deploying bus configuration", "name", name)
+
+	busCfg := newBusConfiguration(name, d.testenv.namespace, busConfig)
+	pdata, _ := json.Marshal(busCfg)
+
+	d.testenv.Log.Info("bus configuration spec", "cr", string(pdata))
+	deployed, err := d.deployCR(ctx, name, busCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return deployed.(*enterpriseApi.BusConfiguration), err
+}
+
+// DeployIngestorClusterWithAdditionalConfiguration deploys the ingestor cluster with additional configuration
+func (d *Deployment) DeployIngestorClusterWithAdditionalConfiguration(ctx context.Context, ic *enterpriseApi.IngestorCluster) (*enterpriseApi.IngestorCluster, error) {
+	d.testenv.Log.Info("Deploying ingestor cluster with additional configuration", "name", ic.Name)
+
+	pdata, _ := json.Marshal(ic)
+
+	d.testenv.Log.Info("ingestor cluster spec", "cr", string(pdata))
+	deployed, err := d.deployCR(ctx, ic.Name, ic)
+	if err != nil {
+		return nil, err
+	}
+
+	return deployed.(*enterpriseApi.IngestorCluster), err
 }
 
 // DeploySearchHeadCluster deploys a search head cluster
@@ -576,6 +623,24 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			ucr := cr.(*enterpriseApi.IndexerCluster)
 			current.Spec = ucr.Spec
 			cobject = current
+		case "IngestorCluster":
+			current := &enterpriseApi.IngestorCluster{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.IngestorCluster)
+			current.Spec = ucr.Spec
+			cobject = current
+		case "BusConfiguration":
+			current := &enterpriseApi.BusConfiguration{}
+			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
+			if err != nil {
+				return err
+			}
+			ucr := cr.(*enterpriseApi.BusConfiguration)
+			current.Spec = ucr.Spec
+			cobject = current
 		case "ClusterMaster":
 			current := &enterpriseApiV3.ClusterMaster{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
@@ -675,7 +740,7 @@ func (d *Deployment) DeploySingleSiteCluster(ctx context.Context, name string, i
 	}
 
 	// Deploy the indexer cluster
-	_, err := d.DeployIndexerCluster(ctx, name+"-idxc", LicenseManager, indexerReplicas, name, "")
+	_, err := d.DeployIndexerCluster(ctx, name+"-idxc", LicenseManager, indexerReplicas, name, "", corev1.ObjectReference{}, "")
 	if err != nil {
 		return err
 	}
@@ -733,7 +798,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHead(ctx context.Cont
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-master", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseMaster, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseMaster, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}
@@ -805,7 +870,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHead(ctx context.Context, n
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-manager", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}
@@ -866,7 +931,7 @@ func (d *Deployment) DeployMultisiteCluster(ctx context.Context, name string, in
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-manager", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}
@@ -1002,7 +1067,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndIndexes(ctx context.
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-manager", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}
@@ -1057,7 +1122,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndIndexes(ctx co
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-master", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, LicenseManager, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}
@@ -1162,7 +1227,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 	}
 
 	// Deploy the indexer cluster
-	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "", corev1.ObjectReference{}, "")
 	if err != nil {
 		return cm, idxc, sh, err
 	}
@@ -1240,7 +1305,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 	}
 
 	// Deploy the indexer cluster
-	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	idxc, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "", corev1.ObjectReference{}, "")
 	if err != nil {
 		return cm, idxc, sh, err
 	}
@@ -1340,7 +1405,7 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-manager", siteName)
-		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults)
+		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return cm, idxc, sh, err
 		}
@@ -1444,7 +1509,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-master", siteName)
-		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		idxc, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return cm, idxc, sh, err
 		}
@@ -1525,7 +1590,7 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "")
+	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseManager, indexerReplicas, name, "", corev1.ObjectReference{}, "")
 	if err != nil {
 		return err
 	}
@@ -1597,7 +1662,7 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 	}
 
 	// Deploy the indexer cluster
-	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "")
+	_, err = d.DeployIndexerCluster(ctx, name+"-idxc", licenseMaster, indexerReplicas, name, "", corev1.ObjectReference{}, "")
 	if err != nil {
 		return err
 	}
@@ -1691,7 +1756,7 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-manager", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseManager, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}
@@ -1791,7 +1856,7 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
   multisite_master: splunk-%s-%s-service
   site: %s
 `, name, "cluster-master", siteName)
-		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults)
+		_, err := d.DeployIndexerCluster(ctx, name+"-"+siteName, licenseMaster, indexerReplicas, name, siteDefaults, corev1.ObjectReference{}, "")
 		if err != nil {
 			return err
 		}

@@ -1,0 +1,30 @@
+---
+# assert for ingestor cluster custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: ingestor
+spec:
+  replicas: 4
+  busConfigurationRef:
+    name: bus-config
+status:
+  phase: Ready
+  busConfiguration:
+    type: sqs_smartbus
+    sqs:
+      queueName: sqs-test
+      authRegion: us-west-2
+      endpoint: https://sqs.us-west-2.amazonaws.com
+      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
+      largeMessageStorePath: s3://ingestion/smartbus-test
+      deadLetterQueueName: sqs-dlq-test
+
+---
+# check for stateful sets and replicas updated
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: splunk-ingestor-ingestor
+status:
+  replicas: 4

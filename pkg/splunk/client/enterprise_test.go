@@ -654,26 +654,26 @@ func TestRestartSplunk(t *testing.T) {
 }
 
 func TestUpdateConfFile(t *testing.T) {
-    // Test successful creation and update of conf property
-    property := "myproperty"
-    key := "mykey"
-    value := "myvalue"
-    fileName := "outputs"
-	
-    // First request: create the property (object) if it doesn't exist
-    createBody := strings.NewReader(fmt.Sprintf("name=%s", property))
-    wantCreateRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs", createBody)
-	
-    // Second request: update the key/value for the property
-    updateBody := strings.NewReader(fmt.Sprintf("%s=%s", key, value))
-    wantUpdateRequest, _ := http.NewRequest("POST", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), updateBody)
+	// Test successful creation and update of conf property
+	property := "myproperty"
+	key := "mykey"
+	value := "myvalue"
+	fileName := "outputs"
 
-    mockSplunkClient := &spltest.MockHTTPClient{}
-    mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
-    mockSplunkClient.AddHandler(wantUpdateRequest, 200, "", nil)
+	// First request: create the property (object) if it doesn't exist
+	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))
+	wantCreateRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs", createBody)
 
-    c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
-    c.Client = mockSplunkClient
+	// Second request: update the key/value for the property
+	updateBody := strings.NewReader(fmt.Sprintf("%s=%s", key, value))
+	wantUpdateRequest, _ := http.NewRequest("POST", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), updateBody)
+
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
+	mockSplunkClient.AddHandler(wantUpdateRequest, 200, "", nil)
+
+	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
 
 	err := c.UpdateConfFile(fileName, property, [][]string{{key, value}})
 	if err != nil {
@@ -681,22 +681,51 @@ func TestUpdateConfFile(t *testing.T) {
 	}
 	mockSplunkClient.CheckRequests(t, "TestUpdateConfFile")
 
-    // Negative test: error on create
-    mockSplunkClient = &spltest.MockHTTPClient{}
-    mockSplunkClient.AddHandler(wantCreateRequest, 500, "", nil)
-    c.Client = mockSplunkClient
+	// Negative test: error on create
+	mockSplunkClient = &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantCreateRequest, 500, "", nil)
+	c.Client = mockSplunkClient
 	err = c.UpdateConfFile(fileName, property, [][]string{{key, value}})
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on create, got nil")
 	}
 
-    // Negative test: error on update
-    mockSplunkClient = &spltest.MockHTTPClient{}
-    mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
-    mockSplunkClient.AddHandler(wantUpdateRequest, 500, "", nil)
-    c.Client = mockSplunkClient
+	// Negative test: error on update
+	mockSplunkClient = &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
+	mockSplunkClient.AddHandler(wantUpdateRequest, 500, "", nil)
+	c.Client = mockSplunkClient
 	err = c.UpdateConfFile(fileName, property, [][]string{{key, value}})
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on update, got nil")
+	}
+}
+
+func TestDeleteConfFileProperty(t *testing.T) {
+	// Test successful deletion of conf property
+	property := "myproperty"
+	fileName := "outputs"
+
+	wantDeleteRequest, _ := http.NewRequest("DELETE", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), nil)
+
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantDeleteRequest, 200, "", nil)
+
+	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
+	c.Client = mockSplunkClient
+
+	err := c.DeleteConfFileProperty(fileName, property)
+	if err != nil {
+		t.Errorf("DeleteConfFileProperty err = %v", err)
+	}
+	mockSplunkClient.CheckRequests(t, "TestDeleteConfFileProperty")
+
+	// Negative test: error on delete
+	mockSplunkClient = &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandler(wantDeleteRequest, 500, "", nil)
+	c.Client = mockSplunkClient
+	err = c.DeleteConfFileProperty(fileName, property)
+	if err == nil {
+		t.Errorf("DeleteConfFileProperty expected error on delete, got nil")
 	}
 }

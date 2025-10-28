@@ -177,12 +177,22 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 			Namespace:   namespace,
 			Annotations: annotations,
 		},
-		Spec: enterpriseApi.IngestorClusterSpec{},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "IfNotPresent",
+				},
+			},
+			Replicas: 3,
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: "busConfig",
+			},
+		},
 	}
 
-	ingSpec = testutils.NewIngestorCluster(name, namespace, "image")
 	Expect(k8sClient.Create(context.Background(), ingSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
+
 	ic := &enterpriseApi.IngestorCluster{}
 	Eventually(func() bool {
 		_ = k8sClient.Get(context.Background(), key, ic)

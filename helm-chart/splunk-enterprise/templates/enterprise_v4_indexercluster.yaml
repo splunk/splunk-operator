@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: List
 items:
-{{- range default (default (until 1) .Values.sva.c3.indexerClusters) .Values.sva.m4.indexerClusters }}
+{{- range default (default (list (dict "name" .Values.indexerCluster.name)) .Values.sva.c3.indexerClusters) .Values.sva.m4.indexerClusters }}
 - apiVersion:  enterprise.splunk.com/v4
   kind: IndexerCluster
   metadata:
@@ -147,7 +147,7 @@ items:
 {{ toYaml . | indent 6 }}
 {{- end }}
 {{- end }}
-  {{- if and ($.Values.sva.m4.enabled) (.zone) }}
+  {{- if and ($.Values.sva.m4.enabled) (.name) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -156,11 +156,18 @@ items:
             - key: topology.kubernetes.io/zone
               operator: In
               values:
-              - {{ .zone }}
+              - {{ .name }}
   {{- else }}
     {{- with $.Values.indexerCluster.affinity }}
     affinity:
 {{ toYaml . | indent 6 }}
+    {{- end }}
+  {{- end }}
+    {{- with $.Values.indexerCluster.busConfigurationRef }}
+    busConfigurationRef:
+      name: {{ .name }}
+    {{- if .namespace }}
+      namespace: {{ .namespace }}
     {{- end }}
   {{- end }}
 {{- end }}

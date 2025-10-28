@@ -1004,3 +1004,16 @@ func (c *SplunkClient) UpdateConfFile(fileName, property string, propertyKVList 
 	err = c.Do(request, expectedStatus, nil)
 	return err
 }
+
+// Deletes conf files properties
+func (c *SplunkClient) DeleteConfFileProperty(fileName, property string) error {
+	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
+
+	request, err := http.NewRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+
+	expectedStatus := []int{200, 201, 404}
+	return c.Do(request, expectedStatus, nil)
+}
