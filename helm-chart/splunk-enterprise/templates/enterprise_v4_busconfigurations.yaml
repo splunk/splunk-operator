@@ -1,3 +1,4 @@
+{{- if .Values.busConfiguration }}
 {{- if .Values.busConfiguration.enabled }}
 apiVersion: enterprise.splunk.com/v4
 kind: BusConfiguration
@@ -35,4 +36,5 @@ spec:
     deadLetterQueueName: {{ .deadLetterQueueName | quote }}
     {{- end }}
   {{- end }}
+{{- end }}
 {{- end }}
