@@ -232,6 +232,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 			err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
 			if err != nil {
+				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 				return result, err
 			}
@@ -311,6 +312,9 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 
 // Checks if only Bus or Pipeline config changed, and updates the conf file if so
 func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("handlePushBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.Replicas
 
@@ -328,7 +332,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		afterDelete := false
 		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
 			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
-			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -337,13 +341,13 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&busConfig, newCR, afterDelete)
 
 		for _, pbVal := range busChangedFields {
-			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, field := range pipelineChangedFields {
-			if err := splunkClient.UpdateConfFile("default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
 				updateErr = err
 			}
 		}
@@ -353,7 +357,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 	return updateErr
 }
 
-// Returns the names of Bus and PipelineConfig fields that changed between oldCR and newCR.
+// getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
 func getChangedBusFieldsForIngestor(busConfig *enterpriseApi.BusConfiguration, busConfigIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (busChangedFields, pipelineChangedFields [][]string) {
 	oldPB := &busConfigIngestorStatus.Status.BusConfiguration
 	newPB := &busConfig.Spec

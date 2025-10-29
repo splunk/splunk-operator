@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
@@ -969,19 +970,23 @@ func (c *SplunkClient) RestartSplunk() error {
 
 // Updates conf files and their properties
 // See https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.0/configuration-endpoints/configuration-endpoint-descriptions
-func (c *SplunkClient) UpdateConfFile(fileName, property string, propertyKVList [][]string) error {
+func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property string, propertyKVList [][]string) error {
 	// Creates an object in a conf file if it doesn't exist
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s", c.ManagementURI, fileName)
 	body := fmt.Sprintf("name=%s", property)
 
+	scopedLog.Info("Creating conf file object if it does not exist", "fileName", fileName, "property", property)
 	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
+		scopedLog.Error(err, "Failed to create conf file object if it does not exist", "fileName", fileName, "property", property)
 		return err
 	}
 
+	scopedLog.Info("Validating conf file object creation", "fileName", fileName, "property", property)
 	expectedStatus := []int{200, 201, 409}
 	err = c.Do(request, expectedStatus, nil)
 	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object creation", expectedStatus), "fileName", fileName, "property", property)
 		return err
 	}
 
@@ -995,25 +1000,37 @@ func (c *SplunkClient) UpdateConfFile(fileName, property string, propertyKVList 
 		body = body[:len(body)-1]
 	}
 
+	scopedLog.Info("Updating conf file object", "fileName", fileName, "property", property, "body", body)
 	request, err = http.NewRequest("POST", endpoint, strings.NewReader(body))
 	if err != nil {
+		scopedLog.Error(err, "Failed to update conf file object", "fileName", fileName, "property", property, "body", body)
 		return err
 	}
 
+	scopedLog.Info("Validating conf file object update", "fileName", fileName, "property", property)
 	expectedStatus = []int{200, 201}
 	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object update", expectedStatus), "fileName", fileName, "property", property, "body", body)
+	}
 	return err
 }
 
 // Deletes conf files properties
-func (c *SplunkClient) DeleteConfFileProperty(fileName, property string) error {
+func (c *SplunkClient) DeleteConfFileProperty(scopedLog logr.Logger, fileName, property string) error {
 	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
 
+	scopedLog.Info("Deleting conf file object", "fileName", fileName, "property", property)
 	request, err := http.NewRequest("DELETE", endpoint, nil)
 	if err != nil {
+		scopedLog.Error(err, "Failed to delete conf file object", "fileName", fileName, "property", property)
 		return err
 	}
 
 	expectedStatus := []int{200, 201, 404}
-	return c.Do(request, expectedStatus, nil)
+	err = c.Do(request, expectedStatus, nil)
+	if err != nil {
+		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object deletion", expectedStatus), "fileName", fileName, "property", property)
+	}
+	return err
 }

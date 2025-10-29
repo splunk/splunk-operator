@@ -16,6 +16,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -23,6 +24,7 @@ import (
 	"testing"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 )
@@ -660,6 +662,9 @@ func TestUpdateConfFile(t *testing.T) {
 	value := "myvalue"
 	fileName := "outputs"
 
+	reqLogger := log.FromContext(context.TODO())
+	scopedLog := reqLogger.WithName("TestUpdateConfFile")
+
 	// First request: create the property (object) if it doesn't exist
 	createBody := strings.NewReader(fmt.Sprintf("name=%s", property))
 	wantCreateRequest, _ := http.NewRequest("POST", "https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs", createBody)
@@ -675,7 +680,7 @@ func TestUpdateConfFile(t *testing.T) {
 	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 
-	err := c.UpdateConfFile(fileName, property, [][]string{{key, value}})
+	err := c.UpdateConfFile(scopedLog, fileName, property, [][]string{{key, value}})
 	if err != nil {
 		t.Errorf("UpdateConfFile err = %v", err)
 	}
@@ -685,7 +690,7 @@ func TestUpdateConfFile(t *testing.T) {
 	mockSplunkClient = &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantCreateRequest, 500, "", nil)
 	c.Client = mockSplunkClient
-	err = c.UpdateConfFile(fileName, property, [][]string{{key, value}})
+	err = c.UpdateConfFile(scopedLog, fileName, property, [][]string{{key, value}})
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on create, got nil")
 	}
@@ -695,7 +700,7 @@ func TestUpdateConfFile(t *testing.T) {
 	mockSplunkClient.AddHandler(wantCreateRequest, 201, "", nil)
 	mockSplunkClient.AddHandler(wantUpdateRequest, 500, "", nil)
 	c.Client = mockSplunkClient
-	err = c.UpdateConfFile(fileName, property, [][]string{{key, value}})
+	err = c.UpdateConfFile(scopedLog, fileName, property, [][]string{{key, value}})
 	if err == nil {
 		t.Errorf("UpdateConfFile expected error on update, got nil")
 	}
@@ -706,6 +711,9 @@ func TestDeleteConfFileProperty(t *testing.T) {
 	property := "myproperty"
 	fileName := "outputs"
 
+	reqLogger := log.FromContext(context.TODO())
+	scopedLog := reqLogger.WithName("TestDeleteConfFileProperty")
+
 	wantDeleteRequest, _ := http.NewRequest("DELETE", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), nil)
 
 	mockSplunkClient := &spltest.MockHTTPClient{}
@@ -714,7 +722,7 @@ func TestDeleteConfFileProperty(t *testing.T) {
 	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
 	c.Client = mockSplunkClient
 
-	err := c.DeleteConfFileProperty(fileName, property)
+	err := c.DeleteConfFileProperty(scopedLog, fileName, property)
 	if err != nil {
 		t.Errorf("DeleteConfFileProperty err = %v", err)
 	}
@@ -724,7 +732,7 @@ func TestDeleteConfFileProperty(t *testing.T) {
 	mockSplunkClient = &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandler(wantDeleteRequest, 500, "", nil)
 	c.Client = mockSplunkClient
-	err = c.DeleteConfFileProperty(fileName, property)
+	err = c.DeleteConfFileProperty(scopedLog, fileName, property)
 	if err == nil {
 		t.Errorf("DeleteConfFileProperty expected error on delete, got nil")
 	}
