@@ -191,7 +191,8 @@ jobs:
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
           cluster-name: ${{ env.TEST_CLUSTER_NAME }}
           inlineScript: |
-            kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+            curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+            kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
       - name: install k8s dashboard
         uses: Azure/aks-set-context@v1
         with:

@@ -1,6 +1,6 @@
 # How to upgrade Splunk Operator and Splunk Enterprise Deployments
 
-To upgrade the Splunk Operator for Kubernetes, you will overwrite the prior Operator release with the latest version. Once the lastest version of `splunk-operator-namespace.yaml` ([see below](#upgrading-splunk-operator-and-splunk-operator-deployment)) is applied the CRD's are updated and Operator deployment is updated with newer version of Splunk Operator image. Any new spec defined by the operator will be applied to the pods managed by Splunk Operator for Kubernetes.
+To upgrade the Splunk Operator for Kubernetes, you will overwrite the prior Operator release with the latest version. Once the lastest version of `splunk-operator-cluster.yaml` or `splunk-operator-namespace.yaml` ([see below](#splunk-operator-upgrade)) is applied, the CRD's are updated and Operator deployment is updated with newer version of Splunk Operator image. Any new spec defined by the operator will be applied to the pods managed by Splunk Operator for Kubernetes.
 ​
 A Splunk Operator for Kubernetes upgrade might include support for a later version of the Splunk Enterprise Docker image. In that scenario, after the Splunk Operator completes its upgrade, the pods managed by Splunk Operator for Kubernetes will be restarted using the latest Splunk Enterprise Docker image.
 ​
@@ -15,6 +15,8 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 * For general information about Splunk Enterprise compatibility and the upgrade process, see [How to upgrade Splunk Enterprise](https://docs.splunk.com/Documentation/Splunk/latest/Installation/HowtoupgradeSplunk).
 ​
 * If you use forwarders, verify the Splunk Enterprise version compatibility with the forwarders in the [Compatibility between forwarders and Splunk Enterprise indexers](https://docs.splunk.com/Documentation/Forwarder/latest/Forwarder/Compatibilitybetweenforwardersandindexers) documentation.
+
+* Verify which manifest you are using in your current setup: cluster or namespace. You can find this information by looking at the splunk-operator-controller-manager deployment that is already running. If the `WATCH_NAMESPACE` environment variable has an empty value, then the splunk-operator-cluster.yaml is being used, and the deployment is watching all namespaces in the cluster. If the `WATCH_NAMESPACE` environment variable has a value with the name of one or multiple namespaces, then the splunk-operator-namespace.yaml is being used, and you will need to follow the [instructions](#configuring-operator-to-watch-specific-namespace) to setup the correct namespaces to watch.
 ​
 
 
@@ -22,8 +24,13 @@ A Splunk Operator for Kubernetes upgrade might include support for a later versi
 
 ## Steps to upgrade from version greater than 1.0.5 to latest
 
-1. Download the latest Splunk Operator installation yaml file.
-​
+1. Download the latest Splunk Operator installation yaml file for your deployment type.
+Cluster-wide:
+```
+wget -O splunk-operator-cluster.yaml https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-cluster.yaml
+```​
+
+Namespace Scoped:
 ```
 wget -O splunk-operator-namespace.yaml https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-namespace.yaml
 ```
@@ -34,6 +41,12 @@ a. **NOTE** The `SPLUNK_GENERAL_TERMS` environment variable is set to an empty s
 
 ​
 3. Upgrade the Splunk Operator.​
+Cluster-wide:
+```
+kubectl apply -f splunk-operator-cluster.yaml --server-side
+```​
+
+Namespace Scoped:
 ```
 kubectl apply -f splunk-operator-namespace.yaml --server-side
 ```
