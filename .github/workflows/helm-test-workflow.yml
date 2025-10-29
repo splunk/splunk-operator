@@ -5,6 +5,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-3551-ingestion-cr-int-helm-tests-run
   workflow_dispatch:
 jobs:
   build-operator-image:

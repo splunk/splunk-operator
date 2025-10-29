@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - CSPL-3551-ingestion-cr-int-helm-tests-run
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
