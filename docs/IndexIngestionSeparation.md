@@ -12,6 +12,10 @@ This separation enables:
 > [!WARNING]
 > **As of now, only brand new deployments are supported for Index and Ingestion Separation. No migration path is implemented, described or tested for existing deployments to move from a standard model to Index & Ingestion separation model.**
 
+# Document Variables
+
+- SPLUNK_IMAGE_VERSION: Splunk Enterprise Docker Image version
+
 # BusConfiguration
 
 BusConfiguration is introduced to store message bus configuration to be shared among IngestorCluster and IndexerCluster.
@@ -70,9 +74,9 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk 10.0.0 image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Push Bus reference allows the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Push Bus reference allows the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, the setup the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -84,7 +88,7 @@ metadata:
 spec:
   serviceAccount: ingestor-sa 
   replicas: 3
-  image: splunk/splunk:10.0.0
+  image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   busConfigurationRef:
     name: bus-config
 ```
@@ -104,7 +108,7 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk 10.0.0 image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Pull Bus reference allows the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Pull Bus reference allows the user to specify queue and bucket settings for the indexing process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
@@ -117,7 +121,7 @@ metadata:
     - enterprise.splunk.com/delete-pvc
 spec:
   serviceAccount: ingestor-sa 
-  image: splunk/splunk:10.0.0
+  image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
 ---
 apiVersion: enterprise.splunk.com/v4
 kind: IndexerCluster
@@ -130,47 +134,14 @@ spec:
     name: cm
   serviceAccount: ingestor-sa
   replicas: 3 
-  image: splunk/splunk:10.0.0
+  image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   busConfigurationRef:
     name: bus-config
 ```
 
 # Common Spec
 
-The spec section is used to define the desired state for a resource. All custom resources provided by the Splunk Operator (with an exception for BusConfiguration) include the following
-configuration parameters. 
-
-| Key                   | Type       | Description                                                                                                |
-| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| image                 | string     | Container image to use for pod instances (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE environment variable) |
-| imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
-| livenessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for liveness probe (default: 300)                           |
-| readinessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for readiness probe (default: 10)                           |
-| extraEnv       | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core)     | Sets the extra environment variables to be passed to the Splunk instance containers (WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation)                          |
-| schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
-| affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance (The default settings should be considered for demo/test purposes.  Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/README.md#hardware-resources-requirements) for production values.) |
-| serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create [Kubernetes services](https://kubernetes.io/docs/concepts/services-networking/service/) |
-| topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create [Kubernetes TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
-
-The following additional configuration parameters may be used for all Splunk Enterprise resources.
-
-| Key                | Type    | Description                                                                   |
-| ------------------ | ------- | ----------------------------------------------------------------------------- |
-| etcVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk etc volume as described in [StorageClass](StorageClass.md) |
-| varVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk var volume as described in [StorageClass](StorageClass.md) |
-| volumes            | [Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/) (These will be mounted in all container pods as `/mnt/<name>`) |
-| defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) used to initialize the environment |
-| defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files (separated by commas) |
-| licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
-| licenseManagerRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed LicenseManager instance (via name and optionally namespace) to use for licensing |
-| clusterManagerRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed ClusterManager instance (via name and optionally namespace) to use for indexing |
-| monitoringConsoleRef  | string     | Logical name assigned to the Monitoring Console pod (You can set the name before or after the MC pod creation) |
-| serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
-| extraEnv | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core) | Extra environment variables to be passed to the Splunk instance containers |
-| readinessInitialDelaySeconds | number | Defines initialDelaySeconds for readiness probe |
-| livenessInitialDelaySeconds | number | Defines initialDelaySeconds for the liveness probe |
-| imagePullSecrets | [ImagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry (Use in conjunction with image config from [common spec](#common-spec-parameters-for-all-resources)) |
+Common spec values for all SOK Custom Resources can be found in [CustomResources doc](CustomResources.md).
 
 # Helm Charts
 
@@ -334,7 +305,7 @@ To automatically adjust the number of replicas to serve the ingestion traffic ef
 
 ## Example
 
-The exmaple presented below configures HorizontalPodAutoscaler named ingestor-hpa that resides in a default namespace to scale IngestorCluster custom resource named ingestor. With average utilization set to 50, the HorizontalPodAutoscaler resource will try to keep the average utilization of the pods in the scaling target at 50%. It will be able to scale the replicas starting from the minimum number of 3 with the maximum number of 10 replicas.
+The exmaple presented below configures HorizontalPodAutoscaler named ingestor-hpa that resides in a default namespace (same namespace as resources it is managing) to scale IngestorCluster custom resource named ingestor. With average utilization set to 50, the HorizontalPodAutoscaler resource will try to keep the average utilization of the pods in the scaling target at 50%. It will be able to scale the replicas starting from the minimum number of 3 with the maximum number of 10 replicas.
 
 ```                             
 apiVersion: autoscaling/v2
@@ -596,7 +567,7 @@ metadata:
 spec:
   serviceAccount: ingestor-sa 
   replicas: 3
-  image: splunk/splunk:10.0.0
+  image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   busConfigurationRef:
     name: bus-config
 ```
@@ -630,7 +601,7 @@ Spec:
   Bus Configuration Ref:
     Name:           bus-config
     Namespace:      default
-  Image:  splunk/splunk:10.0.0
+  Image:  splunk/splunk:${SPLUNK_IMAGE_VERSION}
   Replicas:                          3
   Service Account:                   ingestor-sa
 Status:
@@ -718,7 +689,7 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  image: splunk/splunk:10.0.0
+  image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   serviceAccount: ingestor-sa 
 ---
 apiVersion: enterprise.splunk.com/v4
@@ -728,7 +699,7 @@ metadata:
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  image: splunk/splunk:10.0.0
+  image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   replicas: 3
   clusterManagerRef:
     name: cm
