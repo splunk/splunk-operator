@@ -4,11 +4,11 @@
 # Grants read-only access to enterprise.splunk.com resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
-
+{{- if .Values.splunkOperator.clusterWideAccess }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: busconfiguration-viewer-role
+  name: {{ include "splunk-operator.operator.fullname" . }}-busconfiguration-viewer-role
 rules:
 - apiGroups:
   - enterprise.splunk.com
@@ -24,3 +24,24 @@ rules:
   - busconfigurations/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-busconfiguration-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - busconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - busconfigurations/status
+  verbs:
+  - get
+{{- end }}
