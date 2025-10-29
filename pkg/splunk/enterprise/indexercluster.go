@@ -268,6 +268,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
 				if err != nil {
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 					return result, err
 				}
@@ -558,6 +559,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
 				if err != nil {
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 					return result, err
 				}
@@ -1233,6 +1235,9 @@ var newSplunkClientForBusPipeline = splclient.NewSplunkClient
 
 // Checks if only PullBus or Pipeline config changed, and updates the conf file if so
 func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("handlePullBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
 
@@ -1250,10 +1255,10 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		afterDelete := false
 		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
 			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
-			if err := splunkClient.DeleteConfFileProperty("outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
-			if err := splunkClient.DeleteConfFileProperty("inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -1262,19 +1267,19 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, afterDelete)
 
 		for _, pbVal := range busChangedFieldsOutputs {
-			if err := splunkClient.UpdateConfFile("outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, pbVal := range busChangedFieldsInputs {
-			if err := splunkClient.UpdateConfFile("inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, field := range pipelineChangedFields {
-			if err := splunkClient.UpdateConfFile("default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
 				updateErr = err
 			}
 		}
@@ -1284,6 +1289,7 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 	return updateErr
 }
 
+// getChangedBusFieldsForIndexer returns a list of changed bus and pipeline fields for indexer pods
 func getChangedBusFieldsForIndexer(busConfig *enterpriseApi.BusConfiguration, busConfigIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
 	// Compare bus fields
 	oldPB := busConfigIndexerStatus.Status.BusConfiguration
