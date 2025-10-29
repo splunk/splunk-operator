@@ -249,6 +249,32 @@ rules:
   - patch
   - update
 - apiGroups:
+    - enterprise.splunk.com
+  resources:
+  - busconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - busconfigurations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - busconfigurations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - enterprise.splunk.com
   resources:
   - licensemasters
