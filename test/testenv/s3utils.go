@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -267,10 +268,28 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 
 		// Disable the app
 		// - Get the name of the untarred app folder (as it could be different from the tgz file)
-		wildcardpath := untarredCurrentAppFolder + "/*/./"
-		bytepath, _ := exec.Command("/bin/sh", "-c", "cd "+wildcardpath+"; pwd").Output()
-		untarredAppRootFolder := string(bytepath)
-		untarredAppRootFolder = untarredAppRootFolder[:len(untarredAppRootFolder)-1] //removing \n at the end of folder path
+		// Use filepath.ReadDir to reliably get the first directory
+		entries, err := os.ReadDir(untarredCurrentAppFolder)
+		if err != nil {
+			log.Fatalln(err)
+			return nil, err
+		}
+
+		var appFolderName string
+		for _, entry := range entries {
+			if entry.IsDir() {
+				appFolderName = entry.Name()
+				break
+			}
+		}
+
+		if appFolderName == "" {
+			err := fmt.Errorf("no app directory found in %s", untarredCurrentAppFolder)
+			log.Fatalln(err)
+			return nil, err
+		}
+
+		untarredAppRootFolder := filepath.Join(untarredCurrentAppFolder, appFolderName)
 
 		// - Edit /default/app.conf (add "state = disabled" in [install] stanza)
 		appConfFile := untarredAppRootFolder + "/default/app.conf"
@@ -295,8 +314,6 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		}
 
 		// Tar disabled app folder
-		lastInd = strings.LastIndex(untarredAppRootFolder, "/")
-		appFolderName := untarredAppRootFolder[lastInd+1:]
 		tarDestination := disabledAppsFolder + "/" + key
 		cmd = exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName)
 		cmd.Run()

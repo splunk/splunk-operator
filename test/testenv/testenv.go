@@ -25,6 +25,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/internal/controller"
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
@@ -275,6 +276,44 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.kubeClient = kubeManager.GetClient()
 	if testenv.kubeClient == nil {
 		return nil, fmt.Errorf("kubeClient is nil")
+	}
+
+	// Register controllers with the manager
+	if err := (&controller.ClusterManagerReconciler{
+		Client: kubeManager.GetClient(),
+		Scheme: kubeManager.GetScheme(),
+	}).SetupWithManager(kubeManager); err != nil {
+		return nil, fmt.Errorf("unable to setup ClusterManagerReconciler: %w", err)
+	}
+	if err := (&controller.IndexerClusterReconciler{
+		Client: kubeManager.GetClient(),
+		Scheme: kubeManager.GetScheme(),
+	}).SetupWithManager(kubeManager); err != nil {
+		return nil, fmt.Errorf("unable to setup IndexerClusterReconciler: %w", err)
+	}
+	if err := (&controller.LicenseManagerReconciler{
+		Client: kubeManager.GetClient(),
+		Scheme: kubeManager.GetScheme(),
+	}).SetupWithManager(kubeManager); err != nil {
+		return nil, fmt.Errorf("unable to setup LicenseManagerReconciler: %w", err)
+	}
+	if err := (&controller.MonitoringConsoleReconciler{
+		Client: kubeManager.GetClient(),
+		Scheme: kubeManager.GetScheme(),
+	}).SetupWithManager(kubeManager); err != nil {
+		return nil, fmt.Errorf("unable to setup MonitoringConsoleReconciler: %w", err)
+	}
+	if err := (&controller.SearchHeadClusterReconciler{
+		Client: kubeManager.GetClient(),
+		Scheme: kubeManager.GetScheme(),
+	}).SetupWithManager(kubeManager); err != nil {
+		return nil, fmt.Errorf("unable to setup SearchHeadClusterReconciler: %w", err)
+	}
+	if err := (&controller.StandaloneReconciler{
+		Client: kubeManager.GetClient(),
+		Scheme: kubeManager.GetScheme(),
+	}).SetupWithManager(kubeManager); err != nil {
+		return nil, fmt.Errorf("unable to setup StandaloneReconciler: %w", err)
 	}
 
 	// We need to start the manager to setup the cache. Otherwise, we have to
