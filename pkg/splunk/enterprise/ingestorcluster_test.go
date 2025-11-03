@@ -22,13 +22,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -105,7 +111,7 @@ func init() {
 
 // 	secret := &corev1.Secret{
 // 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:      "test-secrets",
+// 			Name:      splcommon.GetNamespaceScopedSecretName("test"),
 // 			Namespace: "test",
 // 		},
 // 		Data: map[string][]byte{"password": []byte("dummy")},
@@ -186,7 +192,7 @@ func init() {
 // 					Name: "mnt-splunk-secrets",
 // 					VolumeSource: corev1.VolumeSource{
 // 						Secret: &corev1.SecretVolumeSource{
-// 							SecretName: "test-secrets",
+// 							SecretName: secret.Name,
 // 						},
 // 					},
 // 				},
@@ -245,12 +251,15 @@ func init() {
 // 	// outputs.conf
 // 	origNew := newIngestorClusterPodManager
 // 	mockHTTPClient := &spltest.MockHTTPClient{}
-// 	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc) ingestorClusterPodManager {
+// 	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, client splcommon.ControllerClient) ingestorClusterPodManager {
 // 		return ingestorClusterPodManager{
-// 			log: l, cr: cr, secrets: secret,
+// 			log:     l,
+// 			cr:      cr,
+// 			secrets: secret,
 // 			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
 // 				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
 // 			},
+// 			c: client,
 // 		}
 // 	}
 // 	defer func() { newIngestorClusterPodManager = origNew }()

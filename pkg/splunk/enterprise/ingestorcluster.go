@@ -228,7 +228,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		// If bus config is updated
 		if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
-			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 
 			err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
 			if err != nil {
@@ -390,12 +390,13 @@ type ingestorClusterPodManager struct {
 }
 
 // newIngestorClusterPodManager function to create pod manager this is added to write unit test case
-var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) ingestorClusterPodManager {
+var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 	return ingestorClusterPodManager{
 		log:             log,
 		cr:              cr,
 		secrets:         secret,
 		newSplunkClient: newSplunkClient,
+		c:               c,
 	}
 }
 
