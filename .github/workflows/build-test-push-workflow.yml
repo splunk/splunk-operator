@@ -5,6 +5,7 @@ on:
     branches:
     - main
     - develop
+    - CSPL-3551-ingestion-cr-copy-for-tests
 jobs:
   check-formating:
     runs-on: ubuntu-latest
