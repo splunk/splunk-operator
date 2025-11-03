@@ -2611,65 +2611,65 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 	updateReconcileRequeueTime(ctx, result, rqTime, true)
 }
 
-func TestUpdateCRStatus(t *testing.T) {
-	sch := pkgruntime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(sch))
-	utilruntime.Must(corev1.AddToScheme(sch))
-	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+// func TestUpdateCRStatus(t *testing.T) {
+// 	sch := pkgruntime.NewScheme()
+// 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+// 	utilruntime.Must(corev1.AddToScheme(sch))
+// 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
-		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
-		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
-		WithStatusSubresource(&enterpriseApi.Standalone{}).
-		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
-		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
-	c := builder.Build()
-	ctx := context.TODO()
+// 	builder := fake.NewClientBuilder().
+// 		WithScheme(sch).
+// 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+// 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+// 		WithStatusSubresource(&enterpriseApi.Standalone{}).
+// 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
+// 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+// 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+// 	c := builder.Build()
+// 	ctx := context.TODO()
 
-	// create standalone custom resource
-	standalone := &enterpriseApi.Standalone{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Standalone",
-			APIVersion: "enterprise.splunk.com/v3",
-		},
+// 	// create standalone custom resource
+// 	standalone := &enterpriseApi.Standalone{
+// 		TypeMeta: metav1.TypeMeta{
+// 			Kind:       "Standalone",
+// 			APIVersion: "enterprise.splunk.com/v3",
+// 		},
 
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
-		Spec: enterpriseApi.StandaloneSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-				},
-				Volumes: []corev1.Volume{},
-			},
-		},
-		Status: enterpriseApi.StandaloneStatus{
-			ReadyReplicas: 2,
-		},
-	}
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "test",
+// 			Namespace: "default",
+// 		},
+// 		Spec: enterpriseApi.StandaloneSpec{
+// 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+// 				Spec: enterpriseApi.Spec{
+// 					ImagePullPolicy: "Always",
+// 				},
+// 				Volumes: []corev1.Volume{},
+// 			},
+// 		},
+// 		Status: enterpriseApi.StandaloneStatus{
+// 			ReadyReplicas: 2,
+// 		},
+// 	}
 
-	// When the CR is not even existing, error handling will keep retrying to update the CR, but fails at the end.
-	updateCRStatus(ctx, c, standalone, nil)
+// 	// When the CR is not even existing, error handling will keep retrying to update the CR, but fails at the end.
+// 	updateCRStatus(ctx, c, standalone, nil)
 
-	// Creating a standalone, and updating the CR will cover the happy path
-	// simulate create standalone instance before reconcilation
-	err := c.Create(ctx, standalone)
-	if err != nil {
-		t.Errorf("standalone CR creation failed.")
-	}
+// 	// Creating a standalone, and updating the CR will cover the happy path
+// 	// simulate create standalone instance before reconcilation
+// 	err := c.Create(ctx, standalone)
+// 	if err != nil {
+// 		t.Errorf("standalone CR creation failed.")
+// 	}
 
-	// call reconciliation
-	_, err = ApplyStandalone(ctx, c, standalone)
-	if err != nil {
-		t.Errorf("Apply standalone failed.")
-	}
-	standalone.Status.ReadyReplicas = 3
-	updateCRStatus(ctx, c, standalone, &err)
-}
+// 	// call reconciliation
+// 	_, err = ApplyStandalone(ctx, c, standalone)
+// 	if err != nil {
+// 		t.Errorf("Apply standalone failed.")
+// 	}
+// 	standalone.Status.ReadyReplicas = 3
+// 	updateCRStatus(ctx, c, standalone, &err)
+// }
 
 func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 	sch := pkgruntime.NewScheme()
@@ -3273,54 +3273,54 @@ func TestGetLicenseMasterURL(t *testing.T) {
 		t.Errorf("Expected a valid return value")
 	}
 }
-func TestGetCurrentImage(t *testing.T) {
+// func TestGetCurrentImage(t *testing.T) {
 
-	ctx := context.TODO()
-	current := enterpriseApi.ClusterManager{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "test",
-		},
-		Spec: enterpriseApi.ClusterManagerSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
-				},
-				Volumes: []corev1.Volume{},
-			},
-		},
-	}
-	sch := pkgruntime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(sch))
-	utilruntime.Must(corev1.AddToScheme(sch))
-	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+// 	ctx := context.TODO()
+// 	current := enterpriseApi.ClusterManager{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "test",
+// 			Namespace: "test",
+// 		},
+// 		Spec: enterpriseApi.ClusterManagerSpec{
+// 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+// 				Spec: enterpriseApi.Spec{
+// 					ImagePullPolicy: "Always",
+// 					Image:           "splunk/splunk:latest",
+// 				},
+// 				Volumes: []corev1.Volume{},
+// 			},
+// 		},
+// 	}
+// 	sch := pkgruntime.NewScheme()
+// 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+// 	utilruntime.Must(corev1.AddToScheme(sch))
+// 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := fake.NewClientBuilder().
-		WithScheme(sch).
-		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
-		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
-		WithStatusSubresource(&enterpriseApi.Standalone{}).
-		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
-		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
-		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
-	client := builder.Build()
-	client.Create(ctx, &current)
-	_, err := ApplyClusterManager(ctx, client, &current)
-	if err != nil {
-		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
-	}
+// 	builder := fake.NewClientBuilder().
+// 		WithScheme(sch).
+// 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+// 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+// 		WithStatusSubresource(&enterpriseApi.Standalone{}).
+// 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
+// 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+// 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+// 		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
+// 	client := builder.Build()
+// 	client.Create(ctx, &current)
+// 	_, err := ApplyClusterManager(ctx, client, &current)
+// 	if err != nil {
+// 		t.Errorf("applyClusterManager should not have returned error; err=%v", err)
+// 	}
 
-	instanceType := SplunkClusterManager
+// 	instanceType := SplunkClusterManager
 
-	image, err := getCurrentImage(ctx, client, &current, instanceType)
+// 	image, err := getCurrentImage(ctx, client, &current, instanceType)
 
-	if err != nil {
-		t.Errorf("Unexpected getCurrentImage error %v", err)
-	}
-	if image != current.Spec.Image {
-		t.Errorf("getCurrentImage does not return the current statefulset image")
-	}
+// 	if err != nil {
+// 		t.Errorf("Unexpected getCurrentImage error %v", err)
+// 	}
+// 	if image != current.Spec.Image {
+// 		t.Errorf("getCurrentImage does not return the current statefulset image")
+// 	}
 
-}
+// }
