@@ -282,7 +282,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					if err != nil {
 						return result, err
 					}
-					scopedLog.Info("Restarted Splunk for indexer %d", i)
+					scopedLog.Info("Restarted Splunk for indexer", "index", i)
 				}
 			}
 		}
@@ -583,7 +583,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					if err != nil {
 						return result, err
 					}
-					scopedLog.Info("Restarted Splunk for indexer %d", i)
+					scopedLog.Info("Restarted Splunk for indexer", "index", i)
 				}
 			}
 		}

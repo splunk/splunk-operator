@@ -246,7 +246,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				if err != nil {
 					return result, err
 				}
-				scopedLog.Info("Restarted Splunk for indexer %d", i)
+				scopedLog.Info("Restarted Splunk for ingestor", "ingestor", i)
 			}
 		}
 
