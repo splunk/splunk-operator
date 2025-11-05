@@ -4120,14 +4120,15 @@ func TestGetClusterScopedAppsLocOnPod(t *testing.T) {
 		},
 	}
 
-	// Should return empty cluster apps location
-	if getClusterScopedAppsLocOnPod(cr) != "" {
-		t.Errorf("When the clustering is not applicable to the CR, location should be empty")
+	// Should return standalone deployment-apps location
+	retLoc := getClusterScopedAppsLocOnPod(cr)
+	if retLoc != standaloneAppsLocationOnDeploymentApps {
+		t.Errorf("Standalone: Expected location: %v, but got: %v", standaloneAppsLocationOnDeploymentApps, retLoc)
 	}
 
 	// should return master apps location
 	cr.TypeMeta.Kind = "ClusterManager"
-	retLoc := getClusterScopedAppsLocOnPod(cr)
+	retLoc = getClusterScopedAppsLocOnPod(cr)
 	if retLoc != idxcAppsLocationOnClusterManager {
 		t.Errorf("ClusterManager: Expected location: %v, but got: %v", idxcAppsLocationOnClusterManager, retLoc)
 	}
@@ -4149,10 +4150,15 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	}
 
 	podExecCommands := []string{
+		fmt.Sprintf(cmdSetFilePermissionsToRW, standaloneAppsLocationOnDeploymentApps),
 		fmt.Sprintf(cmdSetFilePermissionsToRW, idxcAppsLocationOnClusterManager),
 		fmt.Sprintf(cmdSetFilePermissionsToRW, shcAppsLocationOnDeployer),
 	}
 	mockPodExecReturnContexts := []*spltest.MockPodExecReturnContext{
+		{
+			StdOut: "",
+			StdErr: "",
+		},
 		{
 			StdOut: "",
 			StdErr: "",
@@ -4166,10 +4172,10 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{Cr: cr}
 	mockPodExecClient.AddMockPodExecReturnContexts(ctx, podExecCommands, mockPodExecReturnContexts...)
 
-	// For a CR with no cluster scope, should return an error
+	// For Standalone, should not return an error (now supports cluster scope)
 	err := adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
-	if err == nil || strings.Compare(err.Error(), "invalid Cluster apps location") != 0 {
-		t.Errorf("For CR kind Standalone, should return an error")
+	if err != nil {
+		t.Errorf("For CR kind Standalone, should not return an error, but got: %v", err)
 	}
 
 	// For CM, should not return an error
@@ -4180,12 +4186,12 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	}
 
 	// When the permissions changes fails, should return an error
-	mockPodExecReturnContexts[0].StdErr = "Failed"
+	mockPodExecReturnContexts[1].StdErr = "Failed"
 	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err == nil {
 		t.Errorf("When the file permissions can't be modified, should return an error")
 	}
-	mockPodExecReturnContexts[0].StdErr = ""
+	mockPodExecReturnContexts[1].StdErr = ""
 
 	// For SHC, should not return an error
 	cr.TypeMeta.Kind = "SearchHeadCluster"
@@ -4195,12 +4201,12 @@ func TestAdjustClusterAppsFilePermissions(t *testing.T) {
 	}
 
 	// When the permissions changes fails, should return an error
-	mockPodExecReturnContexts[1].StdErr = "Invalid path"
+	mockPodExecReturnContexts[2].StdErr = "Invalid path"
 	err = adjustClusterAppsFilePermissions(ctx, mockPodExecClient)
 	if err == nil {
 		t.Errorf("When the file permissions can't be modified, should return an error")
 	}
-	mockPodExecReturnContexts[0].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = ""
 }
 
 func TestGetTelAppNameExtension(t *testing.T) {
