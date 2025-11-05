@@ -1,0 +1,50 @@
+---
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterManager
+metadata:
+  name: cm
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+---
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: idxc
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  clusterManagerRef:
+    name: cm
+  licenseManagerRef:
+    name: lm
+  replicas: 3
+---
+apiVersion: enterprise.splunk.com/v4
+kind: SearchHeadCluster
+metadata:
+  name: shc
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  clusterManagerRef:
+    name: cm
+  licenseManagerRef:
+    name: lm
+  replicas: 3
+---
+apiVersion: enterprise.splunk.com/v4
+kind: LicenseManager
+metadata:
+  name: lm
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  volumes:
+    - name: licenses
+      configMap:
+        name: splunk-licenses
+  licenseUrl: /mnt/licenses/enterprise.lic

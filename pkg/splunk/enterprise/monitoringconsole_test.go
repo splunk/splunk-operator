@@ -290,6 +290,126 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	newURLsAdded = true
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
 }
+
+func TestAddURLsConfigMapMultipleEnvVars(t *testing.T) {
+	// Scenario: Multiple URL types need to be added/updated
+	// The first URL already exists and matches, but subsequent URLs need processing
+
+	t.Run("All URLs processed when first matches", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-cluster-manager-service",
+				"SPLUNK_INDEXER_URL":         "splunk-idx-indexer-0,splunk-idx-indexer-1",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},                      // matches
+			{Name: "SPLUNK_INDEXER_URL", Value: "splunk-idx-indexer-0,splunk-idx-indexer-1,splunk-idx-indexer-2"}, // scale up
+			{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-sh-search-head-0,splunk-sh-search-head-1"},            // new
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		if configMap.Data["SPLUNK_CLUSTER_MANAGER_URL"] != "splunk-cm-cluster-manager-service" {
+			t.Errorf("SPLUNK_CLUSTER_MANAGER_URL was modified, expected unchanged")
+		}
+
+		expectedIndexerURL := "splunk-idx-indexer-0,splunk-idx-indexer-1,splunk-idx-indexer-2"
+		if configMap.Data["SPLUNK_INDEXER_URL"] != expectedIndexerURL {
+			t.Errorf("SPLUNK_INDEXER_URL not updated correctly. Got: %s, Want: %s",
+				configMap.Data["SPLUNK_INDEXER_URL"], expectedIndexerURL)
+		}
+
+		expectedSearchHeadURL := "splunk-sh-search-head-0,splunk-sh-search-head-1"
+		if configMap.Data["SPLUNK_SEARCH_HEAD_URL"] != expectedSearchHeadURL {
+			t.Errorf("SPLUNK_SEARCH_HEAD_URL not added. Got: %s, Want: %s",
+				configMap.Data["SPLUNK_SEARCH_HEAD_URL"], expectedSearchHeadURL)
+		}
+	})
+
+	t.Run("Multiple matching URLs all preserved", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-cluster-manager-service",
+				"SPLUNK_INDEXER_URL":         "splunk-idx-indexer-0,splunk-idx-indexer-1",
+				"SPLUNK_SEARCH_HEAD_URL":     "splunk-sh-search-head-0",
+				"SPLUNK_LICENSE_MANAGER_URL": "splunk-lm-license-manager-service",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},
+			{Name: "SPLUNK_INDEXER_URL", Value: "splunk-idx-indexer-0,splunk-idx-indexer-1"},
+			{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-sh-search-head-0"},
+			{Name: "SPLUNK_LICENSE_MANAGER_URL", Value: "splunk-lm-license-manager-service"},
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		for _, url := range newURLs {
+			if val, ok := configMap.Data[url.Name]; !ok {
+				t.Errorf("URL %s was removed from ConfigMap (bug manifestation)", url.Name)
+			} else if val != url.Value {
+				t.Errorf("URL %s was modified. Got: %s, Want: %s", url.Name, val, url.Value)
+			}
+		}
+	})
+
+	t.Run("First URL matches, second is new, third scales up", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{
+				"SPLUNK_CLUSTER_MANAGER_URL": "splunk-cm-cluster-manager-service",
+				"SPLUNK_INDEXER_URL":         "splunk-idx-indexer-0",
+			},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"}, // matches
+			{Name: "SPLUNK_LICENSE_MANAGER_URL", Value: "splunk-lm-license-manager-service"}, // new
+			{Name: "SPLUNK_INDEXER_URL", Value: "splunk-idx-indexer-0,splunk-idx-indexer-1"}, // scale up
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		if _, ok := configMap.Data["SPLUNK_CLUSTER_MANAGER_URL"]; !ok {
+			t.Errorf("SPLUNK_CLUSTER_MANAGER_URL was removed")
+		}
+
+		if _, ok := configMap.Data["SPLUNK_LICENSE_MANAGER_URL"]; !ok {
+			t.Errorf("SPLUNK_LICENSE_MANAGER_URL was not added (bug: loop exited early)")
+		}
+
+		expectedIndexerURL := "splunk-idx-indexer-0,splunk-idx-indexer-1"
+		if configMap.Data["SPLUNK_INDEXER_URL"] != expectedIndexerURL {
+			t.Errorf("SPLUNK_INDEXER_URL not scaled up. Got: %s, Want: %s",
+				configMap.Data["SPLUNK_INDEXER_URL"], expectedIndexerURL)
+		}
+	})
+
+	t.Run("Empty ConfigMap with multiple URLs", func(t *testing.T) {
+		configMap := &corev1.ConfigMap{
+			Data: map[string]string{},
+		}
+
+		newURLs := []corev1.EnvVar{
+			{Name: "SPLUNK_CLUSTER_MANAGER_URL", Value: "splunk-cm-cluster-manager-service"},
+			{Name: "SPLUNK_INDEXER_URL", Value: "splunk-idx-indexer-0,splunk-idx-indexer-1"},
+			{Name: "SPLUNK_SEARCH_HEAD_URL", Value: "splunk-sh-search-head-0"},
+		}
+
+		AddURLsConfigMap(configMap, "test-cr", newURLs)
+
+		for _, url := range newURLs {
+			if val, ok := configMap.Data[url.Name]; !ok {
+				t.Errorf("URL %s was not added to empty ConfigMap", url.Name)
+			} else if val != url.Value {
+				t.Errorf("URL %s has wrong value. Got: %s, Want: %s", url.Name, val, url.Value)
+			}
+		}
+	})
+}
+
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
