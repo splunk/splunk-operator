@@ -42,7 +42,7 @@ jobs:
   #       make docker-buildx IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   setup-aks-cluster:
     runs-on: ubuntu-latest
-    needs: build-operator-image
+    # needs: build-operator-image
     env:
       CLUSTER_WORKERS: 5
       TEST_CLUSTER_PLATFORM: azure
@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
-    # needs: setup-aks-cluster
+    needs: setup-aks-cluster
     env:
       CLUSTER_NODES: 2
       CLUSTER_WORKERS: 5
