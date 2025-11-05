@@ -1,30 +1,25 @@
 // Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
-
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package enterprise
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"runtime/debug"
-	"testing"
-	"time"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,13 +27,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"testing"
+	"time"
 )
 
 func init() {
@@ -56,7 +51,6 @@ func init() {
 		return fileLocation
 	}
 }
-
 func TestApplyMonitoringConsole(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	funcCalls := []spltest.MockFuncCall{
@@ -79,7 +73,6 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
-
 	updateFuncCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -98,12 +91,10 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 		{MetaName: "*v4.MonitoringConsole-test-stack1"},
 	}
-
 	labels := map[string]string{
 		"app.kubernetes.io/component":  "versionedSecrets",
 		"app.kubernetes.io/managed-by": "splunk-operator",
 	}
-
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
 		client.MatchingLabels(labels),
@@ -111,15 +102,12 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	listOpts2 := []client.ListOption{
 		client.InNamespace("test"),
 	}
-
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts},
 		{ListOpts: listOpts2},
 	}
-
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[9], funcCalls[11], funcCalls[12], funcCalls[6]}, "Update": {funcCalls[0], funcCalls[12]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[5]}, "List": {listmockCall[0]}}
-
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
@@ -136,7 +124,6 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		return err
 	}
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &current, revised, createCalls, updateCalls, reconcile, true)
-
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	revised.ObjectMeta.DeletionTimestamp = &currentTime
@@ -147,37 +134,29 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	}
 	splunkDeletionTester(t, revised, deleteFunc)
 }
-
 func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.ConfigMap-test-splunk-test-monitoring-console"},
 	}
-
 	env := []corev1.EnvVar{
 		{Name: "A", Value: "a"},
 	}
-
 	newURLsAdded := true
 	monitoringConsoleRef := "test"
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
 		_, err := ApplyMonitoringConsoleEnvConfigMap(ctx, c, "test", "test", monitoringConsoleRef, env, newURLsAdded)
 		return err
 	}
-
 	//if monitoring-console env configMap doesn't exist, then create one
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false)
-
 	//if configMap exists then update it
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	newURLsAdded = true
-
 	current := corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -185,15 +164,11 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		},
 		Data: map[string]string{"a": "b"},
 	}
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	//check for deletion
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	newURLsAdded = false
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -201,20 +176,14 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		},
 		Data: map[string]string{"a": "b"},
 	}
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	//no configMap exist and try to do deletion then just create a empty configMap
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false)
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -223,16 +192,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"A": "a,b"},
 	}
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-a"},
 	}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -241,16 +206,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"A": "test-a"},
 	}
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-a,test-b"},
 	}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -259,16 +220,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"A": "test-a"},
 	}
 	newURLsAdded = true
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-a"},
 	}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -277,16 +234,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"A": "test-a,test-b"},
 	}
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-b"},
 	}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -295,16 +248,12 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"A": "test-a,test-b"},
 	}
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	env = []corev1.EnvVar{
 		{Name: "SPLUNK_MULTISITE_MASTER", Value: "test-a"},
 	}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -313,13 +262,10 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"SPLUNK_MULTISITE_MASTER": "test-a", "SPLUNK_SITE": "abc"},
 	}
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-a,test-b"},
 	}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -327,18 +273,13 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		},
 		Data: map[string]string{"A": "test-a,test-b,test-c"},
 	}
-
 	newURLsAdded = false
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 	env = []corev1.EnvVar{
 		{Name: "A", Value: "test-b"},
 	}
-
 	createCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
 	updateCalls = map[string][]spltest.MockFuncCall{"Get": funcCalls}
-
 	current = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console",
@@ -347,14 +288,10 @@ func TestApplyMonitoringConsoleEnvConfigMap(t *testing.T) {
 		Data: map[string]string{"A": "test-a,test-b"},
 	}
 	newURLsAdded = true
-
 	spltest.ReconcileTester(t, "TestApplyMonitoringConsoleEnvConfigMap", "test", "test", createCalls, updateCalls, reconcile, false, &current)
-
 }
-
 func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
 	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -362,13 +299,11 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-
 	c := spltest.NewMockClient()
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
 	}
-
 	test := func(want string) {
 		f := func() (interface{}, error) {
 			if err := validateMonitoringConsoleSpec(ctx, c, &cr); err != nil {
@@ -378,16 +313,12 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 		}
 		configTester(t, "getMonitoringConsoleStatefulSet()", f, want)
 	}
-
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_with_defaults.json"))
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = true
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = true
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"mnt-splunk-etc","emptyDir":{}},{"name":"mnt-splunk-var","emptyDir":{}},{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"mnt-splunk-etc","mountPath":"/opt/splunk/etc"},{"name":"mnt-splunk-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_with_apps.json"))
 	cr.Spec.EtcVolumeStorageConfig.EphemeralStorage = false
 	cr.Spec.VarVolumeStorageConfig.EphemeralStorage = false
-
 	cr.Spec.ClusterManagerRef.Name = "stack2"
 	cr.Spec.EtcVolumeStorageConfig.StorageClassName = "gp2"
 	cr.Spec.VarVolumeStorageConfig.StorageClassName = "gp2"
@@ -397,11 +328,9 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	cr.Spec.Volumes = []corev1.Volume{
 		{Name: "defaults"},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"defaults"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-monitoring-console-defaults","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack2-cluster-manager-service"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"defaults","mountPath":"/mnt/defaults"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"custom-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_with_service_account_2.json"))
 	cr.Spec.DefaultsURLApps = "/mnt/apps/apps.yml"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"defaults"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-monitoring-console-defaults","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack2-cluster-manager-service"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"defaults","mountPath":"/mnt/defaults"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"custom-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_base.json"))
 	// Create a serviceaccount
 	current := corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -411,8 +340,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"defaults"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-monitoring-console-defaults","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack2-cluster-manager-service"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"defaults","mountPath":"/mnt/defaults"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"custom-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_base_1.json"))
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
 		{
@@ -420,18 +348,16 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"defaults"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-monitoring-console-defaults","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack2-cluster-manager-service"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"defaults","mountPath":"/mnt/defaults"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"custom-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
-
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_with_service_account.json"))
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-stack1-monitoring-console","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"replicas":1,"selector":{"matchLabels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"annotations":{"monitoringConsoleConfigRev":"","traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"defaults"},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-stack1-monitoring-console-secret-v1","defaultMode":420}},{"name":"mnt-splunk-defaults","configMap":{"name":"splunk-stack1-monitoring-console-defaults","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"}],"envFrom":[{"configMapRef":{"name":"splunk-stack1-monitoring-console"}}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_CLUSTER_MASTER_URL","value":"splunk-stack2-cluster-manager-service"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_monitor"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"defaults","mountPath":"/mnt/defaults"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"},{"name":"mnt-splunk-defaults","mountPath":"/mnt/splunk-defaults"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-stack1-monitoring-console"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"custom-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}},"storageClassName":"gp2"},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"monitoring-console","app.kubernetes.io/instance":"splunk-stack1-monitoring-console","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"monitoring-console","app.kubernetes.io/part-of":"splunk-stack1-monitoring-console","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}},"storageClassName":"gp2"},"status":{}}],"serviceName":"splunk-stack1-monitoring-console-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
+	test(loadFixture(t, "statefulset_stack1_monitoring_console_with_service_account_1.json"))
 }
 func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	// Unset the SPLUNK_GENERAL_TERMS environment variable
 	os.Unsetenv("SPLUNK_GENERAL_TERMS")
 	ctx := context.TODO()
-
 	// Create a mock monitoring console CR
 	mc := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
@@ -442,13 +368,10 @@ func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 			Namespace: "test",
 		},
 	}
-
 	// Create a mock client
 	c := spltest.NewMockClient()
-
 	// Attempt to apply the monitoring console spec
 	_, err := ApplyMonitoringConsole(ctx, c, &mc)
-
 	// Assert that an error is returned
 	if err == nil {
 		t.Errorf("Expected error when SPLUNK_GENERAL_TERMS is not set, but got none")
@@ -458,7 +381,6 @@ func TestMonitoringConsoleSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 }
 func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
 	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -493,34 +415,27 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 			},
 		},
 	}
-
 	client := spltest.NewMockClient()
-
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Error(err.Error())
 	}
-
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 	client.AddObject(&s3Secret)
 	configmap := spltest.GetMockPerCRConfigMap("splunk-monitoring-console-monitoringConsole-configmap")
 	client.AddObject(&configmap)
-
 	// to pass the validation stage, add the directory to download apps
 	_ = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
 	_, err = ApplyMonitoringConsole(ctx, client, &cr)
 	if err != nil {
 		t.Errorf("ApplyMonitoringConsole should be successful")
 	}
 }
-
 func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
 	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -571,30 +486,22 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 	}
-
 	client := spltest.NewMockClient()
-
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
 	client.AddObject(&s3Secret)
-
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Error(err.Error())
 	}
-
 	splclient.RegisterRemoteDataClient(ctx, "aws")
-
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1", "5055a61b3d1b667a4c3279a381a2e7ae", "19779168370b97d8654424e6c9446dd9"}
 	Keys := []string{"admin_app.tgz", "security_app.tgz", "authentication_app.tgz"}
 	Sizes := []int64{10, 20, 30}
 	StorageClass := "STANDARD"
 	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
 	mockAwsHandler := spltest.MockAWSS3Handler{}
-
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
 			Objects: []*spltest.MockRemoteDataObject{
@@ -630,25 +537,19 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 			},
 		},
 	}
-
 	appFrameworkRef := cr.Spec.AppFrameworkConfig
-
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
 	var vol enterpriseApi.VolumeSpec
 	var allSuccess bool = true
 	for index, appSource := range appFrameworkRef.AppSources {
-
 		vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
-
 		// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 		getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
 		getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
-
 		remoteDataClientMgr := &RemoteDataClientManager{client: client,
 			cr: &cr, appFrameworkRef: &cr.Spec.AppFrameworkConfig,
 			vol:      &vol,
@@ -663,37 +564,30 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldNotFail(t *testing.T) {
 				return c, err
 			},
 		}
-
 		RemoteDataListResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
-
 		var mockResponse spltest.MockRemoteDataClient
 		mockResponse, err = splclient.ConvertRemoteDataListResponse(ctx, RemoteDataListResponse)
 		if err != nil {
 			allSuccess = false
 			continue
 		}
-
 		if mockAwsHandler.GotSourceAppListResponseMap == nil {
 			mockAwsHandler.GotSourceAppListResponseMap = make(map[string]spltest.MockAWSS3Client)
 		}
-
 		mockAwsHandler.GotSourceAppListResponseMap[appSource.Name] = spltest.MockAWSS3Client(mockResponse)
 	}
-
 	if allSuccess == false {
 		t.Errorf("Unable to get apps list for all the app sources")
 	}
 	method := "GetAppsList"
 	mockAwsHandler.CheckAWSRemoteDataListResponse(t, method)
 }
-
 func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
 	ctx := context.TODO()
 	cr := enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -721,25 +615,19 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			},
 		},
 	}
-
 	client := spltest.NewMockClient()
-
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
 		t.Error(err.Error())
 	}
-
 	splclient.RegisterRemoteDataClient(ctx, "aws")
-
 	Etags := []string{"cc707187b036405f095a8ebb43a782c1"}
 	Keys := []string{"admin_app.tgz"}
 	Sizes := []int64{10}
 	StorageClass := "STANDARD"
 	randomTime := time.Date(2021, time.May, 1, 23, 23, 0, 0, time.UTC)
-
 	mockAwsHandler := spltest.MockAWSS3Handler{}
-
 	mockAwsObjects := []spltest.MockAWSS3Client{
 		{
 			Objects: []*spltest.MockRemoteDataObject{
@@ -753,23 +641,17 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			},
 		},
 	}
-
 	appFrameworkRef := cr.Spec.AppFrameworkConfig
-
 	mockAwsHandler.AddObjects(appFrameworkRef, mockAwsObjects...)
-
 	var vol enterpriseApi.VolumeSpec
-
 	appSource := appFrameworkRef.AppSources[0]
 	vol, err = splclient.GetAppSrcVolume(ctx, appSource, &appFrameworkRef)
 	if err != nil {
 		t.Errorf("Unable to get Volume due to error=%s", err)
 	}
-
 	// Update the GetRemoteDataClient with our mock call which initializes mock AWS client
 	getClientWrapper := splclient.RemoteDataClientsMap[vol.Provider]
 	getClientWrapper.SetRemoteDataClientFuncPtr(ctx, vol.Provider, splclient.NewMockAWSS3Client)
-
 	remoteDataClientMgr := &RemoteDataClientManager{
 		client:          client,
 		cr:              &cr,
@@ -788,12 +670,10 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 			return c, err
 		},
 	}
-
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as there is no S3 secret provided")
 	}
-
 	// Create empty S3 secret
 	s3Secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -802,44 +682,36 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		},
 		Data: map[string][]byte{},
 	}
-
 	client.AddObject(&s3Secret)
-
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty keys")
 	}
-
 	s3AccessKey := []byte{'1'}
 	s3Secret.Data = map[string][]byte{"s3_access_key": s3AccessKey}
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_secret_key")
 	}
-
 	s3SecretKey := []byte{'2'}
 	s3Secret.Data = map[string][]byte{"s3_secret_key": s3SecretKey}
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as S3 secret has empty s3_access_key")
 	}
-
 	// Create S3 secret
 	s3Secret = spltest.GetMockS3SecretKeys("s3-secret")
-
 	// This should return an error as we have initialized initFn for remoteDataClientMgr
 	// to return a nil client.
 	_, err = remoteDataClientMgr.GetAppsList(ctx)
 	if err == nil {
 		t.Errorf("GetAppsList should have returned error as we could not get the S3 client")
 	}
-
 	remoteDataClientMgr.initFn = func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
 		// To test the error scenario, do no set the Objects member yet
 		cl := spltest.MockAWSS3Client{}
 		return cl
 	}
-
 	remoteDataClientResponse, err := remoteDataClientMgr.GetAppsList(ctx)
 	if err != nil {
 		t.Errorf("GetAppsList should not have returned error since empty appSources are allowed.")
@@ -848,15 +720,12 @@ func TestMonitoringConsoleGetAppsListForAWSS3ClientShouldFail(t *testing.T) {
 		t.Errorf("GetAppsList should return an empty response since we have empty objects in MockAWSS3Client")
 	}
 }
-
 func TestMonitoringConsoleWithReadyState(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-
 	builder := fake.NewClientBuilder().
 		WithScheme(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
@@ -867,7 +736,6 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
 	c := builder.Build()
 	ctx := context.TODO()
-
 	// create monitoringconsole custom resource
 	monitoringconsole := &enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -883,7 +751,6 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 			},
 		},
 	}
-
 	replicas := int32(1)
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -911,29 +778,23 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 			Replicas: &replicas,
 		},
 	}
-
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-test-monitoring-console-headless",
 			Namespace: "default",
 		},
 	}
-
 	// simulate service
 	c.Create(ctx, service)
-
 	// simulate create stateful set
 	c.Create(ctx, statefulset)
-
 	// simulate create clustermanager instance before reconcilation
 	c.Create(ctx, monitoringconsole)
-
 	_, err := ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for indexer cluster %v", err)
 		debug.PrintStack()
 	}
-
 	namespacedName := types.NamespacedName{
 		Name:      monitoringconsole.Name,
 		Namespace: monitoringconsole.Namespace,
@@ -961,20 +822,17 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected error while running reconciliation for cluster master with app framework  %v", err)
 		debug.PrintStack()
 	}
-
 	err = c.Get(ctx, namespacedName, monitoringconsole)
 	if err != nil {
 		t.Errorf("Unexpected get monitoring console %v", err)
 		debug.PrintStack()
 	}
-
 	// call reconciliation
 	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for monitoring console with app framework  %v", err)
 		debug.PrintStack()
 	}
-
 	// create pod
 	stpod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1002,7 +860,6 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected create pod failed %v", err)
 		debug.PrintStack()
 	}
-
 	// update statefulset
 	stpod.Status.Phase = corev1.PodRunning
 	stpod.Status.ContainerStatuses = []corev1.ContainerStatus{
@@ -1017,7 +874,6 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected update statefulset  %v", err)
 		debug.PrintStack()
 	}
-
 	stNamespacedName := types.NamespacedName{
 		Name:      "splunk-test-monitoring-console",
 		Namespace: "default",
@@ -1035,13 +891,11 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected update statefulset  %v", err)
 		debug.PrintStack()
 	}
-
 	err = c.Get(ctx, namespacedName, monitoringconsole)
 	if err != nil {
 		t.Errorf("Unexpected get monitoring console %v", err)
 		debug.PrintStack()
 	}
-
 	// call reconciliation
 	_, err = ApplyMonitoringConsole(ctx, c, monitoringconsole)
 	if err != nil {
@@ -1049,7 +903,6 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		debug.PrintStack()
 	}
 }
-
 func TestApplyMonitoringConsoleDeletion(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
@@ -1098,27 +951,21 @@ func TestApplyMonitoringConsoleDeletion(t *testing.T) {
 			},
 		},
 	}
-
 	c := spltest.NewMockClient()
-
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
-
 	c.AddObject(&s3Secret)
 	configmap := spltest.GetMockPerCRConfigMap("splunk-monitoring-console-stack1-configmap")
 	c.AddObject(&configmap)
-
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Error(err.Error())
 	}
-
 	// test deletion
 	currentTime := metav1.NewTime(time.Now())
 	mc.ObjectMeta.DeletionTimestamp = &currentTime
 	mc.ObjectMeta.Finalizers = []string{"enterprise.splunk.com/delete-pvc"}
-
 	pvclist := corev1.PersistentVolumeClaimList{
 		Items: []corev1.PersistentVolumeClaim{
 			{
@@ -1130,57 +977,44 @@ func TestApplyMonitoringConsoleDeletion(t *testing.T) {
 		},
 	}
 	c.ListObj = &pvclist
-
 	// to pass the validation stage, add the directory to download apps
 	err = os.MkdirAll(splcommon.AppDownloadVolume, 0755)
 	defer os.RemoveAll(splcommon.AppDownloadVolume)
-
 	if err != nil {
 		t.Errorf("Unable to create download directory for apps :%s", splcommon.AppDownloadVolume)
 	}
-
 	_, err = ApplyMonitoringConsole(ctx, c, &mc)
 	if err != nil {
 		t.Errorf("ApplyMonitoringConsole should not have returned error here.")
 	}
 }
-
 func TestGetMonitoringConsoleList(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
 	mc := enterpriseApi.MonitoringConsole{}
-
 	listOpts := []client.ListOption{
 		client.InNamespace("test"),
 	}
-
 	client := spltest.NewMockClient()
-
 	mcList := &enterpriseApi.MonitoringConsoleList{}
 	mcList.Items = append(mcList.Items, mc)
-
 	client.ListObj = mcList
-
 	objectList, err := getMonitoringConsoleList(ctx, client, &mc, listOpts)
 	if err != nil {
 		t.Errorf("getNumOfObjects should not have returned error=%v", err)
 	}
-
 	numOfObjects := len(objectList.Items)
 	if numOfObjects != 1 {
 		t.Errorf("Got wrong number of IndexerCluster objects. Expected=%d, Got=%d", 1, numOfObjects)
 	}
 }
-
 func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
-
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-
 	builder := fake.NewClientBuilder().
 		WithScheme(sch).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
@@ -1191,7 +1025,6 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
 	client := builder.Build()
 	utilruntime.Must(enterpriseApi.AddToScheme(clientgoscheme.Scheme))
-
 	// define CM and MC
 	cm := &enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1207,7 +1040,6 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 			},
 		},
 	}
-
 	mc := &enterpriseApi.MonitoringConsole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -1226,7 +1058,6 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 		},
 	}
 	cm.Spec.Image = "splunk/splunk:latest"
-
 	// Create the instances
 	client.Create(ctx, cm)
 	_, err := ApplyClusterManager(ctx, client, cm)
@@ -1252,7 +1083,6 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	if err != nil {
 		t.Errorf("applyMonitoringConsole should not have returned error; err=%v", err)
 	}
-
 	err = changeMonitoringConsoleAnnotations(ctx, client, cm)
 	if err != nil {
 		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
@@ -1266,7 +1096,6 @@ func TestChangeMonitoringConsoleAnnotations(t *testing.T) {
 	if err != nil {
 		t.Errorf("changeMonitoringConsoleAnnotations should not have returned error=%v", err)
 	}
-
 	annotations := monitoringConsole.GetAnnotations()
 	if annotations["splunk/image-tag"] != cm.Spec.Image {
 		t.Errorf("changeMonitoringConsoleAnnotations should have set the checkUpdateImage annotation field to the current image")

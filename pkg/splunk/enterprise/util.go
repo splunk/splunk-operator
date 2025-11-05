@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -2489,4 +2490,15 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	cr.SetAnnotations(annotations)
 	err := c.Update(ctx, cr)
 	return err
+}
+
+// loadFixture loads a JSON fixture file from the testdata/fixtures directory
+func loadFixture(t *testing.T, filename string) string {
+	t.Helper()
+	path := filepath.Join("testdata", "fixtures", filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to load fixture %s: %v", filename, err)
+	}
+	return string(data)
 }
