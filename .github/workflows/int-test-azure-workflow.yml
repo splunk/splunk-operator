@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
-    needs: setup-aks-cluster
+    # needs: setup-aks-cluster
     env:
       CLUSTER_NODES: 2
       CLUSTER_WORKERS: 5
