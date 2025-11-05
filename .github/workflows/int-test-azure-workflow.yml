@@ -76,7 +76,7 @@ jobs:
       with:
         azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
         inlineScript: |
-          SP_OBJECT_ID=$(az ad sp show --id ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --query id --output tsv)
+          SP_OBJECT_ID=$(az ad sp list --filter "appId eq '${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }}'" --query "[].id" --output tsv)
           az role assignment create --assignee-object-id $SP_OBJECT_ID --assignee-principal-type ServicePrincipal --role AcrPull --scope $(az acr show --name ${{ secrets.AZURE_CONTAINER_REGISTRY }} --query id --output tsv)
           az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --no-ssh-key -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }} --node-count ${{ env.CLUSTER_WORKERS }} --node-vm-size standard_d8_v3
     - name: Wait for Cluster to be Ready
