@@ -76,6 +76,7 @@ jobs:
       with:
         azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
         inlineScript: |
+          az role assignment create --assignee ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --role AcrPull --scope $(az acr show --name ${{ secrets.AZURE_ACR_LOGIN_SERVER }} --query id --output tsv)
           az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --no-ssh-key -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }} --node-count ${{ env.CLUSTER_WORKERS }} --node-vm-size standard_d8_v3
     - name: Wait for Cluster to be Ready
       uses: azure/CLI@v1
