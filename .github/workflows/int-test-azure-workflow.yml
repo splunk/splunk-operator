@@ -4,45 +4,44 @@ on:
     branches:
       - develop
       - main
-      - fix_aks_create
 jobs:
-  # build-operator-image:
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
-  #     SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
-  #     CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #   - name: Dotenv Action
-  #     id: dotenv
-  #     uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-  #   - name: Setup Go
-  #     uses: actions/setup-go@v2
-  #     with:
-  #       go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-  #   - name: Set up Docker Buildx
-  #     uses: docker/setup-buildx-action@v2.5.0
-  #   - name: Install Operator SDK
-  #     run: |
-  #       export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
-  #       export OS=$(uname | awk '{print tolower($0)}')
-  #       export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
-  #       sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-  #       sudo chmod +x operator-sdk_${OS}_${ARCH}
-  #       sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
-  #   - name: 'Login to ACR'
-  #     uses: azure/docker-login@v1
-  #     with:
-  #       login-server: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-  #       username: ${{ secrets.AZURE_ACR_DOCKER_USERNAME }}
-  #       password: ${{ secrets.AZURE_ACR_DOCKER_PASSWORD }}
-  #   - name: Make Splunk Operator Image
-  #     run: |
-  #       make docker-buildx IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+  build-operator-image:
+    runs-on: ubuntu-latest
+    env:
+      SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2.5.0
+    - name: Install Operator SDK
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+    - name: 'Login to ACR'
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+        username: ${{ secrets.AZURE_ACR_DOCKER_USERNAME }}
+        password: ${{ secrets.AZURE_ACR_DOCKER_PASSWORD }}
+    - name: Make Splunk Operator Image
+      run: |
+        make docker-buildx IMG=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   setup-aks-cluster:
     runs-on: ubuntu-latest
-    # needs: build-operator-image
+    needs: build-operator-image
     env:
       CLUSTER_WORKERS: 5
       TEST_CLUSTER_PLATFORM: azure
@@ -82,7 +81,6 @@ jobs:
             echo "Service Principal Object ID not found. Check AZURE_CREDENTIALS_CLIENT_ID permission/scopes."
             exit 1
           fi
-
 
           # Assign AcrPull role
           az role assignment create --assignee-object-id $SP_OBJECT_ID --assignee-principal-type ServicePrincipal --role AcrPull --scope $(az acr show --name ${{ secrets.AZURE_CONTAINER_REGISTRY }} --query id --output tsv)
@@ -184,9 +182,9 @@ jobs:
           password: ${{ secrets.AZURE_ACR_DOCKER_PASSWORD }}
       - name: Pull Splunk Operator Image Locally
         run: |
-          docker pull ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:007613b7f10b91e79232e1ce93edb5ed06165767
-          docker tag ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:007613b7f10b91e79232e1ce93edb5ed06165767 ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:007613b7f10b91e79232e1ce93edb5ed06165767
-          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:007613b7f10b91e79232e1ce93edb5ed06165767" >> $GITHUB_ENV
+          docker pull ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          docker tag ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA ${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
+          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
       - name: Tag and Push Splunk Enterprise Image to the Container Registry
         run: |
           docker tag ${{ env.SPLUNK_ENTERPRISE_IMAGE }} ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
