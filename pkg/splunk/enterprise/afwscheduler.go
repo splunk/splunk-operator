@@ -785,12 +785,13 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	scopedLog.Info("check app's installation state")
 
-	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", appTopFolder)
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED", appTopFolder)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
+	// Handle specific stderr cases first
 	if strings.Contains(stdErr, "Could not find object") {
 		// when app is not installed you will see something like on StdErr:
 		// "Could not find object id=<app_name>"
@@ -798,15 +799,41 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 		return false, nil
 	}
 
-	if stdErr != "" || err != nil {
-		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	// Handle FIPS messages in stderr - these are informational, not errors
+	if stdErr != "" && strings.Contains(stdErr, "FIPS provider enabled") {
+		scopedLog.Info("FIPS provider informational message detected", "stderr", stdErr)
+		// Continue processing - FIPS messages don't indicate failure
+	} else if stdErr != "" {
+		// Log warning for any other stderr content we haven't seen before
+		scopedLog.Info("Unexpected stderr content detected - please review", "stderr", stdErr, "command", command)
 	}
 
-	appInstallCheck, _ := strconv.Atoi(stdOut)
+	// Now check the actual command result
+	if err != nil {
+		// Kubernetes exec returns different error types for different exit codes
+		// For grep: exit code 1 = pattern not found, exit code 2+ = actual error
+		errMsg := err.Error()
 
-	scopedLog.Info("Apps installation state", stdOut, stdOut)
+		// Check for grep exit code 1 (pattern not found)
+		if strings.Contains(errMsg, "exit status 1") || strings.Contains(errMsg, "command terminated with exit code 1") {
+			// grep exit code 1 means "ENABLED" pattern not found - app is not enabled
+			scopedLog.Info("App not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
+			return false, nil
+		}
 
-	return appInstallCheck == 0, nil
+		// Any other exit code indicates a real error (splunk command failed, etc.)
+		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, error: %v, command: %s", stdOut, stdErr, err, command)
+	}
+
+	// If we reach here, grep found "ENABLED" (exit code 0)
+	// stdOut should contain the app status line with "ENABLED"
+	if stdOut == "" {
+		// This shouldn't happen if grep succeeded, but let's be safe
+		return false, fmt.Errorf("command succeeded but no output received, command: %s", command)
+	}
+
+	scopedLog.Info("App installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))
+	return true, nil
 }
 
 // get the name of top folder from the package.
