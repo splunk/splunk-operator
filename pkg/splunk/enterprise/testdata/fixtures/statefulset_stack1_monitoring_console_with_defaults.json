@@ -59,19 +59,9 @@
             }
           },
           {
-            "name": "defaults"
-          },
-          {
             "name": "mnt-splunk-secrets",
             "secret": {
               "secretName": "splunk-stack1-monitoring-console-secret-v1",
-              "defaultMode": 420
-            }
-          },
-          {
-            "name": "mnt-splunk-defaults",
-            "configMap": {
-              "name": "splunk-stack1-monitoring-console-defaults",
               "defaultMode": 420
             }
           }
@@ -111,10 +101,6 @@
             ],
             "env": [
               {
-                "name": "SPLUNK_CLUSTER_MASTER_URL",
-                "value": "splunk-stack2-cluster-manager-service"
-              },
-              {
                 "name": "SPLUNK_HOME",
                 "value": "/opt/splunk"
               },
@@ -124,7 +110,7 @@
               },
               {
                 "name": "SPLUNK_DEFAULTS_URL",
-                "value": "/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/splunk-secrets/default.yml"
+                "value": "/mnt/splunk-secrets/default.yml"
               },
               {
                 "name": "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT",
@@ -175,16 +161,8 @@
                 "mountPath": "/mnt/probes"
               },
               {
-                "name": "defaults",
-                "mountPath": "/mnt/defaults"
-              },
-              {
                 "name": "mnt-splunk-secrets",
                 "mountPath": "/mnt/splunk-secrets"
-              },
-              {
-                "name": "mnt-splunk-defaults",
-                "mountPath": "/mnt/splunk-defaults"
               }
             ],
             "livenessProbe": {
@@ -269,7 +247,7 @@
             ]
           }
         },
-        "schedulerName": "custom-scheduler"
+        "schedulerName": "default-scheduler"
       }
     },
     "volumeClaimTemplates": [
@@ -294,8 +272,7 @@
             "requests": {
               "storage": "10Gi"
             }
-          },
-          "storageClassName": "gp2"
+          }
         },
         "status": {}
       },
@@ -320,8 +297,7 @@
             "requests": {
               "storage": "100Gi"
             }
-          },
-          "storageClassName": "gp2"
+          }
         },
         "status": {}
       }

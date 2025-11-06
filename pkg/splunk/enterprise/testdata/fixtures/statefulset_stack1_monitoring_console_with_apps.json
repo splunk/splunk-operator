@@ -52,6 +52,14 @@
       "spec": {
         "volumes": [
           {
+            "name": "mnt-splunk-etc",
+            "emptyDir": {}
+          },
+          {
+            "name": "mnt-splunk-var",
+            "emptyDir": {}
+          },
+          {
             "name": "splunk-test-probe-configmap",
             "configMap": {
               "name": "splunk-test-probe-configmap",
@@ -59,19 +67,9 @@
             }
           },
           {
-            "name": "defaults"
-          },
-          {
             "name": "mnt-splunk-secrets",
             "secret": {
               "secretName": "splunk-stack1-monitoring-console-secret-v1",
-              "defaultMode": 420
-            }
-          },
-          {
-            "name": "mnt-splunk-defaults",
-            "configMap": {
-              "name": "splunk-stack1-monitoring-console-defaults",
               "defaultMode": 420
             }
           }
@@ -111,10 +109,6 @@
             ],
             "env": [
               {
-                "name": "SPLUNK_CLUSTER_MASTER_URL",
-                "value": "splunk-stack2-cluster-manager-service"
-              },
-              {
                 "name": "SPLUNK_HOME",
                 "value": "/opt/splunk"
               },
@@ -124,7 +118,7 @@
               },
               {
                 "name": "SPLUNK_DEFAULTS_URL",
-                "value": "/mnt/splunk-defaults/default.yml,/mnt/defaults/defaults.yml,/mnt/apps/apps.yml,/mnt/splunk-secrets/default.yml"
+                "value": "/mnt/splunk-secrets/default.yml"
               },
               {
                 "name": "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT",
@@ -163,11 +157,11 @@
             },
             "volumeMounts": [
               {
-                "name": "pvc-etc",
+                "name": "mnt-splunk-etc",
                 "mountPath": "/opt/splunk/etc"
               },
               {
-                "name": "pvc-var",
+                "name": "mnt-splunk-var",
                 "mountPath": "/opt/splunk/var"
               },
               {
@@ -175,16 +169,8 @@
                 "mountPath": "/mnt/probes"
               },
               {
-                "name": "defaults",
-                "mountPath": "/mnt/defaults"
-              },
-              {
                 "name": "mnt-splunk-secrets",
                 "mountPath": "/mnt/splunk-secrets"
-              },
-              {
-                "name": "mnt-splunk-defaults",
-                "mountPath": "/mnt/splunk-defaults"
               }
             ],
             "livenessProbe": {
@@ -269,63 +255,9 @@
             ]
           }
         },
-        "schedulerName": "custom-scheduler"
+        "schedulerName": "default-scheduler"
       }
     },
-    "volumeClaimTemplates": [
-      {
-        "metadata": {
-          "name": "pvc-etc",
-          "namespace": "test",
-          "creationTimestamp": null,
-          "labels": {
-            "app.kubernetes.io/component": "monitoring-console",
-            "app.kubernetes.io/instance": "splunk-stack1-monitoring-console",
-            "app.kubernetes.io/managed-by": "splunk-operator",
-            "app.kubernetes.io/name": "monitoring-console",
-            "app.kubernetes.io/part-of": "splunk-stack1-monitoring-console"
-          }
-        },
-        "spec": {
-          "accessModes": [
-            "ReadWriteOnce"
-          ],
-          "resources": {
-            "requests": {
-              "storage": "10Gi"
-            }
-          },
-          "storageClassName": "gp2"
-        },
-        "status": {}
-      },
-      {
-        "metadata": {
-          "name": "pvc-var",
-          "namespace": "test",
-          "creationTimestamp": null,
-          "labels": {
-            "app.kubernetes.io/component": "monitoring-console",
-            "app.kubernetes.io/instance": "splunk-stack1-monitoring-console",
-            "app.kubernetes.io/managed-by": "splunk-operator",
-            "app.kubernetes.io/name": "monitoring-console",
-            "app.kubernetes.io/part-of": "splunk-stack1-monitoring-console"
-          }
-        },
-        "spec": {
-          "accessModes": [
-            "ReadWriteOnce"
-          ],
-          "resources": {
-            "requests": {
-              "storage": "100Gi"
-            }
-          },
-          "storageClassName": "gp2"
-        },
-        "status": {}
-      }
-    ],
     "serviceName": "splunk-stack1-monitoring-console-headless",
     "podManagementPolicy": "Parallel",
     "updateStrategy": {
