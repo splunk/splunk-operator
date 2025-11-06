@@ -75,7 +75,18 @@ jobs:
       with:
         azcliversion: ${{ steps.dotenv.outputs.AZ_CLI_VERSION }}
         inlineScript: |
-          az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --generate-ssh-keys -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }} --node-count ${{ env.CLUSTER_WORKERS }} --node-vm-size standard_d8_v3
+          # Use Microsoft Graph-compatible SP lookup
+          SP_OBJECT_ID=$(az ad sp list --filter "appId eq '${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }}'" --query "[].id" --output tsv)
+          if [ -z "$SP_OBJECT_ID" ]; then
+            echo "Service Principal Object ID not found. Check AZURE_CREDENTIALS_CLIENT_ID permission/scopes."
+            exit 1
+          fi
+
+          # Assign AcrPull role
+          az role assignment create --assignee-object-id $SP_OBJECT_ID --assignee-principal-type ServicePrincipal --role AcrPull --scope $(az acr show --name ${{ secrets.AZURE_CONTAINER_REGISTRY }} --query id --output tsv)
+
+          # Create AKS
+          az aks create -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --no-ssh-key -l westus --service-principal ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CREDENTIALS_CLIENT_SECRET }} --node-count ${{ env.CLUSTER_WORKERS }} --node-vm-size standard_d8_v3
     - name: Wait for Cluster to be Ready
       uses: azure/CLI@v1
       with:
