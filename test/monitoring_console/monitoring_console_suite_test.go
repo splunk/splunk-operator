@@ -16,12 +16,14 @@
 package monitoringconsoletest
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
@@ -52,6 +54,22 @@ func TestBasic(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	var err error
+
+	// Override script locations to use absolute paths for integration tests
+	// These are relative to test/monitoring_console/, so we go up 2 levels to project root
+	enterprise.GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../tools/k8_probes/readinessProbe.sh")
+		return fileLocation
+	}
+	enterprise.GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../tools/k8_probes/livenessProbe.sh")
+		return fileLocation
+	}
+	enterprise.GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../tools/k8_probes/startupProbe.sh")
+		return fileLocation
+	}
+
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).ToNot(HaveOccurred())
 })

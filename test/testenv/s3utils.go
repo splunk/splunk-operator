@@ -316,11 +316,19 @@ func DisableAppsToS3(downloadDir string, appFileList []string, s3TestDir string)
 		// Tar disabled app folder
 		tarDestination := disabledAppsFolder + "/" + key
 		cmd = exec.Command("tar", "-czf", tarDestination, "--directory", untarredCurrentAppFolder, appFolderName)
-		cmd.Run()
+		err = cmd.Run()
+		if err != nil {
+			log.Fatalf("Failed to create tar archive for disabled app %s: %v", key, err)
+			return nil, err
+		}
 	}
 
 	// Upload disabled apps to S3
-	uploadedFiles, _ := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
+	uploadedFiles, err := UploadFilesToS3(testIndexesS3Bucket, s3TestDir, appFileList, disabledAppsFolder)
+	if err != nil {
+		log.Fatalf("Failed to upload disabled apps to S3: %v", err)
+		return nil, err
+	}
 
 	return uploadedFiles, nil
 }
