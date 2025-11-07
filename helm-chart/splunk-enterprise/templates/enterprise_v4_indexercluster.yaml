@@ -147,7 +147,7 @@ items:
 {{ toYaml . | indent 6 }}
 {{- end }}
 {{- end }}
-  {{- if and ($.Values.sva.m4.enabled) (.name) }}
+  {{- if and ($.Values.sva.m4.enabled) (.zone) }}
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -156,7 +156,7 @@ items:
             - key: topology.kubernetes.io/zone
               operator: In
               values:
-              - {{ .name }}
+              - {{ .zone }}
   {{- else }}
     {{- with $.Values.indexerCluster.affinity }}
     affinity:
