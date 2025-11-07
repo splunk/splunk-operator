@@ -10,7 +10,7 @@ This separation enables:
 # Important Note
 
 > [!WARNING]
-> **As of now, only brand new deployments are supported for Index and Ingestion Separation. No migration path is implemented, described or tested for existing deployments to move from a standard model to Index & Ingestion separation model.**
+> **For customers deploying SmartBus on CMP, the Splunk Operator for Kubernetes (SOK) manages the configuration and lifecycle of the ingestor tier. The following SOK guide provides implementation details for setting up ingestion separation and integrating with existing indexers. This reference is primarily intended for CMP users leveraging SOK-managed ingestors.**
 
 # Document Variables
 
@@ -40,7 +40,7 @@ SQS message bus inputs can be found in the table below.
 | largeMessageStorePath   | string | S3 path for Large Message Store |
 | deadLetterQueueName   | string | Name of the SQS dead letter queue |
 
-Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
+**First provisioning or update of any of the bus inputs requires Ingestor Cluster and Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
 
 ## Example
 ```
