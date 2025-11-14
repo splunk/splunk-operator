@@ -766,6 +766,14 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
+
+	// Handle FIPS messages in stderr - these are informational, not errors
+	if stdErr != "" && strings.Contains(stdErr, "FIPS provider enabled") {
+		scopedLog.Info("FIPS provider informational message detected during app install", "stderr", stdErr)
+		// Continue processing - FIPS messages don't indicate failure
+		stdErr = "" // Clear stderr so it doesn't trigger error handling below
+	}
+
 	// if the app was already installed previously, then just mark it for install complete
 	if stdErr != "" || err != nil {
 		phaseInfo.FailCount++
@@ -1347,6 +1355,15 @@ installPhase:
 				phaseInfo := getPhaseInfoByPhaseType(ctx, installWorker, enterpriseApi.PhaseInstall)
 				if isPhaseMaxRetriesReached(ctx, phaseInfo, installWorker.afwConfig) {
 					phaseInfo.Status = enterpriseApi.AppPkgInstallError
+
+					// For fanout CRs, also update the main PhaseInfo to reflect the failure
+					if isFanOutApplicableToCR(installWorker.cr) {
+						scopedLog.Info("Max retries reached for fanout CR - updating main phase info", "app", installWorker.appDeployInfo.AppName, "failCount", phaseInfo.FailCount)
+						installWorker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
+						installWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallError
+						installWorker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusError
+					}
+
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
