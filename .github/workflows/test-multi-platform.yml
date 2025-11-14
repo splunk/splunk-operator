@@ -61,10 +61,6 @@ jobs:
   automated-release-test-multi-platform:
     name: Test Multi-Platform Copy to Dockerhub
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    if: github.ref == 'refs/heads/main'
     env:
       SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
     steps:
