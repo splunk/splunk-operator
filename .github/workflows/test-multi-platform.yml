@@ -1,0 +1,124 @@
+name: Test Multi-Platform Copy
+on:
+  pull_request:
+    branches:
+      - CSPL_4125_mutiplatform
+jobs:
+  develop-to-main-test-multi-platform:
+    name: Test Multi-Platform Copy Public ECR
+    runs-on: ubuntu-latest
+    env:
+      SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Dotenv Action
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2.5.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+      - name: Install goveralls
+        run: |
+          go get github.com/mattn/goveralls@latest
+
+      - name: Install Operator SDK
+        run: |
+          export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+          export OS=$(uname | awk '{print tolower($0)}')
+          export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+          sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+          sudo chmod +x operator-sdk_${OS}_${ARCH}
+          sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+
+      - name: Tag and Push Default UBI RC Image
+        run: |
+          docker buildx imagetools create -t ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC-multiplatform ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC1
+
+      - name: Tag and Push Default Distroless RC Image
+        run: |
+          docker buildx imagetools create -t ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC-multiplatform-distroless ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC1-distroless
+
+  automated-release-test-multi-platform:
+    name: Test Multi-Platform Copy to Dockerhub
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    if: github.ref == 'refs/heads/main'
+    env:
+      SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Dotenv Action
+      id: dotenv
+      uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr-public
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        registry-type: public
+
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2.5.0
+    - name: Configure Docker Credentials
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PUSH_TOKEN}}
+
+    - name: Install regctl
+      uses: regclient/actions/regctl-installer@main
+
+    - name: Install Operator SDK
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+
+    - name: Promote RC Image to Release
+      run: |
+        regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC-multiplatform rliebermansplunk/splunk-operator:3.0.0-RC-multiplatform
+        regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC-multiplatform rliebermansplunk/splunk-operator:latest
+
+    - name: Promote Distroless RC Image to Release
+      run: |
+        regctl image copy ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:3.0.0-RC-multiplatform-distroless rliebermansplunk/splunk-operator:3.0.0-RC-multiplatform-distroless
