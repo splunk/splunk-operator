@@ -1,6 +1,6 @@
 name: Test Multi-Platform Copy
 on:
-  pull_request:
+  push:
     branches:
       - CSPL_4125_mutiplatform
 jobs:
