@@ -818,7 +818,7 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	// Now check the actual command result
 	if err != nil {
-		// Kubernetes exec returns different error types for different exit codes
+		// The command pipeline ends with 'grep ENABLED', so exit codes follow grep semantics:
 		// For grep: exit code 1 = pattern not found, exit code 2+ = actual error
 		errMsg := err.Error()
 
