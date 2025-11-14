@@ -3061,18 +3061,21 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
-	// Test3: get installed app name passes but getting installed app name failed
+	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error
 	mockPodExecReturnContexts[1].StdErr = ""
+	mockPodExecReturnContexts[2].StdErr = "Could not find object id=app1" // Non-FIPS error
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2") // Real error, not grep exit code 1
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Failed to detect not able to get installed app name: err")
+		t.Errorf("Failed to detect isAppAlreadyInstalled error")
 	}
 
-	// Test4: get installed app command passes but installing app fails (non-FIPS error)
-	mockPodExecReturnContexts[2].StdOut = "1"                       //app is not yet installed or it is not enabled
-	mockPodExecReturnContexts[2].StdErr = ""                        //no error thrown
+	// Test4: isAppAlreadyInstalled returns app not enabled (grep exit code 1), then install fails
+	mockPodExecReturnContexts[2].StdOut = "" // No stdout means grep didn't find ENABLED
+	mockPodExecReturnContexts[2].StdErr = "" // No stderr
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1") // grep exit code 1 = pattern not found
 	mockPodExecReturnContexts[3].StdErr = "real installation error" // Non-FIPS error should still fail
 
 	localInstallCtxt.sem <- struct{}{}
@@ -3082,18 +3085,21 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed")
 	}
 
-	mockPodExecReturnContexts[2].StdOut = "1" //app is not yet installed or it is not enabled
-	mockPodExecReturnContexts[2].StdErr = "Could not find object"
+	// Test5: App not found scenario (Could not find object)
+	mockPodExecReturnContexts[2].StdOut = ""
+	mockPodExecReturnContexts[2].StdErr = "Could not find object id=app1"
+	mockPodExecReturnContexts[2].Err = nil // This should return false, nil (app not installed)
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
 	if err == nil {
-		t.Errorf("Expected app install failed")
+		t.Errorf("Expected app install failed due to installation error")
 	}
 
-	// Test5: FIPS message should be handled gracefully during install
+	// Test6: FIPS message should be handled gracefully during install
 	mockPodExecReturnContexts[3].StdErr = "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success" // FIPS message should be ignored
+	mockPodExecReturnContexts[3].Err = nil // No actual error for install
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3102,7 +3108,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install succeeded but app archive deletion failed")
 	}
 
-	// Test6: successful scenario where everything succeeds
+	// Test7: successful scenario where everything succeeds
 	mockPodExecReturnContexts[4].StdErr = ""
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
