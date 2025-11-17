@@ -68,6 +68,10 @@ jobs:
 
   build-operator-image:
     needs: unit-tests
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     uses: ./.github/workflows/reusable-build-operator.yml
     with:
       sign-image: true
