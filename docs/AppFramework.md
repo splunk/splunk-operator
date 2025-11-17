@@ -1,3 +1,10 @@
+---
+title: App Framework
+parent: Operate & Manage
+nav_order: 2
+---
+
+
 # App Framework Resource Guide
 
 - [About App Framework](#about-app-framework)
