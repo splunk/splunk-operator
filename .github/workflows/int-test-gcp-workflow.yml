@@ -1,4 +1,8 @@
 name: Integration Test on GCP Workflow
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
 
 on:
   push:
