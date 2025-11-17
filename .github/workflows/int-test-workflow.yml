@@ -10,6 +10,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-4201-pipeline-tests-base
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
