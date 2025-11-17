@@ -1,3 +1,10 @@
+---
+title: Premium Apps
+parent: Operate & Manage
+nav_order: 3
+---
+
+
 # Premium Apps Installation Guide
 
 The Splunk Operator automates the installation of Enterprise Security (ES) with support for other premium apps coming in the future releases. This page documents the prerequisites, installation steps, troublshooting steps, and limitations of deploying premium apps using the Splunk Operator.
@@ -358,4 +365,3 @@ Common issues that may be encountered are :
 * ES installation failed as you used default sslEnablement mode ("strict") - enable Splunk Web SSL in web.conf. See the section [Special consideration while using ssl enabled mode of strict in SHC](#special-consideration-while-using-ssl-enabled-mode-of-strict-in-shc)
 * Ansible task timeouts - raise associated timeout (splunkdConnectionTimeout in web.conf, rcv_timeout, send_timeeout, cxn_timeeout etc values in server.conf)
 * Pod Recycles - raise livenessProbe value. More details on this at [Health Check doc](HealthCheck.md)
-
