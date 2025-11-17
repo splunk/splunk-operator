@@ -5,6 +5,7 @@ on:
     branches:
     - main
     - develop
+    - splunk-10-0-2
 jobs:
   check-formating:
     runs-on: ubuntu-latest

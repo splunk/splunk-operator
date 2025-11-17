@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - splunk-10-0-2
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
