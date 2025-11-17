@@ -1,10 +1,3 @@
----
-title: kubectl-splunk Plugin
-parent: Platform Guides
-nav_order: 3
----
-
-
 # kubectl-splunk Plugin
 
 ![PyPI Version](https://img.shields.io/pypi/v/kubectl-splunk)
