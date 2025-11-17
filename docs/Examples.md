@@ -1,3 +1,10 @@
+---
+title: Examples
+parent: Reference
+nav_order: 5
+---
+
+
 # Configuring Splunk Enterprise Deployments
 
 This document includes various examples for configuring Splunk Enterprise deployments with the Splunk Operator.
