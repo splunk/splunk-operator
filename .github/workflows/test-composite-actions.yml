@@ -7,6 +7,9 @@ on:
       - workflow-fix
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   test-setup-operator-tools:
     runs-on: ubuntu-latest

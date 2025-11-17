@@ -54,6 +54,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       image-name: ${{ steps.set-image.outputs.image-name }}
       image-digest: ${{ steps.build.outputs.digest }}

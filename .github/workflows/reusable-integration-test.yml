@@ -70,6 +70,8 @@ on:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       CLUSTER_NODES: ${{ inputs.cluster-nodes }}
       CLUSTER_WORKERS: ${{ inputs.cluster-workers }}
@@ -79,6 +81,7 @@ jobs:
       TEST_CLUSTER_PLATFORM: ${{ inputs.cluster-platform }}
       TEST_CLUSTER_NAME: ${{ inputs.cluster-name }}
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
       TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
       CLUSTER_WIDE: ${{ inputs.cluster-wide }}
