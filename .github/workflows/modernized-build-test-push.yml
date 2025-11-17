@@ -81,8 +81,26 @@ jobs:
       COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
       COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
 
+  load-env:
+    runs-on: ubuntu-latest
+    outputs:
+      splunk-enterprise-image: ${{ steps.set-image.outputs.splunk-enterprise-image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load environment variables
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+      - name: Set Splunk Enterprise Image
+        id: set-image
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "splunk-enterprise-image=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_OUTPUT
+          else
+            echo "splunk-enterprise-image=${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_OUTPUT
+          fi
+
   smoke-tests:
-    needs: build-operator-image
+    needs: [build-operator-image, load-env]
     strategy:
       fail-fast: false
       matrix:
@@ -101,7 +119,7 @@ jobs:
       cluster-workers: ${{ contains(matrix.test, 'appframework') && 5 || 3 }}
       cluster-nodes: ${{ contains(matrix.test, 'appframework') && 2 || 1 }}
       splunk-operator-image: ${{ needs.build-operator-image.outputs.image-name }}
-      splunk-enterprise-image: ${{ github.ref == 'refs/heads/main' && vars.SPLUNK_ENTERPRISE_RELEASE_IMAGE || secrets.SPLUNK_ENTERPRISE_IMAGE }}
+      splunk-enterprise-image: ${{ needs.load-env.outputs.splunk-enterprise-image }}
       cluster-wide: true
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
