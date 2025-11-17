@@ -26,13 +26,25 @@ on:
         type: number
         default: 1
       splunk-operator-image:
-        description: 'Splunk operator image to test'
-        required: true
+        description: 'Splunk operator image to test (if empty, will be constructed from ECR_REPOSITORY)'
+        required: false
         type: string
+        default: ''
       splunk-enterprise-image:
-        description: 'Splunk enterprise image to test'
-        required: true
+        description: 'Splunk enterprise image to test (if empty, will use secret)'
+        required: false
         type: string
+        default: ''
+      use-release-enterprise-image:
+        description: 'Use release enterprise image from env file'
+        required: false
+        type: boolean
+        default: false
+      release-enterprise-image:
+        description: 'Release enterprise image name from env file'
+        required: false
+        type: string
+        default: ''
       cluster-wide:
         description: 'Deploy operator cluster-wide'
         required: false
@@ -75,8 +87,6 @@ jobs:
     env:
       CLUSTER_NODES: ${{ inputs.cluster-nodes }}
       CLUSTER_WORKERS: ${{ inputs.cluster-workers }}
-      SPLUNK_ENTERPRISE_IMAGE: ${{ inputs.splunk-enterprise-image }}
-      SPLUNK_OPERATOR_IMAGE: ${{ inputs.splunk-operator-image }}
       TEST_FOCUS: ${{ inputs.test-focus }}
       TEST_CLUSTER_PLATFORM: ${{ inputs.cluster-platform }}
       TEST_CLUSTER_NAME: ${{ inputs.cluster-name }}
@@ -86,10 +96,39 @@ jobs:
       TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
       CLUSTER_WIDE: ${{ inputs.cluster-wide }}
       DEPLOYMENT_TYPE: ${{ inputs.deployment-type }}
+      # SPLUNK_ENTERPRISE_IMAGE and SPLUNK_OPERATOR_IMAGE are set dynamically in "Set Image Names" step
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set Image Names
+        id: set-images
+        run: |
+          # Set operator image (construct if empty)
+          if [ -z "${{ inputs.splunk-operator-image }}" ]; then
+            OPERATOR_IMAGE="${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}"
+            echo "SPLUNK_OPERATOR_IMAGE=${OPERATOR_IMAGE}" >> $GITHUB_ENV
+            echo "Constructed operator image: ${OPERATOR_IMAGE}"
+          else
+            echo "SPLUNK_OPERATOR_IMAGE=${{ inputs.splunk-operator-image }}" >> $GITHUB_ENV
+            echo "Using provided operator image: ${{ inputs.splunk-operator-image }}"
+          fi
+
+          # Set enterprise image (use release or secret based on input)
+          if [ -z "${{ inputs.splunk-enterprise-image }}" ]; then
+            if [ "${{ inputs.use-release-enterprise-image }}" == "true" ]; then
+              ENTERPRISE_IMAGE="${{ inputs.release-enterprise-image }}"
+              echo "Using release enterprise image: ${ENTERPRISE_IMAGE}"
+            else
+              ENTERPRISE_IMAGE="${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}"
+              echo "Using secret enterprise image"
+            fi
+            echo "SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE}" >> $GITHUB_ENV
+          else
+            echo "SPLUNK_ENTERPRISE_IMAGE=${{ inputs.splunk-enterprise-image }}" >> $GITHUB_ENV
+            echo "Using provided enterprise image: ${{ inputs.splunk-enterprise-image }}"
+          fi
 
       - name: Load environment variables
         id: dotenv
