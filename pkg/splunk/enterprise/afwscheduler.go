@@ -767,15 +767,14 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 
 	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
 
-	// Handle FIPS messages in stderr - these are informational, not errors
-	if stdErr != "" && strings.Contains(stdErr, "FIPS provider enabled") {
-		scopedLog.Info("FIPS provider informational message detected during app install", "stderr", stdErr)
-		// Continue processing - FIPS messages don't indicate failure
-		stdErr = "" // Clear stderr so it doesn't trigger error handling below
+	// TODO(patrykw-splunk): remove this once we have confirm that we are not using stderr for error detection at all
+	// Log stderr content for debugging but don't use it for error detection
+	if stdErr != "" {
+		scopedLog.Info("App install command stderr output (informational only)", "stderr", stdErr)
 	}
 
-	// if the app was already installed previously, then just mark it for install complete
-	if stdErr != "" || err != nil {
+	// Check only the actual command execution error, not stderr content
+	if err != nil {
 		phaseInfo.FailCount++
 		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "failCount", phaseInfo.FailCount)
 		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
@@ -807,13 +806,9 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 		return false, nil
 	}
 
-	// Handle FIPS messages in stderr - these are informational, not errors
-	if stdErr != "" && strings.Contains(stdErr, "FIPS provider enabled") {
-		scopedLog.Info("FIPS provider informational message detected", "stderr", stdErr)
-		// Continue processing - FIPS messages don't indicate failure
-	} else if stdErr != "" {
-		// Log warning for any other stderr content we haven't seen before
-		scopedLog.Info("Unexpected stderr content detected - please review", "stderr", stdErr, "command", command)
+	// Log any other stderr content for debugging but don't use it for error detection
+	if stdErr != "" {
+		scopedLog.Info("Command stderr output (informational only)", "stderr", stdErr)
 	}
 
 	// Now check the actual command result
@@ -824,7 +819,7 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 		// Check for grep exit code 1 (pattern not found)
 		if strings.Contains(errMsg, "exit status 1") || strings.Contains(errMsg, "command terminated with exit code 1") {
-			// grep exit code 1 means "ENABLED" pattern not found - app is not enabled
+			// grep exit code 1 means "ENABLED" pattern not found - app exists but is not enabled
 			scopedLog.Info("App not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
 			return false, nil
 		}

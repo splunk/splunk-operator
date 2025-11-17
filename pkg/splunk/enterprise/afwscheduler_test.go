@@ -3061,9 +3061,9 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
-	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error
+	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error (not "Could not find object")
 	mockPodExecReturnContexts[1].StdErr = ""
-	mockPodExecReturnContexts[2].StdErr = "Could not find object id=app1" // Non-FIPS error
+	mockPodExecReturnContexts[2].StdErr = "Some other real error message" // Real error, not "Could not find object"
 	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2") // Real error, not grep exit code 1
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3076,7 +3076,8 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	mockPodExecReturnContexts[2].StdOut = "" // No stdout means grep didn't find ENABLED
 	mockPodExecReturnContexts[2].StdErr = "" // No stderr
 	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1") // grep exit code 1 = pattern not found
-	mockPodExecReturnContexts[3].StdErr = "real installation error" // Non-FIPS error should still fail
+	mockPodExecReturnContexts[3].StdErr = "real installation error" // This is just logged now
+	mockPodExecReturnContexts[3].Err = fmt.Errorf("install command failed") // This causes the actual failure
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3085,10 +3086,13 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed")
 	}
 
-	// Test5: App not found scenario (Could not find object)
+	// Test5: App not found scenario (Could not find object) - should proceed to install but install fails
 	mockPodExecReturnContexts[2].StdOut = ""
 	mockPodExecReturnContexts[2].StdErr = "Could not find object id=app1"
 	mockPodExecReturnContexts[2].Err = nil // This should return false, nil (app not installed)
+	// Keep the installation error from previous test to make install fail
+	mockPodExecReturnContexts[3].StdErr = "real installation error" // Install should fail
+	mockPodExecReturnContexts[3].Err = fmt.Errorf("install failed")
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3097,9 +3101,11 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed due to installation error")
 	}
 
-	// Test6: FIPS message should be handled gracefully during install
-	mockPodExecReturnContexts[3].StdErr = "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success" // FIPS message should be ignored
+	// Test6: Install succeeds with stderr content (should be ignored), but cleanup fails
+	mockPodExecReturnContexts[3].StdErr = "Some informational message in stderr" // Stderr content should be ignored
 	mockPodExecReturnContexts[3].Err = nil // No actual error for install
+	// Keep cleanup failure from previous test setup to make overall test fail
+	// mockPodExecReturnContexts[4] still has error from earlier
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3307,9 +3313,9 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Failed to detect that steps to get installed app failed")
 	}
 
-	// Test3: get installed app name passes but isAppAlreadyInstalled fails with non-FIPS error
+	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error (not "Could not find object")
 	mockPodExecReturnContexts[1].StdErr = ""
-	mockPodExecReturnContexts[2].StdErr = "Could not find object id=app1" // Non-FIPS error
+	mockPodExecReturnContexts[2].StdErr = "Some other real error message" // Real error, not "Could not find object"
 	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2")        // Real error, not grep exit code 1
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3319,11 +3325,12 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	}
 
 	// Test4: isAppAlreadyInstalled returns app is not enabled (grep exit code 1)
-	// so app install will run and it should fail with non-FIPS error
+	// so app install will run and it should fail with real error
 	mockPodExecReturnContexts[2].StdOut = ""                        // No stdout means grep didn't find ENABLED
 	mockPodExecReturnContexts[2].StdErr = ""                        // No stderr
 	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1")  // grep exit code 1 = pattern not found
-	mockPodExecReturnContexts[3].StdErr = "real installation error" // Non-FIPS error should still fail
+	mockPodExecReturnContexts[3].StdErr = "real installation error" // This is just logged now
+	mockPodExecReturnContexts[3].Err = fmt.Errorf("install command failed") // This causes the actual failure
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3332,9 +3339,9 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected app install failed")
 	}
 
-	// Test5: FIPS message during install should be handled gracefully, but es post install fails
-	mockPodExecReturnContexts[3].StdErr = "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success" // FIPS message should be ignored
-	mockPodExecReturnContexts[3].Err = nil                                                                                                        // No actual error for install
+	// Test5: Install succeeds with stderr content (should be ignored), but post install fails
+	mockPodExecReturnContexts[3].StdErr = "Some informational message in stderr" // Stderr content should be ignored
+	mockPodExecReturnContexts[3].Err = nil // No actual error for install
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
@@ -3353,13 +3360,13 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 		t.Errorf("Expected es post  install succeeded but app arhive deletion failed")
 	}
 
-	// Test7: App already installed with FIPS message - should skip installation
+	// Test7: App already installed with stderr content - should skip installation
 	// Reset all mock contexts for this test
 	mockPodExecReturnContexts[0].Err = nil                                  // File exists check passes
 	mockPodExecReturnContexts[1].StdErr = ""                                // Get app name passes
 	mockPodExecReturnContexts[1].StdOut = "app1"                            // App name is found
 	mockPodExecReturnContexts[2].StdOut = "app1 CONFIGURED ENABLED VISIBLE" // App is already enabled
-	mockPodExecReturnContexts[2].StdErr = "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success"
+	mockPodExecReturnContexts[2].StdErr = "Some informational message in stderr"
 	mockPodExecReturnContexts[2].Err = nil // No error - app is found and enabled
 	// Install step should be skipped, but cleanup should still work
 	mockPodExecReturnContexts[5].StdErr = "" // Cleanup should succeed
@@ -3367,7 +3374,7 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 	waiter.Add(1)
 	err = pCtx.runPlaybook(ctx)
 	if err != nil {
-		t.Errorf("runPlayBook should not have returned error when app is already installed with FIPS message. err=%s", err.Error())
+		t.Errorf("runPlayBook should not have returned error when app is already installed with stderr content. err=%s", err.Error())
 	}
 
 	// Test8: successful scenario where everything succeeds
@@ -4530,22 +4537,22 @@ func TestIsAppAlreadyInstalled(t *testing.T) {
 			description:    "App not installed at all",
 		},
 		{
-			name:           "FIPS provider message with app enabled",
+			name:           "App enabled with stderr content",
 			stdOut:         "myapp CONFIGURED ENABLED VISIBLE",
-			stdErr:         "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success",
+			stdErr:         "Some informational message in stderr",
 			err:            nil,
 			expectedResult: true,
 			expectedError:  false,
-			description:    "FIPS message should be ignored when app is enabled",
+			description:    "Stderr content should be ignored when app is enabled",
 		},
 		{
-			name:           "FIPS provider message with app not enabled",
+			name:           "App not enabled with stderr content",
 			stdOut:         "",
-			stdErr:         "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success",
+			stdErr:         "Some informational message in stderr",
 			err:            fmt.Errorf("exit status 1"),
 			expectedResult: false,
 			expectedError:  false,
-			description:    "FIPS message should be ignored, grep exit code 1 means not enabled",
+			description:    "Stderr content should be ignored, grep exit code 1 means not enabled",
 		},
 		{
 			name:           "Real error - exit code 2",
