@@ -1,10 +1,3 @@
----
-title: Security
-parent: Operate & Manage
-nav_order: 6
----
-
-
 # Secure Splunk deployments in Kubernetes
 
 Before creating new deployments in Kubernetes, it is important you consider the security aspects of your environment. This document describes how to secure your deployment using the Operator and Splunk Enterprise configurations, and provides examples for some common scenarios.
