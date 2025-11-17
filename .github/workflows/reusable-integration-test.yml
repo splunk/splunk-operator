@@ -1,0 +1,149 @@
+name: 'Reusable Integration Test'
+
+on:
+  workflow_call:
+    inputs:
+      cluster-platform:
+        description: 'Cloud platform: eks, azure, or gcp'
+        required: true
+        type: string
+      test-focus:
+        description: 'Test focus pattern'
+        required: true
+        type: string
+      cluster-name:
+        description: 'Cluster name'
+        required: true
+        type: string
+      cluster-workers:
+        description: 'Number of worker nodes'
+        required: false
+        type: number
+        default: 3
+      cluster-nodes:
+        description: 'Number of control plane nodes'
+        required: false
+        type: number
+        default: 1
+      splunk-operator-image:
+        description: 'Splunk operator image to test'
+        required: true
+        type: string
+      splunk-enterprise-image:
+        description: 'Splunk enterprise image to test'
+        required: true
+        type: string
+      cluster-wide:
+        description: 'Deploy operator cluster-wide'
+        required: false
+        type: boolean
+        default: true
+      deployment-type:
+        description: 'Deployment type (empty, helm, etc.)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_DEFAULT_REGION:
+        required: false
+      AZURE_CREDENTIALS:
+        required: false
+      GCP_SERVICE_ACCOUNT_KEY:
+        required: false
+      ECR_REPOSITORY:
+        required: false
+      TEST_BUCKET:
+        required: false
+      TEST_INDEXES_S3_BUCKET:
+        required: false
+      EKS_VPC_PRIVATE_SUBNET_STRING:
+        required: false
+      EKS_VPC_PUBLIC_SUBNET_STRING:
+        required: false
+      EKS_SSH_PUBLIC_KEY:
+        required: false
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    env:
+      CLUSTER_NODES: ${{ inputs.cluster-nodes }}
+      CLUSTER_WORKERS: ${{ inputs.cluster-workers }}
+      SPLUNK_ENTERPRISE_IMAGE: ${{ inputs.splunk-enterprise-image }}
+      SPLUNK_OPERATOR_IMAGE: ${{ inputs.splunk-operator-image }}
+      TEST_FOCUS: ${{ inputs.test-focus }}
+      TEST_CLUSTER_PLATFORM: ${{ inputs.cluster-platform }}
+      TEST_CLUSTER_NAME: ${{ inputs.cluster-name }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      TEST_BUCKET: ${{ secrets.TEST_BUCKET }}
+      TEST_INDEXES_S3_BUCKET: ${{ secrets.TEST_INDEXES_S3_BUCKET }}
+      CLUSTER_WIDE: ${{ inputs.cluster-wide }}
+      DEPLOYMENT_TYPE: ${{ inputs.deployment-type }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load environment variables
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+
+      - name: Setup Operator Tools
+        uses: ./.github/actions/setup-operator-tools
+        with:
+          operator-sdk-version: ${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+      - name: Setup Kubernetes Tools
+        uses: ./.github/actions/setup-k8s-tools
+        with:
+          kubectl-version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
+          helm-version: v3.8.2
+          eksctl-version: ${{ steps.dotenv.outputs.EKSCTL_VERSION }}
+
+      - name: Setup Cloud Authentication
+        uses: ./.github/actions/configure-cloud-auth
+        with:
+          cloud-provider: ${{ inputs.cluster-platform == 'eks' && 'aws' || inputs.cluster-platform == 'azure' && 'azure' || 'gcp' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          azure-credentials: ${{ secrets.AZURE_CREDENTIALS }}
+          gcp-service-account-key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Create Cluster
+        run: |
+          export EKS_CLUSTER_K8_VERSION=${{ steps.dotenv.outputs.EKS_CLUSTER_K8_VERSION }}
+          make cluster-up
+
+      - name: Install Kubernetes Add-ons
+        uses: ./.github/actions/setup-k8s-tools
+        with:
+          kubectl-version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
+          install-metrics-server: 'true'
+
+      - name: Run Integration Tests
+        id: test
+        run: |
+          make int-test
+
+      - name: Collect Test Artifacts
+        if: always()
+        uses: ./.github/actions/collect-test-artifacts
+        with:
+          artifact-name: test-logs-${{ inputs.cluster-platform }}-${{ inputs.test-focus }}
+
+      - name: Cleanup Test Artifacts
+        if: always()
+        run: |
+          make cleanup
+          make clean
+
+      - name: Cleanup Cluster
+        if: always()
+        run: |
+          make cluster-down

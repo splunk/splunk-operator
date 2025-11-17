@@ -1,0 +1,35 @@
+name: 'Setup Operator Development Tools'
+description: 'Install Operator SDK, Ginkgo, and other operator development tools'
+
+inputs:
+  operator-sdk-version:
+    description: 'Operator SDK version to install'
+    required: true
+  go-version:
+    description: 'Go version for setup'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Install Operator SDK
+      shell: bash
+      run: |
+        export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
+        export OS=$(uname | awk '{print tolower($0)}')
+        export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/${{ inputs.operator-sdk-version }}
+        sudo curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
+        sudo chmod +x operator-sdk_${OS}_${ARCH}
+        sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
+        operator-sdk version
+
+    - name: Install Ginkgo
+      shell: bash
+      run: |
+        make setup/ginkgo
+        go mod tidy
