@@ -12,7 +12,7 @@ _How did you test these changes? What automated tests are added?_
 
 ### Related Issues
 
-_Jira tickets, GitHub issues, Support tickets..._
+_Jira tickets, GitHub issues, Support tickets etc._
 
 ### PR Checklist
 
