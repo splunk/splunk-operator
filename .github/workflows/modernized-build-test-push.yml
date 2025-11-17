@@ -89,19 +89,26 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       splunk-enterprise-image: ${{ steps.set-image.outputs.splunk-enterprise-image }}
+      splunk-operator-image: ${{ steps.set-image.outputs.splunk-operator-image }}
     steps:
       - uses: actions/checkout@v4
       - name: Load environment variables
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-      - name: Set Splunk Enterprise Image
+      - name: Set Images
         id: set-image
         run: |
+          # Set Splunk Enterprise image based on branch
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "splunk-enterprise-image=${{ steps.dotenv.outputs.SPLUNK_ENTERPRISE_RELEASE_IMAGE }}" >> $GITHUB_OUTPUT
           else
             echo "splunk-enterprise-image=${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}" >> $GITHUB_OUTPUT
           fi
+
+          # Set Splunk Operator image (constructed here to avoid secret output issues)
+          OPERATOR_IMAGE="${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}"
+          echo "splunk-operator-image=${OPERATOR_IMAGE}" >> $GITHUB_OUTPUT
+          echo "Operator image will be: ${OPERATOR_IMAGE}"
 
   smoke-tests:
     needs: [build-operator-image, load-env]
@@ -122,7 +129,7 @@ jobs:
       cluster-name: eks-smoke-test-${{ matrix.test }}-${{ github.run_id }}
       cluster-workers: ${{ contains(matrix.test, 'appframework') && 5 || 3 }}
       cluster-nodes: ${{ contains(matrix.test, 'appframework') && 2 || 1 }}
-      splunk-operator-image: ${{ needs.build-operator-image.outputs.image-name }}
+      splunk-operator-image: ${{ needs.load-env.outputs.splunk-operator-image }}
       splunk-enterprise-image: ${{ needs.load-env.outputs.splunk-enterprise-image }}
       cluster-wide: true
     secrets:

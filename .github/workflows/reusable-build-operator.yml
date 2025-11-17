@@ -113,6 +113,10 @@ jobs:
       actions: read
       contents: read
       security-events: write
+    env:
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      IMAGE_TAG: ${{ inputs.image-tag || github.sha }}
+      FULL_IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ inputs.image-tag || github.sha }}
 
     steps:
       - name: Checkout code
@@ -132,8 +136,8 @@ jobs:
 
       - name: Pull Image
         run: |
-          echo "Pulling image: ${{ needs.build.outputs.image-name }}"
-          docker pull ${{ needs.build.outputs.image-name }}
+          echo "Pulling image: ${{ env.FULL_IMAGE_NAME }}"
+          docker pull ${{ env.FULL_IMAGE_NAME }}
 
       - name: Set up Cosign
         if: inputs.sign-image
@@ -142,14 +146,14 @@ jobs:
       - name: Verify Image Signature
         if: inputs.sign-image
         run: |
-          cosign verify --key env://COSIGN_PUBLIC_KEY ${{ needs.build.outputs.image-name }}
+          cosign verify --key env://COSIGN_PUBLIC_KEY ${{ env.FULL_IMAGE_NAME }}
         env:
           COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
 
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ needs.build.outputs.image-name }}
+          image-ref: ${{ env.FULL_IMAGE_NAME }}
           format: sarif
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
