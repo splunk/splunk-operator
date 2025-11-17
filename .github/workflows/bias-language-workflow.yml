@@ -1,4 +1,8 @@
 name: Bias Language
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
 on: [push]
 jobs:
   biased_lang:

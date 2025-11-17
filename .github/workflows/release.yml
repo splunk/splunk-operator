@@ -1,4 +1,8 @@
 name: Release Charts
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
 on:
   push:
     branches:

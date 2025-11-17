@@ -1,4 +1,8 @@
 name: Bundle Push Post Release Workflow
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
 on:
   workflow_dispatch:
     inputs:
