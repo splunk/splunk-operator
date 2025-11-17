@@ -113,7 +113,8 @@ jobs:
 
   smoke-tests:
     needs: [build-operator-image, load-env]
-    permissions: {}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
