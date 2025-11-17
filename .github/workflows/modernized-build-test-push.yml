@@ -27,6 +27,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+          cache: false
 
       - name: Check Source Formatting
         run: make fmt && if [[ $? -ne 0 ]]; then false; fi
