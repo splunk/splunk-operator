@@ -1,10 +1,14 @@
+name: Prodsec Workflow
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
 on:
   pull_request: {}
   push:
     branches:
     - main
     - develop
-name: Prodsec Workflow
 jobs:
   semgrep:
     name: Semgrep Scanner

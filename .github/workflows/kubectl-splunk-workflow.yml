@@ -2,6 +2,11 @@
 
 name: Kubectl Splunk CI 
 
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
 on:
   push:
     branches: 
