@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - feature/fix-error-handling-in-afwscheduler
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
