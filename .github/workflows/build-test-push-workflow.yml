@@ -5,6 +5,7 @@ on:
     branches:
     - main
     - develop
+    - CSPL_4238_xcrypto
 jobs:
   check-formating:
     runs-on: ubuntu-latest
