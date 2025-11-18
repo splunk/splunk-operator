@@ -68,6 +68,8 @@ on:
         required: false
       ECR_REPOSITORY:
         required: false
+      SPLUNK_ENTERPRISE_IMAGE:
+        required: false
       TEST_BUCKET:
         required: false
       TEST_INDEXES_S3_BUCKET:
@@ -105,30 +107,43 @@ jobs:
       - name: Set Image Names
         id: set-images
         run: |
+          echo "=== Setting Image Names ==="
+
           # Set operator image (construct if empty)
           if [ -z "${{ inputs.splunk-operator-image }}" ]; then
             OPERATOR_IMAGE="${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}"
             echo "SPLUNK_OPERATOR_IMAGE=${OPERATOR_IMAGE}" >> $GITHUB_ENV
-            echo "Constructed operator image: ${OPERATOR_IMAGE}"
+            echo "✓ Constructed operator image: ${OPERATOR_IMAGE}"
           else
             echo "SPLUNK_OPERATOR_IMAGE=${{ inputs.splunk-operator-image }}" >> $GITHUB_ENV
-            echo "Using provided operator image: ${{ inputs.splunk-operator-image }}"
+            echo "✓ Using provided operator image: ${{ inputs.splunk-operator-image }}"
           fi
 
           # Set enterprise image (use release or secret based on input)
           if [ -z "${{ inputs.splunk-enterprise-image }}" ]; then
             if [ "${{ inputs.use-release-enterprise-image }}" == "true" ]; then
               ENTERPRISE_IMAGE="${{ inputs.release-enterprise-image }}"
-              echo "Using release enterprise image: ${ENTERPRISE_IMAGE}"
+              echo "✓ Using release enterprise image: ${ENTERPRISE_IMAGE}"
             else
               ENTERPRISE_IMAGE="${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}"
-              echo "Using secret enterprise image"
+              echo "✓ Using secret enterprise image (from SPLUNK_ENTERPRISE_IMAGE secret)"
             fi
+
+            if [ -z "${ENTERPRISE_IMAGE}" ]; then
+              echo "❌ ERROR: Enterprise image is empty!"
+              echo "   - use-release-enterprise-image: ${{ inputs.use-release-enterprise-image }}"
+              echo "   - release-enterprise-image: ${{ inputs.release-enterprise-image }}"
+              echo "   - SPLUNK_ENTERPRISE_IMAGE secret is not set or empty"
+              exit 1
+            fi
+
             echo "SPLUNK_ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE}" >> $GITHUB_ENV
           else
             echo "SPLUNK_ENTERPRISE_IMAGE=${{ inputs.splunk-enterprise-image }}" >> $GITHUB_ENV
-            echo "Using provided enterprise image: ${{ inputs.splunk-enterprise-image }}"
+            echo "✓ Using provided enterprise image: ${{ inputs.splunk-enterprise-image }}"
           fi
+
+          echo "=== Image Names Set Successfully ==="
 
       - name: Load environment variables
         id: dotenv
