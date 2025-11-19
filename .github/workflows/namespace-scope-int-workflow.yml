@@ -9,6 +9,7 @@ on:
     - cron: "0 02 * * WED,SUN"
 jobs:
   int-tests:
+    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -112,6 +113,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -140,6 +142,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
+        timeout-minutes: 360
         run: |
           export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test

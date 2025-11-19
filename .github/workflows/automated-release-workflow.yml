@@ -47,6 +47,7 @@ jobs:
         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
         role-session-name: github-${{ github.run_id }}
         aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
 
     - name: Login to Amazon ECR
       id: login-ecr-public

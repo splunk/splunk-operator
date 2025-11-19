@@ -94,6 +94,7 @@ jobs:
         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
         role-session-name: github-${{ github.run_id }}
         aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -112,6 +113,7 @@ jobs:
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
   smoke-tests-arm-ubuntu:
     needs: build-operator-image-arm-ubuntu
+    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -216,6 +218,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -240,6 +243,7 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
+        timeout-minutes: 360
         run: |
           make int-test
       - name: Collect Test Logs
