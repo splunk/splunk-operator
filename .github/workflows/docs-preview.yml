@@ -1,11 +1,7 @@
 name: Docs Preview
 
 on:
-  pull_request:
-    paths:
-      - 'docs/**'
-      - '.github/workflows/docs-preview.yml'
-      - 'README.md'
+  pull_request: {}
 
 permissions:
   contents: read
