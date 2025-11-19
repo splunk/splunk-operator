@@ -14,6 +14,7 @@ infrastructure. Packaged as a container, it uses the
 to manage Splunk-specific [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/),
 following best practices to manage all the underlying Kubernetes objects for you.
 
+
 This repository is used to build the Splunk
 [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
 for Kubernetes (SOK). If you are just looking for documentation on how to
