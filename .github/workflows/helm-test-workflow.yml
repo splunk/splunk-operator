@@ -45,6 +45,7 @@ jobs:
         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
         role-session-name: github-${{ github.run_id }}
         aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -52,6 +53,7 @@ jobs:
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
+    timeout-minutes: 420
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
@@ -148,6 +150,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -193,6 +196,7 @@ jobs:
           helm package helm-chart/splunk-operator
           mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts
       - name: Run helm test
+        timeout-minutes: 360
         env:
           KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           KUTTL_SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.HELM_GITHUB_SHA }}

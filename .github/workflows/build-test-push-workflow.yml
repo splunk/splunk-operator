@@ -96,6 +96,7 @@ jobs:
         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
         role-session-name: github-${{ github.run_id }}
         aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -136,6 +137,7 @@ jobs:
         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
         role-session-name: github-${{ github.run_id }}
         aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
 
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v1
@@ -162,6 +164,7 @@ jobs:
         sarif_file: 'trivy-results.sarif'
   smoke-tests:
     needs: vulnerability-scan
+    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -260,6 +263,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -285,6 +289,7 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
+        timeout-minutes: 360
         run: |
           make int-test
       - name: Collect Test Logs

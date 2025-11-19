@@ -44,6 +44,7 @@ jobs:
         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
         role-session-name: github-${{ github.run_id }}
         aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -55,6 +56,7 @@ jobs:
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
         make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
   int-tests-arm-rhel:
+    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -158,6 +160,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -181,6 +184,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
+        timeout-minutes: 360
         run: |
           make int-test
       - name: Collect Test Logs
