@@ -139,6 +139,15 @@ test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
+##@ Documentation
+
+docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
+	@echo "Installing dependencies locally..."
+	@cd docs && bundle config set --local path 'vendor/bundle' && bundle config set --local deployment 'false' && bundle install
+	@echo "Starting Jekyll server for documentation preview..."
+	@cd docs && bundle exec jekyll serve --livereload
+	@echo "Documentation available at http://localhost:4000/splunk-operator"
+
 ##@ Build
 
 build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
