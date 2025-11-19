@@ -1,0 +1,59 @@
+name: Docs Preview
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-preview.yml'
+      - 'README.md'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: pages-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    name: Publish preview
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          preview: true
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📝 Documentation preview deployed!\n\n🔗 Preview URL: ${{ steps.deployment.outputs.page_url }}`
+            })
