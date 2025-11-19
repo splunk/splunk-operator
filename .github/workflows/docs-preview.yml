@@ -14,7 +14,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: "pages-preview-${{ github.event.pull_request.number || github.run_id }}"
+  group: pages-preview-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -38,6 +38,9 @@ jobs:
     name: Publish preview
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
@@ -46,7 +49,6 @@ jobs:
           preview: true
       - name: Comment preview URL
         uses: actions/github-script@v7
-        if: github.event_name == 'pull_request'
         with:
           script: |
             github.rest.issues.createComment({
