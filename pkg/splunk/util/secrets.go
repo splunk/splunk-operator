@@ -365,6 +365,7 @@ splunk:
     pass4SymmKey: "%s"
     idxc:
         secret: "%s"
+		replication_port: 9887
     shc:
         secret: "%s"
 `,
