@@ -11,6 +11,7 @@ helm repo update
 
 The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Splunk Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Enterprise custom resources.
 
+
 Users need to deploy the latest CRDs manually. This is a [limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/) from helm. The ```splunk/splunk-operator``` chart no longer contains the CRDs to install on the first deployment due to the size of the CRDs. Helm has a chart size [limit of 1MB](https://helm.sh/docs/topics/advanced/#sql-storage-backend) due to internal limits in Kubernetes' underlying etcd key-value store, and the Splunk Operator for Kubernetes CRDs are too big to fit into the helm chart to deploy the operator. To install the CRDs for the first time, or to update the CRDs to the latest versions, follow one of the following steps.
 
 ```
