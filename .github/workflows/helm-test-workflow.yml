@@ -202,7 +202,6 @@ jobs:
           helm package helm-chart/splunk-operator
           mv splunk-operator-*.tgz helm-chart/splunk-enterprise/charts
       - name: Run helm test
-        timeout-minutes: 360
         env:
           KUTTL_SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_ENTERPRISE_IMAGE }}
           KUTTL_SPLUNK_OPERATOR_IMAGE: ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ env.HELM_GITHUB_SHA }}
