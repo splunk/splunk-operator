@@ -1,3 +1,10 @@
+---
+title: Helm Chart
+parent: Deploy & Configure
+nav_order: 2
+---
+
+
 # Splunk Operator Helm Installation
 
 ## Splunk Operator Helm chart Repository
