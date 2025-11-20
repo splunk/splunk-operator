@@ -13,7 +13,6 @@ on:
 jobs:
   build-operator-image-arm-rhel:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.ECR_PREFIX }}/${{ github.event.inputs.splunk_image_repository_tag }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -192,7 +191,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
-        timeout-minutes: 360
+        timeout-minutes: 240
         run: |
           make int-test
       - name: Collect Test Logs
