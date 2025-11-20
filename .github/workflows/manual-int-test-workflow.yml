@@ -13,7 +13,6 @@ on:
         default: "true"
 jobs:
   int-tests:
-    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +144,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
-        timeout-minutes: 360
+        timeout-minutes: 240
         run: |
           export SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
           make int-test
