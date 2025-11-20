@@ -1,3 +1,10 @@
+---
+title: Multisite Examples
+parent: Reference
+nav_order: 6
+---
+
+
 # Configuring Splunk Enterprise Multisite Deployments
 
 This document provides examples to configure a multisite cluster using the splunk-operator.
