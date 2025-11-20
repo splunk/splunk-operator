@@ -1,0 +1,273 @@
+---
+# ================= Canonical TLS under $SPLUNK_HOME =================
+- name: "Ensure canonical TLS dir"
+  file:
+    path: "[[ .CanonicalDir ]]"
+    state: directory
+    owner: splunk
+    group: splunk
+    mode: "0755"
+
+# Probe mounted inputs
+- name: "Stat source files under SrcDir"
+  block:
+    - name: "Stat tls.crt"
+      stat:
+        path: "[[ .SrcDir ]]/tls.crt"
+      register: s_tls_crt
+
+    - name: "Stat tls.key"
+      stat:
+        path: "[[ .SrcDir ]]/tls.key"
+      register: s_tls_key
+
+    - name: "Stat ca.crt"
+      stat:
+        path: "[[ .SrcDir ]]/ca.crt"
+      register: s_ca_crt
+
+    - name: "Stat trust-manager bundle (if any)"
+      stat:
+        path: "[[ .TrustDir ]]/[[ .TrustKey ]]"
+      register: s_trust_mgr
+
+# Fail early if key/cert missing
+- name: "Validate required source files are present"
+  assert:
+    that:
+      - s_tls_crt.stat.exists
+      - s_tls_key.stat.exists
+    fail_msg: "TLS inputs not found at [[ .SrcDir ]]. Mount Secret/CSI with tls.crt and tls.key."
+    success_msg: "Found tls.crt and tls.key at [[ .SrcDir ]]"
+
+# Copy into canonical paths
+- name: "Copy tls.crt -> canonical"
+  copy:
+    src: "[[ .SrcDir ]]/tls.crt"
+    dest: "[[ .TLSCrt ]]"
+    owner: splunk
+    group: splunk
+    mode: "0644"
+    remote_src: true
+  when: s_tls_crt.stat.exists
+
+- name: "Copy tls.key -> canonical (0600)"
+  copy:
+    src: "[[ .SrcDir ]]/tls.key"
+    dest: "[[ .TLSKey ]]"
+    owner: splunk
+    group: splunk
+    mode: "0600"
+    remote_src: true
+  when: s_tls_key.stat.exists
+
+- name: "Copy CA to canonical if present"
+  copy:
+    src: "[[ .SrcDir ]]/ca.crt"
+    dest: "[[ .CACrt ]]"
+    owner: splunk
+    group: splunk
+    mode: "0644"
+    remote_src: true
+  when: s_ca_crt.stat.exists
+
+# ================= Build server.pem (splunkd cert bundle) =================
+- name: Build server.pem (key + cert + optional CA)
+  shell:
+    cmd: /bin/sh -s
+    stdin: |-
+      set -e
+      if [ -f "[[ .TLSCrt ]]" ] && [ -s "[[ .CACrt ]]" ]; then
+        cat "[[ .TLSKey ]]" "[[ .TLSCrt ]]" "[[ .CACrt ]]" > "[[ .ServerPEM ]]"
+      else
+        cat "[[ .TLSKey ]]" "[[ .TLSCrt ]]" > "[[ .ServerPEM ]]"
+      fi
+      chown splunk:splunk "[[ .ServerPEM ]]"
+      chmod 0600 "[[ .ServerPEM ]]"
+
+# ================= Build TRUST BUNDLE =================
+# Result path is [[ .CABundle ]] (recommend: /opt/splunk/etc/auth/custom-ca-bundle.crt)
+# 1) Find a system CA bundle (pick the first that exists)
+- name: Detect system CA bundle path
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/pki/tls/certs/ca-bundle.crt
+    - /etc/ssl/certs/ca-bundle.crt
+    - /etc/ssl/cert.pem
+  register: sysca_candidates
+
+- name: Set system_ca_path fact
+  set_fact:
+    system_ca_path: >-
+      {{ (sysca_candidates.results
+          | selectattr('stat.exists')
+          | map(attribute='stat.path')
+          | list | first) | default('', true) }}
+
+# Assemble merged trust store -> **[[ .CABundle ]]** (canonical)
+- name: Assemble merged trust store (Secret + trust-manager + system)
+  shell:
+    cmd: /bin/sh -s
+    stdin: |
+      set -e
+      OUT="[[ .CABundle ]]"     # e.g., /opt/splunk/etc/auth/trust-bundle.crt
+      TMP="$(mktemp)"
+      # Append in this order: Secret CA, trust-manager bundle, system CA
+      for f in "[[ .CACrt ]]" "[[ .CABundle ]]" "{{ system_ca_path | default('') }}"; do
+        if [ -n "$f" ] && [ -s "$f" ] && [ "$f" != "$OUT" ]; then
+          cat "$f" >>"$TMP"
+          printf '\n' >>"$TMP"
+        fi
+      done
+      # Write atomically with ownership/perm
+      install -D -o splunk -g splunk -m 0644 -T "$TMP" "$OUT"
+      rm -f "$TMP"
+  changed_when: true
+
+
+# ================= KV encrypted key + bundles =================
+- name: Generate KV passphrase (prefer Splunk OpenSSL, else system, else dd)
+  no_log: true
+  ansible.builtin.shell:
+    cmd: /bin/sh -s
+    stdin: |
+      set -e
+      # Try Splunk's OpenSSL first (with proper env), then system openssl, then dd
+      if [ -x /opt/splunk/bin/openssl ] && \
+         LD_LIBRARY_PATH=/opt/splunk/lib OPENSSL_FIPS="${SPLUNK_FIPS:-}" \
+           /opt/splunk/bin/openssl version >/dev/null 2>&1; then
+        if LD_LIBRARY_PATH=/opt/splunk/lib OPENSSL_FIPS="${SPLUNK_FIPS:-}" \
+             /opt/splunk/bin/openssl rand -base64 24 >/dev/null 2>&1; then
+          LD_LIBRARY_PATH=/opt/splunk/lib OPENSSL_FIPS="${SPLUNK_FIPS:-}" \
+            /opt/splunk/bin/openssl rand -base64 24
+          exit 0
+        fi
+      fi
+      if command -v openssl >/dev/null 2>&1 && \
+         openssl rand -base64 24 >/dev/null 2>&1; then
+        openssl rand -base64 24
+        exit 0
+      fi
+      dd if=/dev/urandom bs=24 count=1 2>/dev/null | base64
+  register: kv_pass
+  changed_when: true
+
+
+- name: "Create encrypted private key for KV (tls_enc.key)"
+  no_log: true
+  shell: |
+    set -e
+    PASS="{{ kv_pass.stdout | trim }}"
+    if [ -x /opt/splunk/bin/openssl ] && \
+       LD_LIBRARY_PATH=/opt/splunk/lib OPENSSL_FIPS="${SPLUNK_FIPS:-}" \
+         /opt/splunk/bin/openssl version >/dev/null 2>&1; then
+      LD_LIBRARY_PATH=/opt/splunk/lib OPENSSL_FIPS="${SPLUNK_FIPS:-}" \
+        /opt/splunk/bin/openssl rsa -aes256 -passout pass:"$PASS" \
+          -in "[[ .TLSKey ]]" -out "[[ .CanonicalDir ]]/tls_enc.key"
+    else
+      openssl rsa -aes256 -passout pass:"$PASS" \
+        -in "[[ .TLSKey ]]" -out "[[ .CanonicalDir ]]/tls_enc.key"
+    fi
+    chown splunk:splunk "[[ .CanonicalDir ]]/tls_enc.key"
+    chmod 0600 "[[ .CanonicalDir ]]/tls_enc.key"
+
+- name: "Build KV bundle(s): kvstore.pem + splunk-bundle-pass.crt + splunk-bundle.crt"
+  no_log: false
+  shell: |
+    set -e
+    CAN="[[ .CanonicalDir ]]"
+    TLSCRT="[[ .TLSCrt ]]"
+    CACRT="[[ .CACrt ]]"
+
+    # Encrypted bundle for KV (enc key + cert + optional CA)
+    if [ -s "$CACRT" ]; then
+      cat "$CAN/tls_enc.key" "$TLSCRT" "$CACRT" > "[[ .KVBundlePath ]]"
+      cat "$TLSCRT" "[[ .CACrt ]]" > "$CAN/tls.fullchain.crt"
+    else
+      cat "$CAN/tls_enc.key" "$TLSCRT" > "[[ .KVBundlePath ]]"
+      cp -f "$TLSCRT" "$CAN/tls.fullchain.crt"
+    fi
+    chown splunk:splunk "[[ .KVBundlePath ]]"
+    chmod 0600 "[[ .KVBundlePath ]]"
+
+    ln -sf "[[ .KVBundlePath ]]" "$CAN/splunk-bundle-pass.crt"
+    if [ -s "$CACRT" ]; then
+      cat "[[ .TLSKey ]]" "$TLSCRT" "$CACRT" > "$CAN/splunk-bundle.crt"
+    else
+      cat "[[ .TLSKey ]]" "$TLSCRT" > "$CAN/splunk-bundle.crt"
+    fi
+    chown splunk:splunk "$CAN/splunk-bundle.crt"
+    chmod 0600 "$CAN/splunk-bundle.crt"
+
+# =================== Export Ansible facts (no direct conf writes) ===================
+- name: "Set splunk_ssl_password fact (KV + trust store)"
+  no_log: true
+  set_fact:
+    splunk_ssl_password:
+      ssl:
+        password: "{{ kv_pass.stdout | trim }}"
+        ca: "[[ .CACrt ]]"                                   # leaf CA (from Secret)
+        cert: "[[ .CanonicalDir ]]/splunk-bundle-pass.crt"   # encrypted bundle (enc key + chain)
+        enable: true
+      conf:
+        - key: "server"
+          value:
+            directory: "[[ .SplunkHome ]]/etc/system/local"
+            content:
+              kvstore:
+                sslPassword: "{{ kv_pass.stdout | trim }}"
+                serverCert: "[[ .KVBundlePath ]]"            # we built this for KV: encrypted key + chain
+                sslVerifyServerName: true
+                sslVerifyServerCert: true
+              sslConfig:
+                sslVersions: "tls1.2"
+                sslVersionsForClient: "tls1.2"
+                requireClientCert: false
+                sslVerifyServerName: true
+                cliVerifyServerName: true
+                sslVerifyServerCert: true
+                caTrustStore: "splunk,OS"
+                caTrustStorePath: "[[ .CABundle ]]"          # merged bundle we created above
+              node_auth:
+                signatureVersion: "v2"
+
+- name: "Merge splunk_ssl_password into splunk"
+  no_log: true
+  set_fact:
+    splunk: "{{ (splunk | default({})) | combine(splunk_ssl_password, recursive=true, list_merge='append_rp') }}"
+
+# ================= Final safety: assert canonical perms =================
+# Re-assert perms only if the merged bundle exists
+- name: Stat merged trust bundle
+  stat:
+    path: "[[ .CABundle ]]"
+  register: s_trust
+
+- name: "Re-assert canonical file perms (tls.key)"
+  file:
+    path: "[[ .TLSKey ]]"
+    owner: splunk
+    group: splunk
+    mode: "0600"
+
+- name: "Re-assert canonical file perms (tls.crt)"
+  file:
+    path: "[[ .TLSCrt ]]"
+    owner: splunk
+    group: splunk
+    mode: "0644"
+
+- name: "Re-assert canonical file perms (server.pem)"
+  file:
+    path: "[[ .ServerPEM ]]"
+    owner: splunk
+    group: splunk
+    mode: "0600"
+
+- name: "Re-assert canonical file perms (merged trust bundle)"
+  file:
+    path: "[[ .CABundle ]]"
+    owner: splunk
+    group: splunk
+    mode: "0644"

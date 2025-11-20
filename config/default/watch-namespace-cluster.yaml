@@ -1,0 +1,9 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value: ""
+
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SPLUNK_GENERAL_TERMS
+    value: "--accept-sgt-current-at-splunk-com"
