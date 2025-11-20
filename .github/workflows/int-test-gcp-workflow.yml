@@ -254,6 +254,7 @@ jobs:
           kubectl apply -f test/gcp-storageclass.yaml
 
       - name: Run Integration Tests
+        timeout-minutes: 240
         run: |
           export GCP_SERVICE_ACCOUNT_KEY=${{ secrets.GCP_SERVICE_ACCOUNT_KEY_BASE64 }}
           make int-test

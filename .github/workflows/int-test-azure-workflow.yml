@@ -223,6 +223,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
+        timeout-minutes: 240
         run: |
             make int-test
       - name: Collect Test Logs

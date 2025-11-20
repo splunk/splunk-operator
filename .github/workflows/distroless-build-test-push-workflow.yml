@@ -164,7 +164,6 @@ jobs:
 #          sarif_file: 'trivy-results.sarif'
   smoke-tests:
     needs: build-operator-image
-    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -289,7 +288,7 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
-        timeout-minutes: 360
+        timeout-minutes: 240
         run: |
           make int-test
       - name: Collect Test Logs

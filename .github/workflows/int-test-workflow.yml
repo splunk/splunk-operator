@@ -14,7 +14,6 @@ on:
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
@@ -53,7 +52,6 @@ jobs:
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
-    timeout-minutes: 420
     strategy:
       fail-fast: false
       matrix:
@@ -183,7 +181,7 @@ jobs:
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
-        timeout-minutes: 360
+        timeout-minutes: 240
         run: |
           make int-test
       - name: Collect Test Logs
