@@ -2213,6 +2213,9 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              terminationGracePeriodSeconds:
+                format: int64
+                type: integer
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
@@ -6730,6 +6733,9 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              terminationGracePeriodSeconds:
+                format: int64
+                type: integer
               tolerations:
                 description: Pod's tolerations for Kubernetes node's taint
                 items:
