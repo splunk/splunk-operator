@@ -1,0 +1,60 @@
+{
+  "links": {},
+  "origin": "https://localhost:8089/services/shcluster/captain/info",
+  "updated": "2020-03-15T16:36:42+00:00",
+  "generator": {
+    "build": "a7f645ddaf91",
+    "version": "8.0.2"
+  },
+  "entry": [
+    {
+      "name": "captain",
+      "id": "https://localhost:8089/services/shcluster/captain/info/captain",
+      "updated": "1970-01-01T00:00:00+00:00",
+      "links": {
+        "alternate": "/services/shcluster/captain/info/captain",
+        "list": "/services/shcluster/captain/info/captain"
+      },
+      "author": "system",
+      "acl": {
+        "app": "",
+        "can_list": true,
+        "can_write": true,
+        "modifiable": false,
+        "owner": "system",
+        "perms": {
+          "read": [
+            "admin",
+            "splunk-system-role"
+          ],
+          "write": [
+            "admin",
+            "splunk-system-role"
+          ]
+        },
+        "removable": false,
+        "sharing": "system"
+      },
+      "content": {
+        "eai:acl": null,
+        "elected_captain": 1584139352,
+        "id": "A9D5FCCF-EB93-4E0A-93E1-45B56483EA7A",
+        "initialized_flag": true,
+        "label": "splunk-s2-search-head-0",
+        "maintenance_mode": false,
+        "mgmt_uri": "https://splunk-s2-search-head-0.splunk-s2-search-head-headless.splunk.svc.cluster.local:8089",
+        "min_peers_joined_flag": true,
+        "peer_scheme_host_port": "https://splunk-s2-search-head-0.splunk-s2-search-head-headless.splunk.svc.cluster.local:8089",
+        "rolling_restart_flag": false,
+        "service_ready_flag": true,
+        "start_time": 1584139291
+      }
+    }
+  ],
+  "paging": {
+    "total": 1,
+    "perPage": 30,
+    "offset": 0
+  },
+  "messages": []
+}
