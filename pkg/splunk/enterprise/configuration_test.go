@@ -95,11 +95,11 @@ func TestGetSplunkService(t *testing.T) {
 		configTester(t, fmt.Sprintf("getSplunkService(\"%s\",%t)", instanceType, isHeadless), f, want)
 	}
 
-	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"status":{"loadBalancer":{}}}`)
-	test(SplunkIndexer, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-headless","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"clusterIP":"None","type":"ClusterIP"},"status":{"loadBalancer":{}}}`)
+	test(SplunkIndexer, false, loadFixture(t, "splunk_indexer_service.json"))
+	test(SplunkIndexer, true, loadFixture(t, "splunk_indexer_headless.json"))
 	// Multipart IndexerCluster - test part-of and instance labels for child part
 	cr.Spec.ClusterManagerRef.Name = "cluster1"
-	test(SplunkIndexer, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-cluster1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/instance":"splunk-stack1-indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-cluster1-indexer"}},"status":{"loadBalancer":{}}}`)
+	test(SplunkIndexer, false, loadFixture(t, "splunk_indexer_multipart_service.json"))
 	cr.Spec.ClusterManagerRef.Name = ""
 
 	cr.Spec.ServiceTemplate.Spec.Type = "LoadBalancer"
@@ -107,8 +107,8 @@ func TestGetSplunkService(t *testing.T) {
 	cr.ObjectMeta.Labels = map[string]string{"one": "two"}
 	cr.ObjectMeta.Annotations = map[string]string{"a": "b"}
 
-	test(SplunkSearchHead, false, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-search-head-service","namespace":"test","creationTimestamp":null,"labels":{"1":"2","app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head","one":"two"},"annotations":{"a":"b"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089}],"selector":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"type":"LoadBalancer"},"status":{"loadBalancer":{}}}`)
-	test(SplunkSearchHead, true, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-search-head-headless","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head","one":"two"},"annotations":{"a":"b"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089}],"selector":{"app.kubernetes.io/component":"search-head","app.kubernetes.io/instance":"splunk-stack1-search-head","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"search-head","app.kubernetes.io/part-of":"splunk-stack1-search-head"},"clusterIP":"None","type":"ClusterIP","publishNotReadyAddresses":true},"status":{"loadBalancer":{}}}`)
+	test(SplunkSearchHead, false, loadFixture(t, "splunk_search_head_service.json"))
+	test(SplunkSearchHead, true, loadFixture(t, "splunk_search_head_headless.json"))
 }
 
 func TestGetSplunkDefaults(t *testing.T) {
@@ -129,7 +129,7 @@ func TestGetSplunkDefaults(t *testing.T) {
 		configTester(t, "getSplunkDefaults()", f, want)
 	}
 
-	test(`{"metadata":{"name":"splunk-stack1-indexer-defaults","namespace":"test","creationTimestamp":null},"data":{"default.yml":"defaults_string"}}`)
+	test(loadFixture(t, "splunk_defaults.json"))
 }
 
 func TestGetService(t *testing.T) {
@@ -161,7 +161,7 @@ func TestGetService(t *testing.T) {
 		configTester(t, "getSplunkService()", f, want)
 	}
 
-	test(SplunkIndexer, `{"kind":"Service","apiVersion":"v1","metadata":{"name":"splunk-stack1-indexer-service","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"},"ownerReferences":[{"apiVersion":"","kind":"","name":"stack1","uid":"","controller":true}]},"spec":{"ports":[{"name":"user-defined","port":32000,"targetPort":6443},{"name":"http-splunkweb","protocol":"TCP","port":8000,"targetPort":8000},{"name":"http-hec","protocol":"TCP","port":8088,"targetPort":8088},{"name":"https-splunkd","protocol":"TCP","port":8089,"targetPort":8089},{"name":"tcp-s2s","protocol":"TCP","port":9997,"targetPort":9997}],"selector":{"app.kubernetes.io/component":"indexer","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"indexer","app.kubernetes.io/part-of":"splunk-stack1-indexer"}},"status":{"loadBalancer":{}}}`)
+	test(SplunkIndexer, loadFixture(t, "splunk_indexer_service_with_custom_port.json"))
 }
 
 func TestSetVolumeDefault(t *testing.T) {
