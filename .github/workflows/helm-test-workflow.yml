@@ -5,7 +5,6 @@ on:
       - develop
       - main
       - feature**
-      - fix_helm_m4
   workflow_dispatch:
 jobs:
   build-operator-image:
