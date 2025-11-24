@@ -104,15 +104,11 @@ jobs:
 
       - name: Tag and Push Default UBI RC Image
         run: |
-          docker pull ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
-          docker tag ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }} ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC
-          docker push ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC
+          docker buildx imagetools create -t ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}
 
       - name: Tag and Push Default Distroless RC Image
         run: |
-          docker pull ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}-distroless
-          docker tag ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}-distroless ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless
-          docker push ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless
+          docker buildx imagetools create -t ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC-distroless ${{ secrets.PUBLIC_ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_RC_IMAGE_NAME }}:${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.release_candiate_version }}-distroless
 
       - name: Generate Release Artifacts
         run: |
