@@ -766,8 +766,15 @@ func installApp(rctx context.Context, localCtx *localScopePlaybookContext, cr sp
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := localCtx.podExecClient.RunPodExecCommand(rctx, streamOptions, []string{"/bin/sh"})
-	// if the app was already installed previously, then just mark it for install complete
-	if stdErr != "" || err != nil {
+
+	// TODO(patrykw-splunk): remove this once we have confirm that we are not using stderr for error detection at all
+	// Log stderr content for debugging but don't use it for error detection
+	if stdErr != "" {
+		scopedLog.Info("App install command stderr output (informational only)", "stderr", stdErr)
+	}
+
+	// Check only the actual command execution error, not stderr content
+	if err != nil {
 		phaseInfo.FailCount++
 		scopedLog.Error(err, "local scoped app package install failed", "stdout", stdOut, "stderr", stdErr, "app pkg path", appPkgPathOnPod, "failCount", phaseInfo.FailCount)
 		return fmt.Errorf("local scoped app package install failed. stdOut: %s, stdErr: %s, app pkg path: %s, failCount: %d", stdOut, stdErr, appPkgPathOnPod, phaseInfo.FailCount)
@@ -785,12 +792,13 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 
 	scopedLog.Info("check app's installation state")
 
-	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED; echo -n $?", appTopFolder)
+	command := fmt.Sprintf("/opt/splunk/bin/splunk list app %s -auth admin:`cat /mnt/splunk-secrets/password`| grep ENABLED", appTopFolder)
 
 	streamOptions := splutil.NewStreamOptionsObject(command)
 
 	stdOut, stdErr, err := podExecClient.RunPodExecCommand(ctx, streamOptions, []string{"/bin/sh"})
 
+	// Handle specific stderr cases first
 	if strings.Contains(stdErr, "Could not find object") {
 		// when app is not installed you will see something like on StdErr:
 		// "Could not find object id=<app_name>"
@@ -798,15 +806,37 @@ func isAppAlreadyInstalled(ctx context.Context, cr splcommon.MetaObject, podExec
 		return false, nil
 	}
 
-	if stdErr != "" || err != nil {
-		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, command: %s", stdOut, stdErr, command)
+	// Log any other stderr content for debugging but don't use it for error detection
+	if stdErr != "" {
+		scopedLog.Info("Command stderr output (informational only)", "stderr", stdErr)
 	}
 
-	appInstallCheck, _ := strconv.Atoi(stdOut)
+	// Now check the actual command result
+	if err != nil {
+		// The command pipeline ends with 'grep ENABLED', so exit codes follow grep semantics:
+		// For grep: exit code 1 = pattern not found, exit code 2+ = actual error
+		errMsg := err.Error()
 
-	scopedLog.Info("Apps installation state", stdOut, stdOut)
+		// Check for grep exit code 1 (pattern not found)
+		if strings.Contains(errMsg, "exit status 1") || strings.Contains(errMsg, "command terminated with exit code 1") {
+			// grep exit code 1 means "ENABLED" pattern not found - app exists but is not enabled
+			scopedLog.Info("App not enabled - grep pattern not found", "stdout", stdOut, "stderr", stdErr)
+			return false, nil
+		}
 
-	return appInstallCheck == 0, nil
+		// Any other exit code indicates a real error (splunk command failed, etc.)
+		return false, fmt.Errorf("could not get installed app status stdOut: %s, stdErr: %s, error: %v, command: %s", stdOut, stdErr, err, command)
+	}
+
+	// If we reach here, grep found "ENABLED" (exit code 0)
+	// stdOut should contain the app status line with "ENABLED"
+	if stdOut == "" {
+		// This shouldn't happen if grep succeeded, but let's be safe
+		return false, fmt.Errorf("command succeeded but no output received, command: %s", command)
+	}
+
+	scopedLog.Info("App installation state check successful - app is enabled", "appStatus", strings.TrimSpace(stdOut))
+	return true, nil
 }
 
 // get the name of top folder from the package.
@@ -1320,6 +1350,15 @@ installPhase:
 				phaseInfo := getPhaseInfoByPhaseType(ctx, installWorker, enterpriseApi.PhaseInstall)
 				if isPhaseMaxRetriesReached(ctx, phaseInfo, installWorker.afwConfig) {
 					phaseInfo.Status = enterpriseApi.AppPkgInstallError
+
+					// For fanout CRs, also update the main PhaseInfo to reflect the failure
+					if isFanOutApplicableToCR(installWorker.cr) {
+						scopedLog.Info("Max retries reached for fanout CR - updating main phase info", "app", installWorker.appDeployInfo.AppName, "failCount", phaseInfo.FailCount)
+						installWorker.appDeployInfo.PhaseInfo.Phase = enterpriseApi.PhaseInstall
+						installWorker.appDeployInfo.PhaseInfo.Status = enterpriseApi.AppPkgInstallError
+						installWorker.appDeployInfo.DeployStatus = enterpriseApi.DeployStatusError
+					}
+
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
 				} else if isPhaseStatusComplete(phaseInfo) {
 					ppln.deleteWorkerFromPipelinePhase(ctx, phaseInfo.Phase, installWorker)
