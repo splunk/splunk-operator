@@ -61,19 +61,19 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 
+	// Ensure DB and summarize (do this before validation so we can test without license)
+	err = EnsureDatabaseForSHC(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "EnsureDatabaseForSHC", fmt.Sprintf("ensure database for SHC failed %s", err.Error()))
+		scopedLog.Error(err, "Failed to ensure database for SHC")
+		return result, err
+	}
+
 	// validate and updates defaults for CR
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
 	if err != nil {
 		eventPublisher.Warning(ctx, "validateSearchHeadClusterSpec", fmt.Sprintf("validate searchHeadCluster spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate searchHeadCluster spec")
-		return result, err
-	}
-
-	// Ensure DB and summarize
-	err = EnsureDatabaseForSHC(ctx, client, cr)
-	if err != nil {
-		eventPublisher.Warning(ctx, "EnsureDatabaseForSHC", fmt.Sprintf("ensure database for SHC failed %s", err.Error()))
-		scopedLog.Error(err, "Failed to ensure database for SHC")
 		return result, err
 	}
 

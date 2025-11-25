@@ -20,11 +20,20 @@ type ClassPolicy struct {
 }
 
 type DatabaseClassSpec struct {
-	ManagedBy string       `json:"managedBy"` // CNPG|External|AWSAurora (future)
-	Version   string       `json:"version,omitempty"`
-	CNPG      *CNPGSpec    `json:"cnpg,omitempty"`
-	Backup    *BackupSpec  `json:"backup,omitempty"`
-	Policy    *ClassPolicy `json:"policy,omitempty"`
+	// Engine specifies the database engine (e.g., "Postgres", "MySQL")
+	Engine string `json:"engine,omitempty"`
+
+	// Provider configuration (CNPG, Aurora, CloudSQL, External)
+	Provider ProviderConfig `json:"provider"`
+
+	// Requirements are provider-agnostic capacity hints
+	Requirements *DatabaseRequirements `json:"requirements,omitempty"`
+
+	// Backup intent for this class
+	Backup *BackupIntent `json:"backup,omitempty"`
+
+	// Policy controls what claim parameters can override
+	Policy *ClassPolicy `json:"policy,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -6,6 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v4 "github.com/splunk/splunk-operator/api/v4"
 )
@@ -32,7 +33,7 @@ func EnsureDatabaseForSHC(ctx context.Context, c client.Client, shc *v4.SearchHe
 		}
 		return nil
 
-	default: // Auto → create a DatabaseClaim and let binder produce DatabaseCluster
+	default: // Auto → create a DatabaseClaim with proper ownership
 		claimName := ternStr(shc.Spec.Database != nil && shc.Spec.Database.AutoNameSuffix != "",
 			fmt.Sprintf("%s-%s", name, shc.Spec.Database.AutoNameSuffix), name+"-db")
 
@@ -41,6 +42,7 @@ func EnsureDatabaseForSHC(ctx context.Context, c client.Client, shc *v4.SearchHe
 			className = shc.Spec.Database.DatabaseClassName
 		}
 
+		// Create or update DatabaseClaim with proper owner reference
 		desired := v4.DatabaseClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      claimName,
@@ -52,15 +54,48 @@ func EnsureDatabaseForSHC(ctx context.Context, c client.Client, shc *v4.SearchHe
 				ReclaimPolicy:        v4.ReclaimDelete,
 			},
 		}
+
+		// Add S3 bucket override if specified
+		if shc.Spec.Database != nil && shc.Spec.Database.S3BackupBucket != "" {
+			desired.Spec.Overrides = &v4.DatabaseClaimOverrides{
+				BackupConfig: &v4.BackupOverride{
+					S3: &v4.S3Override{
+						Bucket: shc.Spec.Database.S3BackupBucket,
+						Path:   fmt.Sprintf("shc/%s", shc.Name), // Use convention: shc/<name>
+					},
+				},
+			}
+		}
+
 		var existing v4.DatabaseClaim
 		if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: claimName}, &existing); err != nil {
-			// Do NOT set ownerRef to SHC; label instead for traceability
+			// DatabaseClaim doesn't exist - create it with owner reference
+			if err := controllerutil.SetControllerReference(shc, &desired, c.Scheme()); err != nil {
+				return fmt.Errorf("failed to set controller reference on DatabaseClaim: %w", err)
+			}
+
+			// Add labels for traceability
 			if desired.Labels == nil {
 				desired.Labels = map[string]string{}
 			}
+			desired.Labels["app.kubernetes.io/managed-by"] = "splunk-operator"
 			desired.Labels["database.splunk.com/owner-shc"] = shc.Name
-			_ = c.Create(ctx, &desired)
+
+			if err := c.Create(ctx, &desired); err != nil {
+				return fmt.Errorf("failed to create DatabaseClaim: %w", err)
+			}
+		} else {
+			// DatabaseClaim exists - ensure owner reference is set
+			if !hasOwnerReference(&existing, shc) {
+				if err := controllerutil.SetControllerReference(shc, &existing, c.Scheme()); err != nil {
+					return fmt.Errorf("failed to set controller reference on existing DatabaseClaim: %w", err)
+				}
+				if err := c.Update(ctx, &existing); err != nil {
+					return fmt.Errorf("failed to update DatabaseClaim with owner reference: %w", err)
+				}
+			}
 		}
+
 		// Try to summarize if the bound cluster exists
 		var db v4.DatabaseCluster
 		if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: claimName}, &db); err == nil {
@@ -89,6 +124,15 @@ func fromDB(db *v4.DatabaseCluster, shc *v4.SearchHeadCluster) {
 	}
 	shc.Status.DatabaseSummary.Version = db.Status.Version
 	shc.Status.DatabaseSummary.LastBackup = db.Status.LastBackupTime
+}
+
+func hasOwnerReference(obj *v4.DatabaseClaim, owner *v4.SearchHeadCluster) bool {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == owner.UID {
+			return true
+		}
+	}
+	return false
 }
 
 func ternStr(b bool, x, y string) string {

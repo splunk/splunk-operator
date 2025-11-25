@@ -53,6 +53,29 @@ spec:
                 type: string
               connectionSecretName:
                 type: string
+              overrides:
+                description: |-
+                  DatabaseClaimOverrides allows per-claim customization of DatabaseClass settings.
+                  This enables simple APIs like SearchHeadCluster.spec.database.s3BackupBucket to override
+                  the default S3 configuration from the DatabaseClass.
+                properties:
+                  backupConfig:
+                    description: BackupOverride allows overriding backup configuration
+                      from the DatabaseClass.
+                    properties:
+                      enabled:
+                        type: boolean
+                      s3:
+                        description: S3Override allows overriding S3 configuration
+                          for backups.
+                        properties:
+                          bucket:
+                            type: string
+                          path:
+                            type: string
+                        type: object
+                    type: object
+                type: object
               parameters:
                 additionalProperties:
                   type: string

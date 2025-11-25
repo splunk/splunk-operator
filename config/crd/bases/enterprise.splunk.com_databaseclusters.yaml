@@ -53,130 +53,23 @@ spec:
           spec:
             properties:
               backup:
+                description: Backup intent for this cluster
                 properties:
                   enabled:
+                    description: Enabled controls whether backups are taken.
                     type: boolean
-                  objectStore:
-                    properties:
-                      provider:
-                        type: string
-                      s3:
-                        properties:
-                          bucket:
-                            type: string
-                          credentialsSecret:
-                            type: string
-                          path:
-                            type: string
-                          region:
-                            type: string
-                        type: object
-                    type: object
-                  pitrecovery:
-                    properties:
-                      enabled:
-                        type: boolean
-                      maxRecoveryWindow:
-                        type: string
-                    type: object
-                  retention:
-                    properties:
-                      full:
-                        format: int32
-                        type: integer
-                      walDays:
-                        format: int32
-                        type: integer
-                    type: object
+                  retentionDays:
+                    description: RetentionDays specifies how long to keep backups
+                      (works for CNPG S3 backups and Aurora snapshots).
+                    type: integer
                   schedule:
+                    description: Schedule is a cron expression for backup frequency
+                      (e.g., "0 2 * * *" for daily at 2am).
                     type: string
                 type: object
-              cnpg:
-                properties:
-                  instances:
-                    format: int32
-                    type: integer
-                  maintenance:
-                    properties:
-                      window:
-                        type: string
-                    type: object
-                  pooler:
-                    properties:
-                      enabled:
-                        type: boolean
-                      mode:
-                        type: string
-                    type: object
-                  resources:
-                    description: ResourceRequirements describes the compute resource
-                      requirements.
-                    properties:
-                      claims:
-                        description: |-
-                          Claims lists the names of resources, defined in spec.resourceClaims,
-                          that are used by this container.
-
-                          This is an alpha field and requires enabling the
-                          DynamicResourceAllocation feature gate.
-
-                          This field is immutable. It can only be set for containers.
-                        items:
-                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                          properties:
-                            name:
-                              description: |-
-                                Name must match the name of one entry in pod.spec.resourceClaims of
-                                the Pod where this field is used. It makes that resource available
-                                inside a container.
-                              type: string
-                            request:
-                              description: |-
-                                Request is the name chosen for a request in the referenced claim.
-                                If empty, everything from the claim is made available, otherwise
-                                only the result of this request.
-                              type: string
-                          required:
-                          - name
-                          type: object
-                        type: array
-                        x-kubernetes-list-map-keys:
-                        - name
-                        x-kubernetes-list-type: map
-                      limits:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: |-
-                          Limits describes the maximum amount of compute resources allowed.
-                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                        type: object
-                      requests:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: |-
-                          Requests describes the minimum amount of compute resources required.
-                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                        type: object
-                    type: object
-                  storage:
-                    properties:
-                      size:
-                        type: string
-                      storageClassName:
-                        type: string
-                    type: object
-                type: object
               connection:
+                description: Connection specifies where to put the normalized connection
+                  secret
                 properties:
                   clientCertSecret:
                     type: string
@@ -192,47 +85,11 @@ spec:
                     type: object
                 type: object
               engine:
-                type: string
-              external:
-                properties:
-                  dbName:
-                    type: string
-                  dsnSecretRef:
-                    type: string
-                  host:
-                    type: string
-                  port:
-                    format: int32
-                    type: integer
-                  ssl:
-                    properties:
-                      caBundleSecret:
-                        type: string
-                      mode:
-                        description: disable | prefer | require | verify-full
-                        type: string
-                    type: object
-                  userSecretRef:
-                    type: string
-                type: object
-              init:
-                properties:
-                  bootstrapSQLSecret:
-                    type: string
-                  createDatabaseIfMissing:
-                    type: boolean
-                  databaseName:
-                    type: string
-                  extensions:
-                    items:
-                      type: string
-                    type: array
-                  owner:
-                    type: string
-                type: object
-              managedBy:
+                description: Engine specifies the database engine (e.g., "Postgres",
+                  "MySQL")
                 type: string
               network:
+                description: Network access controls
                 properties:
                   allowFromNamespaces:
                     items:
@@ -243,13 +100,372 @@ spec:
                       type: string
                     type: array
                 type: object
+              provider:
+                description: Provider configuration (CNPG, Aurora, CloudSQL, External)
+                properties:
+                  aurora:
+                    description: Aurora-specific configuration (for AWS Aurora PostgreSQL)
+                    properties:
+                      awsCredentialsSecret:
+                        description: AWSCredentialsSecret is a Kubernetes secret containing
+                          AWS credentials (accessKeyID, secretAccessKey).
+                        type: string
+                      clusterIdentifier:
+                        description: ClusterIdentifier for existing Aurora cluster
+                          (used when Mode=Reference).
+                        type: string
+                      endpointOverride:
+                        description: EndpointOverride allows specifying a custom endpoint
+                          (e.g., for PrivateLink).
+                        type: string
+                      mode:
+                        description: |-
+                          Mode determines how the Aurora cluster is managed: "Provision" | "Reference"
+                          - Provision: Create a new Aurora cluster via Crossplane/ACK
+                          - Reference: Connect to an existing Aurora cluster
+                        type: string
+                      provisionedCluster:
+                        description: ProvisionedCluster configuration (used when Mode=Provision).
+                        properties:
+                          enableIAMAuth:
+                            description: EnableIAMAuth enables IAM database authentication.
+                            type: boolean
+                          engine:
+                            description: Engine is the database engine (e.g., "aurora-postgresql").
+                            type: string
+                          engineVersion:
+                            description: EngineVersion is the PostgreSQL version (e.g.,
+                              "15.3").
+                            type: string
+                          instanceClass:
+                            description: InstanceClass specifies the compute/memory
+                              capacity (e.g., "db.r6g.large").
+                            type: string
+                          kmsKeyID:
+                            description: KMSKeyID for encryption (optional, uses default
+                              AWS key if not specified).
+                            type: string
+                          maxCapacity:
+                            description: MaxCapacity for Aurora Serverless v2 (Aurora
+                              Capacity Units).
+                            type: integer
+                          minCapacity:
+                            description: MinCapacity for Aurora Serverless v2 (Aurora
+                              Capacity Units).
+                            type: integer
+                          storageEncrypted:
+                            description: StorageEncrypted enables encryption at rest.
+                            type: boolean
+                          subnetGroupName:
+                            description: SubnetGroupName identifies the DB subnet
+                              group for network placement.
+                            type: string
+                          vpcSecurityGroupIDs:
+                            description: VPCSecurityGroupIDs are security groups to
+                              apply to the cluster.
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      region:
+                        description: Region is the AWS region where the Aurora cluster
+                          exists or will be created.
+                        type: string
+                    type: object
+                  cnpg:
+                    description: CNPG-specific configuration (for Kubernetes-native
+                      PostgreSQL via CloudNativePG operator)
+                    properties:
+                      bootstrapInitDB:
+                        description: BootstrapInitDB configuration for database initialization.
+                        properties:
+                          bootstrapSQLSecret:
+                            type: string
+                          createDatabaseIfMissing:
+                            type: boolean
+                          databaseName:
+                            type: string
+                          extensions:
+                            items:
+                              type: string
+                            type: array
+                          owner:
+                            type: string
+                        type: object
+                      clientCert:
+                        description: ClientCert configuration for client/replication
+                          TLS certificate.
+                        properties:
+                          caSecretName:
+                            description: CASecretName for an existing CA bundle secret.
+                            type: string
+                          issuerRef:
+                            description: IssuerRef references a cert-manager Issuer/ClusterIssuer.
+                            properties:
+                              group:
+                                description: Group is the API group (defaults to "cert-manager.io").
+                                type: string
+                              kind:
+                                description: Kind is either "Issuer" or "ClusterIssuer".
+                                type: string
+                              name:
+                                description: Name of the Issuer/ClusterIssuer.
+                                type: string
+                            type: object
+                          secretName:
+                            description: SecretName for an existing TLS secret (alternative
+                              to cert-manager).
+                            type: string
+                        type: object
+                      imageCatalogRef:
+                        description: |-
+                          ImageCatalogRef references a CNPG ClusterImageCatalog for PostgreSQL version management.
+                          This allows specifying different PostgreSQL major versions.
+                        properties:
+                          apiGroup:
+                            description: APIGroup is the API group of the ClusterImageCatalog
+                              (typically "postgresql.cnpg.io").
+                            type: string
+                          kind:
+                            description: Kind is typically "ClusterImageCatalog" or
+                              "ImageCatalog".
+                            type: string
+                          name:
+                            description: Name is the name of the ClusterImageCatalog
+                              resource.
+                            type: string
+                        type: object
+                      imageName:
+                        description: |-
+                          ImageName specifies the PostgreSQL container image (e.g., "ghcr.io/cloudnative-pg/postgresql:15.3").
+                          If not specified, CNPG uses its default image catalog.
+                        type: string
+                      instances:
+                        description: Instances is the number of PostgreSQL pods (1
+                          for dev, 3+ for HA).
+                        format: int32
+                        type: integer
+                      maintenance:
+                        description: Maintenance window for automated updates.
+                        properties:
+                          window:
+                            type: string
+                        type: object
+                      objectStore:
+                        description: ObjectStore configuration for Barman backups
+                          to S3/GCS/Azure.
+                        properties:
+                          provider:
+                            type: string
+                          s3:
+                            properties:
+                              bucket:
+                                type: string
+                              credentialsSecret:
+                                type: string
+                              path:
+                                type: string
+                              region:
+                                type: string
+                            type: object
+                        type: object
+                      pooler:
+                        description: Pooler configuration for PgBouncer connection
+                          pooling.
+                        properties:
+                          enabled:
+                            type: boolean
+                          mode:
+                            type: string
+                        type: object
+                      resources:
+                        description: Resources defines CPU/memory requests and limits
+                          for PostgreSQL pods.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This is an alpha field and requires enabling the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                      serverCert:
+                        description: ServerCert configuration for PostgreSQL server
+                          TLS certificate.
+                        properties:
+                          caSecretName:
+                            description: CASecretName for an existing CA bundle secret.
+                            type: string
+                          issuerRef:
+                            description: IssuerRef references a cert-manager Issuer/ClusterIssuer.
+                            properties:
+                              group:
+                                description: Group is the API group (defaults to "cert-manager.io").
+                                type: string
+                              kind:
+                                description: Kind is either "Issuer" or "ClusterIssuer".
+                                type: string
+                              name:
+                                description: Name of the Issuer/ClusterIssuer.
+                                type: string
+                            type: object
+                          secretName:
+                            description: SecretName for an existing TLS secret (alternative
+                              to cert-manager).
+                            type: string
+                        type: object
+                      serviceAccountTemplate:
+                        description: |-
+                          ServiceAccountTemplate allows customization of the ServiceAccount created for the CNPG cluster.
+                          This is particularly useful for configuring IAM Roles for Service Accounts (IRSA) in AWS EKS.
+                        properties:
+                          metadata:
+                            description: |-
+                              Metadata contains labels and annotations for the ServiceAccount.
+                              Common use case: adding IRSA annotations for AWS EKS.
+                              Example: annotations: {"eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/my-role"}
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: |-
+                                  Annotations to add to the ServiceAccount.
+                                  For IRSA: {"eks.amazonaws.com/role-arn": "arn:aws:iam::ACCOUNT:role/ROLE"}
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                description: Labels to add to the ServiceAccount.
+                                type: object
+                            type: object
+                        type: object
+                      storage:
+                        description: Storage configuration for persistent volumes.
+                        properties:
+                          size:
+                            type: string
+                          storageClassName:
+                            type: string
+                        type: object
+                    type: object
+                  external:
+                    description: External-specific configuration (for pre-existing
+                      databases outside Kubernetes)
+                    properties:
+                      credentialsSecret:
+                        description: CredentialsSecret is a Kubernetes secret containing
+                          username and password.
+                        type: string
+                      databaseName:
+                        description: DatabaseName is the name of the database to connect
+                          to.
+                        type: string
+                      endpoints:
+                        description: Endpoints are the database connection endpoints
+                          (e.g., ["postgres-primary.example.com:5432"]).
+                        items:
+                          type: string
+                        type: array
+                      tls:
+                        description: TLS configuration for secure connections.
+                        properties:
+                          caBundleSecret:
+                            type: string
+                          mode:
+                            description: disable | prefer | require | verify-full
+                            type: string
+                        type: object
+                    type: object
+                  type:
+                    description: 'Type identifies the database provider: "CNPG" |
+                      "Aurora" | "CloudSQL" | "External"'
+                    type: string
+                type: object
               reclaimPolicy:
                 enum:
                 - Delete
                 - Retain
                 type: string
-              version:
-                type: string
+              requirements:
+                description: Requirements are provider-agnostic capacity hints
+                properties:
+                  highAvailability:
+                    description: |-
+                      HighAvailability enables multi-instance/multi-AZ configurations.
+                      CNPG: instances=3, Aurora: multi-AZ enabled
+                    type: boolean
+                  minIOPS:
+                    description: MinIOPS affects storage class selection (CNPG) or
+                      provisioned IOPS (Aurora).
+                    type: integer
+                  minMemory:
+                    description: MinMemory is a hint for memory allocation (e.g.,
+                      "8Gi"). CNPG uses this for pod resources, Aurora for instance
+                      class selection.
+                    type: string
+                  minStorageGB:
+                    description: MinStorageGB is a hint for storage capacity. CNPG
+                      creates a PVC of this size, Aurora ignores it (unlimited storage).
+                    type: integer
+                type: object
+              tls:
+                description: TLS configuration for secure connections
+                properties:
+                  caBundleSecret:
+                    type: string
+                  mode:
+                    description: disable | prefer | require | verify-full
+                    type: string
+                type: object
             type: object
           status:
             properties:

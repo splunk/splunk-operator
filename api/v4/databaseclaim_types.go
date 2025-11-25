@@ -35,10 +35,30 @@ type DatabaseClaim struct {
 }
 
 type DatabaseClaimSpec struct {
-	ClassName            string            `json:"className"`
-	Parameters           map[string]string `json:"parameters,omitempty"` // optional overrides allowed by Class.Policy
-	ConnectionSecretName string            `json:"connectionSecretName,omitempty"`
-	ReclaimPolicy        ReclaimPolicy     `json:"reclaimPolicy,omitempty"`
+	ClassName            string                  `json:"className"`
+	Parameters           map[string]string       `json:"parameters,omitempty"` // optional overrides allowed by Class.Policy
+	ConnectionSecretName string                  `json:"connectionSecretName,omitempty"`
+	ReclaimPolicy        ReclaimPolicy           `json:"reclaimPolicy,omitempty"`
+	Overrides            *DatabaseClaimOverrides `json:"overrides,omitempty"` // Overrides for specific configuration like S3 backup bucket
+}
+
+// DatabaseClaimOverrides allows per-claim customization of DatabaseClass settings.
+// This enables simple APIs like SearchHeadCluster.spec.database.s3BackupBucket to override
+// the default S3 configuration from the DatabaseClass.
+type DatabaseClaimOverrides struct {
+	BackupConfig *BackupOverride `json:"backupConfig,omitempty"`
+}
+
+// BackupOverride allows overriding backup configuration from the DatabaseClass.
+type BackupOverride struct {
+	Enabled *bool       `json:"enabled,omitempty"`
+	S3      *S3Override `json:"s3,omitempty"`
+}
+
+// S3Override allows overriding S3 configuration for backups.
+type S3Override struct {
+	Bucket string `json:"bucket,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 type LocalRef struct {

@@ -32,6 +32,10 @@ type SearchHeadClusterDatabaseSpec struct {
 	Policy            *SearchHeadClusterDatabasePolicy `json:"policy,omitempty"`
 	DatabaseClassName string                           `json:"databaseClassName,omitempty"`
 	AutoNameSuffix    string                           `json:"autoNameSuffix,omitempty"`
+	// S3BackupBucket allows specifying a custom S3 bucket for database backups.
+	// This overrides the default S3 bucket from the DatabaseClass.
+	// Only used in Auto mode.
+	S3BackupBucket string `json:"s3BackupBucket,omitempty"`
 }
 
 type DatabaseSummary struct {

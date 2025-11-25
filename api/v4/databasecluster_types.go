@@ -27,17 +27,26 @@ type DatabaseCluster struct {
 }
 
 type DatabaseClusterSpec struct {
-	Engine     string          `json:"engine"`
-	Version    string          `json:"version,omitempty"`
-	ManagedBy  string          `json:"managedBy"`
+	// Engine specifies the database engine (e.g., "Postgres", "MySQL")
+	Engine string `json:"engine"`
+
+	// Provider configuration (CNPG, Aurora, CloudSQL, External)
+	Provider ProviderConfig `json:"provider"`
+
+	// Requirements are provider-agnostic capacity hints
+	Requirements *DatabaseRequirements `json:"requirements,omitempty"`
+
+	// Connection specifies where to put the normalized connection secret
 	Connection *ConnectionSpec `json:"connection,omitempty"`
 
-	CNPG     *CNPGSpec     `json:"cnpg,omitempty"`
-	External *ExternalSpec `json:"external,omitempty"`
+	// Backup intent for this cluster
+	Backup *BackupIntent `json:"backup,omitempty"`
 
-	Backup  *BackupSpec  `json:"backup,omitempty"`
-	Init    *InitSpec    `json:"init,omitempty"`
+	// Network access controls
 	Network *NetworkSpec `json:"network,omitempty"`
+
+	// TLS configuration for secure connections
+	TLS *SSLSpec `json:"tls,omitempty"`
 
 	// +kubebuilder:validation:Enum=Delete;Retain
 	ReclaimPolicy string `json:"reclaimPolicy,omitempty"`

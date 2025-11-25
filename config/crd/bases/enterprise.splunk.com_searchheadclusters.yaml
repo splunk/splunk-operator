@@ -5874,6 +5874,12 @@ spec:
                         - WarnOnly
                         type: string
                     type: object
+                  s3BackupBucket:
+                    description: |-
+                      S3BackupBucket allows specifying a custom S3 bucket for database backups.
+                      This overrides the default S3 bucket from the DatabaseClass.
+                      Only used in Auto mode.
+                    type: string
                 type: object
               defaults:
                 description: Inline map of default.yml overrides used to initialize

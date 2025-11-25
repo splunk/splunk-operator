@@ -47,7 +47,7 @@ func (r *DatabaseRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Create recovered CNPG Cluster
 	prov := &cnpg.CNPGProvider{Client: r.Client}
-	if err := prov.RestoreNewClusterFromBackup(ctx, &src, &dr); err != nil {
+	if err := prov.RestoreNewClusterFromBackup(ctx, &dr, &src); err != nil {
 		setRestore(&dr, v4.RestoreFailed, "CreateError", err.Error())
 		_ = r.Status().Update(ctx, &dr)
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
