@@ -210,6 +210,8 @@ jobs:
           AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
           TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
+          TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
+          TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results

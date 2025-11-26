@@ -189,6 +189,9 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run Integration test
         timeout-minutes: 240
+        env:
+          TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
+          TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
           make int-test
       - name: Collect Test Logs
