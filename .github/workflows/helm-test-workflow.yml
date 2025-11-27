@@ -46,8 +46,6 @@ jobs:
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
@@ -74,7 +72,7 @@ jobs:
            yq --help
       - name: Set Test Cluster Name
         run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
+          echo "TEST_CLUSTER_NAME=eks-test-cluster-integration-helm-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
