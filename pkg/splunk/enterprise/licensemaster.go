@@ -148,6 +148,13 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 	cr.Status.Phase = phase
 
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), true)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
@@ -155,12 +162,6 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
-		}
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getLicenseMasterURL(cr, &cr.Spec.CommonSplunkSpec), true)
-			if err != nil {
-				return result, err
-			}
 		}
 
 		// Add a splunk operator telemetry app
