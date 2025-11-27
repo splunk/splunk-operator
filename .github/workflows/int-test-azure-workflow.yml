@@ -100,8 +100,6 @@ jobs:
         inlineScript: |
           az aks update -n ${{ env.TEST_CLUSTER_NAME }} -g ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} --attach-acr ${{ secrets.AZURE_CONTAINER_REGISTRY }}
   int-tests-appframeworkazure:
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     needs: setup-aks-cluster
     env:
