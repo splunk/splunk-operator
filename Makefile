@@ -143,7 +143,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bundler)
 	@echo "Installing dependencies locally..."
-	@cd docs && bundle config set --local path 'vendor/bundle' && bundle config set --local deployment 'false' && bundle install
+	@cd docs && bundle install --path vendor/bundle
 	@echo "Starting Jekyll server for documentation preview..."
 	@cd docs && bundle exec jekyll serve --livereload
 	@echo "Documentation available at http://localhost:4000/splunk-operator"
