@@ -417,7 +417,7 @@ func TestUpgradePathValidation(t *testing.T) {
 		t.Errorf("shc is not in ready state")
 	}
 
-	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
 		return extraEnv, err
 	}
