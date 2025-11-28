@@ -55,6 +55,11 @@ func TestApplyClusterManager(t *testing.T) {
 		return nil
 	}
 
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -542,6 +547,12 @@ func TestClusterManagerSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 
 func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	funcCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -874,6 +885,12 @@ func TestPushManagerAppsBundle(t *testing.T) {
 func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	initGlobalResourceTracker()
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -948,6 +965,12 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 
 func TestApplyClusterManagerDeletion(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 	cm := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1471,6 +1494,12 @@ func TestCheckIfsmartstoreConfigMapUpdatedToPod(t *testing.T) {
 
 func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+		return extraEnv, nil
+	}
+
 	ctx := context.TODO()
 
 	sch := pkgruntime.NewScheme()
@@ -1678,7 +1707,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		debug.PrintStack()
 	}
 
-	VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+	GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 		extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
 		return extraEnv, err
 	}
