@@ -45,9 +45,6 @@ jobs:
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       CLUSTER_WIDE: ${{ github.event.inputs.CLUSTER_WIDE }}
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
@@ -56,6 +53,17 @@ jobs:
           fi
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Set Test Cluster Name
+        id: set-cluster-name
+        uses: ./.github/actions/set-cluster-name
+        with:
+          test-type: integration
+          platform: manual
+          test-name: ${{ matrix.test }}
+          run-id: ${{ github.run_id }}
+      - name: Export cluster name to environment
+        run: |
+          echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
