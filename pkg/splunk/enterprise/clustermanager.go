@@ -136,7 +136,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			extraEnv, _ := VerifyCMisMultisiteCall(ctx, cr, namespaceScopedSecret)
+			extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, false)
 			if err != nil {
 				return result, err
@@ -187,7 +187,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	//make changes to respective mc configmap when changing/removing mcRef from spec
-	extraEnv, err := VerifyCMisMultisiteCall(ctx, cr, namespaceScopedSecret)
+	extraEnv, _ := GetCMMultisiteEnvVarsCall(ctx, cr, namespaceScopedSecret)
 	err = validateMonitoringConsoleRef(ctx, client, statefulSet, extraEnv)
 	if err != nil {
 		return result, err
@@ -446,23 +446,30 @@ func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr
 	return numOfObjects, nil
 }
 
-// VerifyCMisMultisite checks if its a multisite used also in mock
-var VerifyCMisMultisiteCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
-	var err error
+// GetCMMultisiteEnvVarsCall checks if cluster is multisite and returns appropriate environment variables
+// If it fails to connect to the cluster manager (e.g., pod not ready yet), it returns basic env vars as fallback
+// This function is used also in mock tests
+var GetCMMultisiteEnvVarsCall = func(ctx context.Context, cr *enterpriseApi.ClusterManager, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
+
+	extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
+
 	mgr := clusterManagerPodManager{log: scopedLog, cr: cr, secrets: namespaceScopedSecret, newSplunkClient: splclient.NewSplunkClient}
 	cm := mgr.getClusterManagerClient(cr)
 	clusterInfo, err := cm.GetClusterInfo(false)
 	if err != nil {
-		return nil, err
+		scopedLog.Error(err, "Failed to get cluster info from cluster manager pod, using basic environment variables")
+		return extraEnv, err
 	}
-	multiSite := clusterInfo.MultiSite
-	extraEnv := getClusterManagerExtraEnv(cr, &cr.Spec.CommonSplunkSpec)
-	if multiSite == "true" {
-		extraEnv = append(extraEnv, corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"}, corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
+
+	if clusterInfo.MultiSite == "true" {
+		extraEnv = append(extraEnv,
+			corev1.EnvVar{Name: "SPLUNK_SITE", Value: "site0"},
+			corev1.EnvVar{Name: "SPLUNK_MULTISITE_MASTER", Value: GetSplunkServiceName(SplunkClusterManager, cr.GetName(), false)})
 	}
-	return extraEnv, err
+
+	return extraEnv, nil
 }
 
 // changeClusterManagerAnnotations updates the splunk/image-tag field of the ClusterManager annotations to trigger the reconcile loop
