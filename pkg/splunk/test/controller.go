@@ -794,7 +794,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	// test scale up (zero ready so far; wait for ready)
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0]}}
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
 
@@ -809,7 +809,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
-	updateCalls = map[string][]MockFuncCall{"Get": {funcCalls[0]}, "Update": {funcCalls[0]}}
+	updateCalls = map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, Update Replicas 1=>2")
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
@@ -827,7 +827,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
 	}
 	scaleDownCalls := map[string][]MockFuncCall{
-		"Get":    {funcCalls[0], pvcCalls[0], pvcCalls[1]},
+		"Get":    {funcCalls[0], funcCalls[0], pvcCalls[0], pvcCalls[1]},
 		"Update": {funcCalls[0]},
 		"Delete": pvcCalls,
 	}
@@ -845,7 +845,7 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
-	podCalls := []MockFuncCall{funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
+	podCalls := []MockFuncCall{funcCalls[0], funcCalls[0], {MetaName: "*v1.Pod-test-splunk-stack1-0"}}
 	getPodCalls := map[string][]MockFuncCall{"Get": podCalls}
 	//getPodCalls := map[string][]MockFuncCall{}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "Pod not found")
