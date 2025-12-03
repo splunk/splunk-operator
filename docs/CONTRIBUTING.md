@@ -1,3 +1,8 @@
+---
+title: CONTRIBUTING
+nav_order: 7
+---
+
 # Contributing to the Project
 
 This document is the single source of truth on contributing towards this codebase. Feel free to browse the [open issues](https://github.com/splunk/splunk-operator/issues) and file new ones - all feedback is welcome!
