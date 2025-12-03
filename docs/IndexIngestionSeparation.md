@@ -1,3 +1,9 @@
+---
+title: Index and Ingestion Separation
+parent: Deploy & Configure
+nav_order: 6
+---
+
 # Background
 
 Separation between ingestion and indexing services within Splunk Operator for Kubernetes enables the operator to independently manage the ingestion service while maintaining seamless integration with the indexing service.
