@@ -1,0 +1,57 @@
+{
+  "kind": "Service",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "splunk-stack1-search-head-service",
+    "namespace": "test",
+    "creationTimestamp": null,
+    "labels": {
+      "1": "2",
+      "app.kubernetes.io/component": "search-head",
+      "app.kubernetes.io/instance": "splunk-stack1-search-head",
+      "app.kubernetes.io/managed-by": "splunk-operator",
+      "app.kubernetes.io/name": "search-head",
+      "app.kubernetes.io/part-of": "splunk-stack1-search-head",
+      "one": "two"
+    },
+    "annotations": {
+      "a": "b"
+    },
+    "ownerReferences": [
+      {
+        "apiVersion": "",
+        "kind": "",
+        "name": "stack1",
+        "uid": "",
+        "controller": true
+      }
+    ]
+  },
+  "spec": {
+    "ports": [
+      {
+        "name": "http-splunkweb",
+        "protocol": "TCP",
+        "port": 8000,
+        "targetPort": 8000
+      },
+      {
+        "name": "https-splunkd",
+        "protocol": "TCP",
+        "port": 8089,
+        "targetPort": 8089
+      }
+    ],
+    "selector": {
+      "app.kubernetes.io/component": "search-head",
+      "app.kubernetes.io/instance": "splunk-stack1-search-head",
+      "app.kubernetes.io/managed-by": "splunk-operator",
+      "app.kubernetes.io/name": "search-head",
+      "app.kubernetes.io/part-of": "splunk-stack1-search-head"
+    },
+    "type": "LoadBalancer"
+  },
+  "status": {
+    "loadBalancer": {}
+  }
+}
