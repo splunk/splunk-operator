@@ -158,7 +158,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN}}
       - name: Set Splunk Operator image
         run: |
-            echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless" >> $GITHUB_ENV
+          echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA-distroless" >> $GITHUB_ENV
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:

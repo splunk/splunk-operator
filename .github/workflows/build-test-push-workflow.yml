@@ -144,7 +144,7 @@ jobs:
     - name: Pull Splunk Operator Image Locally
       run: |
         docker pull ${{ env.IMAGE_NAME }}
-    - name: Verify Signed Splunk Operator image 
+    - name: Verify Signed Splunk Operator image
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ env.IMAGE_NAME }}
       env:

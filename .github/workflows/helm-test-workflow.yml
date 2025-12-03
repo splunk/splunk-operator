@@ -52,7 +52,7 @@ jobs:
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
-    timeout-minutes: 420
+    timeout-minutes: 240
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
