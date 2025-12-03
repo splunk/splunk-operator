@@ -130,6 +130,7 @@ If you need help, tag one of the active maintainers of this project in a post or
 (*) Patryk Wasielewski
 (*) Igor Grzankowski
 (*) Kasia Kozioł
+(*) Jakub Buczak
 () Sirish Mohan
 () Gaurav Gupta
 () Subba Gontla
