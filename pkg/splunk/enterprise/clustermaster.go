@@ -196,6 +196,14 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 	cr.Status.Phase = phase
 
+	//Update MC configmap
+	if cr.Spec.MonitoringConsoleRef.Name != "" {
+		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
 		//upgrade fron automated MC to MC CRD
@@ -203,13 +211,6 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
 		if err != nil {
 			scopedLog.Error(err, "Error in deleting automated monitoring console resource")
-		}
-		//Update MC configmap
-		if cr.Spec.MonitoringConsoleRef.Name != "" {
-			_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, extraEnv, true)
-			if err != nil {
-				return result, err
-			}
 		}
 
 		// Create podExecClient

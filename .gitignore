@@ -82,6 +82,7 @@ tags
 .yq_script.yaml
 Gopkg.lock
 vendor/
+.bundle/
 push_targets
 splunk-enterprise.lic
 splunk-operator-*.yaml

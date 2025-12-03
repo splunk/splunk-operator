@@ -1,4 +1,4 @@
-name: ARM RHEL Integration Test WorkFlow
+name: ARM RHEL Smoke Test WorkFlow
 permissions:
   contents: read
   packages: write
@@ -54,7 +54,7 @@ jobs:
         export BASE_IMAGE_VERSION=9.5
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
         make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
-  int-tests-arm-rhel:
+  smoke-tests-arm-rhel:
     strategy:
       fail-fast: false
       matrix:
@@ -80,8 +80,8 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       SPLUNK_OPERATOR_IMAGE_FILENAME: splunk-operator
       TEST_FOCUS: "${{ matrix.test }}"
-      # This regex matches any string not containing integration keyword
-      TEST_TO_SKIP: "^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$"
+      # This regex matches any string not containing smoke keyword
+      TEST_TO_SKIP: "^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$"
       TEST_CLUSTER_PLATFORM: eks
       EKS_VPC_PRIVATE_SUBNET_STRING: ${{ secrets.EKS_VPC_PRIVATE_SUBNET_STRING }}
       EKS_VPC_PUBLIC_SUBNET_STRING: ${{ secrets.EKS_VPC_PUBLIC_SUBNET_STRING }}
@@ -95,9 +95,6 @@ jobs:
       ARM64: "true"
       GRAVITON_TESTING: "true"
     steps:
-      - name: Set Test Cluster Name
-        run: |
-          echo "TEST_CLUSTER_NAME=eks-integration-test-cluster-${{ matrix.test }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Set Test Cluster Nodes and Parallel Runs
         run: >-
           if grep -q "appframework" <<< "${{ matrix.test }}"; then
@@ -106,6 +103,17 @@ jobs:
           fi
       - name: Checkcout code
         uses: actions/checkout@v2
+      - name: Set Test Cluster Name
+        id: set-cluster-name
+        uses: ./.github/actions/set-cluster-name
+        with:
+          test-type: smoke
+          platform: arm-rhel
+          test-name: ${{ matrix.test }}
+          run-id: ${{ github.run_id }}
+      - name: Export cluster name to environment
+        run: |
+          echo "TEST_CLUSTER_NAME=${{ steps.set-cluster-name.outputs.cluster-name }}" >> $GITHUB_ENV
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -181,7 +189,7 @@ jobs:
           sudo snap install kustomize
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
-      - name: Run Integration test
+      - name: Run smoke test
         run: |
           make int-test
       - name: Collect Test Logs

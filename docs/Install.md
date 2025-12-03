@@ -1,3 +1,10 @@
+---
+title: Installing the Splunk Operator
+parent: Deploy & Configure
+nav_order: 1
+---
+
+
 # Splunk Operator Advanced Installation
 
 
