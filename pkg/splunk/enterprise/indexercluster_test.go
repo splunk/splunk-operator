@@ -769,7 +769,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[4], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
+	wantCalls := map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[4], funcCalls[0], funcCalls[5]}, "Create": {funcCalls[1]}, "List": {listmockCall[0]}}
 
 	// test 1 ready pod
 	mockHandlers := []spltest.MockHTTPHandler{
@@ -822,6 +822,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-indexer-0"},
@@ -836,6 +837,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-0"},
 	}
 	mockHandlers = []spltest.MockHTTPHandler{mockHandlers[0], mockHandlers[1]}
@@ -862,7 +864,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 	statefulSet.Status.Replicas = 2
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Status.UpdatedReplicas = 2
-	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[4]}, "Create": {funcCalls[1]}}
+	wantCalls = map[string][]spltest.MockFuncCall{"Get": {funcCalls[0], funcCalls[1], funcCalls[1], funcCalls[4], funcCalls[4], funcCalls[0]}, "Create": {funcCalls[1]}}
 	method = "indexerClusterPodManager.Update(Pod Not Found)"
 	indexerClusterPodManagerUpdateTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod)
 
@@ -885,6 +887,7 @@ func TestIndexerClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
 		{MetaName: "*v1.Pod-test-splunk-manager1-cluster-manager-0"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
