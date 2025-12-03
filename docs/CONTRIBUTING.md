@@ -136,6 +136,10 @@ If you need help, tag one of the active maintainers of this project in a post or
 (*) Igor Grzankowski
 (*) Kasia Kozioł
 (*) Jakub Buczak
+(*) Qing Wang
+(*) Gabriel Mendoza
+(*) Minjie Qiu
+(*) Yuhan Yang
 () Sirish Mohan
 () Gaurav Gupta
 () Subba Gontla
