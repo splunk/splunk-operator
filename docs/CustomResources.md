@@ -355,7 +355,7 @@ The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is
 
 ## Examples of Guaranteed and Burstable QoS
 
-You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods using the [Kubernetes Quality of Service section](README.md#using-kubernetes-quality-of-service-classes). Here are some examples:
+You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods. Here are some examples:
   
 ### A Guaranteed QoS Class example:
 Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
