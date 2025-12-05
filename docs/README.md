@@ -19,7 +19,7 @@ This repository is used to build the Splunk
 for Kubernetes (SOK). If you are just looking for documentation on how to
 deploy and use the latest release, please visit the published
 [Splunk Operator documentation site](https://splunk.github.io/splunk-operator/)
-or review the in-repo [Getting Started Documentation](GettingStarted.md).
+or review the in-repo [Getting Started Documentation](GettingStarted.html).
 
 ## Splunk General Terms Acceptance
 
@@ -35,7 +35,7 @@ By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empt
 make deploy IMG=docker.io/splunk/splunk-operator:<tag name> WATCH_NAMESPACE="namespace1" RELATED_IMAGE_SPLUNK_ENTERPRISE="splunk/splunk:edge" SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com"
 ```
 
-For more information about this change, see the [Splunk General Terms Migration Documentation](SplunkGeneralTermsMigration.md).
+For more information about this change, see the [Splunk General Terms Migration Documentation](SplunkGeneralTermsMigration.html).
 
 ## Prerequisites
 
@@ -107,7 +107,7 @@ In addition to the source code, this repository includes:
 * `tools`: Build scripts, templates, etc. used to build the container image
 * `config`: Kubernetes YAML templates used to install the Splunk Operator
 * `docs`: Getting Started Guide and other documentation in Markdown format
-* `test`: Integration test framework built using Ginko. See [docs](test/README.md) for more info.
+* `test`: Integration test framework built using Ginkgo. See [docs](https://github.com/splunk/splunk-operator/blob/main/test/README.md) for more info.
 
 ## Building the operator
 
@@ -158,7 +158,7 @@ make run
 This will use your current Kubernetes context from `~/.kube/config` to manage
 resources in your current namespace.
 
-Please see the [Getting Started Documentation](GettingStarted.md) for more
+Please see the [Getting Started Documentation](GettingStarted.html) for more
 information, including instructions on how to install the operator in your
 cluster.
 

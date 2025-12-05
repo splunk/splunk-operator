@@ -16,7 +16,7 @@ All users deploying Splunk Enterprise 10.x or later image versions instances mus
 
 Starting with the 3.0.0 release, there is now a mandatory acknowledgment mechanism for the Splunk General Terms (SGT) within the Splunk Operator for Kubernetes. **This is a breaking change, and user action is required.** This involves creating a new `SPLUNK_GENERAL_TERMS` environment variable in the splunk operator deployment, which gets passed to every CRD.
 
-To learn more about the required value for this variable, please see the [README](../README.md) or Splunk Enterprise 10.x image’s README.
+To learn more about the required value for this variable, please see the [README](index.html#splunk-general-terms-acceptance) or Splunk Enterprise 10.x image’s README.
 
 ## How does this affect existing deployments?
 
@@ -25,11 +25,11 @@ Existing deployments of the Splunk Operator for Kubernetes will not be affected 
 ## How to plan for a migration?
 
 When you are ready to upgrade from version 1.x.x or 2.x.x to 3.0.0 or later, there are a few options you have to set the `SPLUNK_GENERAL_TERMS` to the proper value. By default, the SPLUNK_GENERAL_TERMS environment variable will be set to an empty string.
-1. Pass the `SPLUNK_GENERAL_TERMS` parameter with the required value to the `make deploy` command
+1. Pass the `SPLUNK_GENERAL_TERMS` parameter with the [required value](index.html#splunk-general-terms-acceptance) to the `make deploy` command.
 ```
-make deploy IMG=docker.io/splunk/splunk-operator:<tag name> SPLUNK_GENERAL_TERMS="[required value]"
+make deploy IMG=docker.io/splunk/splunk-operator:<tag name> SPLUNK_GENERAL_TERMS="<required value>"
 ```
-2. Update the value in the Splunk Operator installation file from the release on GitHub
+2. Update the value in the Splunk Operator installation file from the [release](https://github.com/splunk/splunk-operator/releases/latest) on GitHub with the [required value](index.html#splunk-general-terms-acceptance).
 ```yaml
 ...
         env:
@@ -40,7 +40,7 @@ make deploy IMG=docker.io/splunk/splunk-operator:<tag name> SPLUNK_GENERAL_TERMS
         - name: OPERATOR_NAME
           value: splunk-operator
         - name: SPLUNK_GENERAL_TERMS
-          value: "[required value]"
+          value: "<required value>"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -48,11 +48,11 @@ make deploy IMG=docker.io/splunk/splunk-operator:<tag name> SPLUNK_GENERAL_TERMS
               fieldPath: metadata.name
 ...
 ```
-3. Set the value in a `helm install` command
+3. Set the [required value](index.html#splunk-general-terms-acceptance) in a `helm install` command.
 ```
-helm install -f new_values.yaml --set splunkOperator.splunkGeneralTerms="[required value]" <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+helm install -f new_values.yaml --set splunkOperator.splunkGeneralTerms="<required value>" <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
 ```
-4. Edit the splunk-operator-controller-manager deployment after it is deployed
+4. Edit the splunk-operator-controller-manager deployment after it is deployed to include the [required value](index.html#splunk-general-terms-acceptance).
 ```
 kubectl edit deployment splunk-operator-controller-manager -n splunk-operator
 ```

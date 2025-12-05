@@ -107,10 +107,8 @@ release "splunk-operator-test" uninstalled
 
 ## Splunk Enterprise deployments
 
-The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command:
-```
-helm dependency build splunk/splunk-enterprise
-```
+The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default.
+
 If the operator is already installed then you will need to disable the dependency:
 ```
 helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
