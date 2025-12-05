@@ -1013,3 +1013,19 @@ func TestSortAndCompareSlices(t *testing.T) {
 		t.Errorf("Expect 2 slices to be equal - (%v, %v)", a, b)
 	}
 }
+
+func TestGetServiceURI(t *testing.T) {
+	test := func(namespace string, name string, want string) {
+		got := GetServiceURI(namespace, name)
+		if got != want {
+			t.Errorf("GetServiceURI() = %s; want %s", got, want)
+		}
+	}
+
+	os.Setenv("SPLUNKD_SSL_ENABLE", "true")
+	test("test", "t1", "https://t1.test.svc.cluster.local:8089")
+
+	os.Setenv("CLUSTER_DOMAIN", "cluster.local")
+	os.Setenv("SPLUNKD_SSL_ENABLE", "false")
+	test("test", "t2", "http://t2.test.svc.cluster.local:8089")
+}
