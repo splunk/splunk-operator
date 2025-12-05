@@ -77,6 +77,11 @@ func (d *Deployment) popCleanupFunc() (cleanupFunc, error) {
 
 // Teardown teardowns the deployment resources
 func (d *Deployment) Teardown() error {
+	defer func() {
+		if r := recover(); r != nil {
+			d.testenv.Log.Error(fmt.Errorf("panic: %v", r), "Recovered from panic in Deployment.Teardown")
+		}
+	}()
 
 	// Formatted string for pod logs
 	podLogFile := "%s-%s.log"

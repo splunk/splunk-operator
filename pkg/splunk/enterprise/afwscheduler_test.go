@@ -3773,8 +3773,8 @@ func TestHandleAppPkgInstallComplete(t *testing.T) {
 	// Standalone with only one replicas
 	// Case-1: App pkg should not be deleted, when the installation is not complete on the Pod.
 	worker.appDeployInfo.AuxPhaseInfo = append(worker.appDeployInfo.AuxPhaseInfo, enterpriseApi.PhaseInfo{
-		Phase:  enterpriseApi.PhaseInstall,
-		Status: enterpriseApi.AppPkgInstallInProgress})
+		Phase: enterpriseApi.PhaseInstall,
+	})
 
 	_, err = os.Create(appPkgLocalPath)
 	if err != nil {

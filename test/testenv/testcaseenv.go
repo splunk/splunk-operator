@@ -177,6 +177,11 @@ func (testenv *TestCaseEnv) setup() error {
 
 // Teardown cleanup the resources use in this testenv
 func (testenv *TestCaseEnv) Teardown() error {
+	defer func() {
+		if r := recover(); r != nil {
+			testenv.Log.Error(fmt.Errorf("panic: %v", r), "Recovered from panic in TestCaseEnv.Teardown")
+		}
+	}()
 
 	if testenv.SkipTeardown && testenv.debug == "True" {
 		testenv.Log.Info("testenv teardown is skipped!\n")
