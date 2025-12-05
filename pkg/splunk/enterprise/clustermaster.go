@@ -331,7 +331,8 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 }
 
 // PerformCmasterBundlePush initiates the bundle push from cluster manager
-func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
+// Defined as a variable to allow mocking in unit tests
+var PerformCmasterBundlePush = func(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	if !cr.Status.BundlePushTracker.NeedToPushMasterApps {
 		return nil
 	}
@@ -428,7 +429,8 @@ func getClusterMasterList(ctx context.Context, c splcommon.ControllerClient, cr 
 }
 
 // VerifyCMasterisMultisite checks if its a multisite
-func VerifyCMasterisMultisite(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
+// Defined as a variable to allow mocking in unit tests
+var VerifyCMasterisMultisite = func(ctx context.Context, cr *enterpriseApiV3.ClusterMaster, namespaceScopedSecret *corev1.Secret) ([]corev1.EnvVar, error) {
 	var err error
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("Verify if Multisite Indexer Cluster").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())

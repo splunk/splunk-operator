@@ -1236,15 +1236,49 @@ func TestStandaloneWitAppFramework(t *testing.T) {
 
 func TestStandaloneWithReadyState(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	// create directory for app framework
+
+	// Initialize the global resource tracker to allow app framework to run
+	initGlobalResourceTracker()
+
+	// Create temporary directory for app framework operations
 	newpath := filepath.Join("/tmp", "appframework")
 	_ = os.MkdirAll(newpath, os.ModePerm)
+	defer os.RemoveAll(newpath)
 
-	// adding getapplist to fix test case
+	// Create app download directory required by app framework
+	err := os.MkdirAll(splcommon.AppDownloadVolume, 0755)
+	if err != nil {
+		t.Fatalf("Unable to create download directory for apps: %s", splcommon.AppDownloadVolume)
+	}
+	defer os.RemoveAll(splcommon.AppDownloadVolume)
+
+	// Mock GetAppsList to return empty list (no apps to download)
+	savedGetAppsList := GetAppsList
 	GetAppsList = func(ctx context.Context, remoteDataClientMgr RemoteDataClientManager) (splclient.RemoteDataListResponse, error) {
 		RemoteDataListResponse := splclient.RemoteDataListResponse{}
 		return RemoteDataListResponse, nil
 	}
+	defer func() { GetAppsList = savedGetAppsList }()
+
+	// Mock GetPodExecClient to return a mock client that simulates pod operations locally
+	savedGetPodExecClient := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(client splcommon.ControllerClient, cr splcommon.MetaObject, targetPodName string) splutil.PodExecClientImpl {
+		mockClient := &spltest.MockPodExecClient{
+			Client:        client,
+			Cr:            cr,
+			TargetPodName: targetPodName,
+		}
+		// Add mock responses for common commands
+		ctx := context.TODO()
+		// Mock mkdir command (used by createDirOnSplunkPods)
+		mockClient.AddMockPodExecReturnContext(ctx, "mkdir -p", &spltest.MockPodExecReturnContext{
+			StdOut: "",
+			StdErr: "",
+			Err:    nil,
+		})
+		return mockClient
+	}
+	defer func() { splutil.GetPodExecClient = savedGetPodExecClient }()
 
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
@@ -1352,7 +1386,7 @@ func TestStandaloneWithReadyState(t *testing.T) {
 	// simulate create standalone instance before reconcilation
 	c.Create(ctx, &standalone)
 
-	_, err := ApplyStandalone(ctx, c, &standalone)
+	_, err = ApplyStandalone(ctx, c, &standalone)
 	if err != nil {
 		t.Errorf("Unexpected error while running reconciliation for standalone with app framework  %v", err)
 		debug.PrintStack()

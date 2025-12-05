@@ -3,9 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	"github.com/splunk/splunk-operator/internal/controller/testutils"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 
 	"time"
 
@@ -35,7 +37,7 @@ var _ = Describe("ClusterManager Controller", func() {
 
 		It("Get ClusterManager custom resource should failed", func() {
 			namespace := "ns-splunk-cm-1"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -51,7 +53,7 @@ var _ = Describe("ClusterManager Controller", func() {
 
 		It("Create ClusterManager custom resource with annotations should pause", func() {
 			namespace := "ns-splunk-cm-2"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -71,7 +73,7 @@ var _ = Describe("ClusterManager Controller", func() {
 	Context("ClusterManager Management", func() {
 		It("Create ClusterManager custom resource should succeeded", func() {
 			namespace := "ns-splunk-cm-3"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -84,7 +86,7 @@ var _ = Describe("ClusterManager Controller", func() {
 
 		It("Cover Unused methods", func() {
 			namespace := "ns-splunk-cm-4"
-			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager) (reconcile.Result, error) {
+			ApplyClusterManager = func(ctx context.Context, client client.Client, instance *enterpriseApi.ClusterManager, podExecClient splutil.PodExecClientImpl) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}

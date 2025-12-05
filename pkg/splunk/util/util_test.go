@@ -214,6 +214,18 @@ func TestDeepCopy(t *testing.T) {
 
 func TestPodExecCommand(t *testing.T) {
 	ctx := context.TODO()
+
+	// Mock podExecGetConfig to return a config with localhost as server
+	// This prevents the test from trying to connect to a real Kubernetes cluster
+	// and timing out. Instead, it will fail fast with connection refused.
+	savedPodExecGetConfig := podExecGetConfig
+	defer func() { podExecGetConfig = savedPodExecGetConfig }()
+	podExecGetConfig = func() (*rest.Config, error) {
+		return &rest.Config{
+			Host: "http://127.0.0.1:1", // Use invalid port for fast failure
+		}, nil
+	}
+
 	// Create pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

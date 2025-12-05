@@ -129,6 +129,10 @@ type PipelineWorker struct {
 
 	// indicates a fan out worker
 	fanOut bool
+
+	// Optional injected pod exec client for testing (avoids real network I/O)
+	// If nil, runPodCopyWorker will create a real client
+	podExecClient splutil.PodExecClientImpl
 }
 
 // PipelinePhase represents one phase in the overall installation pipeline
