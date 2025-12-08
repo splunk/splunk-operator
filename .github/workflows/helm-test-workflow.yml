@@ -1,4 +1,9 @@
 name: Helm Test WorkFlow
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  pull-requests: write
 on:
   push:
     branches:
@@ -34,11 +39,12 @@ jobs:
         sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v5
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+        role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+        role-session-name: github-${{ github.run_id }}
+        aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -46,6 +52,7 @@ jobs:
       run: |
         make docker-buildx IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
   int-tests:
+    timeout-minutes: 240
     runs-on: ubuntu-latest
     needs: build-operator-image
     env:
@@ -143,11 +150,12 @@ jobs:
       - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -201,6 +209,8 @@ jobs:
           AWS_S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_S3_BUCKET: ${{ secrets.TEST_BUCKET }}
           TEST_VPC_ENDPOINT_URL: ${{ secrets.TEST_VPC_ENDPOINT_URL }}
+          TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
+          TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
           kubectl kuttl test --config kuttl/kuttl-test-helm.yaml --report xml
       - name: Publish Results
