@@ -47,9 +47,11 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - busconfigurations
   - clustermanagers
   - clustermasters
   - indexerclusters
+  - ingestorclusters
   - licensemanagers
   - licensemasters
   - monitoringconsoles
@@ -66,9 +68,11 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - busconfigurations/finalizers
   - clustermanagers/finalizers
   - clustermasters/finalizers
   - indexerclusters/finalizers
+  - ingestorclusters/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
@@ -79,9 +83,11 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - busconfigurations/status
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
+  - ingestorclusters/status
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status

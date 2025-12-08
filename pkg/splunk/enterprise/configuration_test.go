@@ -1816,3 +1816,18 @@ func TestValidateLivenessProbe(t *testing.T) {
 		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
 }
+
+func TestGetSplunkPorts(t *testing.T) {
+	test := func(instanceType InstanceType) {
+		ports := getSplunkPorts(instanceType)
+		require.Equal(t, 8000, ports["http-splunkweb"])
+		require.Equal(t, 8089, ports["https-splunkd"])
+		require.Equal(t, 8088, ports["http-hec"])
+		require.Equal(t, 9997, ports["tcp-s2s"])
+	}
+
+	test(SplunkStandalone)
+	test(SplunkIndexer)
+	test(SplunkIngestor)
+	test(SplunkMonitoringConsole)
+}

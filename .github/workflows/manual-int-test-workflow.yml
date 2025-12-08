@@ -28,6 +28,7 @@ jobs:
             managerscaling,
             managercrcrud,
             licensemanager,
+            indingsep,
           ]
     runs-on: ubuntu-latest
     env:

@@ -20,6 +20,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
+  - [IngestorCluster Resource Spec Parameters](#ingestorcluster-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
@@ -141,7 +142,7 @@ spec:
 
 The following additional configuration parameters may be used for all Splunk
 Enterprise resources, including: `Standalone`, `LicenseManager`,
-`SearchHeadCluster`, `ClusterManager` and `IndexerCluster`:
+`SearchHeadCluster`, `ClusterManager`, `IndexerCluster` and `IngestorCluster`:
 
 | Key                | Type    | Description                                                                   |
 | ------------------ | ------- | ----------------------------------------------------------------------------- |
@@ -328,6 +329,27 @@ the `IndexerCluster` resource provides the following `Spec` configuration parame
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of indexer cluster members (minimum of 3, which is the default) |
 
+## IngestorCluster Resource Spec Parameters
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: ic
+spec:
+  replicas: 3
+  busConfigurationRef: 
+    name: bus-config
+```
+Note:  `busConfigurationRef` is required field in case of IngestorCluster resource since it will be used to connect the IngestorCluster to BusConfiguration resource.
+
+In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
+and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
+the `IngestorCluster` resource provides the following `Spec` configuration parameters:
+
+| Key        | Type    | Description                                           |
+| ---------- | ------- | ----------------------------------------------------- |
+| replicas   | integer | The number of ingestor peers (minimum of 3 which is the default) |
 
 ## MonitoringConsole Resource Spec Parameters
 
@@ -443,6 +465,7 @@ The Splunk Operator controller reconciles every Splunk Enterprise CR. However, t
 | clustermaster.enterprise.splunk.com | "clustermaster.enterprise.splunk.com/paused" |
 | clustermanager.enterprise.splunk.com | "clustermanager.enterprise.splunk.com/paused" |
 | indexercluster.enterprise.splunk.com | "indexercluster.enterprise.splunk.com/paused" |
+| ingestorcluster.enterprise.splunk.com | "ingestorcluster.enterprise.splunk.com/paused" |
 | licensemaster.enterprise.splunk.com | "licensemaster.enterprise.splunk.com/paused" |
 | monitoringconsole.enterprise.splunk.com | "monitoringconsole.enterprise.splunk.com/paused" |
 | searchheadcluster.enterprise.splunk.com | "searchheadcluster.enterprise.splunk.com/paused" |
@@ -512,6 +535,7 @@ Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
 | clustermanager.enterprise.splunk.com | cluster-manager |
 | clustermaster.enterprise.splunk.com | cluster-master |
 | indexercluster.enterprise.splunk.com | indexer-cluster |
+| ingestorcluster.enterprise.splunk.com | ingestor-cluster |
 | licensemanager.enterprise.splunk.com | license-manager |
 | licensemaster.enterprise.splunk.com | license-master |
 | monitoringconsole.enterprise.splunk.com | monitoring-console |

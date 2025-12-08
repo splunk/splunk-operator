@@ -55,7 +55,7 @@ var appPhaseInfoStatuses = map[enterpriseApi.AppPhaseStatusType]bool{
 // isFanOutApplicableToCR confirms if a given CR needs fanOut support
 func isFanOutApplicableToCR(cr splcommon.MetaObject) bool {
 	switch cr.GetObjectKind().GroupVersionKind().Kind {
-	case "Standalone":
+	case "Standalone", "IngestorCluster":
 		return true
 	default:
 		return false
@@ -106,6 +106,8 @@ func getApplicablePodNameForAppFramework(cr splcommon.MetaObject, ordinalIdx int
 		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
 	}
 
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
@@ -153,6 +155,8 @@ func getTelAppNameExtension(crKind string) (string, error) {
 		return "cmaster", nil
 	case "ClusterManager":
 		return "cmanager", nil
+	case "IngestorCluster":
+		return "ingestor", nil
 	default:
 		return "", errors.New("Invalid CR kind for telemetry app")
 	}
@@ -1549,6 +1553,8 @@ func afwGetReleventStatefulsetByKind(ctx context.Context, cr splcommon.MetaObjec
 		instanceID = SplunkClusterManager
 	case "MonitoringConsole":
 		instanceID = SplunkMonitoringConsole
+	case "IngestorCluster":
+		instanceID = SplunkIngestor
 	default:
 		return nil
 	}
@@ -2210,6 +2216,7 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 
 		podExecClient := splutil.GetPodExecClient(client, cr, podName)
 		appsPathOnPod := filepath.Join(appBktMnt, appSrcName)
+
 		// create the dir on Splunk pod/s where app/s will be copied from operator pod
 		err = createDirOnSplunkPods(ctx, cr, *sts.Spec.Replicas, appsPathOnPod, podExecClient)
 		if err != nil {

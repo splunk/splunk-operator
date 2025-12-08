@@ -2277,6 +2277,34 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.Standalone).Status.DeepCopyInto(&latestStdlnCR.Status)
 		return latestStdlnCR, nil
 
+	case "IngestorCluster":
+		latestIngCR := &enterpriseApi.IngestorCluster{}
+		err = client.Get(ctx, namespacedName, latestIngCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.IngestorCluster).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.IngestorCluster).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
+		return latestIngCR, nil
+
+	case "BusConfiguration":
+		latestBusCR := &enterpriseApi.BusConfiguration{}
+		err = client.Get(ctx, namespacedName, latestBusCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.BusConfiguration).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.BusConfiguration).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.BusConfiguration).Status.DeepCopyInto(&latestBusCR.Status)
+		return latestBusCR, nil
+
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
 		err = client.Get(ctx, namespacedName, latestLmCR)
@@ -2452,6 +2480,8 @@ func getApplicablePodNameForK8Probes(cr splcommon.MetaObject, ordinalIdx int32) 
 		podType = "cluster-manager"
 	case "MonitoringConsole":
 		podType = "monitoring-console"
+	case "IngestorCluster":
+		podType = "ingestor"
 	}
 	return fmt.Sprintf("splunk-%s-%s-%d", cr.GetName(), podType, ordinalIdx)
 }

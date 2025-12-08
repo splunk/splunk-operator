@@ -30,10 +30,12 @@ import (
 	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	pkgruntime "k8s.io/apimachinery/pkg/runtime"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -1344,10 +1346,37 @@ func TestInvalidIndexerClusterSpec(t *testing.T) {
 
 func TestGetIndexerStatefulSet(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "busConfig",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+
 	cr := enterpriseApi.IndexerCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stack1",
 			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: busConfig.Name,
+			},
 		},
 	}
 
@@ -2019,4 +2048,509 @@ func TestImageUpdatedTo9(t *testing.T) {
 	if imageUpdatedTo9("splunk/splunk:", "splunk/splunk:") {
 		t.Errorf("Should not have detected an upgrade from 8 to 9, there is no version")
 	}
+}
+
+func TestGetChangedBusFieldsForIndexer(t *testing.T) {
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "busConfig",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+
+	newCR := &enterpriseApi.IndexerCluster{
+		Spec: enterpriseApi.IndexerClusterSpec{
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: busConfig.Name,
+			},
+		},
+	}
+
+	busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, false)
+	assert.Equal(t, 8, len(busChangedFieldsInputs))
+	assert.Equal(t, [][]string{
+		{"remote_queue.type", busConfig.Spec.Type},
+		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
+	}, busChangedFieldsInputs)
+
+	assert.Equal(t, 10, len(busChangedFieldsOutputs))
+	assert.Equal(t, [][]string{
+		{"remote_queue.type", busConfig.Spec.Type},
+		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
+		{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"},
+		{fmt.Sprintf("remote_queue.%s.encoding_format", busConfig.Spec.Type), "s2s"},
+	}, busChangedFieldsOutputs)
+
+	assert.Equal(t, 5, len(pipelineChangedFields))
+	assert.Equal(t, [][]string{
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+	}, pipelineChangedFields)
+}
+
+func TestHandlePullBusChange(t *testing.T) {
+	// Object definitions
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "busConfig",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+
+	newCR := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			BusConfigurationRef: corev1.ObjectReference{
+				Name: busConfig.Name,
+			},
+		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			ReadyReplicas: 3,
+		},
+	}
+
+	pod0 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"app.kubernetes.io/instance": "splunk-test-indexer",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "dummy-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "test-secrets",
+						},
+					},
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
+
+	pod1 := pod0.DeepCopy()
+	pod1.ObjectMeta.Name = "splunk-test-indexer-1"
+
+	pod2 := pod0.DeepCopy()
+	pod2.ObjectMeta.Name = "splunk-test-indexer-2"
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": []byte("dummy"),
+		},
+	}
+
+	// Mock pods
+	c := spltest.NewMockClient()
+	ctx := context.TODO()
+	c.Create(ctx, &busConfig)
+	c.Create(ctx, newCR)
+	c.Create(ctx, pod0)
+	c.Create(ctx, pod1)
+	c.Create(ctx, pod2)
+
+	// Negative test case: secret not found
+	mgr := &indexerClusterPodManager{}
+	err := mgr.handlePullBusChange(ctx, newCR, busConfig, c)
+	assert.NotNil(t, err)
+
+	// Mock secret
+	c.Create(ctx, secret)
+
+	mockHTTPClient := &spltest.MockHTTPClient{}
+
+	// Negative test case: failure in creating remote queue stanza
+	mgr = newTestPullBusPipelineManager(mockHTTPClient)
+
+	err = mgr.handlePullBusChange(ctx, newCR, busConfig, c)
+	assert.NotNil(t, err)
+
+	// outputs.conf
+	propertyKVList := [][]string{
+		{fmt.Sprintf("remote_queue.%s.auth_region", busConfig.Spec.Type), busConfig.Spec.SQS.AuthRegion},
+		{fmt.Sprintf("remote_queue.%s.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStoreEndpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", busConfig.Spec.Type), busConfig.Spec.SQS.LargeMessageStorePath},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busConfig.Spec.Type), busConfig.Spec.SQS.DeadLetterQueueName},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busConfig.Spec.Type), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", busConfig.Spec.Type), "max_count"},
+	}
+	propertyKVListOutputs := propertyKVList
+
+	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.encoding_format", busConfig.Spec.Type), "s2s"})
+	propertyKVListOutputs = append(propertyKVListOutputs, []string{fmt.Sprintf("remote_queue.%s.send_interval", busConfig.Spec.Type), "5s"})
+
+	body := buildFormBody(propertyKVListOutputs)
+	addRemoteQueueHandlersForIndexer(mockHTTPClient, newCR, busConfig, newCR.Status.ReadyReplicas, "conf-outputs", body)
+
+	// Negative test case: failure in creating remote queue stanza
+	mgr = newTestPullBusPipelineManager(mockHTTPClient)
+
+	err = mgr.handlePullBusChange(ctx, newCR, busConfig, c)
+	assert.NotNil(t, err)
+
+	// inputs.conf
+	body = buildFormBody(propertyKVList)
+	addRemoteQueueHandlersForIndexer(mockHTTPClient, newCR, busConfig, newCR.Status.ReadyReplicas, "conf-inputs", body)
+
+	// Negative test case: failure in updating remote queue stanza
+	mgr = newTestPullBusPipelineManager(mockHTTPClient)
+
+	err = mgr.handlePullBusChange(ctx, newCR, busConfig, c)
+	assert.NotNil(t, err)
+
+	// default-mode.conf
+	propertyKVList = [][]string{
+		{"pipeline:remotequeueruleset", "disabled", "false"},
+		{"pipeline:ruleset", "disabled", "true"},
+		{"pipeline:remotequeuetyping", "disabled", "false"},
+		{"pipeline:remotequeueoutput", "disabled", "false"},
+		{"pipeline:typing", "disabled", "true"},
+	}
+
+	for i := 0; i < int(newCR.Status.ReadyReplicas); i++ {
+		podName := fmt.Sprintf("splunk-test-indexer-%d", i)
+		baseURL := fmt.Sprintf("https://%s.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs/conf-default-mode", podName)
+
+		for _, field := range propertyKVList {
+			req, _ := http.NewRequest("POST", baseURL, strings.NewReader(fmt.Sprintf("name=%s", field[0])))
+			mockHTTPClient.AddHandler(req, 200, "", nil)
+
+			updateURL := fmt.Sprintf("%s/%s", baseURL, field[0])
+			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
+			mockHTTPClient.AddHandler(req, 200, "", nil)
+		}
+	}
+
+	mgr = newTestPullBusPipelineManager(mockHTTPClient)
+
+	err = mgr.handlePullBusChange(ctx, newCR, busConfig, c)
+	assert.Nil(t, err)
+}
+
+func buildFormBody(pairs [][]string) string {
+	var b strings.Builder
+	for i, kv := range pairs {
+		if len(kv) < 2 {
+			continue
+		}
+		fmt.Fprintf(&b, "%s=%s", kv[0], kv[1])
+		if i < len(pairs)-1 {
+			b.WriteByte('&')
+		}
+	}
+	return b.String()
+}
+
+func addRemoteQueueHandlersForIndexer(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IndexerCluster, busConfig enterpriseApi.BusConfiguration, replicas int32, confName, body string) {
+	for i := 0; i < int(replicas); i++ {
+		podName := fmt.Sprintf("splunk-%s-indexer-%d", cr.GetName(), i)
+		baseURL := fmt.Sprintf(
+			"https://%s.splunk-%s-indexer-headless.%s.svc.cluster.local:8089/servicesNS/nobody/system/configs/%s",
+			podName, cr.GetName(), cr.GetNamespace(), confName,
+		)
+
+		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName))
+		reqCreate, _ := http.NewRequest("POST", baseURL, strings.NewReader(createReqBody))
+		mockHTTPClient.AddHandler(reqCreate, 200, "", nil)
+
+		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName))
+		reqUpdate, _ := http.NewRequest("POST", updateURL, strings.NewReader(body))
+		mockHTTPClient.AddHandler(reqUpdate, 200, "", nil)
+	}
+}
+
+func newTestPullBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *indexerClusterPodManager {
+	newSplunkClientForBusPipeline = func(uri, user, pass string) *splclient.SplunkClient {
+		return &splclient.SplunkClient{
+			ManagementURI: uri,
+			Username:      user,
+			Password:      pass,
+			Client:        mockHTTPClient,
+		}
+	}
+	return &indexerClusterPodManager{
+		newSplunkClient: newSplunkClientForBusPipeline,
+	}
+}
+
+func TestApplyIndexerClusterManager_BusConfig_Success(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	ctx := context.TODO()
+
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Object definitions
+	busConfig := enterpriseApi.BusConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "BusConfiguration",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "busConfig",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.BusConfigurationSpec{
+			Type: "sqs_smartbus",
+			SQS: enterpriseApi.SQSSpec{
+				QueueName:                 "test-queue",
+				AuthRegion:                "us-west-2",
+				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
+				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
+				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
+				DeadLetterQueueName:       "sqs-dlq-test",
+			},
+		},
+	}
+	c.Create(ctx, &busConfig)
+
+	cm := &enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm",
+			Namespace: "test",
+		},
+		Status: enterpriseApi.ClusterManagerStatus{
+			Phase: enterpriseApi.PhaseReady,
+		},
+	}
+	c.Create(ctx, cm)
+
+	cr := &enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			Replicas: 1,
+			BusConfigurationRef: corev1.ObjectReference{
+				Name:      busConfig.Name,
+				Namespace: busConfig.Namespace,
+			},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: "cm",
+				},
+				Mock: true,
+			},
+		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			Phase: enterpriseApi.PhaseReady,
+		},
+	}
+	c.Create(ctx, cr)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secrets",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			"password": []byte("dummy"),
+		},
+	}
+	c.Create(ctx, secret)
+
+	cmPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-cm-cluster-manager-0",
+			Namespace: "test",
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+						SecretName: "test-secrets",
+					}},
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
+	c.Create(ctx, cmPod)
+
+	pod0 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"app.kubernetes.io/instance": "splunk-test-indexer",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "dummy-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "mnt-splunk-secrets",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "test-secrets",
+						},
+					},
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
+	c.Create(ctx, pod0)
+
+	replicas := int32(1)
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        1,
+			ReadyReplicas:   1,
+			UpdatedReplicas: 1,
+		},
+	}
+	c.Create(ctx, sts)
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-indexer-headless",
+			Namespace: "test",
+		},
+	}
+	c.Create(ctx, svc)
+
+	// outputs.conf
+	mockHTTPClient := &spltest.MockHTTPClient{}
+
+	base := "https://splunk-test-indexer-0.splunk-test-indexer-headless.test.svc.cluster.local:8089/servicesNS/nobody/system/configs"
+	queue := "remote_queue:test-queue"
+
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs", base), "name="+queue), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-outputs/%s", base, queue), ""), 200, "", nil)
+
+	// inputs.conf
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs", base), "name="+queue), 200, "", nil)
+	mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-inputs/%s", base, queue), ""), 200, "", nil)
+
+	// default-mode.conf
+	pipelineFields := []string{
+		"pipeline:remotequeueruleset",
+		"pipeline:ruleset",
+		"pipeline:remotequeuetyping",
+		"pipeline:remotequeueoutput",
+		"pipeline:typing",
+	}
+	for range pipelineFields {
+		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode", base), "name="), 200, "", nil)
+		mockHTTPClient.AddHandler(mustReq("POST", fmt.Sprintf("%s/conf-default-mode/", base), ""), 200, "", nil)
+	}
+
+	res, err := ApplyIndexerCluster(ctx, c, cr)
+	assert.NotNil(t, res)
+	assert.Nil(t, err)
+}
+
+func mustReq(method, url, body string) *http.Request {
+	var r *http.Request
+	var err error
+	if body != "" {
+		r, err = http.NewRequest(method, url, strings.NewReader(body))
+	} else {
+		r, err = http.NewRequest(method, url, nil)
+	}
+	if err != nil {
+		panic(err)
+	}
+	return r
 }

@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -76,6 +77,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -241,6 +245,38 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// Bus config
+		busConfig := enterpriseApi.BusConfiguration{}
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.BusConfigurationRef.Namespace != "" {
+				ns = cr.Spec.BusConfigurationRef.Namespace
+			}
+			err = client.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Spec.BusConfigurationRef.Name,
+				Namespace: ns,
+			}, &busConfig)
+			if err != nil {
+				return result, err
+			}
+		}
+
+		// If bus config is updated
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+
+				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+				if err != nil {
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
+					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					return result, err
+				}
+
+				cr.Status.BusConfiguration = busConfig.Spec
+			}
+		}
+
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
@@ -329,6 +365,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -497,6 +536,38 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// Bus config
+		busConfig := enterpriseApi.BusConfiguration{}
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.BusConfigurationRef.Namespace != "" {
+				ns = cr.Spec.BusConfigurationRef.Namespace
+			}
+			err = client.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Spec.BusConfigurationRef.Name,
+				Namespace: ns,
+			}, &busConfig)
+			if err != nil {
+				return result, err
+			}
+		}
+
+		// If bus config is updated
+		if cr.Spec.BusConfigurationRef.Name != "" {
+			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+
+				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+				if err != nil {
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
+					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					return result, err
+				}
+
+				cr.Status.BusConfiguration = busConfig.Spec
+			}
+		}
+
 		//update MC
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
@@ -1078,6 +1149,7 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 		len(cr.Spec.ClusterMasterRef.Namespace) > 0 && cr.Spec.ClusterMasterRef.Namespace != cr.GetNamespace() {
 		return fmt.Errorf("multisite cluster does not support cluster manager to be located in a different namespace")
 	}
+
 	return validateCommonSplunkSpec(ctx, c, &cr.Spec.CommonSplunkSpec, cr)
 }
 
@@ -1159,6 +1231,79 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	return extractedValue
 }
 
+var newSplunkClientForBusPipeline = splclient.NewSplunkClient
+
+// Checks if only PullBus or Pipeline config changed, and updates the conf file if so
+func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("handlePullBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+
+	// Only update config for pods that exist
+	readyReplicas := newCR.Status.ReadyReplicas
+
+	// List all pods for this IndexerCluster StatefulSet
+	var updateErr error
+	for n := 0; n < int(readyReplicas); n++ {
+		memberName := GetSplunkStatefulsetPodName(SplunkIndexer, newCR.GetName(), int32(n))
+		fqdnName := splcommon.GetServiceFQDN(newCR.GetNamespace(), fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIndexer, newCR.GetName(), true)))
+		adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, k8s, memberName, newCR.GetNamespace(), "password")
+		if err != nil {
+			return err
+		}
+		splunkClient := newSplunkClientForBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+
+		afterDelete := false
+		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
+			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+				updateErr = err
+			}
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+				updateErr = err
+			}
+			afterDelete = true
+		}
+
+		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, afterDelete)
+
+		for _, pbVal := range busChangedFieldsOutputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+				updateErr = err
+			}
+		}
+
+		for _, pbVal := range busChangedFieldsInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+				updateErr = err
+			}
+		}
+
+		for _, field := range pipelineChangedFields {
+			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
+				updateErr = err
+			}
+		}
+	}
+
+	// Do NOT restart Splunk
+	return updateErr
+}
+
+// getChangedBusFieldsForIndexer returns a list of changed bus and pipeline fields for indexer pods
+func getChangedBusFieldsForIndexer(busConfig *enterpriseApi.BusConfiguration, busConfigIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
+	// Compare bus fields
+	oldPB := busConfigIndexerStatus.Status.BusConfiguration
+	newPB := busConfig.Spec
+
+	// Push all bus fields
+	busChangedFieldsInputs, busChangedFieldsOutputs = pullBusChanged(&oldPB, &newPB, afterDelete)
+
+	// Always set all pipeline fields, not just changed ones
+	pipelineChangedFields = pipelineConfig(true)
+
+	return
+}
+
 // Tells if there is an image migration from 8.x.x to 9.x.x
 func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	// If there is no colon, version can't be detected
@@ -1168,4 +1313,37 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	previousVersion := strings.Split(previousImage, ":")[1]
 	currentVersion := strings.Split(currentImage, ":")[1]
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
+}
+
+func pullBusChanged(oldBus, newBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (inputs, outputs [][]string) {
+	if oldBus.Type != newBus.Type || afterDelete {
+		inputs = append(inputs, []string{"remote_queue.type", newBus.Type})
+	}
+	if oldBus.SQS.AuthRegion != newBus.SQS.AuthRegion || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", newBus.Type), newBus.SQS.AuthRegion})
+	}
+	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", newBus.Type), newBus.SQS.Endpoint})
+	}
+	if oldBus.SQS.LargeMessageStoreEndpoint != newBus.SQS.LargeMessageStoreEndpoint || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newBus.Type), newBus.SQS.LargeMessageStoreEndpoint})
+	}
+	if oldBus.SQS.LargeMessageStorePath != newBus.SQS.LargeMessageStorePath || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newBus.Type), newBus.SQS.LargeMessageStorePath})
+	}
+	if oldBus.SQS.DeadLetterQueueName != newBus.SQS.DeadLetterQueueName || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newBus.Type), newBus.SQS.DeadLetterQueueName})
+	}
+	inputs = append(inputs,
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newBus.Type), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newBus.Type), "max_count"},
+	)
+
+	outputs = inputs
+	outputs = append(outputs,
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newBus.Type), "5s"},
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newBus.Type), "s2s"},
+	)
+
+	return inputs, outputs
 }

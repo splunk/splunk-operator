@@ -368,13 +368,54 @@ func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...cli
 		ListOpts: opts,
 		ObjList:  obj,
 	})
-	listObj := c.ListObj
-	if listObj != nil {
-		srcObj := listObj
-		copyMockObjectList(&obj, &srcObj)
-		return nil
+
+	// Only handle PodList for this test
+	podList, ok := obj.(*corev1.PodList)
+	if !ok {
+		// fallback to old logic
+		listObj := c.ListObj
+		if listObj != nil {
+			srcObj := listObj
+			copyMockObjectList(&obj, &srcObj)
+			return nil
+		}
+		return c.NotFoundError
 	}
-	return c.NotFoundError
+
+	// Gather label selector and namespace from opts
+	var ns string
+	var matchLabels map[string]string
+	for _, opt := range opts {
+		switch v := opt.(type) {
+		case client.InNamespace:
+			ns = string(v)
+		case client.MatchingLabels:
+			matchLabels = v
+		}
+	}
+
+	// Filter pods in State
+	for _, v := range c.State {
+		pod, ok := v.(*corev1.Pod)
+		if !ok {
+			continue
+		}
+		if ns != "" && pod.Namespace != ns {
+			continue
+		}
+		matches := true
+		for k, val := range matchLabels {
+			if pod.Labels[k] != val {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			podList.Items = append(podList.Items, *pod)
+		}
+	}
+
+	return nil
 }
 
 // Create returns mock client's Err field
