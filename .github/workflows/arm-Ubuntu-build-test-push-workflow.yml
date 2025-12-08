@@ -89,11 +89,12 @@ jobs:
         sudo chmod +x operator-sdk_${OS}_${ARCH}
         sudo mv operator-sdk_${OS}_${ARCH} /usr/local/bin/operator-sdk
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v5
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+        role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+        role-session-name: github-${{ github.run_id }}
+        aws-region: ${{ vars.AWS_REGION }}
+        role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
@@ -101,9 +102,9 @@ jobs:
       run: |
         export PLATFORMS=linux/arm64,linux/amd64
         export BASE_IMAGE=ubuntu
-        export BASE_IMAGE_VERSION=24.10
+        export BASE_IMAGE_VERSION=24.04
         export IMG=${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA
-        make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG 
+        make docker-buildx PLATFORMS=$PLATFORMS BASE_IMAGE=$BASE_IMAGE BASE_IMAGE_VERSION=$BASE_IMAGE_VERSION IMG=$IMG
     - name: Sign Splunk Operator image with a key
       run: |
         cosign sign --yes --key env://COSIGN_PRIVATE_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
@@ -211,11 +212,12 @@ jobs:
         run: |
             echo "SPLUNK_OPERATOR_IMAGE=${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:$GITHUB_SHA" >> $GITHUB_ENV
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: ${{ vars.AWS_ROLE_DURATION_SECONDS }}
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
@@ -240,6 +242,10 @@ jobs:
           cp /snap/bin/kustomize ./bin/kustomize
       - name: Run smoke test
         id: smoketest
+        timeout-minutes: 240
+        env:
+          TEST_S3_ACCESS_KEY_ID: ${{ vars.TEST_S3_ACCESS_KEY_ID }}
+          TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.TEST_S3_SECRET_ACCESS_KEY }}
         run: |
           make int-test
       - name: Collect Test Logs
