@@ -274,6 +274,15 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				}
 
 				cr.Status.BusConfiguration = busConfig.Spec
+
+				for i := int32(0); i < cr.Spec.Replicas; i++ {
+					idxcClient := mgr.getClient(ctx, i)
+					err = idxcClient.RestartSplunk()
+					if err != nil {
+						return result, err
+					}
+					scopedLog.Info("Restarted splunk", "indexer", i)
+				}
 			}
 		}
 
@@ -565,6 +574,15 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 
 				cr.Status.BusConfiguration = busConfig.Spec
+
+				for i := int32(0); i < cr.Spec.Replicas; i++ {
+					idxcClient := mgr.getClient(ctx, i)
+					err = idxcClient.RestartSplunk()
+					if err != nil {
+						return result, err
+					}
+					scopedLog.Info("Restarted splunk", "indexer", i)
+				}
 			}
 		}
 

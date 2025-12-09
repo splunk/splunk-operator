@@ -228,7 +228,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 		// If bus config is updated
 		if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
-			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 
 			err = mgr.handlePushBusChange(ctx, cr, busConfig, client)
 			if err != nil {
@@ -238,6 +238,15 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 
 			cr.Status.BusConfiguration = busConfig.Spec
+
+			for i := int32(0); i < cr.Spec.Replicas; i++ {
+				ingClient := mgr.getClient(ctx, i)
+				err = ingClient.RestartSplunk()
+				if err != nil {
+					return result, err
+				}
+				scopedLog.Info("Restarted splunk", "ingestor", i)
+			}
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -278,6 +287,27 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	}
 
 	return result, nil
+}
+
+// getClient for ingestorClusterPodManager returns a SplunkClient for the member n
+func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ingestorClusterPodManager.getClient").WithValues("name", mgr.cr.GetName(), "namespace", mgr.cr.GetNamespace())
+
+	// Get Pod Name
+	memberName := GetSplunkStatefulsetPodName(SplunkIngestor, mgr.cr.GetName(), n)
+
+	// Get Fully Qualified Domain Name
+	fqdnName := splcommon.GetServiceFQDN(mgr.cr.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, GetSplunkServiceName(SplunkIngestor, mgr.cr.GetName(), true)))
+
+	// Retrieve admin password from Pod
+	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.c, memberName, mgr.cr.GetNamespace(), "password")
+	if err != nil {
+		scopedLog.Error(err, "Couldn't retrieve the admin password from pod")
+	}
+
+	return mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
 }
 
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
@@ -372,6 +402,7 @@ func getChangedBusFieldsForIngestor(busConfig *enterpriseApi.BusConfiguration, b
 }
 
 type ingestorClusterPodManager struct {
+	c               splcommon.ControllerClient
 	log             logr.Logger
 	cr              *enterpriseApi.IngestorCluster
 	secrets         *corev1.Secret
@@ -379,12 +410,13 @@ type ingestorClusterPodManager struct {
 }
 
 // newIngestorClusterPodManager function to create pod manager this is added to write unit test case
-var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) ingestorClusterPodManager {
+var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 	return ingestorClusterPodManager{
 		log:             log,
 		cr:              cr,
 		secrets:         secret,
 		newSplunkClient: newSplunkClient,
+		c:               c,
 	}
 }
 

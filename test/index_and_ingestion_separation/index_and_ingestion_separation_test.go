@@ -384,14 +384,6 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.UpdateCR(ctx, bus)
 			Expect(err).To(Succeed(), "Unable to deploy Bus Configuration with updated CR")
 
-			// Ensure that Ingestor Cluster has not been restarted
-			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster has not been restarted")
-			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
-
-			// Ensure that Indexer Cluster has not been restarted
-			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster has not been restarted")
-			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
 			ingest := &enterpriseApi.IngestorCluster{}
