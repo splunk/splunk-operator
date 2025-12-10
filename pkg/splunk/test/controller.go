@@ -792,13 +792,15 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, updateCalls, nil, current)
 
 	// test scale up (zero ready so far; wait for ready)
+	// Now includes Update+Get for setScaleUpWaitStarted annotation tracking
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
 
 	// test scale up (1 ready scaling to 2; wait for ready)
+	// Now includes Update+Get for setScaleUpWaitStarted annotation tracking
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
@@ -814,14 +816,16 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
 	// test scale down (2 ready, 1 desired)
+	// In this case readyReplicas > replicas, so no clearScaleUpWaitStarted is called
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 2
-	delete(scaleUpCalls, "Update")
+	scaleDownReadyCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleDownReadyCalls, nil, current, pod)
 
 	// test scale down (2 ready scaling down to 1)
+	// The Get calls are: initial StatefulSet re-fetch, then PVC lookups for deletion.
 	pvcCalls := []MockFuncCall{
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
