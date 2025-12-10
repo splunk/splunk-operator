@@ -62,7 +62,7 @@ type AWSS3Client struct {
 	Downloader         SplunkAWSDownloadClient
 }
 
-var regionRegex = ".*.s3[-,.]([a-z]+-[a-z]+-[0-9]+)\\..*amazonaws.com"
+var regionRegex = ".*.s3[-,.]([a-z]+-[a-z]+(?:-[a-z]+)?-[0-9]+)\\..*amazonaws\\.com"
 
 // GetRegion extracts the region from the endpoint field
 func GetRegion(ctx context.Context, endpoint string, region *string) error {
