@@ -3064,7 +3064,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	// Test3: get installed app name passes but isAppAlreadyInstalled fails with real error (not "Could not find object")
 	mockPodExecReturnContexts[1].StdErr = ""
 	mockPodExecReturnContexts[2].StdErr = "Some other real error message" // Real error, not "Could not find object"
-	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2") // Real error, not grep exit code 1
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 2")        // Real error, not grep exit code 1
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
 	err = localInstallCtxt.runPlaybook(ctx)
@@ -3073,10 +3073,10 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 	}
 
 	// Test4: isAppAlreadyInstalled returns app not enabled (grep exit code 1), then install fails
-	mockPodExecReturnContexts[2].StdOut = "" // No stdout means grep didn't find ENABLED
-	mockPodExecReturnContexts[2].StdErr = "" // No stderr
-	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1") // grep exit code 1 = pattern not found
-	mockPodExecReturnContexts[3].StdErr = "real installation error" // This is just logged now
+	mockPodExecReturnContexts[2].StdOut = ""                                // No stdout means grep didn't find ENABLED
+	mockPodExecReturnContexts[2].StdErr = ""                                // No stderr
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1")          // grep exit code 1 = pattern not found
+	mockPodExecReturnContexts[3].StdErr = "real installation error"         // This is just logged now
 	mockPodExecReturnContexts[3].Err = fmt.Errorf("install command failed") // This causes the actual failure
 
 	localInstallCtxt.sem <- struct{}{}
@@ -3103,7 +3103,7 @@ func TestRunLocalScopedPlaybook(t *testing.T) {
 
 	// Test6: Install succeeds with stderr content (should be ignored), but cleanup fails
 	mockPodExecReturnContexts[3].StdErr = "Some informational message in stderr" // Stderr content should be ignored
-	mockPodExecReturnContexts[3].Err = nil // No actual error for install
+	mockPodExecReturnContexts[3].Err = nil                                       // No actual error for install
 	// Keep cleanup failure from previous test setup to make overall test fail
 	// mockPodExecReturnContexts[4] still has error from earlier
 
@@ -3326,10 +3326,10 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 
 	// Test4: isAppAlreadyInstalled returns app is not enabled (grep exit code 1)
 	// so app install will run and it should fail with real error
-	mockPodExecReturnContexts[2].StdOut = ""                        // No stdout means grep didn't find ENABLED
-	mockPodExecReturnContexts[2].StdErr = ""                        // No stderr
-	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1")  // grep exit code 1 = pattern not found
-	mockPodExecReturnContexts[3].StdErr = "real installation error" // This is just logged now
+	mockPodExecReturnContexts[2].StdOut = ""                                // No stdout means grep didn't find ENABLED
+	mockPodExecReturnContexts[2].StdErr = ""                                // No stderr
+	mockPodExecReturnContexts[2].Err = fmt.Errorf("exit status 1")          // grep exit code 1 = pattern not found
+	mockPodExecReturnContexts[3].StdErr = "real installation error"         // This is just logged now
 	mockPodExecReturnContexts[3].Err = fmt.Errorf("install command failed") // This causes the actual failure
 
 	localInstallCtxt.sem <- struct{}{}
@@ -3341,7 +3341,7 @@ func TestPremiumAppScopedPlaybook(t *testing.T) {
 
 	// Test5: Install succeeds with stderr content (should be ignored), but post install fails
 	mockPodExecReturnContexts[3].StdErr = "Some informational message in stderr" // Stderr content should be ignored
-	mockPodExecReturnContexts[3].Err = nil // No actual error for install
+	mockPodExecReturnContexts[3].Err = nil                                       // No actual error for install
 
 	localInstallCtxt.sem <- struct{}{}
 	waiter.Add(1)
