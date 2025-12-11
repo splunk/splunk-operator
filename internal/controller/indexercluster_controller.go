@@ -174,5 +174,6 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("indexer-cluster-controller").
 		Complete(r)
 }

@@ -351,6 +351,7 @@ spec:
               labels:
                 control-plane: controller-manager
                 name: splunk-operator
+                app.kubernetes.io/name: splunk-operator
             spec:
               containers:
               - args:
