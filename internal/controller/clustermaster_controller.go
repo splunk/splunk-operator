@@ -158,5 +158,6 @@ func (r *ClusterMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("cluster-master-controller").
 		Complete(r)
 }

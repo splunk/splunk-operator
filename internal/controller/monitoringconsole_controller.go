@@ -170,5 +170,6 @@ func (r *MonitoringConsoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("monitoring-console-controller").
 		Complete(r)
 }

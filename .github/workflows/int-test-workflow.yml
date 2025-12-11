@@ -10,6 +10,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL-3964_Upgrade-operator-sdk
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
