@@ -59,7 +59,9 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.34.0
+# Automatically derive the version from go.mod
+ENVTEST_VERSION := $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+ENVTEST_K8S_VERSION := $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 
 ignore-not-found ?= True
 
@@ -135,7 +137,7 @@ scheck: ## Run static check against code
 vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
-test: manifests generate fmt vet envtest ## Run tests.
+test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION} --bin-dir $(LOCALBIN) -p path)" ginkgo --junit-report=unit_test.xml --output-dir=`pwd` -vv --trace --keep-going --timeout=3h --cover --covermode=count --coverprofile=coverage.out ./pkg/splunk/common ./pkg/splunk/enterprise ./pkg/splunk/client ./pkg/splunk/util ./internal/controller ./pkg/splunk/splkcontroller
 
 
@@ -241,6 +243,11 @@ envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
+.PHONY: setup-envtest
+setup-envtest: envtest ## Set up ENVTEST binaries for the correct version
+	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
+	  echo "Error setting up envtest"; exit 1; }
+
 ## Generate bundle manifests and metadata, then validate generated files.
 ## In addition, copy the newly generated crd files to helm crds.
 .PHONY: bundle
@@ -272,7 +279,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.24.2/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.55.0/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else

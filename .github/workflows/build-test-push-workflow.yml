@@ -64,6 +64,7 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
@@ -122,6 +123,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ github.sha }}
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
@@ -197,6 +199,7 @@ jobs:
       EKS_SSH_PUBLIC_KEY: ${{ secrets.EKS_SSH_PUBLIC_KEY }}
       CLUSTER_WIDE: "true"
       DEPLOYMENT_TYPE: ""
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
     steps:
       - name: Chekcout code
         uses: actions/checkout@v2
