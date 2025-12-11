@@ -2503,7 +2503,7 @@ func loadFixture(t *testing.T, filename string) string {
 	if err != nil {
 		t.Fatalf("Failed to load fixture %s: %v", filename, err)
 	}
-	
+
 	// Compact the JSON to match the output from json.Marshal
 	var compactJSON bytes.Buffer
 	if err := json.Compact(&compactJSON, data); err != nil {
