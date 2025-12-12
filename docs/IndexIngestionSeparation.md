@@ -16,13 +16,13 @@ This separation enables:
 
 - SPLUNK_IMAGE_VERSION: Splunk Enterprise Docker Image version
 
-# BusConfiguration
+# Bus
 
-BusConfiguration is introduced to store message bus configuration to be shared among IngestorCluster and IndexerCluster.
+Bus is introduced to store message bus to be shared among IngestorCluster and IndexerCluster.
 
 ## Spec
 
-BusConfiguration inputs can be found in the table below. As of now, only SQS type of message bus is supported.
+Bus inputs can be found in the table below. As of now, only SQS type of message bus is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
@@ -45,9 +45,9 @@ Change of any of the bus inputs does not restart Splunk. It just updates the con
 ## Example
 ```
 apiVersion: enterprise.splunk.com/v4
-kind: BusConfiguration
+kind: Bus
 metadata:
-  name: bus-config
+  name: bus
 spec:
   type: sqs_smartbus
   sqs:
@@ -70,7 +70,8 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| busConfigurationRef   | corev1.ObjectReference | Message bus configuration reference |
+| busRef   | corev1.ObjectReference | Message bus reference |
+| largeMessageStoreRef   | corev1.ObjectReference | Large message store reference |
 
 ## Example
 
@@ -89,8 +90,10 @@ spec:
   serviceAccount: ingestor-sa 
   replicas: 3
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
 
 # IndexerCluster
@@ -104,7 +107,8 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| busConfigurationRef   | corev1.ObjectReference | Message bus configuration reference |
+| busRef   | corev1.ObjectReference | Message bus reference |
+| largeMessageStoreRef   | corev1.ObjectReference | Large message store reference |
 
 ## Example
 
@@ -135,8 +139,10 @@ spec:
   serviceAccount: ingestor-sa
   replicas: 3 
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
 
 # Common Spec
@@ -149,12 +155,12 @@ An IngestorCluster template has been added to the splunk/splunk-enterprise Helm 
 
 ## Example
 
-Below examples describe how to define values for BusConfiguration, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
+Below examples describe how to define values for Bus, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
 
 ```
-busConfiguration::
+bus:
   enabled: true
-  name: bus-config
+  name: bus
   type: sqs_smartbus
   sqs:
     queueName: sqs-test
@@ -171,8 +177,10 @@ ingestorCluster:
   name: ingestor
   replicaCount: 3
   serviceAccount: ingestor-sa 
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
 
 ```
@@ -189,8 +197,10 @@ indexerCluster:
   serviceAccount: ingestor-sa 
   clusterManagerRef:
     name: cm
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
 
 # Service Account
@@ -492,12 +502,12 @@ $ aws iam list-attached-role-policies --role-name eksctl-ind-ing-sep-demo-addon-
 }
 ```
 
-3. Install BusConfiguration resource.
+3. Install Bus resource.
 
 ```
 $ cat bus.yaml          
 apiVersion: enterprise.splunk.com/v4
-kind: BusConfiguration
+kind: Bus
 metadata:
   name: bus
   finalizers:
@@ -518,19 +528,19 @@ $ kubectl apply -f bus.yaml
 ```
 
 ```
-$ kubectl get busconfiguration                        
+$ kubectl get bus                        
 NAME   PHASE   AGE   MESSAGE
 bus    Ready   20s  
 ```
 
 ```
-kubectl describe busconfiguration                                
+kubectl describe bus                               
 Name:         bus
 Namespace:    default
 Labels:       <none>
 Annotations:  <none>
 API Version:  enterprise.splunk.com/v4
-Kind:         BusConfiguration
+Kind:         Bus
 Metadata:
   Creation Timestamp:  2025-10-27T10:25:53Z
   Finalizers:
@@ -568,8 +578,10 @@ spec:
   serviceAccount: ingestor-sa 
   replicas: 3
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
 
 ```
@@ -598,8 +610,8 @@ Metadata:
   Resource Version:    12345678
   UID:                 12345678-1234-1234-1234-1234567890123
 Spec:
-  Bus Configuration Ref:
-    Name:           bus-config
+  Bus Ref:
+    Name:           bus
     Namespace:      default
   Image:  splunk/splunk:${SPLUNK_IMAGE_VERSION}
   Replicas:                          3
@@ -616,7 +628,7 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
-  Bus Configuration:
+  Bus:
     Sqs:
       Auth Region:                   us-west-2
       Dead Letter Queue Name:        sqs-dlq-test
@@ -704,8 +716,10 @@ spec:
   clusterManagerRef:
     name: cm
   serviceAccount: ingestor-sa 
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
 
 ```

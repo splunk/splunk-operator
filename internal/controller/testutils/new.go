@@ -54,28 +54,26 @@ func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
 				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
 			},
 			Replicas: 3,
-			BusConfigurationRef: corev1.ObjectReference{
-				Name: "busConfig",
+			BusRef: corev1.ObjectReference{
+				Name: "bus",
 			},
 		},
 	}
 }
 
-// NewBusConfiguration returns new BusConfiguration instance with its config hash
-func NewBusConfiguration(name, ns, image string) *enterpriseApi.BusConfiguration {
-	return &enterpriseApi.BusConfiguration{
+// NewBus returns new Bus instance with its config hash
+func NewBus(name, ns string, spec enterpriseApi.BusSpec) *enterpriseApi.Bus {
+	return &enterpriseApi.Bus{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: enterpriseApi.BusConfigurationSpec{
-			Type: "sqs_smartbus",
-			SQS: enterpriseApi.SQSSpec{
-				QueueName:                 "test-queue",
-				AuthRegion:                "us-west-2",
-				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-				DeadLetterQueueName:       "sqs-dlq-test",
-			},
-		},
+		Spec: spec,
+	}
+}
+
+// NewLargeMessageStore returns new LargeMessageStore instance with its config hash
+func NewLargeMessageStore(name, ns string, spec enterpriseApi.LargeMessageStoreSpec) *enterpriseApi.LargeMessageStore {
+	return &enterpriseApi.LargeMessageStore{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: spec,
 	}
 }
 
@@ -313,9 +311,6 @@ func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 
 	ad.Spec = enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: *cs,
-		BusConfigurationRef: corev1.ObjectReference{
-			Name: "busConfig",
-		},
 	}
 	return ad
 }

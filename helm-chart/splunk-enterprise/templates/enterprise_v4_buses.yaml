@@ -1,0 +1,30 @@
+{{- if .Values.bus }}
+{{- if .Values.bus.enabled }}
+apiVersion: enterprise.splunk.com/v4
+kind: Bus
+metadata:
+  name: {{ .Values.bus.name }}
+  namespace: {{ default .Release.Namespace .Values.bus.namespaceOverride }}
+  {{- with .Values.bus.additionalLabels }}
+  labels:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.bus.additionalAnnotations }}
+  annotations:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  provider: {{ .Values.bus.provider | quote }}
+  queueName: {{ .Values.bus.queueName | quote }}
+  region: {{ .Values.bus.region | quote }}
+  {{- with .Values.bus.sqs }}
+  sqs:
+    {{- if .endpoint }}
+    endpoint: {{ .endpoint | quote }}
+    {{- end }}
+    {{- if .dlq }}
+    dlq: {{ .dlq | quote }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

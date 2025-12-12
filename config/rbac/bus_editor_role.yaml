@@ -8,12 +8,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: busconfiguration-editor-role
+  name: bus-editor-role
 rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations
+  - buses
   verbs:
   - create
   - delete
@@ -25,6 +25,6 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations/status
+  - buses/status
   verbs:
   - get

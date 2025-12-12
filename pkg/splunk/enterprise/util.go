@@ -2291,19 +2291,33 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
 		return latestIngCR, nil
 
-	case "BusConfiguration":
-		latestBusCR := &enterpriseApi.BusConfiguration{}
+	case "Bus":
+		latestBusCR := &enterpriseApi.Bus{}
 		err = client.Get(ctx, namespacedName, latestBusCR)
 		if err != nil {
 			return nil, err
 		}
 
-		origCR.(*enterpriseApi.BusConfiguration).Status.Message = ""
+		origCR.(*enterpriseApi.Bus).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.BusConfiguration).Status.Message = (*crError).Error()
+			origCR.(*enterpriseApi.Bus).Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.BusConfiguration).Status.DeepCopyInto(&latestBusCR.Status)
+		origCR.(*enterpriseApi.Bus).Status.DeepCopyInto(&latestBusCR.Status)
 		return latestBusCR, nil
+
+	case "LargeMessageStore":
+		latestLmsCR := &enterpriseApi.LargeMessageStore{}
+		err = client.Get(ctx, namespacedName, latestLmsCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.LargeMessageStore).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.LargeMessageStore).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.LargeMessageStore).Status.DeepCopyInto(&latestLmsCR.Status)
+		return latestLmsCR, nil
 
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}

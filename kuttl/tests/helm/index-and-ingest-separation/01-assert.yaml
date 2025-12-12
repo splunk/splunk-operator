@@ -1,18 +1,30 @@
 ---
-# assert for bus configurtion custom resource to be ready
+# assert for bus custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
-kind: BusConfiguration
+kind: Bus
 metadata:
-  name: bus-config
+  name: bus
 spec:
-  type: sqs_smartbus
+  provider: sqs
+  queueName: sqs-test
+  region: us-west-2
   sqs:
-    queueName: sqs-test
-    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
-    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-    largeMessageStorePath: s3://ingestion/smartbus-test
     deadLetterQueueName: sqs-dlq-test
+status:
+  phase: Ready
+
+---
+# assert for large message store custom resource to be ready
+apiVersion: enterprise.splunk.com/v4
+kind: LargeMessageStore
+metadata:
+  name: lms
+spec:
+  provider: s3
+  s3:
+    endpoint: https://s3.us-west-2.amazonaws.com
+    path: s3://ingestion/smartbus-test
 status:
   phase: Ready
 
@@ -49,20 +61,23 @@ metadata:
   name: indexer
 spec:
   replicas: 3
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
 status:
   phase: Ready
-  busConfiguration:
-    type: sqs_smartbus
+  bus:
+    provider: sqs
+    queueName: sqs-test
+    region: us-west-2
     sqs:
-      queueName: sqs-test
-      authRegion: us-west-2
       endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ingestion/smartbus-test
       deadLetterQueueName: sqs-dlq-test
-
+  largeMessageStore:
+    provider: s3
+    s3:
+      endpoint: https://s3.us-west-2.amazonaws.com
+      path: s3://ingestion/smartbus-test
+  
 ---
 # check for stateful set and replicas as configured
 apiVersion: apps/v1
@@ -87,19 +102,22 @@ metadata:
   name: ingestor
 spec:
   replicas: 3
-  busConfigurationRef:
-    name: bus-config
+  busRef:
+    name: bus
 status:
   phase: Ready
-  busConfiguration:
-    type: sqs_smartbus
+  bus:
+    provider: sqs
+    queueName: sqs-test
+    region: us-west-2
     sqs:
-      queueName: sqs-test
-      authRegion: us-west-2
       endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ingestion/smartbus-test
       deadLetterQueueName: sqs-dlq-test
+  largeMessageStore:
+    provider: s3
+    s3:
+      endpoint: https://s3.us-west-2.amazonaws.com
+      path: s3://ingestion/smartbus-test
 
 ---
 # check for stateful set and replicas as configured

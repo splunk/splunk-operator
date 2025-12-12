@@ -71,7 +71,35 @@ var _ = Describe("IngestorCluster Controller", func() {
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			bus := &enterpriseApi.Bus{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bus",
+					Namespace: nsSpecs.Name,
+				},
+				Spec: enterpriseApi.BusSpec{
+					Provider:  "sqs",
+					QueueName: "smartbus-queue",
+					Region:    "us-west-2",
+					SQS: enterpriseApi.SQSSpec{
+						DLQ:      "smartbus-dlq",
+						Endpoint: "https://sqs.us-west-2.amazonaws.com",
+					},
+				},
+			}
+			lms := &enterpriseApi.LargeMessageStore{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "lms",
+					Namespace: nsSpecs.Name,
+				},
+				Spec: enterpriseApi.LargeMessageStoreSpec{
+					Provider: "s3",
+					S3: enterpriseApi.S3Spec{
+						Endpoint: "https://s3.us-west-2.amazonaws.com",
+						Path:     "s3://ingestion/smartbus-test",
+					},
+				},
+			}
+			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, bus)
 			icSpec, _ := GetIngestorCluster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
@@ -91,7 +119,35 @@ var _ = Describe("IngestorCluster Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
+			bus := &enterpriseApi.Bus{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bus",
+					Namespace: nsSpecs.Name,
+				},
+				Spec: enterpriseApi.BusSpec{
+					Provider:  "sqs",
+					QueueName: "smartbus-queue",
+					Region:    "us-west-2",
+					SQS: enterpriseApi.SQSSpec{
+						DLQ:      "smartbus-dlq",
+						Endpoint: "https://sqs.us-west-2.amazonaws.com",
+					},
+				},
+			}
+			lms := &enterpriseApi.LargeMessageStore{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "lms",
+					Namespace: nsSpecs.Name,
+				},
+				Spec: enterpriseApi.LargeMessageStoreSpec{
+					Provider: "s3",
+					S3: enterpriseApi.S3Spec{
+						Endpoint: "https://s3.us-west-2.amazonaws.com",
+						Path:     "s3://ingestion/smartbus-test",
+					},
+				},
+			}
+			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, bus)
 			DeleteIngestorCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
@@ -164,7 +220,7 @@ func GetIngestorCluster(name string, namespace string) (*enterpriseApi.IngestorC
 	return ic, err
 }
 
-func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.IngestorCluster {
+func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, lms *enterpriseApi.LargeMessageStore, bus *enterpriseApi.Bus) *enterpriseApi.IngestorCluster {
 	By("Expecting IngestorCluster custom resource to be created successfully")
 
 	key := types.NamespacedName{
@@ -184,8 +240,13 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 				},
 			},
 			Replicas: 3,
-			BusConfigurationRef: corev1.ObjectReference{
-				Name: "busConfig",
+			BusRef: corev1.ObjectReference{
+				Name:      bus.Name,
+				Namespace: bus.Namespace,
+			},
+			LargeMessageStoreRef: corev1.ObjectReference{
+				Name:      lms.Name,
+				Namespace: lms.Namespace,
 			},
 		},
 	}

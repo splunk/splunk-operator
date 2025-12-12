@@ -338,10 +338,12 @@ metadata:
   name: ic
 spec:
   replicas: 3
-  busConfigurationRef: 
-    name: bus-config
+  busRef: 
+    name: bus
+  largeMessageStoreRef:
+    name: lms
 ```
-Note:  `busConfigurationRef` is required field in case of IngestorCluster resource since it will be used to connect the IngestorCluster to BusConfiguration resource.
+Note:  `busRef` and `largeMessageStoreRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Bus and LargeMessageStore resources.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),

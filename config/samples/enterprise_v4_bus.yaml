@@ -1,0 +1,8 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Bus
+metadata:
+  name: bus-sample
+  finalizers:  
+  - "enterprise.splunk.com/delete-pvc" 
+spec: {}
+# TODO(user): Add fields here
