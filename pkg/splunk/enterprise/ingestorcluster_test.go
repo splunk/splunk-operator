@@ -75,10 +75,10 @@ func TestApplyIngestorCluster(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.BusSpec{
-			Provider:  "sqs",
-			QueueName: "test-queue",
-			Region:    "us-west-2",
+			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
+				Name:     "test-queue",
+				Region:   "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				DLQ:      "sqs-dlq-test",
 			},
@@ -285,7 +285,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
@@ -342,10 +342,10 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			Name: "bus",
 		},
 		Spec: enterpriseApi.BusSpec{
-			Provider:  "sqs",
-			QueueName: "test-queue",
-			Region:    "us-west-2",
+			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
+				Name:     "test-queue",
+				Region:   "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				DLQ:      "sqs-dlq-test",
 			},
@@ -428,10 +428,10 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 			Name: "bus",
 		},
 		Spec: enterpriseApi.BusSpec{
-			Provider:  "sqs",
-			QueueName: "test-queue",
-			Region:    "us-west-2",
+			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
+				Name:     "test-queue",
+				Region:   "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				DLQ:      "sqs-dlq-test",
 			},
@@ -472,7 +472,7 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 	assert.Equal(t, 10, len(busChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
@@ -507,10 +507,10 @@ func TestHandlePushBusChange(t *testing.T) {
 			Name: "bus",
 		},
 		Spec: enterpriseApi.BusSpec{
-			Provider:  "sqs",
-			QueueName: "test-queue",
-			Region:    "us-west-2",
+			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
+				Name:     "test-queue",
+				Region:   "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				DLQ:      "sqs-dlq-test",
 			},
@@ -635,7 +635,7 @@ func TestHandlePushBusChange(t *testing.T) {
 	// outputs.conf
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
@@ -692,11 +692,11 @@ func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, c
 			podName, cr.GetName(), cr.GetNamespace(), confName,
 		)
 
-		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", bus.Spec.QueueName))
+		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name))
 		reqCreate, _ := http.NewRequest("POST", baseURL, strings.NewReader(createReqBody))
 		mockHTTPClient.AddHandler(reqCreate, 200, "", nil)
 
-		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", bus.Spec.QueueName))
+		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name))
 		reqUpdate, _ := http.NewRequest("POST", updateURL, strings.NewReader(body))
 		mockHTTPClient.AddHandler(reqUpdate, 200, "", nil)
 	}

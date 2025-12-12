@@ -77,10 +77,10 @@ var _ = Describe("IngestorCluster Controller", func() {
 					Namespace: nsSpecs.Name,
 				},
 				Spec: enterpriseApi.BusSpec{
-					Provider:  "sqs",
-					QueueName: "smartbus-queue",
-					Region:    "us-west-2",
+					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
+						Name:     "smartbus-queue",
+						Region:   "us-west-2",
 						DLQ:      "smartbus-dlq",
 						Endpoint: "https://sqs.us-west-2.amazonaws.com",
 					},
@@ -125,10 +125,10 @@ var _ = Describe("IngestorCluster Controller", func() {
 					Namespace: nsSpecs.Name,
 				},
 				Spec: enterpriseApi.BusSpec{
-					Provider:  "sqs",
-					QueueName: "smartbus-queue",
-					Region:    "us-west-2",
+					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
+						Name:     "smartbus-queue",
+						Region:   "us-west-2",
 						DLQ:      "smartbus-dlq",
 						Endpoint: "https://sqs.us-west-2.amazonaws.com",
 					},

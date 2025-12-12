@@ -15,8 +15,6 @@ metadata:
   {{- end }}
 spec:
   provider: {{ .Values.bus.provider | quote }}
-  queueName: {{ .Values.bus.queueName | quote }}
-  region: {{ .Values.bus.region | quote }}
   {{- with .Values.bus.sqs }}
   sqs:
     {{- if .endpoint }}
@@ -24,6 +22,12 @@ spec:
     {{- end }}
     {{- if .dlq }}
     dlq: {{ .dlq | quote }}
+    {{- end }}
+    {{- if .name }}
+    name: {{ .name | quote }}
+    {{- end }}
+    {{- if .region }}
+    region: {{ .region | quote }}
     {{- end }}
   {{- end }}
 {{- end }}

@@ -40,10 +40,10 @@ var (
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
 
 	bus = enterpriseApi.BusSpec{
-		Provider:  "sqs",
-		QueueName: "test-queue",
-		Region:    "us-west-2",
+		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
+			Name:     "test-queue",
+			Region:   "us-west-2",
 			Endpoint: "https://sqs.us-west-2.amazonaws.com",
 			DLQ:      "test-dead-letter-queue",
 		},
@@ -86,10 +86,10 @@ var (
 	}
 
 	updateBus = enterpriseApi.BusSpec{
-		Provider:  "sqs",
-		QueueName: "test-queue-updated",
-		Region:    "us-west-2",
+		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
+			Name:     "test-queue-updated",
+			Region:   "us-west-2",
 			Endpoint: "https://sqs.us-west-2.amazonaws.com",
 			DLQ:      "test-dead-letter-queue-updated",
 		},

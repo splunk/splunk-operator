@@ -1285,12 +1285,12 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		splunkClient := newSplunkClientForBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		afterDelete := false
-		if (bus.Spec.QueueName != "" && newCR.Status.Bus.QueueName != "" && bus.Spec.QueueName != newCR.Status.Bus.QueueName) ||
+		if (bus.Spec.SQS.Name != "" && newCR.Status.Bus.SQS.Name != "" && bus.Spec.SQS.Name != newCR.Status.Bus.SQS.Name) ||
 			(bus.Spec.Provider != "" && newCR.Status.Bus.Provider != "" && bus.Spec.Provider != newCR.Status.Bus.Provider) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.SQS.Name)); err != nil {
 				updateErr = err
 			}
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.SQS.Name)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -1299,13 +1299,13 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&bus, &lms, newCR, afterDelete)
 
 		for _, pbVal := range busChangedFieldsOutputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
 		for _, pbVal := range busChangedFieldsInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", bus.Spec.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
@@ -1368,8 +1368,8 @@ func pullBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enter
 	if oldBus.Provider != newBus.Provider || afterDelete {
 		inputs = append(inputs, []string{"remote_queue.type", busProvider})
 	}
-	if oldBus.Region != newBus.Region || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.Region})
+	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})
 	}
 	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
 		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", busProvider), newBus.SQS.Endpoint})

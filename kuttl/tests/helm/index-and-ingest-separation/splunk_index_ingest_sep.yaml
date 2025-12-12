@@ -9,11 +9,11 @@ bus:
   enabled: true
   name: bus
   provider: sqs
-  queueName: sqs-test
-  region: us-west-2
   sqs:
+    name: sqs-test
+    region: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
-    deadLetterQueueName: sqs-dlq-test
+    dlq: sqs-dlq-test
 
 largeMessageStore:
   enabled: true

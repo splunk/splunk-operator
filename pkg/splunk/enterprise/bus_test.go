@@ -49,10 +49,10 @@ func TestApplyBus(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.BusSpec{
-			Provider:  "sqs",
-			QueueName: "test-queue",
-			Region:    "us-west-2",
+			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
+				Name:     "test-queue",
+				Region:   "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				DLQ:      "sqs-dlq-test",
 			},

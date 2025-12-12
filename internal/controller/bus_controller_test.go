@@ -72,10 +72,10 @@ var _ = Describe("Bus Controller", func() {
 
 			spec := enterpriseApi.BusSpec{
 				Provider: "sqs",
-				QueueName: "smartbus-queue",
-				Region: "us-west-2",
 				SQS: enterpriseApi.SQSSpec{
-					DLQ: "smartbus-dlq",
+					Name:     "smartbus-queue",
+					Region:   "us-west-2",
+					DLQ:      "smartbus-dlq",
 					Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				},
 			}
@@ -101,10 +101,10 @@ var _ = Describe("Bus Controller", func() {
 			annotations := make(map[string]string)
 			spec := enterpriseApi.BusSpec{
 				Provider: "sqs",
-				QueueName: "smartbus-queue",
-				Region: "us-west-2",
 				SQS: enterpriseApi.SQSSpec{
-					DLQ: "smartbus-dlq",
+					Name:     "smartbus-queue",
+					Region:   "us-west-2",
+					DLQ:      "smartbus-dlq",
 					Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				},
 			}
@@ -140,10 +140,10 @@ var _ = Describe("Bus Controller", func() {
 
 			spec := enterpriseApi.BusSpec{
 				Provider: "sqs",
-				QueueName: "smartbus-queue",
-				Region: "us-west-2",
 				SQS: enterpriseApi.SQSSpec{
-					DLQ: "smartbus-dlq",
+					Name:     "smartbus-queue",
+					Region:   "us-west-2",
+					DLQ:      "smartbus-dlq",
 					Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				},
 			}

@@ -36,21 +36,21 @@ type BusSpec struct {
 	// Provider of queue resources
 	Provider string `json:"provider"`
 
+	// sqs specific inputs
+	SQS SQSSpec `json:"sqs"`
+}
+
+type SQSSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// Name of the queue
-	QueueName string `json:"queueName"`
+	Name string `json:"name"`
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
 	// Region of the resources
 	Region string `json:"region"`
 
-	// sqs specific inputs
-	SQS SQSSpec `json:"sqs"`
-}
-
-type SQSSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// Name of the dead letter queue resource

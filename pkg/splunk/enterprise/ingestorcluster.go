@@ -346,9 +346,9 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		afterDelete := false
-		if (bus.Spec.QueueName != "" && newCR.Status.Bus.QueueName != "" && bus.Spec.QueueName != newCR.Status.Bus.QueueName) ||
+		if (bus.Spec.SQS.Name != "" && newCR.Status.Bus.SQS.Name != "" && bus.Spec.SQS.Name != newCR.Status.Bus.SQS.Name) ||
 			(bus.Spec.Provider != "" && newCR.Status.Bus.Provider != "" && bus.Spec.Provider != newCR.Status.Bus.Provider) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.SQS.Name)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -357,7 +357,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, afterDelete)
 
 		for _, pbVal := range busChangedFields {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.QueueName), [][]string{pbVal}); err != nil {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
@@ -440,8 +440,8 @@ func pushBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enter
 	if oldBus.Provider != newBus.Provider || afterDelete {
 		output = append(output, []string{"remote_queue.type", busProvider})
 	}
-	if oldBus.Region != newBus.Region || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.Region})
+	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})
 	}
 	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", busProvider), newBus.SQS.Endpoint})
