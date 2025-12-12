@@ -4,24 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: busconfigurations.enterprise.splunk.com
+  name: largemessagestores.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: BusConfiguration
-    listKind: BusConfigurationList
-    plural: busconfigurations
+    kind: LargeMessageStore
+    listKind: LargeMessageStoreList
+    plural: largemessagestores
     shortNames:
-    - bus
-    singular: busconfiguration
+    - lms
+    singular: largemessagestore
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of bus configuration
+    - description: Status of large message store
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of bus configuration resource
+    - description: Age of large message store resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -32,7 +32,7 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: BusConfiguration is the Schema for the busconfigurations API
+        description: LargeMessageStore is the Schema for the largemessagestores API
         properties:
           apiVersion:
             description: |-
@@ -52,34 +52,41 @@ spec:
           metadata:
             type: object
           spec:
-            description: BusConfigurationSpec defines the desired state of BusConfiguration
+            description: LargeMessageStoreSpec defines the desired state of LargeMessageStore
             properties:
-              sqs:
-                properties:
-                  authRegion:
-                    type: string
-                  deadLetterQueueName:
-                    type: string
-                  endpoint:
-                    type: string
-                  largeMessageStoreEndpoint:
-                    type: string
-                  largeMessageStorePath:
-                    type: string
-                  queueName:
-                    type: string
-                type: object
-              type:
+              provider:
+                description: Provider of queue resources
+                enum:
+                - s3
                 type: string
+              s3:
+                description: s3 specific inputs
+                properties:
+                  endpoint:
+                    description: S3-compatible Service endpoint
+                    pattern: ^https://s3(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$
+                    type: string
+                  path:
+                    description: S3 bucket path
+                    pattern: ^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$
+                    type: string
+                required:
+                - path
+                type: object
+            required:
+            - provider
             type: object
+            x-kubernetes-validations:
+            - message: s3 must be provided when provider is s3
+              rule: self.provider != 's3' || has(self.s3)
           status:
-            description: BusConfigurationStatus defines the observed state of BusConfiguration.
+            description: LargeMessageStoreStatus defines the observed state of LargeMessageStore.
             properties:
               message:
                 description: Auxillary message describing CR status
                 type: string
               phase:
-                description: Phase of the bus configuration
+                description: Phase of the large message store
                 enum:
                 - Pending
                 - Ready

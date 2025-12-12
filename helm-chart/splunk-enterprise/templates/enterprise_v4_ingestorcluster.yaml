@@ -95,11 +95,18 @@ spec:
   topologySpreadConstraints:
 {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with $.Values.ingestorCluster.busConfigurationRef }}
-  busConfigurationRef:
-    name: {{ $.Values.ingestorCluster.busConfigurationRef.name }}
-    {{- if $.Values.ingestorCluster.busConfigurationRef.namespace }}
-    namespace: {{ $.Values.ingestorCluster.busConfigurationRef.namespace }}
+  {{- with $.Values.ingestorCluster.busRef }}
+  busRef:
+    name: {{ $.Values.ingestorCluster.busRef.name }}
+    {{- if $.Values.ingestorCluster.busRef.namespace }}
+    namespace: {{ $.Values.ingestorCluster.busRef.namespace }}
+    {{- end }}
+  {{- end }}
+  {{- with $.Values.ingestorCluster.largeMessageStoreRef }}
+  largeMessageStoreRef:
+    name: {{ $.Values.ingestorCluster.largeMessageStoreRef.name }}
+    {{- if $.Values.ingestorCluster.largeMessageStoreRef.namespace }}
+    namespace: {{ $.Values.ingestorCluster.largeMessageStoreRef.namespace }}
     {{- end }}
   {{- end }}
   {{- with .Values.ingestorCluster.extraEnv }}

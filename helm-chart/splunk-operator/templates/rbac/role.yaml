@@ -251,7 +251,7 @@ rules:
 - apiGroups:
     - enterprise.splunk.com
   resources:
-  - busconfigurations
+  - buses
   verbs:
   - create
   - delete
@@ -263,13 +263,39 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations/finalizers
+  - buses/finalizers
   verbs:
   - update
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations/status
+  - buses/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+  - largemessagestores
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - largemessagestores/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - largemessagestores/status
   verbs:
   - get
   - patch

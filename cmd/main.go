@@ -230,11 +230,18 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
 		os.Exit(1)
 	}
-	if err := (&controller.BusConfigurationReconciler{
+	if err := (&controller.BusReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "BusConfiguration")
+		setupLog.Error(err, "unable to create controller", "controller", "Bus")
+		os.Exit(1)
+	}
+	if err := (&controller.LargeMessageStoreReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LargeMessageStore")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

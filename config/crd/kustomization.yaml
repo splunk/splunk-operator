@@ -11,7 +11,8 @@ resources:
 - bases/enterprise.splunk.com_searchheadclusters.yaml
 - bases/enterprise.splunk.com_standalones.yaml
 - bases/enterprise.splunk.com_ingestorclusters.yaml
-- bases/enterprise.splunk.com_busconfigurations.yaml
+- bases/enterprise.splunk.com_buses.yaml
+- bases/enterprise.splunk.com_largemessagestores.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 
