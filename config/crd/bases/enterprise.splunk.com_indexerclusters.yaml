@@ -8328,6 +8328,10 @@ spec:
                   type: object
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: busRef and largeMessageStoreRef must both be set or both be
+                empty
+              rule: has(self.busRef) == has(self.largeMessageStoreRef)
           status:
             description: IndexerClusterStatus defines the observed state of a Splunk
               Enterprise indexer cluster
@@ -8371,6 +8375,7 @@ spec:
                     type: object
                 required:
                 - provider
+                - sqs
                 type: object
                 x-kubernetes-validations:
                 - message: sqs must be provided when provider is sqs
@@ -8433,6 +8438,7 @@ spec:
                     type: object
                 required:
                 - provider
+                - s3
                 type: object
                 x-kubernetes-validations:
                 - message: s3 must be provided when provider is s3

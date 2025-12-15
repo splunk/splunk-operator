@@ -4302,6 +4302,9 @@ spec:
                   - name
                   type: object
                 type: array
+            required:
+            - busRef
+            - largeMessageStoreRef
             type: object
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
@@ -4622,6 +4625,7 @@ spec:
                     type: object
                 required:
                 - provider
+                - sqs
                 type: object
                 x-kubernetes-validations:
                 - message: sqs must be provided when provider is sqs
@@ -4650,6 +4654,7 @@ spec:
                     type: object
                 required:
                 - provider
+                - s3
                 type: object
                 x-kubernetes-validations:
                 - message: s3 must be provided when provider is s3

@@ -36,6 +36,7 @@ type BusSpec struct {
 	// Provider of queue resources
 	Provider string `json:"provider"`
 
+	// +kubebuilder:validation:Required
 	// sqs specific inputs
 	SQS SQSSpec `json:"sqs"`
 }

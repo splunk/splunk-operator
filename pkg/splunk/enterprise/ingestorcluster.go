@@ -226,6 +226,14 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
+		// Can not override original bus spec due to comparison in the later code
+		busCopy := bus
+		if busCopy.Spec.Provider == "sqs" {
+			if busCopy.Spec.SQS.Endpoint == "" {
+				busCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", busCopy.Spec.SQS.Region)
+			}
+		}
+
 		// Large Message Store
 		lms := enterpriseApi.LargeMessageStore{}
 		if cr.Spec.LargeMessageStoreRef.Name != "" {
@@ -242,11 +250,19 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
+		// Can not override original bus spec due to comparison in the later code
+		lmsCopy := lms
+		if lmsCopy.Spec.Provider == "s3" {
+			if lmsCopy.Spec.S3.Endpoint == "" {
+				lmsCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", bus.Spec.SQS.Region)
+			}
+		}
+
 		// If bus is updated
 		if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-			err = mgr.handlePushBusChange(ctx, cr, bus, lms, client)
+			err = mgr.handlePushBusChange(ctx, cr, busCopy, lmsCopy, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
@@ -377,7 +393,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 func getChangedBusFieldsForIngestor(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (busChangedFields, pipelineChangedFields [][]string) {
 	oldPB := busIngestorStatus.Status.Bus
 	if oldPB == nil {
-		oldPB = &enterpriseApi.BusSpec{} 
+		oldPB = &enterpriseApi.BusSpec{}
 	}
 	newPB := &bus.Spec
 

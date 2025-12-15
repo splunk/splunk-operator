@@ -36,6 +36,7 @@ type LargeMessageStoreSpec struct {
 	// Provider of queue resources
 	Provider string `json:"provider"`
 
+	// +kubebuilder:validation:Required
 	// s3 specific inputs
 	S3 S3Spec `json:"s3"`
 }

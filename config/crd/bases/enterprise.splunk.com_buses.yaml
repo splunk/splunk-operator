@@ -85,6 +85,7 @@ spec:
                 type: object
             required:
             - provider
+            - sqs
             type: object
             x-kubernetes-validations:
             - message: sqs must be provided when provider is sqs

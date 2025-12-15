@@ -34,6 +34,7 @@ const (
 	IndexerClusterPausedAnnotation = "indexercluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="has(self.busRef) == has(self.largeMessageStoreRef)",message="busRef and largeMessageStoreRef must both be set or both be empty"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`

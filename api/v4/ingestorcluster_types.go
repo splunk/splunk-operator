@@ -39,9 +39,11 @@ type IngestorClusterSpec struct {
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
+	// +kubebuilder:validation:Required
 	// Bus reference
 	BusRef corev1.ObjectReference `json:"busRef"`
 
+	// +kubebuilder:validation:Required
 	// Large Message Store reference
 	LargeMessageStoreRef corev1.ObjectReference `json:"largeMessageStoreRef"`
 }

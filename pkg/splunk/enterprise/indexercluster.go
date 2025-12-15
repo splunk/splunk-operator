@@ -261,6 +261,14 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
+		// Can not override original bus spec due to comparison in the later code
+		busCopy := bus
+		if busCopy.Spec.Provider == "sqs" {
+			if busCopy.Spec.SQS.Endpoint == "" {
+				busCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", busCopy.Spec.SQS.Region)
+			}
+		}
+
 		// Large Message Store
 		lms := enterpriseApi.LargeMessageStore{}
 		if cr.Spec.LargeMessageStoreRef.Name != "" {
@@ -277,12 +285,20 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
+		// Can not override original large message store spec due to comparison in the later code
+		lmsCopy := lms
+		if lmsCopy.Spec.Provider == "s3" {
+			if lmsCopy.Spec.S3.Endpoint == "" {
+				lmsCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", busCopy.Spec.SQS.Region)
+			}
+		}
+
 		// If bus is updated
 		if cr.Spec.BusRef.Name != "" {
 			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-				err = mgr.handlePullBusChange(ctx, cr, bus, lms, client)
+				err = mgr.handlePullBusChange(ctx, cr, busCopy, lmsCopy, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
@@ -568,6 +584,14 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
+		// Can not override original bus spec due to comparison in the later code
+		busCopy := bus
+		if busCopy.Spec.Provider == "sqs" {
+			if busCopy.Spec.SQS.Endpoint == "" {
+				busCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", busCopy.Spec.SQS.Region)
+			}
+		}
+
 		// Large Message Store
 		lms := enterpriseApi.LargeMessageStore{}
 		if cr.Spec.LargeMessageStoreRef.Name != "" {
@@ -584,12 +608,20 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
+		// Can not override original bus spec due to comparison in the later code
+		lmsCopy := lms
+		if lmsCopy.Spec.Provider == "s3" {
+			if lmsCopy.Spec.S3.Endpoint == "" {
+				lmsCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", busCopy.Spec.SQS.Region)
+			}
+		}
+
 		// If bus is updated
 		if cr.Spec.BusRef.Name != "" {
 			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-				err = mgr.handlePullBusChange(ctx, cr, bus, lms, client)
+				err = mgr.handlePullBusChange(ctx, cr, busCopy, lmsCopy, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")

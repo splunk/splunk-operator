@@ -75,6 +75,7 @@ spec:
                 type: object
             required:
             - provider
+            - s3
             type: object
             x-kubernetes-validations:
             - message: s3 must be provided when provider is s3
