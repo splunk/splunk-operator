@@ -30,6 +30,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -92,6 +93,183 @@ type ScalingCPUMetrics struct {
 	TargetTotalCPU    int64 // Target total CPU after transition
 	TargetCPUPerPod   int64 // CPU per pod in target spec
 	OriginalCPUPerPod int64 // CPU per pod in original spec
+}
+
+// VCTStorageChange represents a storage change for a volume claim template
+type VCTStorageChange struct {
+	TemplateName string
+	OldSize      resource.Quantity
+	NewSize      resource.Quantity
+}
+
+// VCTCompareResult holds the result of comparing volume claim templates
+type VCTCompareResult struct {
+	RequiresRecreate  bool               // True if StatefulSet needs to be recreated
+	StorageExpansions []VCTStorageChange // Storage expansions that can be done in-place
+	RecreateReason    string             // Reason why recreation is needed
+}
+
+// CompareVolumeClaimTemplates compares volume claim templates between current and revised StatefulSets
+// Returns a VCTCompareResult indicating what changes are needed
+func CompareVolumeClaimTemplates(current, revised *appsv1.StatefulSet) VCTCompareResult {
+	result := VCTCompareResult{
+		RequiresRecreate:  false,
+		StorageExpansions: []VCTStorageChange{},
+	}
+
+	currentVCTs := current.Spec.VolumeClaimTemplates
+	revisedVCTs := revised.Spec.VolumeClaimTemplates
+
+	// Build map of current VCTs by name
+	currentVCTMap := make(map[string]corev1.PersistentVolumeClaim)
+	for _, vct := range currentVCTs {
+		currentVCTMap[vct.Name] = vct
+	}
+
+	// Build map of revised VCTs by name
+	revisedVCTMap := make(map[string]corev1.PersistentVolumeClaim)
+	for _, vct := range revisedVCTs {
+		revisedVCTMap[vct.Name] = vct
+	}
+
+	// Check for removed VCTs (requires recreate)
+	for name := range currentVCTMap {
+		if _, exists := revisedVCTMap[name]; !exists {
+			result.RequiresRecreate = true
+			result.RecreateReason = fmt.Sprintf("VolumeClaimTemplate '%s' was removed", name)
+			return result
+		}
+	}
+
+	// Check for added VCTs (requires recreate)
+	for name := range revisedVCTMap {
+		if _, exists := currentVCTMap[name]; !exists {
+			result.RequiresRecreate = true
+			result.RecreateReason = fmt.Sprintf("VolumeClaimTemplate '%s' was added", name)
+			return result
+		}
+	}
+
+	// Compare each VCT
+	for name, currentVCT := range currentVCTMap {
+		revisedVCT := revisedVCTMap[name]
+
+		// Check storage class change (requires recreate)
+		currentSC := ""
+		if currentVCT.Spec.StorageClassName != nil {
+			currentSC = *currentVCT.Spec.StorageClassName
+		}
+		revisedSC := ""
+		if revisedVCT.Spec.StorageClassName != nil {
+			revisedSC = *revisedVCT.Spec.StorageClassName
+		}
+		if currentSC != revisedSC {
+			result.RequiresRecreate = true
+			result.RecreateReason = fmt.Sprintf("StorageClassName changed for VolumeClaimTemplate '%s' from '%s' to '%s'", name, currentSC, revisedSC)
+			return result
+		}
+
+		// Check access modes change (requires recreate)
+		if !reflect.DeepEqual(currentVCT.Spec.AccessModes, revisedVCT.Spec.AccessModes) {
+			result.RequiresRecreate = true
+			result.RecreateReason = fmt.Sprintf("AccessModes changed for VolumeClaimTemplate '%s'", name)
+			return result
+		}
+
+		// Check storage size change
+		currentSize := currentVCT.Spec.Resources.Requests[corev1.ResourceStorage]
+		revisedSize := revisedVCT.Spec.Resources.Requests[corev1.ResourceStorage]
+
+		if !currentSize.Equal(revisedSize) {
+			// Storage size changed
+			if revisedSize.Cmp(currentSize) < 0 {
+				// Storage decrease requested - not supported
+				result.RequiresRecreate = true
+				result.RecreateReason = fmt.Sprintf("Storage decrease requested for VolumeClaimTemplate '%s' from %s to %s (not supported)", name, currentSize.String(), revisedSize.String())
+				return result
+			}
+			// Storage increase - can potentially be done in-place
+			result.StorageExpansions = append(result.StorageExpansions, VCTStorageChange{
+				TemplateName: name,
+				OldSize:      currentSize,
+				NewSize:      revisedSize,
+			})
+		}
+	}
+
+	return result
+}
+
+// ExpandPVCStorage expands the storage of existing PVCs to match the new VCT size
+// This is called when storage expansion is detected and the storage class supports volume expansion
+func ExpandPVCStorage(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, changes []VCTStorageChange, eventPublisher splcommon.K8EventPublisher) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ExpandPVCStorage").WithValues(
+		"name", statefulSet.GetName(),
+		"namespace", statefulSet.GetNamespace())
+
+	// Get all pods for this StatefulSet to find their PVCs
+	replicas := int32(1)
+	if statefulSet.Spec.Replicas != nil {
+		replicas = *statefulSet.Spec.Replicas
+	}
+
+	for _, change := range changes {
+		scopedLog.Info("Expanding PVC storage",
+			"template", change.TemplateName,
+			"oldSize", change.OldSize.String(),
+			"newSize", change.NewSize.String())
+
+		// Expand each PVC for this template
+		for i := int32(0); i < replicas; i++ {
+			pvcName := fmt.Sprintf("%s-%s-%d", change.TemplateName, statefulSet.GetName(), i)
+
+			// Get the existing PVC
+			pvc := &corev1.PersistentVolumeClaim{}
+			namespacedName := types.NamespacedName{
+				Namespace: statefulSet.GetNamespace(),
+				Name:      pvcName,
+			}
+
+			err := c.Get(ctx, namespacedName, pvc)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					// PVC doesn't exist yet (replica not created), skip
+					scopedLog.Info("PVC not found, skipping", "pvc", pvcName)
+					continue
+				}
+				scopedLog.Error(err, "Failed to get PVC", "pvc", pvcName)
+				return err
+			}
+
+			// Check if expansion is needed
+			currentSize := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+			if currentSize.Cmp(change.NewSize) >= 0 {
+				// PVC is already at or above the requested size
+				scopedLog.Info("PVC already at requested size", "pvc", pvcName, "currentSize", currentSize.String())
+				continue
+			}
+
+			// Update PVC storage request
+			pvc.Spec.Resources.Requests[corev1.ResourceStorage] = change.NewSize
+
+			err = splutil.UpdateResource(ctx, c, pvc)
+			if err != nil {
+				scopedLog.Error(err, "Failed to expand PVC", "pvc", pvcName)
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PVCExpansionFailed", fmt.Sprintf("Failed to expand PVC %s: %v", pvcName, err))
+				}
+				return err
+			}
+
+			scopedLog.Info("Successfully requested PVC expansion", "pvc", pvcName, "newSize", change.NewSize.String())
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "PVCExpansionRequested", fmt.Sprintf("Requested PVC %s expansion to %s", pvcName, change.NewSize.String()))
+			}
+		}
+	}
+
+	return nil
 }
 
 // isPreserveTotalCPUEnabled checks if the CPU-preserving scaling annotation is enabled on the StatefulSet.
@@ -302,7 +480,13 @@ type DefaultStatefulSetPodManager struct{}
 // If CPU-preserving scaling is enabled (PreserveTotalCPUAnnotation="true"), this function will adjust
 // desiredReplicas to maintain total CPU allocation when per-pod CPU requests change.
 func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
-	phase, err := ApplyStatefulSet(ctx, client, statefulSet)
+	// Get eventPublisher from context
+	var eventPublisher splcommon.K8EventPublisher
+	if ep := ctx.Value(splcommon.EventPublisherKey); ep != nil {
+		eventPublisher = ep.(splcommon.K8EventPublisher)
+	}
+
+	phase, err := ApplyStatefulSet(ctx, client, statefulSet, eventPublisher)
 
 	// If CPU scaling is enabled and ApplyStatefulSet modified replicas due to CPU changes,
 	// use the new calculated replicas instead of the original desiredReplicas
@@ -341,7 +525,7 @@ func (mgr *DefaultStatefulSetPodManager) FinishUpgrade(ctx context.Context, n in
 // - Label/Annotation changes: In-place update
 // - Pod template changes: In-place update
 // - No changes: No operation
-func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet) (enterpriseApi.Phase, error) {
+func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet, eventPublisher splcommon.K8EventPublisher) (enterpriseApi.Phase, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyStatefulSet").WithValues(
 		"name", revised.GetObjectMeta().GetName(),
@@ -375,6 +559,47 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 	// check for changes in Pod template
 	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
+
+	// Compare VolumeClaimTemplates to detect changes
+	vctResult := CompareVolumeClaimTemplates(&current, revised)
+
+	if vctResult.RequiresRecreate {
+		// VCT changes require StatefulSet recreation (delete and recreate)
+		scopedLog.Info("VolumeClaimTemplate changes require StatefulSet recreation",
+			"reason", vctResult.RecreateReason)
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "VCTRecreateRequired", fmt.Sprintf("StatefulSet will be recreated: %s", vctResult.RecreateReason))
+		}
+
+		// Delete the existing StatefulSet with orphan propagation (keeps pods and PVCs)
+		err = splutil.DeleteResource(ctx, c, &current, client.PropagationPolicy(metav1.DeletePropagationOrphan))
+		if err != nil {
+			scopedLog.Error(err, "Failed to delete StatefulSet for VCT update")
+			return enterpriseApi.PhaseError, err
+		}
+
+		scopedLog.Info("Deleted StatefulSet for VCT recreation, will recreate on next reconcile")
+		if eventPublisher != nil {
+			eventPublisher.Normal(ctx, "VCTRecreateInProgress", "StatefulSet deleted for VCT update, will recreate on next reconcile")
+		}
+
+		// Return to trigger reconcile which will recreate the StatefulSet
+		return enterpriseApi.PhasePending, nil
+	}
+
+	// Handle storage expansions if any
+	if len(vctResult.StorageExpansions) > 0 {
+		scopedLog.Info("Storage expansions detected, attempting PVC expansion",
+			"expansions", len(vctResult.StorageExpansions))
+
+		err = ExpandPVCStorage(ctx, c, &current, vctResult.StorageExpansions, eventPublisher)
+		if err != nil {
+			scopedLog.Error(err, "Failed to expand PVC storage")
+			// Don't fail the reconcile, log the error and continue
+			// The storage expansion might fail due to storage class not supporting expansion
+		}
+	}
+
 	*revised = current // caller expects that object passed represents latest state
 
 	// Apply CPU-aware scaling adjustments AFTER copying current to revised
@@ -490,8 +715,14 @@ func handleScaleDown(ctx context.Context, c splcommon.ControllerClient, stateful
 
 	// delete PVCs used by the pod so that a future scale up will have clean state
 	for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
+		// VolumeClaimTemplate's namespace is typically empty (inherits from StatefulSet),
+		// so we need to fall back to the StatefulSet's namespace when building PVC names
+		pvcNamespace := vol.ObjectMeta.Namespace
+		if pvcNamespace == "" {
+			pvcNamespace = statefulSet.GetNamespace()
+		}
 		namespacedName := types.NamespacedName{
-			Namespace: statefulSet.GetNamespace(),
+			Namespace: pvcNamespace,
 			Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
 		}
 		var pvc corev1.PersistentVolumeClaim

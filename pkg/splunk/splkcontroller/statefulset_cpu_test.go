@@ -276,7 +276,7 @@ func TestCPUAwareScalingInApplyStatefulSet(t *testing.T) {
 	}
 
 	// Apply the StatefulSet
-	phase, err := ApplyStatefulSet(ctx, c, revised)
+	phase, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err != nil {
 		t.Errorf("ApplyStatefulSet() failed: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestCPUAwareScalingDisabled(t *testing.T) {
 	}
 
 	// Apply the StatefulSet
-	phase, err := ApplyStatefulSet(ctx, c, revised)
+	phase, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err != nil {
 		t.Errorf("ApplyStatefulSet() failed: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestCPUAwareScalingScaleUp(t *testing.T) {
 	}
 
 	// Apply the StatefulSet
-	phase, err := ApplyStatefulSet(ctx, c, revised)
+	phase, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err != nil {
 		t.Errorf("ApplyStatefulSet() failed: %v", err)
 	}

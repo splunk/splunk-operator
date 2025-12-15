@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -107,7 +108,7 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet))
+		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet), nil)
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
@@ -122,7 +123,7 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised = current.DeepCopy()
 	revised.Spec.Template.Spec.Containers = []corev1.Container{{Image: "efgh"}}
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
-	_, err := ApplyStatefulSet(ctx, c, revised)
+	_, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -414,7 +415,7 @@ func TestGetStatefulSetByName(t *testing.T) {
 		},
 	}
 
-	_, err := ApplyStatefulSet(ctx, c, &current)
+	_, err := ApplyStatefulSet(ctx, c, &current, nil)
 	if err != nil {
 		return
 	}
@@ -1206,4 +1207,286 @@ func (mgr *testTrackingPodManager) FinishUpgrade(ctx context.Context, n int32) e
 		return mgr.onFinishUpgrade(n)
 	}
 	return nil
+}
+
+func TestCompareVolumeClaimTemplates_NoChanges(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if result.RequiresRecreate {
+		t.Errorf("Expected no recreate required, got RequiresRecreate=true with reason: %s", result.RecreateReason)
+	}
+	if len(result.StorageExpansions) != 0 {
+		t.Errorf("Expected no storage expansions, got %d", len(result.StorageExpansions))
+	}
+}
+
+func TestCompareVolumeClaimTemplates_StorageExpansion(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("20Gi")
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if result.RequiresRecreate {
+		t.Errorf("Expected no recreate for storage expansion, got RequiresRecreate=true with reason: %s", result.RecreateReason)
+	}
+	if len(result.StorageExpansions) != 1 {
+		t.Errorf("Expected 1 storage expansion, got %d", len(result.StorageExpansions))
+	}
+	if len(result.StorageExpansions) > 0 {
+		expansion := result.StorageExpansions[0]
+		if expansion.TemplateName != "pvc-data" {
+			t.Errorf("Expected template name 'pvc-data', got '%s'", expansion.TemplateName)
+		}
+		if expansion.OldSize.String() != "10Gi" {
+			t.Errorf("Expected old size '10Gi', got '%s'", expansion.OldSize.String())
+		}
+		if expansion.NewSize.String() != "20Gi" {
+			t.Errorf("Expected new size '20Gi', got '%s'", expansion.NewSize.String())
+		}
+	}
+}
+
+func TestCompareVolumeClaimTemplates_StorageDecrease(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("20Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("10Gi")
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for storage decrease")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for storage decrease recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_StorageClassChange(t *testing.T) {
+	storageClass1 := "standard"
+	storageClass2 := "premium"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass1,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.StorageClassName = &storageClass2
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for storage class change")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for storage class change recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_VCTAdded(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates = append(revised.Spec.VolumeClaimTemplates, corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-logs"},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClass,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("5Gi"),
+				},
+			},
+		},
+	})
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for VCT addition")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for VCT addition recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_VCTRemoved(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-logs"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("5Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for VCT removal")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for VCT removal recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_AccessModesChange(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for access modes change")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for access modes change recreate")
+	}
 }

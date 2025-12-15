@@ -110,7 +110,7 @@ func TestCreateAndAddPipelineWorker(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -688,7 +688,7 @@ func TestPhaseManagersTermination(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(ctx, c, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, c, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -784,7 +784,7 @@ func TestPhaseManagersMsgChannels(t *testing.T) {
 	client.AddObject(pod)
 
 	// Create the statefulset
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -1313,7 +1313,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, err := splctrl.ApplyStatefulSet(ctx, c, &current, nil)
 	if err != nil {
 		return
 	}
@@ -1330,7 +1330,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current, nil)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
@@ -1344,7 +1344,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current, nil)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
@@ -1358,7 +1358,7 @@ func TestAfwGetReleventStatefulsetByKind(t *testing.T) {
 		},
 	}
 
-	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current)
+	_, _ = splctrl.ApplyStatefulSet(ctx, c, &current, nil)
 	if afwGetReleventStatefulsetByKind(ctx, &cr, c) == nil {
 		t.Errorf("Unable to get the sts for SHC deployer")
 	}
@@ -3656,7 +3656,7 @@ func TestNeedToRunClusterScopedPlaybook(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -3943,7 +3943,7 @@ func TestInstallWorkerHandler(t *testing.T) {
 		},
 	}
 
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -4133,7 +4133,7 @@ func TestAfwSchedulerEntry(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}

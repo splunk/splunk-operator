@@ -57,3 +57,13 @@ type StatefulSetPodManager interface {
 	// FinishUpgrade finishes rolling upgrade process; it returns an error if upgrade process can't be finished
 	FinishUpgrade(context.Context, int32) error
 }
+
+// K8EventPublisher is an interface for publishing Kubernetes events
+// This interface allows decoupling the event publishing logic from specific implementations
+type K8EventPublisher interface {
+	// Normal publishes a normal event to Kubernetes
+	Normal(ctx context.Context, reason, message string)
+
+	// Warning publishes a warning event to Kubernetes
+	Warning(ctx context.Context, reason, message string)
+}
