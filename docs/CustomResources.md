@@ -25,6 +25,8 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
       - [Scaling Behavior Annotations](#scaling-behavior-annotations)
         - [Scale-Up Ready Wait Timeout](#scale-up-ready-wait-timeout)
+        - [Preserve Total CPU](#preserve-total-cpu)
+        - [Parallel Pod Updates](#parallel-pod-updates)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
     - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
@@ -408,6 +410,83 @@ spec:
 - **Bounded waiting:** Set a specific timeout like `"30m"` if you want to eventually proceed with scaling even if some pods remain unhealthy
 
 **Note:** This annotation affects scale-up operations only. Scale-down operations always proceed to remove pods even if other pods are not ready, as removing pods doesn't add additional load to the cluster.
+
+##### Preserve Total CPU
+
+**Annotation:** `operator.splunk.com/preserve-total-cpu`
+
+When changing the CPU requests per pod, this annotation enables the operator to automatically adjust the replica count to maintain the same total CPU allocation. This is useful for license-based deployments or cost-optimized environments where total resource allocation should remain constant regardless of individual pod sizing.
+
+**Default Value:** Disabled (not set)
+
+**Supported Values:**
+- `"true"` to enable CPU-preserving scaling
+- Any other value or missing annotation disables this feature
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    operator.splunk.com/preserve-total-cpu: "true"
+spec:
+  replicas: 4
+  resources:
+    requests:
+      cpu: "2"
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. When you change the CPU request per pod (e.g., from 2 CPU to 4 CPU), the operator calculates the new replica count to preserve total CPU
+2. For scale-up (fewer CPU per pod → more replicas): New pods are created immediately, then old pods are gradually removed
+3. For scale-down (more CPU per pod → fewer replicas): New pods are created first, and old pods are only deleted when sufficient new-spec CPU capacity is available
+4. Throughout the transition, total cluster CPU never drops below the original allocation
+
+**Use Cases:**
+- **License compliance:** Maintain consistent CPU allocation for license calculations
+- **Cost optimization:** Resize pods without changing overall resource footprint
+- **Gradual migration:** Safely transition between different pod sizes without capacity loss
+
+##### Parallel Pod Updates
+
+**Annotation:** `operator.splunk.com/parallel-pod-updates`
+
+Controls how many pods can be updated (recycled) simultaneously during rolling updates. By default, the operator updates pods one at a time, but this annotation allows faster updates for large clusters.
+
+**Default Value:** `1` (sequential updates)
+
+**Supported Values:**
+- A value less than `1.0`: Interpreted as a percentage of total replicas (e.g., `"0.25"` = 25%)
+- A value of `1.0` or greater: Interpreted as an absolute number of pods (e.g., `"3"` = 3 pods at a time)
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    operator.splunk.com/parallel-pod-updates: "0.25"
+spec:
+  replicas: 12
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. With `"0.25"` on a 12-replica cluster, up to 3 pods (25% of 12, rounded up) can be updated simultaneously
+2. The operator still ensures proper pod recycling (PrepareRecycle → Delete → FinishRecycle)
+3. The value is clamped between 1 and total replicas
+
+**Use Cases:**
+- **Large cluster updates:** Speed up rolling updates on clusters with many replicas
+- **Maintenance windows:** Complete updates faster during limited maintenance windows
 
 ## Examples of Guaranteed and Burstable QoS
 

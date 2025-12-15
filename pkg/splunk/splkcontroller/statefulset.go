@@ -18,7 +18,9 @@ package splkcontroller
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
+	"strconv"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -48,14 +50,266 @@ const (
 	// This annotation is automatically managed by the operator and should not be set manually.
 	// Expected format: RFC3339 timestamp (e.g., "2006-01-02T15:04:05Z07:00")
 	ScaleUpWaitStartedAnnotation = "operator.splunk.com/scale-up-wait-started"
+
+	// PreserveTotalCPUAnnotation is the annotation key to enable CPU-preserving scaling.
+	// When set on a StatefulSet, this annotation enables the operator to automatically
+	// adjust replicas to maintain the same total CPU allocation when CPU requests per pod change.
+	// Example: If set to "true" and pods scale from 4x2CPU to 8x1CPU, total CPU (8) is preserved.
+	// This is useful for license-based or cost-optimized deployments where total resource
+	// allocation should remain constant regardless of individual pod sizing.
+	PreserveTotalCPUAnnotation = "operator.splunk.com/preserve-total-cpu"
+
+	// ParallelPodUpdatesAnnotation is the annotation key to specify the number of pods that can be updated in parallel.
+	// When set on a StatefulSet, this annotation controls how many pods can be deleted/recycled simultaneously
+	// during rolling updates. This can significantly speed up large cluster updates.
+	//
+	// The annotation accepts either:
+	//   - A floating-point value <= 1.0: Interpreted as a percentage of total replicas
+	//     Example: "0.25" means 25% of pods can be updated in parallel
+	//   - A value > 1.0: Interpreted as an absolute number of pods
+	//     Example: "3" allows up to 3 pods to be updated at once
+	//
+	// If the annotation is missing or invalid, the default value of 1 is used (sequential updates).
+	// Valid range: 1 to total number of replicas. Values outside this range are clamped.
+	ParallelPodUpdatesAnnotation = "operator.splunk.com/parallel-pod-updates"
+
+	// CPUAwareTargetReplicasAnnotation stores the target replica count during CPU-aware scale-down.
+	// This annotation is automatically managed by the operator and should not be set manually.
+	CPUAwareTargetReplicasAnnotation = "operator.splunk.com/cpu-aware-target-replicas"
+
+	// DefaultParallelPodUpdates is the default number of pods to update in parallel when the annotation is not set.
+	DefaultParallelPodUpdates = 1
 )
+
+// ScalingCPUMetrics tracks CPU allocation across old and new spec pods during transitions
+type ScalingCPUMetrics struct {
+	TotalReadyCPU     int64 // Total CPU of all ready pods
+	NewSpecReadyPods  int32 // Number of ready pods with new spec
+	NewSpecReadyCPU   int64 // Total CPU of ready pods with new spec
+	OldSpecReadyPods  int32 // Number of ready pods with old spec
+	OldSpecReadyCPU   int64 // Total CPU of ready pods with old spec
+	OriginalTotalCPU  int64 // Original total CPU before transition
+	TargetTotalCPU    int64 // Target total CPU after transition
+	TargetCPUPerPod   int64 // CPU per pod in target spec
+	OriginalCPUPerPod int64 // CPU per pod in original spec
+}
+
+// isPreserveTotalCPUEnabled checks if the CPU-preserving scaling annotation is enabled on the StatefulSet.
+func isPreserveTotalCPUEnabled(statefulSet *appsv1.StatefulSet) bool {
+	if statefulSet.Annotations == nil {
+		return false
+	}
+	value, exists := statefulSet.Annotations[PreserveTotalCPUAnnotation]
+	return exists && value == "true"
+}
+
+// getCPURequest extracts the CPU request from a pod template spec.
+// Returns the CPU millicores (e.g., "2" CPU = 2000 millicores) or 0 if not found.
+func getCPURequest(podSpec *corev1.PodSpec) int64 {
+	if podSpec == nil || len(podSpec.Containers) == 0 {
+		return 0
+	}
+	// Use the first container's CPU request as the reference
+	cpuRequest := podSpec.Containers[0].Resources.Requests[corev1.ResourceCPU]
+	return cpuRequest.MilliValue()
+}
+
+// calculateAdjustedReplicas calculates the new replica count to maintain total CPU when per-pod CPU changes.
+// Formula: newReplicas = (currentReplicas * currentCPUPerPod) / newCPUPerPod
+// Returns the adjusted replica count, rounded up to ensure we don't under-provision.
+func calculateAdjustedReplicas(currentReplicas int32, currentCPUPerPod, newCPUPerPod int64) int32 {
+	if newCPUPerPod == 0 {
+		return currentReplicas // Avoid division by zero
+	}
+	totalCPU := currentReplicas * int32(currentCPUPerPod)
+	adjustedReplicas := (totalCPU + int32(newCPUPerPod) - 1) / int32(newCPUPerPod) // Ceiling division
+	if adjustedReplicas < 1 {
+		return 1 // Ensure at least 1 replica
+	}
+	return adjustedReplicas
+}
+
+// getParallelPodUpdates extracts and validates the parallel pod updates setting from StatefulSet annotations.
+// Returns the number of pods that can be updated in parallel during rolling updates.
+//
+// The annotation accepts either:
+//   - A floating-point value < 1.0: Interpreted as a percentage of total replicas
+//     Example: "0.25" means 25% of pods can be updated in parallel
+//   - A value >= 1.0: Interpreted as an absolute number of pods
+//     Example: "3" or "3.0" allows up to 3 pods to be updated at once
+//
+// If the annotation is missing, invalid, or out of range, returns DefaultParallelPodUpdates (1).
+// The returned value is clamped between 1 and the total number of replicas.
+func getParallelPodUpdates(statefulSet *appsv1.StatefulSet) int32 {
+	if statefulSet.Annotations == nil {
+		return DefaultParallelPodUpdates
+	}
+
+	value, exists := statefulSet.Annotations[ParallelPodUpdatesAnnotation]
+	if !exists || value == "" {
+		return DefaultParallelPodUpdates
+	}
+
+	// Parse the annotation value as float64
+	floatValue, err := strconv.ParseFloat(value, 64)
+	if err != nil || floatValue <= 0 {
+		return DefaultParallelPodUpdates
+	}
+
+	var parallelUpdates int32
+	totalReplicas := int32(1)
+	if statefulSet.Spec.Replicas != nil {
+		totalReplicas = *statefulSet.Spec.Replicas
+	}
+
+	if floatValue < 1.0 {
+		// Percentage mode: value is a fraction of total replicas
+		// e.g., 0.25 means 25% of replicas
+		calculated := float64(totalReplicas) * floatValue
+		parallelUpdates = int32(math.Ceil(calculated))
+	} else {
+		// Absolute mode: value is the exact number of pods
+		// e.g., 1.0, 2.5, 3 all treated as absolute values
+		parallelUpdates = int32(math.Round(floatValue))
+	}
+
+	// Clamp to reasonable bounds: at least 1, at most total replicas
+	if parallelUpdates < 1 {
+		return 1
+	}
+	if parallelUpdates > totalReplicas {
+		return totalReplicas
+	}
+
+	return parallelUpdates
+}
+
+// isPodReady checks if a pod is in Ready condition
+func isPodReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+// extractCPUFromPod extracts CPU millicores from a running pod
+func extractCPUFromPod(pod *corev1.Pod) int64 {
+	if len(pod.Spec.Containers) == 0 {
+		return 0
+	}
+	// Use first container's CPU request
+	cpuRequest := pod.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]
+	return cpuRequest.MilliValue()
+}
+
+// hasNewSpec checks if a pod has the new spec (compares CPU)
+func hasNewSpec(pod *corev1.Pod, targetCPU int64) bool {
+	podCPU := extractCPUFromPod(pod)
+	return podCPU == targetCPU
+}
+
+// computeCPUMetrics calculates CPU metrics for all ready pods
+func computeCPUMetrics(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	statefulSet *appsv1.StatefulSet,
+	targetReplicas int32,
+) (ScalingCPUMetrics, error) {
+	scopedLog := log.FromContext(ctx)
+	logger := scopedLog.WithName("computeCPUMetrics").WithValues(
+		"name", statefulSet.GetObjectMeta().GetName(),
+		"namespace", statefulSet.GetObjectMeta().GetNamespace())
+
+	metrics := ScalingCPUMetrics{}
+
+	// Get target CPU from statefulSet spec (after merge)
+	metrics.TargetCPUPerPod = getCPURequest(&statefulSet.Spec.Template.Spec)
+
+	// Get original CPU - need to detect it from existing pods
+	metrics.OriginalCPUPerPod = metrics.TargetCPUPerPod // Default assumption
+
+	// List all pods for this StatefulSet
+	selector, err := metav1.LabelSelectorAsSelector(statefulSet.Spec.Selector)
+	if err != nil {
+		return metrics, err
+	}
+
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(statefulSet.GetNamespace()),
+		client.MatchingLabelsSelector{Selector: selector},
+	}
+
+	err = c.List(ctx, podList, listOpts...)
+	if err != nil {
+		return metrics, err
+	}
+
+	// Track first old-spec CPU we find
+	firstOldCPU := int64(0)
+
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+
+		if !isPodReady(pod) {
+			continue
+		}
+
+		podCPU := extractCPUFromPod(pod)
+		metrics.TotalReadyCPU += podCPU
+
+		// Check if pod has new spec
+		if hasNewSpec(pod, metrics.TargetCPUPerPod) {
+			metrics.NewSpecReadyPods++
+			metrics.NewSpecReadyCPU += podCPU
+		} else {
+			metrics.OldSpecReadyPods++
+			metrics.OldSpecReadyCPU += podCPU
+			if firstOldCPU == 0 {
+				firstOldCPU = podCPU
+			}
+		}
+	}
+
+	// Set original CPU per pod from first old pod we found
+	if firstOldCPU > 0 {
+		metrics.OriginalCPUPerPod = firstOldCPU
+	}
+
+	// Calculate totals
+	currentReplicas := *statefulSet.Spec.Replicas
+	metrics.OriginalTotalCPU = int64(currentReplicas) * metrics.OriginalCPUPerPod
+	metrics.TargetTotalCPU = int64(targetReplicas) * metrics.TargetCPUPerPod
+
+	logger.Info("Computed CPU metrics",
+		"totalReadyCPU", metrics.TotalReadyCPU,
+		"newSpecPods", metrics.NewSpecReadyPods,
+		"newSpecCPU", metrics.NewSpecReadyCPU,
+		"oldSpecPods", metrics.OldSpecReadyPods,
+		"oldSpecCPU", metrics.OldSpecReadyCPU,
+		"originalCPUPerPod", metrics.OriginalCPUPerPod,
+		"targetCPUPerPod", metrics.TargetCPUPerPod)
+
+	return metrics, nil
+}
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
 type DefaultStatefulSetPodManager struct{}
 
-// Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods
+// Update for DefaultStatefulSetPodManager handles all updates for a statefulset of standard pods.
+// If CPU-preserving scaling is enabled (PreserveTotalCPUAnnotation="true"), this function will adjust
+// desiredReplicas to maintain total CPU allocation when per-pod CPU requests change.
 func (mgr *DefaultStatefulSetPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
 	phase, err := ApplyStatefulSet(ctx, client, statefulSet)
+
+	// If CPU scaling is enabled and ApplyStatefulSet modified replicas due to CPU changes,
+	// use the new calculated replicas instead of the original desiredReplicas
+	if isPreserveTotalCPUEnabled(statefulSet) {
+		desiredReplicas = *statefulSet.Spec.Replicas
+	}
+
 	if err == nil && phase == enterpriseApi.PhaseReady {
 		phase, err = UpdateStatefulSetPods(ctx, client, statefulSet, mgr, desiredReplicas)
 	}
@@ -82,7 +336,17 @@ func (mgr *DefaultStatefulSetPodManager) FinishUpgrade(ctx context.Context, n in
 }
 
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
+// It intelligently handles different types of changes:
+// - VolumeClaimTemplate changes: Delete + Recreate with orphan cascade (preserves pods and PVCs)
+// - Label/Annotation changes: In-place update
+// - Pod template changes: In-place update
+// - No changes: No operation
 func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised *appsv1.StatefulSet) (enterpriseApi.Phase, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyStatefulSet").WithValues(
+		"name", revised.GetObjectMeta().GetName(),
+		"namespace", revised.GetObjectMeta().GetNamespace())
+
 	namespacedName := types.NamespacedName{Namespace: revised.GetNamespace(), Name: revised.GetName()}
 	var current appsv1.StatefulSet
 
@@ -105,12 +369,57 @@ func ApplyStatefulSet(ctx context.Context, c splcommon.ControllerClient, revised
 
 	// found an existing StatefulSet
 
+	// Save original CPU value before MergePodUpdates modifies current
+	originalCPU := getCPURequest(&current.Spec.Template.Spec)
+	originalReplicas := *current.Spec.Replicas
+
 	// check for changes in Pod template
 	hasUpdates := MergePodUpdates(ctx, &current.Spec.Template, &revised.Spec.Template, current.GetObjectMeta().GetName())
 	*revised = current // caller expects that object passed represents latest state
 
-	// only update if there are material differences, as determined by comparison function
+	// Apply CPU-aware scaling adjustments AFTER copying current to revised
+	// Note: MergePodUpdates already merged the new template into current, so current now has the NEW CPU value
+	// We compare the original CPU (before merge) with the new CPU (after merge) to detect changes
+	if isPreserveTotalCPUEnabled(revised) {
+		newCPU := getCPURequest(&revised.Spec.Template.Spec) // revised now has the merged template from current
+
+		// Only adjust replicas if CPU request actually changed and both are non-zero
+		if originalCPU > 0 && newCPU > 0 && originalCPU != newCPU {
+			adjustedReplicas := calculateAdjustedReplicas(originalReplicas, originalCPU, newCPU)
+
+			if adjustedReplicas != originalReplicas {
+				scopedLog.Info("CPU-aware scaling detected",
+					"originalReplicas", originalReplicas,
+					"originalCPU", originalCPU,
+					"newCPU", newCPU,
+					"targetReplicas", adjustedReplicas,
+					"currentTotalCPU", originalReplicas*int32(originalCPU))
+
+				// For scale-down (fewer replicas), do NOT update replicas here
+				// Let UpdateStatefulSetPods handle gradual scale-down with CPU bounds
+				// For scale-up (more replicas), safe to increase immediately
+				if adjustedReplicas > originalReplicas {
+					scopedLog.Info("CPU-aware scale-up: increasing replicas immediately",
+						"from", originalReplicas, "to", adjustedReplicas)
+					revised.Spec.Replicas = &adjustedReplicas
+					hasUpdates = true
+				} else {
+					scopedLog.Info("CPU-aware scale-down: will handle gradually with CPU bounds",
+						"currentReplicas", originalReplicas, "targetReplicas", adjustedReplicas)
+					// Keep current replicas, will be reduced gradually
+					// Store target in annotation for UpdateStatefulSetPods to use
+					if revised.Annotations == nil {
+						revised.Annotations = make(map[string]string)
+					}
+					revised.Annotations[CPUAwareTargetReplicasAnnotation] = fmt.Sprintf("%d", adjustedReplicas)
+					hasUpdates = true
+				}
+			}
+		}
+	}
+
 	if hasUpdates {
+		// only update if there are material differences, as determined by comparison function
 		// this updates the desired state template, but doesn't actually modify any pods
 		// because we use an "OnUpdate" strategy https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#update-strategies
 		// note also that this ignores Replicas, which is handled below by UpdateStatefulSetPods
@@ -329,6 +638,203 @@ func handleScaleUp(ctx context.Context, c splcommon.ControllerClient, statefulSe
 	return enterpriseApi.PhaseScalingUp, nil
 }
 
+// handleCPUPreservingTransition manages the gradual pod transition when CPU-preserving scaling is enabled.
+// It ensures total CPU allocation stays above the original level while transitioning to pods with different CPU specs.
+//
+// The function handles the following scenarios:
+// 1. Waits for at least one new-spec pod to become ready before deleting old pods
+// 2. Calculates how many old pods can be safely deleted while maintaining CPU bounds
+// 3. Properly decommissions pods via PrepareScaleDown before deletion
+// 4. Updates StatefulSet replicas once all old pods are deleted
+//
+// Returns:
+// - (phase, true, nil) if CPU-preserving transition is being handled (caller should return phase)
+// - (PhaseReady, false, nil) if CPU-preserving transition is not applicable (caller should continue)
+// - (PhaseError, true, error) if an error occurred
+func handleCPUPreservingTransition(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	statefulSet *appsv1.StatefulSet,
+	mgr splcommon.StatefulSetPodManager,
+	replicas int32,
+	readyReplicas int32,
+) (enterpriseApi.Phase, bool, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("handleCPUPreservingTransition").WithValues(
+		"name", statefulSet.GetObjectMeta().GetName(),
+		"namespace", statefulSet.GetObjectMeta().GetNamespace())
+
+	// Check if CPU-preserving scaling is enabled
+	if !isPreserveTotalCPUEnabled(statefulSet) {
+		return enterpriseApi.PhaseReady, false, nil
+	}
+
+	// Check for target replicas annotation
+	targetReplicasStr := ""
+	if statefulSet.Annotations != nil {
+		targetReplicasStr = statefulSet.Annotations[CPUAwareTargetReplicasAnnotation]
+	}
+	if targetReplicasStr == "" {
+		return enterpriseApi.PhaseReady, false, nil
+	}
+
+	targetReplicas, parseErr := strconv.ParseInt(targetReplicasStr, 10, 32)
+	if parseErr != nil || int32(targetReplicas) >= replicas {
+		return enterpriseApi.PhaseReady, false, nil
+	}
+
+	scopedLog.Info("CPU-aware scale-down active",
+		"currentReplicas", replicas,
+		"targetReplicas", targetReplicas,
+		"readyReplicas", readyReplicas)
+
+	// Compute CPU metrics
+	metrics, metricsErr := computeCPUMetrics(ctx, c, statefulSet, int32(targetReplicas))
+	if metricsErr != nil {
+		scopedLog.Error(metricsErr, "Unable to compute CPU metrics")
+		return enterpriseApi.PhaseError, true, metricsErr
+	}
+
+	// Need at least one new-spec pod ready before deleting old pods
+	if metrics.NewSpecReadyPods == 0 {
+		scopedLog.Info("Waiting for new-spec pods to become ready before CPU-aware scale-down",
+			"oldSpecPods", metrics.OldSpecReadyPods)
+		return enterpriseApi.PhaseUpdating, true, nil
+	}
+
+	// Calculate how many old pods can be safely deleted
+	maxParallelUpdates := getParallelPodUpdates(statefulSet)
+	oldPodsPerNewPod := int64(1)
+	if metrics.OriginalCPUPerPod > 0 {
+		oldPodsPerNewPod = metrics.TargetCPUPerPod / metrics.OriginalCPUPerPod
+		if oldPodsPerNewPod > 1 {
+			oldPodsPerNewPod-- // Safety margin
+		}
+		if oldPodsPerNewPod < 1 {
+			oldPodsPerNewPod = 1
+		}
+	}
+
+	maxBalancingDeletes := int32(maxParallelUpdates) * int32(oldPodsPerNewPod)
+
+	scopedLog.Info("CPU-aware balancing calculation",
+		"newSpecReadyPods", metrics.NewSpecReadyPods,
+		"oldPodsPerNewPod", oldPodsPerNewPod,
+		"maxBalancingDeletes", maxBalancingDeletes,
+		"totalReadyCPU", metrics.TotalReadyCPU,
+		"originalTotalCPU", metrics.OriginalTotalCPU)
+
+	// Find old-spec pods to delete (from highest index downward)
+	podsToDelete := []string{}
+	cpuAfterDeletion := metrics.TotalReadyCPU
+
+	for n := readyReplicas - 1; n >= int32(targetReplicas) && int32(len(podsToDelete)) < maxBalancingDeletes; n-- {
+		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
+		podNamespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
+		var pod corev1.Pod
+		podErr := c.Get(ctx, podNamespacedName, &pod)
+		if podErr != nil {
+			continue
+		}
+
+		if !isPodReady(&pod) {
+			continue
+		}
+
+		// Only delete old-spec pods
+		if hasNewSpec(&pod, metrics.TargetCPUPerPod) {
+			continue // Skip new-spec pods
+		}
+
+		podCPU := extractCPUFromPod(&pod)
+		newTotalCPU := cpuAfterDeletion - podCPU
+
+		// Ensure we stay above original CPU
+		if newTotalCPU < metrics.OriginalTotalCPU {
+			scopedLog.Info("CPU bounds reached, stopping balancing deletions",
+				"currentCPU", cpuAfterDeletion,
+				"wouldBe", newTotalCPU,
+				"originalCPU", metrics.OriginalTotalCPU)
+			break
+		}
+
+		podsToDelete = append(podsToDelete, podName)
+		cpuAfterDeletion = newTotalCPU
+	}
+
+	// Delete the selected pods (with proper decommissioning)
+	if len(podsToDelete) > 0 {
+		scopedLog.Info("Executing CPU-aware balancing deletions",
+			"podsToDelete", len(podsToDelete),
+			"currentCPU", metrics.TotalReadyCPU,
+			"afterDeletionCPU", cpuAfterDeletion,
+			"originalCPU", metrics.OriginalTotalCPU)
+
+		for _, podName := range podsToDelete {
+			podNamespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
+			var pod corev1.Pod
+			podErr := c.Get(ctx, podNamespacedName, &pod)
+			if podErr != nil {
+				continue
+			}
+
+			// Extract pod index for PrepareScaleDown
+			var podIndex int32
+			fmt.Sscanf(podName, statefulSet.GetName()+"-%d", &podIndex)
+
+			// Call PrepareScaleDown to properly decommission the pod
+			// (drain data, remove from cluster manager, etc.)
+			ready, prepErr := mgr.PrepareScaleDown(ctx, podIndex)
+			if prepErr != nil {
+				scopedLog.Error(prepErr, "Unable to prepare Pod for CPU-aware scale down", "podName", podName)
+				return enterpriseApi.PhaseError, true, prepErr
+			}
+			if !ready {
+				// Wait until pod preparation has completed before deleting it
+				scopedLog.Info("Waiting for pod decommissioning before CPU-aware deletion", "podName", podName)
+				return enterpriseApi.PhaseUpdating, true, nil
+			}
+
+			// Now safe to delete the pod
+			preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
+			delErr := c.Delete(ctx, &pod, preconditions)
+			if delErr != nil {
+				scopedLog.Error(delErr, "Unable to delete Pod for balancing", "podName", podName)
+			} else {
+				scopedLog.Info("Deleted pod for CPU balancing", "podName", podName, "podCPU", extractCPUFromPod(&pod))
+			}
+		}
+
+		return enterpriseApi.PhaseUpdating, true, nil
+	}
+
+	// All old pods deleted, update StatefulSet replicas to target
+	if metrics.OldSpecReadyPods == 0 && replicas > int32(targetReplicas) {
+		scopedLog.Info("All old pods deleted, updating StatefulSet replicas to target",
+			"currentReplicas", replicas, "targetReplicas", targetReplicas)
+		targetReplicasInt32 := int32(targetReplicas)
+		statefulSet.Spec.Replicas = &targetReplicasInt32
+		updateErr := splutil.UpdateResource(ctx, c, statefulSet)
+		if updateErr != nil {
+			scopedLog.Error(updateErr, "Unable to update StatefulSet replicas")
+			return enterpriseApi.PhaseError, true, updateErr
+		}
+
+		// Remove the target replicas annotation
+		delete(statefulSet.Annotations, CPUAwareTargetReplicasAnnotation)
+		updateErr = splutil.UpdateResource(ctx, c, statefulSet)
+		if updateErr != nil {
+			scopedLog.Error(updateErr, "Unable to remove CPU-aware target annotation")
+		}
+
+		scopedLog.Info("CPU-aware scale-down complete", "finalReplicas", targetReplicas)
+		return enterpriseApi.PhaseScalingDown, true, nil
+	}
+
+	// Continue to next reconcile for more deletions or final replica update
+	return enterpriseApi.PhaseUpdating, true, nil
+}
+
 // UpdateStatefulSetPods manages scaling and config updates for StatefulSets.
 // The function implements careful ordering of operations:
 // 1. Prioritize scale-down operations (removes pods even if not all are ready)
@@ -353,6 +859,11 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	if err != nil {
 		scopedLog.Error(err, "Unable to re-fetch StatefulSet for latest status")
 		return enterpriseApi.PhaseError, err
+	}
+
+	// Handle CPU-preserving transition if enabled
+	if phase, handled, err := handleCPUPreservingTransition(ctx, c, statefulSet, mgr, replicas, readyReplicas); handled {
+		return phase, err
 	}
 
 	// check for scaling down - prioritize scale-down operations
@@ -391,59 +902,9 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	// check existing pods for desired updates
-	for n := readyReplicas - 1; n >= 0; n-- {
-		// get Pod
-		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
-		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
-		var pod corev1.Pod
-		err := c.Get(ctx, namespacedName, &pod)
-		if err != nil {
-			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
-			return enterpriseApi.PhaseError, err
-		}
-		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
-			scopedLog.Error(err, "Waiting for Pod to become ready", "podName", podName)
-			return enterpriseApi.PhaseUpdating, err
-		}
-
-		// terminate pod if it has pending updates; k8s will start a new one with revised template
-		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
-			// pod needs to be updated; first, prepare it to be recycled
-			ready, err := mgr.PrepareRecycle(ctx, n)
-			if err != nil {
-				scopedLog.Error(err, "Unable to prepare Pod for recycling", "podName", podName)
-				return enterpriseApi.PhaseError, err
-			}
-			if !ready {
-				// wait until pod quarantine has completed before deleting it
-				return enterpriseApi.PhaseUpdating, nil
-			}
-
-			// deleting pod will cause StatefulSet controller to create a new one with latest template
-			scopedLog.Info("Recycling Pod for updates", "podName", podName,
-				"statefulSetRevision", statefulSet.Status.UpdateRevision,
-				"podRevision", pod.GetLabels()["controller-revision-hash"])
-			preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
-			err = c.Delete(ctx, &pod, preconditions)
-			if err != nil {
-				scopedLog.Error(err, "Unable to delete Pod", "podName", podName)
-				return enterpriseApi.PhaseError, err
-			}
-
-			// only delete one at a time
-			return enterpriseApi.PhaseUpdating, nil
-		}
-
-		// check if pod was previously prepared for recycling; if so, complete
-		complete, err := mgr.FinishRecycle(ctx, n)
-		if err != nil {
-			scopedLog.Error(err, "Unable to complete recycling of pod", "podName", podName)
-			return enterpriseApi.PhaseError, err
-		}
-		if !complete {
-			// return and wait until next reconcile to let things settle down
-			return enterpriseApi.PhaseUpdating, nil
-		}
+	phase, err := CheckStatefulSetPodsForUpdates(ctx, c, statefulSet, mgr, readyReplicas)
+	if phase != enterpriseApi.PhaseReady || err != nil {
+		return phase, err
 	}
 
 	// Remove unwanted owner references
@@ -464,6 +925,206 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	scopedLog.Info("Statefulset - Phase Ready")
+
+	return enterpriseApi.PhaseReady, nil
+}
+
+// CheckStatefulSetPodsForUpdates checks existing pods for desired updates and handles recycling if needed.
+// This function iterates through all pods in reverse order (highest index first) and:
+// - Verifies each pod exists and is ready
+// - Compares pod revision with StatefulSet UpdateRevision
+// - Initiates controlled pod recycling (PrepareRecycle -> Delete -> FinishRecycle)
+// - Supports parallel pod updates via annotation (default: 1 pod at a time)
+// Returns PhaseUpdating while updates are in progress, PhaseReady when all pods are current.
+func CheckStatefulSetPodsForUpdates(ctx context.Context,
+	c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet,
+	mgr splcommon.StatefulSetPodManager, readyReplicas int32,
+) (enterpriseApi.Phase, error) {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("CheckStatefulSetPodsForUpdates").WithValues("name", statefulSet.GetName(), "namespace", statefulSet.GetNamespace())
+
+	// Get the maximum number of pods to update in parallel
+	maxParallelUpdates := getParallelPodUpdates(statefulSet)
+	podsDeletedThisCycle := int32(0)
+
+	scopedLog.Info("Checking pods for updates", "maxParallelUpdates", maxParallelUpdates)
+
+	for n := readyReplicas - 1; n >= 0; n-- {
+		// get Pod
+		podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
+		namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
+		var pod corev1.Pod
+		err := c.Get(ctx, namespacedName, &pod)
+		if err != nil {
+			scopedLog.Error(err, "Unable to find Pod", "podName", podName)
+			return enterpriseApi.PhaseError, err
+		}
+		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
+			scopedLog.Info("Waiting for Pod to become ready", "podName", podName)
+			return enterpriseApi.PhaseUpdating, nil
+		}
+
+		// terminate pod if it has pending updates; k8s will start a new one with revised template
+		if statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"] {
+			// pod needs to be updated; first, prepare it to be recycled
+			ready, err := mgr.PrepareRecycle(ctx, n)
+			if err != nil {
+				scopedLog.Error(err, "Unable to prepare Pod for recycling", "podName", podName)
+				return enterpriseApi.PhaseError, err
+			}
+			if !ready {
+				// wait until pod quarantine has completed before deleting it
+				return enterpriseApi.PhaseUpdating, nil
+			}
+
+			// deleting pod will cause StatefulSet controller to create a new one with revised template
+			scopedLog.Info("Recycling Pod for updates", "podName", podName,
+				"statefulSetRevision", statefulSet.Status.UpdateRevision,
+				"podRevision", pod.GetLabels()["controller-revision-hash"])
+			preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
+			err = c.Delete(ctx, &pod, preconditions)
+			if err != nil {
+				scopedLog.Error(err, "Unable to delete Pod", "podName", podName)
+				return enterpriseApi.PhaseError, err
+			}
+
+			// Track number of pods deleted in this cycle
+			podsDeletedThisCycle++
+
+			// Check if we've reached the parallel update limit
+			if podsDeletedThisCycle >= maxParallelUpdates {
+				scopedLog.Info("Reached parallel update limit, waiting for next reconcile",
+					"podsDeleted", podsDeletedThisCycle,
+					"maxParallel", maxParallelUpdates)
+				return enterpriseApi.PhaseUpdating, nil
+			}
+
+			// Continue to next pod for parallel updates
+			continue
+		}
+
+		// check if pod was previously prepared for recycling; if so, complete
+		complete, err := mgr.FinishRecycle(ctx, n)
+		if err != nil {
+			scopedLog.Error(err, "Unable to complete recycling of pod", "podName", podName)
+			return enterpriseApi.PhaseError, err
+		}
+		if !complete {
+			// return and wait until next reconcile to let things settle down
+			return enterpriseApi.PhaseUpdating, nil
+		}
+	}
+
+	// If we deleted any pods this cycle, return PhaseUpdating to wait for them to be recreated
+	if podsDeletedThisCycle > 0 {
+		scopedLog.Info("Pods deleted this cycle, waiting for recreation",
+			"podsDeleted", podsDeletedThisCycle)
+		return enterpriseApi.PhaseUpdating, nil
+	}
+
+	// Phase 2: CPU-preserving balancing deletions (only if no update deletions occurred)
+	// This handles deleting extra old-spec pods to reclaim CPU resources
+	if isPreserveTotalCPUEnabled(statefulSet) {
+		// Check if there's a target replicas annotation
+		targetReplicasStr := ""
+		if statefulSet.Annotations != nil {
+			targetReplicasStr = statefulSet.Annotations[CPUAwareTargetReplicasAnnotation]
+		}
+
+		if targetReplicasStr != "" {
+			targetReplicas, parseErr := strconv.ParseInt(targetReplicasStr, 10, 32)
+			if parseErr == nil && int32(targetReplicas) < readyReplicas {
+				// We have a target for scale-down, compute metrics
+				metrics, compErr := computeCPUMetrics(ctx, c, statefulSet, int32(targetReplicas))
+				if compErr == nil && metrics.NewSpecReadyPods > 0 {
+					// Calculate balancing deletions
+					oldPodsPerNewPod := int64(1)
+					if metrics.OriginalCPUPerPod > 0 {
+						oldPodsPerNewPod = metrics.TargetCPUPerPod / metrics.OriginalCPUPerPod
+						if oldPodsPerNewPod > 1 {
+							oldPodsPerNewPod-- // Safety margin
+						}
+						if oldPodsPerNewPod < 1 {
+							oldPodsPerNewPod = 1
+						}
+					}
+
+					maxBalancingDeletes := int32(maxParallelUpdates) * int32(oldPodsPerNewPod)
+
+					scopedLog.Info("Checking for CPU-aware balancing deletions",
+						"maxBalancingDeletes", maxBalancingDeletes,
+						"oldSpecPods", metrics.OldSpecReadyPods,
+						"newSpecPods", metrics.NewSpecReadyPods)
+
+					// Find old-spec pods beyond target replicas to delete
+					cpuAfterDeletion := metrics.TotalReadyCPU
+
+					for n := readyReplicas - 1; n >= int32(targetReplicas); n-- {
+						podName := fmt.Sprintf("%s-%d", statefulSet.GetName(), n)
+						podNamespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
+						var pod corev1.Pod
+						podErr := c.Get(ctx, podNamespacedName, &pod)
+						if podErr != nil {
+							continue
+						}
+
+						if !isPodReady(&pod) {
+							continue
+						}
+
+						// Only delete old-spec pods
+						if hasNewSpec(&pod, metrics.TargetCPUPerPod) {
+							continue
+						}
+
+						podCPU := extractCPUFromPod(&pod)
+						newTotalCPU := cpuAfterDeletion - podCPU
+
+						// Check CPU bounds
+						if newTotalCPU < metrics.OriginalTotalCPU {
+							scopedLog.Info("CPU bounds reached during balancing in CheckStatefulSetPodsForUpdates",
+								"currentCPU", cpuAfterDeletion,
+								"wouldBe", newTotalCPU,
+								"minRequired", metrics.OriginalTotalCPU)
+							break
+						}
+
+						// Call PrepareScaleDown to properly decommission the pod
+						ready, prepErr := mgr.PrepareScaleDown(ctx, n)
+						if prepErr != nil {
+							scopedLog.Error(prepErr, "Unable to prepare Pod for CPU-aware scale down", "podName", podName)
+							return enterpriseApi.PhaseError, prepErr
+						}
+						if !ready {
+							// Wait until pod preparation has completed
+							scopedLog.Info("Waiting for pod decommissioning before CPU-aware deletion", "podName", podName)
+							return enterpriseApi.PhaseUpdating, nil
+						}
+
+						// Delete this pod
+						scopedLog.Info("CPU-aware balancing deletion from CheckStatefulSetPodsForUpdates",
+							"podName", podName, "podCPU", podCPU)
+						preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
+						delErr := c.Delete(ctx, &pod, preconditions)
+						if delErr != nil {
+							scopedLog.Error(delErr, "Unable to delete Pod for balancing", "podName", podName)
+							return enterpriseApi.PhaseError, delErr
+						}
+
+						cpuAfterDeletion = newTotalCPU
+
+						// Only delete one pod at a time due to PrepareScaleDown requirement
+						// (we need to wait for decommissioning to complete)
+						scopedLog.Info("Balancing deletion completed, waiting for next reconcile",
+							"podName", podName,
+							"cpuBefore", metrics.TotalReadyCPU,
+							"cpuAfter", cpuAfterDeletion)
+						return enterpriseApi.PhaseUpdating, nil
+					}
+				}
+			}
+		}
+	}
 
 	return enterpriseApi.PhaseReady, nil
 }
