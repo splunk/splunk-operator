@@ -13,4 +13,5 @@ resources:
 - enterprise_v4_searchheadcluster.yaml
 - enterprise_v4_clustermanager.yaml
 - enterprise_v4_licensemanager.yaml
+- v4_kvservice.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

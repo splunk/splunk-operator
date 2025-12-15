@@ -91,3 +91,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - splunk.com
+  resources:
+  - kvservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - splunk.com
+  resources:
+  - kvservices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - splunk.com
+  resources:
+  - kvservices/status
+  verbs:
+  - get
+  - patch
+  - update
