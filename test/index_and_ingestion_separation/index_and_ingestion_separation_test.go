@@ -382,6 +382,7 @@ var _ = Describe("indingsep test", func() {
 			// Secret reference
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			bus.SQS.VolList = volumeSpec
+			updateBus.SQS.VolList = volumeSpec
 
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")
