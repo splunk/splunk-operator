@@ -79,6 +79,11 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
+			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
+			// Secret reference
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			bus.SQS.VolList = volumeSpec
+
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")
 			b, err := deployment.DeployBus(ctx, "bus", bus)
@@ -151,6 +156,11 @@ var _ = Describe("indingsep test", func() {
 			// Create Service Account
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+
+			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
+			// Secret reference
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			bus.SQS.VolList = volumeSpec
 
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")
@@ -255,6 +265,11 @@ var _ = Describe("indingsep test", func() {
 			// Create Service Account
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+
+			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
+			// Secret reference
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			bus.SQS.VolList = volumeSpec
 
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")
@@ -362,6 +377,11 @@ var _ = Describe("indingsep test", func() {
 			// Create Service Account
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+
+			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
+			// Secret reference
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			bus.SQS.VolList = volumeSpec
 
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")

@@ -434,6 +434,9 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 				Region:   "us-west-2",
 				Endpoint: "https://sqs.us-west-2.amazonaws.com",
 				DLQ:      "sqs-dlq-test",
+				VolList: []enterpriseApi.VolumeSpec{
+					{SecretRef: "secret"},
+				},
 			},
 		},
 	}
@@ -467,11 +470,15 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 		Status: enterpriseApi.IngestorClusterStatus{},
 	}
 
-	busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, false)
+	key := "key"
+	secret := "secret"
+	busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, false, key, secret)
 
-	assert.Equal(t, 10, len(busChangedFields))
+	assert.Equal(t, 12, len(busChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},

@@ -61,6 +61,10 @@ type SQSSpec struct {
 	// +kubebuilder:validation:Pattern=`^https://sqs(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$`
 	// Amazon SQS Service endpoint
 	Endpoint string `json:"endpoint"`
+
+	// +optional
+	// List of remote storage volumes
+	VolList []VolumeSpec `json:"volumes,omitempty"`
 }
 
 // BusStatus defines the observed state of Bus

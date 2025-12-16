@@ -295,9 +295,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 		// If bus is updated
 		if cr.Spec.BusRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) {
+			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(cr.Status.LargeMessageStore, lms.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-
 				err = mgr.handlePullBusChange(ctx, cr, busCopy, lmsCopy, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
@@ -618,9 +617,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		// If bus is updated
 		if cr.Spec.BusRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) {
+			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(cr.Status.LargeMessageStore, lms.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-
 				err = mgr.handlePullBusChange(ctx, cr, busCopy, lmsCopy, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
@@ -1328,7 +1326,21 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 			afterDelete = true
 		}
 
-		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&bus, &lms, newCR, afterDelete)
+		// Secret reference
+		s3AccessKey, s3SecretKey := "", ""
+		if bus.Spec.Provider == "sqs" {
+			for _, vol := range bus.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					s3AccessKey, s3SecretKey, err = GetBusRemoteVolumeSecrets(ctx, vol, k8s, newCR)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get bus remote volume secrets")
+						return err
+					}
+				}
+			}
+		}
+
+		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&bus, &lms, newCR, afterDelete, s3AccessKey, s3SecretKey)
 
 		for _, pbVal := range busChangedFieldsOutputs {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name), [][]string{pbVal}); err != nil {
@@ -1354,7 +1366,7 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 }
 
 // getChangedBusFieldsForIndexer returns a list of changed bus and pipeline fields for indexer pods
-func getChangedBusFieldsForIndexer(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
+func getChangedBusFieldsForIndexer(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
 	// Compare bus fields
 	oldPB := busIndexerStatus.Status.Bus
 	if oldPB == nil {
@@ -1369,7 +1381,7 @@ func getChangedBusFieldsForIndexer(bus *enterpriseApi.Bus, lms *enterpriseApi.La
 	newLMS := lms.Spec
 
 	// Push all bus fields
-	busChangedFieldsInputs, busChangedFieldsOutputs = pullBusChanged(oldPB, &newPB, oldLMS, &newLMS, afterDelete)
+	busChangedFieldsInputs, busChangedFieldsOutputs = pullBusChanged(oldPB, &newPB, oldLMS, &newLMS, afterDelete, s3AccessKey, s3SecretKey)
 	// Always set all pipeline fields, not just changed ones
 	pipelineChangedFields = pipelineConfig(true)
 
@@ -1387,7 +1399,7 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
 }
 
-func pullBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enterpriseApi.LargeMessageStoreSpec, afterDelete bool) (inputs, outputs [][]string) {
+func pullBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enterpriseApi.LargeMessageStoreSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (inputs, outputs [][]string) {
 	busProvider := ""
 	if newBus.Provider == "sqs" {
 		busProvider = "sqs_smartbus"
@@ -1399,6 +1411,10 @@ func pullBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enter
 
 	if oldBus.Provider != newBus.Provider || afterDelete {
 		inputs = append(inputs, []string{"remote_queue.type", busProvider})
+	}
+	if !reflect.DeepEqual(oldBus.SQS.VolList, newBus.SQS.VolList) || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
 	}
 	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
 		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})

@@ -417,6 +417,25 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
 }
 
+// GetBusRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
+func GetBusRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, error) {
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	if err != nil {
+		return "", "", err
+	}
+
+	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
+	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
+
+	if accessKey == "" {
+		return "", "", errors.New("access Key is missing")
+	} else if secretKey == "" {
+		return "", "", errors.New("secret Key is missing")
+	}
+
+	return accessKey, secretKey, nil
+}
+
 // getLocalAppFileName generates the local app file name
 // For e.g., if the app package name is sample_app.tgz
 // and etag is "abcd1234", then it will be downloaded locally as sample_app.tgz_abcd1234

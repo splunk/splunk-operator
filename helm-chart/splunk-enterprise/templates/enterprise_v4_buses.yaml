@@ -29,6 +29,10 @@ spec:
     {{- if .region }}
     region: {{ .region | quote }}
     {{- end }}
+    {{- if .volumes }}
+    volumes:
+    {{ toYaml . | indent 4 }}
+    {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}

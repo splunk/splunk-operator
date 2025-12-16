@@ -259,9 +259,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 
 		// If bus is updated
-		if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) {
+		if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(cr.Status.LargeMessageStore, lms.Spec) {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
-
 			err = mgr.handlePushBusChange(ctx, cr, busCopy, lmsCopy, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
@@ -370,7 +369,21 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 			afterDelete = true
 		}
 
-		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, afterDelete)
+		// Secret reference
+		s3AccessKey, s3SecretKey := "", ""
+		if bus.Spec.Provider == "sqs" {
+			for _, vol := range bus.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					s3AccessKey, s3SecretKey, err = GetBusRemoteVolumeSecrets(ctx, vol, k8s, newCR)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get bus remote volume secrets")
+						return err
+					}
+				}
+			}
+		}
+
+		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, afterDelete, s3AccessKey, s3SecretKey)
 
 		for _, pbVal := range busChangedFields {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name), [][]string{pbVal}); err != nil {
@@ -390,7 +403,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 }
 
 // getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
-func getChangedBusFieldsForIngestor(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (busChangedFields, pipelineChangedFields [][]string) {
+func getChangedBusFieldsForIngestor(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (busChangedFields, pipelineChangedFields [][]string) {
 	oldPB := busIngestorStatus.Status.Bus
 	if oldPB == nil {
 		oldPB = &enterpriseApi.BusSpec{}
@@ -404,7 +417,7 @@ func getChangedBusFieldsForIngestor(bus *enterpriseApi.Bus, lms *enterpriseApi.L
 	newLMS := &lms.Spec
 
 	// Push changed bus fields
-	busChangedFields = pushBusChanged(oldPB, newPB, oldLMS, newLMS, afterDelete)
+	busChangedFields = pushBusChanged(oldPB, newPB, oldLMS, newLMS, afterDelete, s3AccessKey, s3SecretKey)
 
 	// Always changed pipeline fields
 	pipelineChangedFields = pipelineConfig(false)
@@ -443,7 +456,7 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 	return output
 }
 
-func pushBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enterpriseApi.LargeMessageStoreSpec, afterDelete bool) (output [][]string) {
+func pushBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enterpriseApi.LargeMessageStoreSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (output [][]string) {
 	busProvider := ""
 	if newBus.Provider == "sqs" {
 		busProvider = "sqs_smartbus"
@@ -455,6 +468,10 @@ func pushBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enter
 
 	if oldBus.Provider != newBus.Provider || afterDelete {
 		output = append(output, []string{"remote_queue.type", busProvider})
+	}
+	if !reflect.DeepEqual(oldBus.SQS.VolList, newBus.SQS.VolList) || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
 	}
 	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})
