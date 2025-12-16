@@ -18,79 +18,53 @@ package enterprise
 import (
 	"context"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
-	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // K8EventPublisher structure used to publish k8s event
 type K8EventPublisher struct {
-	client   splcommon.ControllerClient
-	instance interface{}
+	recorder record.EventRecorder
+	instance runtime.Object
 }
 
-// private function to get new k8s event publisher
-func newK8EventPublisher(client splcommon.ControllerClient, instance interface{}) (*K8EventPublisher, error) {
+// newK8EventPublisher creates a new k8s event publisher
+func newK8EventPublisher(recorder record.EventRecorder, instance runtime.Object) (*K8EventPublisher, error) {
 	eventPublisher := &K8EventPublisher{
-		client:   client,
+		recorder: recorder,
 		instance: instance,
 	}
 
 	return eventPublisher, nil
 }
 
-// publishEvents adds events to k8s
+// NewK8EventPublisherWithRecorder creates a new k8s event publisher with recorder (exported for controller use)
+func NewK8EventPublisherWithRecorder(recorder record.EventRecorder, instance runtime.Object) (*K8EventPublisher, error) {
+	return newK8EventPublisher(recorder, instance)
+}
+
+// publishEvent adds events to k8s using event recorder
 func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, message string) {
-
-	var event corev1.Event
-
-	// in the case of testing, client is not passed
-	if k.client == nil {
-		return
-	}
-
-	// based on the custom resource instance type find name, type and create new event
-	switch v := k.instance.(type) {
-	case *enterpriseApi.Standalone:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApiV3.LicenseMaster:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApi.LicenseManager:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApi.IndexerCluster:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApi.ClusterManager:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApiV3.ClusterMaster:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApi.MonitoringConsole:
-		event = v.NewEvent(eventType, reason, message)
-	case *enterpriseApi.SearchHeadCluster:
-		event = v.NewEvent(eventType, reason, message)
-	default:
+	// in the case of testing, recorder is not passed
+	if k.recorder == nil {
 		return
 	}
 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PublishEvent")
-	scopedLog.Info("publishing event", "reason", event.Reason, "message", event.Message)
+	scopedLog.Info("publishing event", "eventType", eventType, "reason", reason, "message", message)
 
-	err := k.client.Create(ctx, &event)
-	if err != nil {
-		scopedLog.Error(err, "failed to record event, ignoring",
-			"reason", event.Reason, "message", event.Message, "error", err)
-	}
+	// Use the EventRecorder to emit the event
+	k.recorder.Event(k.instance, eventType, reason, message)
 }
 
 // Normal publish normal events to k8s
 func (k *K8EventPublisher) Normal(ctx context.Context, reason, message string) {
-	k.publishEvent(ctx, corev1.EventTypeNormal, reason, message)
+	k.publishEvent(ctx, "Normal", reason, message)
 }
 
 // Warning publish warning events to k8s
 func (k *K8EventPublisher) Warning(ctx context.Context, reason, message string) {
-	k.publishEvent(ctx, corev1.EventTypeWarning, reason, message)
+	k.publishEvent(ctx, "Warning", reason, message)
 }

@@ -19,11 +19,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pkg/errors"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -35,9 +33,10 @@ func TestClusterManagerEventPublisher(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
+	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.ClusterManager{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := newK8EventPublisher(recorder, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -49,60 +48,76 @@ func TestClusterManagerEventPublisher(t *testing.T) {
 	cmaster := enterpriseApiV3.ClusterMaster{}
 	k8sevent.instance = &cmaster
 	k8sevent.Normal(ctx, "", "")
+
+	// Use client to avoid unused variable warning
+	_ = c
 }
 
 func TestIndexerClusterEventPublisher(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
+	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.IndexerCluster{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := newK8EventPublisher(recorder, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
+
+	// Use client to avoid unused variable warning
+	_ = c
 }
 
 func TestMonitoringConsoleEventPublisher(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
+	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.MonitoringConsole{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := newK8EventPublisher(recorder, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
+
+	// Use client to avoid unused variable warning
+	_ = c
 }
 
 func TestSearchHeadClusterEventPublisher(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
+	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.SearchHeadCluster{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := newK8EventPublisher(recorder, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
+
+	// Use client to avoid unused variable warning
+	_ = c
 }
 
 func TestStandaloneEventPublisher(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
+	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.Standalone{}
-	k8sevent, err := newK8EventPublisher(c, &cm)
+	k8sevent, err := newK8EventPublisher(recorder, &cm)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -112,25 +127,26 @@ func TestStandaloneEventPublisher(t *testing.T) {
 
 	// Negative testing
 	ctx := context.TODO()
-	k8sevent.client = nil
+	k8sevent.recorder = nil
 	k8sevent.publishEvent(ctx, "", "", "")
 
-	mockClient := spltest.NewMockClient()
-	mockClient.InduceErrorKind[splcommon.MockClientInduceErrorCreate] = errors.New(splcommon.Rerr)
-	k8sevent.client = mockClient
-	k8sevent.publishEvent(ctx, "", "", "")
+	// Test with different instance type (this should work with EventRecorder)
+	k8sevent.recorder = recorder
+	k8sevent.instance = &cm
+	k8sevent.publishEvent(ctx, "Normal", "TestReason", "Test message")
 
-	k8sevent.instance = "randomString"
-	k8sevent.publishEvent(ctx, "", "", "")
+	// Use client to avoid unused variable warning
+	_ = c
 }
 
 func TestLicenseManagerEventPublisher(t *testing.T) {
 
 	builder := fake.NewClientBuilder()
 	c := builder.Build()
+	recorder := record.NewFakeRecorder(10)
 
 	lmanager := enterpriseApi.LicenseManager{}
-	k8sevent, err := newK8EventPublisher(c, &lmanager)
+	k8sevent, err := newK8EventPublisher(recorder, &lmanager)
 	if err != nil {
 		t.Errorf("Unexpected error while creating new event publisher %v", err)
 	}
@@ -142,4 +158,7 @@ func TestLicenseManagerEventPublisher(t *testing.T) {
 	lmaster := enterpriseApiV3.LicenseMaster{}
 	k8sevent.instance = &lmaster
 	k8sevent.Normal(ctx, "", "")
+
+	// Use client to avoid unused variable warning
+	_ = c
 }
