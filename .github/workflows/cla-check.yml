@@ -15,7 +15,7 @@ jobs:
         uses: cla-assistant/github-action@v2.1.3-beta
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PAT_CLATOOL }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
           path-to-signatures: "signatures/version1/cla.json"
           path-to-document: "https://github.com/splunk/cla-agreement/blob/main/CLA.md" # e.g. a CLA or a DCO document
@@ -31,7 +31,7 @@ jobs:
         uses: cla-assistant/github-action@v2.1.3-beta
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PAT_CLATOOL }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
           path-to-signatures: "signatures/version1/coc.json"
           path-to-document: "https://github.com/splunk/cla-agreement/blob/main/CODE_OF_CONDUCT.md" # e.g. a COC or a DCO document
