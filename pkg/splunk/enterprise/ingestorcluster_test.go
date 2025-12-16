@@ -32,7 +32,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -55,7 +56,11 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	ctx := context.TODO()
 
-	c := spltest.NewMockClient()
+	scheme := runtime.NewScheme()
+	_ = enterpriseApi.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
 	provider := "sqs_smartbus"
@@ -81,7 +86,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	}
 	c.Create(ctx, bus)
 
-	lms := enterpriseApi.LargeMessageStore{
+	lms := &enterpriseApi.LargeMessageStore{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "LargeMessageStore",
 			APIVersion: "enterprise.splunk.com/v4",
@@ -98,7 +103,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 			},
 		},
 	}
-	c.Create(ctx, &lms)
+	c.Create(ctx, lms)
 
 	cr := &enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -112,7 +117,8 @@ func TestApplyIngestorCluster(t *testing.T) {
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock: true,
+				Mock:           true,
+				ServiceAccount: "sa",
 			},
 			BusRef: corev1.ObjectReference{
 				Name:      bus.Name,
@@ -242,29 +248,6 @@ func TestApplyIngestorCluster(t *testing.T) {
 	assert.True(t, result.Requeue)
 	assert.NotEqual(t, enterpriseApi.PhaseError, cr.Status.Phase)
 
-	// Ensure stored StatefulSet status reflects readiness after any reconcile modifications
-	fetched := &appsv1.StatefulSet{}
-	_ = c.Get(ctx, types.NamespacedName{Name: "splunk-test-ingestor", Namespace: "test"}, fetched)
-	fetched.Status.Replicas = replicas
-	fetched.Status.ReadyReplicas = replicas
-	fetched.Status.UpdatedReplicas = replicas
-	if fetched.Status.UpdateRevision == "" {
-		fetched.Status.UpdateRevision = "v1"
-	}
-	c.Update(ctx, fetched)
-
-	// Guarantee all pods have matching revision label
-	for _, pn := range []string{"splunk-test-ingestor-0", "splunk-test-ingestor-1", "splunk-test-ingestor-2"} {
-		p := &corev1.Pod{}
-		if err := c.Get(ctx, types.NamespacedName{Name: pn, Namespace: "test"}, p); err == nil {
-			if p.Labels == nil {
-				p.Labels = map[string]string{}
-			}
-			p.Labels["controller-revision-hash"] = fetched.Status.UpdateRevision
-			c.Update(ctx, p)
-		}
-	}
-
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
 	mockHTTPClient := &spltest.MockHTTPClient{}
@@ -280,6 +263,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	defer func() { newIngestorClusterPodManager = origNew }()
 
 	propertyKVList := [][]string{
+		{"remote_queue.type", provider},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
@@ -316,6 +300,13 @@ func TestApplyIngestorCluster(t *testing.T) {
 			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
 			mockHTTPClient.AddHandler(req, 200, "", nil)
 		}
+	}
+
+	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
+		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
+		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/server/control/restart", podName, cr.GetName(), cr.GetNamespace())
+		req, _ := http.NewRequest("POST", baseURL, nil)
+		mockHTTPClient.AddHandler(req, 200, "", nil)
 	}
 
 	// Second reconcile should now yield Ready

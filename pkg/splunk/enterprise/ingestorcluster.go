@@ -401,7 +401,7 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 
 		// Secret reference
 		s3AccessKey, s3SecretKey := "", ""
-		if bus.Spec.Provider == "sqs" {
+		if bus.Spec.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
 			for _, vol := range bus.Spec.SQS.VolList {
 				if vol.SecretRef != "" {
 					s3AccessKey, s3SecretKey, err = GetBusRemoteVolumeSecrets(ctx, vol, k8s, newCR)
@@ -502,8 +502,10 @@ func pushBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enter
 		output = append(output, []string{"remote_queue.type", busProvider})
 	}
 	if !reflect.DeepEqual(oldBus.SQS.VolList, newBus.SQS.VolList) || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
+		if s3AccessKey != "" && s3SecretKey != "" {
+			output = append(output, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
+			output = append(output, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
+		}
 	}
 	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})

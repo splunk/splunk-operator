@@ -1346,7 +1346,7 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 
 		// Secret reference
 		s3AccessKey, s3SecretKey := "", ""
-		if bus.Spec.Provider == "sqs" {
+		if bus.Spec.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
 			for _, vol := range bus.Spec.SQS.VolList {
 				if vol.SecretRef != "" {
 					s3AccessKey, s3SecretKey, err = GetBusRemoteVolumeSecrets(ctx, vol, k8s, newCR)
@@ -1431,8 +1431,10 @@ func pullBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enter
 		inputs = append(inputs, []string{"remote_queue.type", busProvider})
 	}
 	if !reflect.DeepEqual(oldBus.SQS.VolList, newBus.SQS.VolList) || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
+		if s3AccessKey != "" && s3SecretKey != "" {
+			inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
+			inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
+		}
 	}
 	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
 		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})

@@ -2404,7 +2404,7 @@ func TestApplyIndexerClusterManager_Bus_Success(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	bus := enterpriseApi.Bus{
+	bus := &enterpriseApi.Bus{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Bus",
 			APIVersion: "enterprise.splunk.com/v4",
@@ -2423,7 +2423,26 @@ func TestApplyIndexerClusterManager_Bus_Success(t *testing.T) {
 			},
 		},
 	}
-	c.Create(ctx, &bus)
+	c.Create(ctx, bus)
+
+	lms := &enterpriseApi.LargeMessageStore{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "LargeMessageStore",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lms",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LargeMessageStoreSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "s3://bucket/key",
+			},
+		},
+	}
+	c.Create(ctx, lms)
 
 	cm := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"},
@@ -2448,6 +2467,10 @@ func TestApplyIndexerClusterManager_Bus_Success(t *testing.T) {
 			BusRef: corev1.ObjectReference{
 				Name:      bus.Name,
 				Namespace: bus.Namespace,
+			},
+			LargeMessageStoreRef: corev1.ObjectReference{
+				Name:      lms.Name,
+				Namespace: lms.Namespace,
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				ClusterManagerRef: corev1.ObjectReference{
