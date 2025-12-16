@@ -25,15 +25,14 @@ import (
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func init() {
@@ -56,11 +55,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	ctx := context.TODO()
 
-	scheme := runtime.NewScheme()
-	_ = enterpriseApi.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	c := spltest.NewMockClient()
 
 	// Object definitions
 	provider := "sqs_smartbus"
@@ -273,8 +268,9 @@ func TestApplyIngestorCluster(t *testing.T) {
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
 	mockHTTPClient := &spltest.MockHTTPClient{}
-	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc) ingestorClusterPodManager {
+	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
+			c:   c,
 			log: l, cr: cr, secrets: secret,
 			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
 				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}

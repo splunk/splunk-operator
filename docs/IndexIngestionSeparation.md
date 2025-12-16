@@ -1,3 +1,9 @@
+---
+title: Index and Ingestion Separation
+parent: Deploy & Configure
+nav_order: 6
+---
+
 # Background
 
 Separation between ingestion and indexing services within Splunk Operator for Kubernetes enables the operator to independently manage the ingestion service while maintaining seamless integration with the indexing service.
@@ -10,7 +16,7 @@ This separation enables:
 # Important Note
 
 > [!WARNING]
-> **As of now, only brand new deployments are supported for Index and Ingestion Separation. No migration path is implemented, described or tested for existing deployments to move from a standard model to Index & Ingestion separation model.**
+> **For customers deploying SmartBus on CMP, the Splunk Operator for Kubernetes (SOK) manages the configuration and lifecycle of the ingestor tier. The following SOK guide provides implementation details for setting up ingestion separation and integrating with existing indexers. This reference is primarily intended for CMP users leveraging SOK-managed ingestors.**
 
 # Document Variables
 
@@ -38,7 +44,7 @@ SQS message bus inputs can be found in the table below.
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
 
-Change of any of the bus inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+**First provisioning or update of any of the bus inputs requires Ingestor Cluster and Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
 
 ## Example
 ```
@@ -424,6 +430,14 @@ In the following example, the dashboard presents ingestion and indexing data in 
 ## Documentation References
 
 - [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
+
+# App Installation for Ingestor Cluster Instances
+
+Application installation is supported for Ingestor Cluster instances. However, as of now, applications are installed using local scope and if any application requires Splunk restart, there is no automated way to detect it and trigger automatically via Splunk Operator. 
+
+Therefore, to be able to enforce Splunk restart for each of the Ingestor Cluster pods, it is recommended to add/update IngestorCluster CR annotations/labels and apply the new configuration which will trigger the rolling restart of Splunk pods for Ingestor Cluster. 
+
+We are under the investigation on how to make it fully automated. What is more, ideally, update of annotations and labels should not trigger pod restart at all and we are investigating on how to fix this behaviour eventually.
 
 # Example
 
