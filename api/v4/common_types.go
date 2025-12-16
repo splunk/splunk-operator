@@ -112,6 +112,14 @@ type Spec struct {
 
 	// TopologySpreadConstraint https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	// FSGroupChangePolicy defines the policy for changing ownership and permission of the volume
+	// before being exposed inside the Pod. Valid values are "Always" and "OnRootMismatch".
+	// Default is "OnRootMismatch" for improved performance.
+	// Can be overridden by the operator.splunk.com/fs-group-change-policy annotation.
+	// +kubebuilder:validation:Enum=Always;OnRootMismatch
+	// +optional
+	FSGroupChangePolicy *corev1.PodFSGroupChangePolicy `json:"fsGroupChangePolicy,omitempty"`
 }
 
 // Phase is used to represent the current phase of a custom resource

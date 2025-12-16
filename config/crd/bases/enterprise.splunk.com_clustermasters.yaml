@@ -1381,6 +1381,16 @@ spec:
                   - name
                   type: object
                 type: array
+              fsGroupChangePolicy:
+                description: |-
+                  FSGroupChangePolicy defines the policy for changing ownership and permission of the volume
+                  before being exposed inside the Pod. Valid values are "Always" and "OnRootMismatch".
+                  Default is "OnRootMismatch" for improved performance.
+                  Can be overridden by the operator.splunk.com/fs-group-change-policy annotation.
+                enum:
+                - Always
+                - OnRootMismatch
+                type: string
               image:
                 description: Image to use for Splunk pod containers (overrides RELATED_IMAGE_SPLUNK_ENTERPRISE
                   environment variables)
