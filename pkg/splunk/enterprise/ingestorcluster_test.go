@@ -454,7 +454,10 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 				Name: lms.Name,
 			},
 		},
-		Status: enterpriseApi.IngestorClusterStatus{},
+		Status: enterpriseApi.IngestorClusterStatus{
+			Bus:               &enterpriseApi.BusSpec{},
+			LargeMessageStore: &enterpriseApi.LargeMessageStoreSpec{},
+		},
 	}
 
 	key := "key"

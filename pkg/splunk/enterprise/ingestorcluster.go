@@ -72,10 +72,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 
-	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.Bus = &enterpriseApi.BusSpec{}
-		cr.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
-	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, migrate the app framework status
@@ -260,7 +256,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 
 		// If bus is updated
-		if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(cr.Status.LargeMessageStore, lms.Spec) {
+		if cr.Status.Bus == nil || cr.Status.LargeMessageStore == nil || !reflect.DeepEqual(*cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(*cr.Status.LargeMessageStore, lms.Spec) {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = mgr.handlePushBusChange(ctx, cr, busCopy, lmsCopy, client)
 			if err != nil {
@@ -268,9 +264,6 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 				return result, err
 			}
-
-			cr.Status.Bus = &bus.Spec
-			cr.Status.LargeMessageStore = &lms.Spec
 
 			for i := int32(0); i < cr.Spec.Replicas; i++ {
 				ingClient := mgr.getClient(ctx, i)
@@ -280,6 +273,9 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				}
 				scopedLog.Info("Restarted splunk", "ingestor", i)
 			}
+
+			cr.Status.Bus = &bus.Spec
+			cr.Status.LargeMessageStore = &lms.Spec
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -392,6 +388,13 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
+		if newCR.Status.Bus == nil {
+			newCR.Status.Bus = &enterpriseApi.BusSpec{}
+		}
+		if newCR.Status.LargeMessageStore == nil {
+			newCR.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
+		}
+
 		afterDelete := false
 		if (bus.Spec.SQS.Name != "" && newCR.Status.Bus.SQS.Name != "" && bus.Spec.SQS.Name != newCR.Status.Bus.SQS.Name) ||
 			(bus.Spec.Provider != "" && newCR.Status.Bus.Provider != "" && bus.Spec.Provider != newCR.Status.Bus.Provider) {
@@ -437,15 +440,9 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 // getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
 func getChangedBusFieldsForIngestor(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (busChangedFields, pipelineChangedFields [][]string) {
 	oldPB := busIngestorStatus.Status.Bus
-	if oldPB == nil {
-		oldPB = &enterpriseApi.BusSpec{}
-	}
 	newPB := &bus.Spec
 
 	oldLMS := busIngestorStatus.Status.LargeMessageStore
-	if oldLMS == nil {
-		oldLMS = &enterpriseApi.LargeMessageStoreSpec{}
-	}
 	newLMS := &lms.Spec
 
 	// Push changed bus fields

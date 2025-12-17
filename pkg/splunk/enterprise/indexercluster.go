@@ -77,10 +77,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
-	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.Bus = &enterpriseApi.BusSpec{}
-		cr.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
-	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -296,7 +292,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 		// If bus is updated
 		if cr.Spec.BusRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(cr.Status.LargeMessageStore, lms.Spec) {
+			if cr.Status.Bus == nil || cr.Status.LargeMessageStore == nil || !reflect.DeepEqual(*cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(*cr.Status.LargeMessageStore, lms.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 				err = mgr.handlePullBusChange(ctx, cr, busCopy, lmsCopy, client)
 				if err != nil {
@@ -304,9 +300,6 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 					return result, err
 				}
-
-				cr.Status.Bus = &bus.Spec
-				cr.Status.LargeMessageStore = &lms.Spec
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
@@ -316,6 +309,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					}
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
+
+				cr.Status.Bus = &bus.Spec
+				cr.Status.LargeMessageStore = &lms.Spec
 			}
 		}
 
@@ -407,10 +403,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
-	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.Bus = &enterpriseApi.BusSpec{}
-		cr.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
-	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -629,7 +621,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 		// If bus is updated
 		if cr.Spec.BusRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(cr.Status.LargeMessageStore, lms.Spec) {
+			if cr.Status.Bus == nil || cr.Status.LargeMessageStore == nil || !reflect.DeepEqual(*cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(*cr.Status.LargeMessageStore, lms.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 				err = mgr.handlePullBusChange(ctx, cr, busCopy, lmsCopy, client)
 				if err != nil {
@@ -637,9 +629,6 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
 					return result, err
 				}
-
-				cr.Status.Bus = &bus.Spec
-				cr.Status.LargeMessageStore = &lms.Spec
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
@@ -649,6 +638,9 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					}
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
+
+				cr.Status.Bus = &bus.Spec
+				cr.Status.LargeMessageStore = &lms.Spec
 			}
 		}
 
@@ -1335,6 +1327,13 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 			return err
 		}
 		splunkClient := newSplunkClientForBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+
+		if newCR.Status.Bus == nil {
+			newCR.Status.Bus = &enterpriseApi.BusSpec{}
+		}
+		if newCR.Status.LargeMessageStore == nil {
+			newCR.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
+		}
 
 		afterDelete := false
 		if (bus.Spec.SQS.Name != "" && newCR.Status.Bus.SQS.Name != "" && bus.Spec.SQS.Name != newCR.Status.Bus.SQS.Name) ||
