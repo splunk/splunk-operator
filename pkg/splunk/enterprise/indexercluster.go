@@ -79,6 +79,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.Bus = &enterpriseApi.BusSpec{}
+		cr.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -305,6 +306,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				}
 
 				cr.Status.Bus = &bus.Spec
+				cr.Status.LargeMessageStore = &lms.Spec
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)
@@ -407,6 +409,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.Bus = &enterpriseApi.BusSpec{}
+		cr.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -636,6 +639,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 
 				cr.Status.Bus = &bus.Spec
+				cr.Status.LargeMessageStore = &lms.Spec
 
 				for i := int32(0); i < cr.Spec.Replicas; i++ {
 					idxcClient := mgr.getClient(ctx, i)

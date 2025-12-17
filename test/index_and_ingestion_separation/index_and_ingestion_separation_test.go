@@ -83,6 +83,7 @@ var _ = Describe("indingsep test", func() {
 			// Secret reference
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			bus.SQS.VolList = volumeSpec
+			updateBus.SQS.VolList = volumeSpec
 
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")
@@ -161,6 +162,7 @@ var _ = Describe("indingsep test", func() {
 			// Secret reference
 			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			bus.SQS.VolList = volumeSpec
+			updateBus.SQS.VolList = volumeSpec
 
 			// Deploy Bus
 			testcaseEnvInst.Log.Info("Deploy Bus")
@@ -316,7 +318,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.Bus).To(Equal(bus), "Ingestor bus status is not the same as provided as input")
+			Expect(*ingest.Status.Bus).To(Equal(bus), "Ingestor bus status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -326,7 +328,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.Bus).To(Equal(bus), "Indexer bus status is not the same as provided as input")
+			Expect(*index.Status.Bus).To(Equal(bus), "Indexer bus status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -433,6 +435,10 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.UpdateCR(ctx, bus)
 			Expect(err).To(Succeed(), "Unable to deploy Bus with updated CR")
 
+			// Ensure that Ingestor Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
+			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
 			// Get instance of current Ingestor Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Ingestor Cluster CR with latest config")
 			ingest := &enterpriseApi.IngestorCluster{}
@@ -441,7 +447,11 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.Bus).To(Equal(updateBus), "Ingestor bus status is not the same as provided as input")
+			Expect(*ingest.Status.Bus).To(Equal(updateBus), "Ingestor bus status is not the same as provided as input")
+
+			// Ensure that Indexer Cluster is in Ready phase
+			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
+			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -451,7 +461,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.Bus).To(Equal(updateBus), "Indexer bus status is not the same as provided as input")
+			Expect(*index.Status.Bus).To(Equal(updateBus), "Indexer bus status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")

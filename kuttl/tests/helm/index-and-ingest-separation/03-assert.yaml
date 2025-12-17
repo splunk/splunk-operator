@@ -8,6 +8,8 @@ spec:
   replicas: 4
   busRef:
     name: bus
+  largeMessageStoreRef:
+    name: lms
 status:
   phase: Ready
   bus:

@@ -74,6 +74,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.Bus = &enterpriseApi.BusSpec{}
+		cr.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
@@ -269,6 +270,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 
 			cr.Status.Bus = &bus.Spec
+			cr.Status.LargeMessageStore = &lms.Spec
 
 			for i := int32(0); i < cr.Spec.Replicas; i++ {
 				ingClient := mgr.getClient(ctx, i)
