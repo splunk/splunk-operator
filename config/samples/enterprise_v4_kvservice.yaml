@@ -1,0 +1,12 @@
+apiVersion: enterprise.splunk.com/v4
+kind: KVService
+metadata:
+  labels:
+    app.kubernetes.io/name: kvservice
+    app.kubernetes.io/instance: kvservice-sample
+    app.kubernetes.io/part-of: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: splunk-operator
+  name: kvservice-sample
+spec:
+  # TODO(user): Add fields here
