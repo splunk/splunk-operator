@@ -5,7 +5,10 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  pull_request_target: {}
+  pull_request_target:
+    branches:
+      - 'develop'
+      - 'CSPL-4372-add-approval-gate-exec-in-target'
   push:
     branches:
     - main
