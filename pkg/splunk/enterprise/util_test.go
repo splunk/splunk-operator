@@ -2314,7 +2314,7 @@ func TestMigrateAfwStatus(t *testing.T) {
 	}
 
 	client := spltest.NewMockClient()
-	_, err := splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err := splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}
@@ -2512,7 +2512,7 @@ func TestCheckAndMigrateAppDeployStatus(t *testing.T) {
 		},
 	}
 
-	_, err = splctrl.ApplyStatefulSet(ctx, client, sts)
+	_, err = splctrl.ApplyStatefulSet(ctx, client, sts, nil)
 	if err != nil {
 		t.Errorf("unable to apply statefulset")
 	}

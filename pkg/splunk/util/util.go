@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/scheme"
+	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
@@ -83,6 +84,12 @@ func CreateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
 
+	// Clear metadata fields to ensure clean resource creation
+	obj.SetUID("")
+	obj.SetResourceVersion("")
+	obj.SetGeneration(0)
+	obj.SetManagedFields(nil)
+
 	err := client.Create(ctx, obj)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -113,12 +120,12 @@ func UpdateResource(ctx context.Context, client splcommon.ControllerClient, obj 
 }
 
 // DeleteResource deletes an existing Kubernetes resource using the REST API.
-func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject) error {
+func DeleteResource(ctx context.Context, client splcommon.ControllerClient, obj splcommon.MetaObject, opts ...k8sClient.DeleteOption) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("DeleteResource").WithValues(
 		"name", obj.GetObjectMeta().GetName(),
 		"namespace", obj.GetObjectMeta().GetNamespace())
-	err := client.Delete(ctx, obj)
+	err := client.Delete(ctx, obj, opts...)
 
 	if err != nil && !errors.IsAlreadyExists(err) {
 		scopedLog.Error(err, "Failed to delete resource", "kind", obj.GetObjectKind())

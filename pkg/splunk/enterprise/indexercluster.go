@@ -36,7 +36,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -788,9 +787,16 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	if mgr.c == nil {
 		mgr.c = c
 	}
+
+	// Get eventPublisher from context
+	var eventPublisher splcommon.K8EventPublisher
+	if ep := ctx.Value(splcommon.EventPublisherKey); ep != nil {
+		eventPublisher = ep.(splcommon.K8EventPublisher)
+	}
+
 	// update statefulset, if necessary
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady || mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
-		_, err = splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+		_, err = splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet, eventPublisher)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
@@ -820,6 +826,10 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
+// NOTE: Unlike decommission(), this method is more defensive about bounds checking because scale-down operations
+// can be triggered on out-of-sync state (e.g., manual pod deletion). The decommission() method can safely return
+// true for out-of-bounds cases since there's nothing to decommission, but PrepareScaleDown must actually remove
+// the peer from the Cluster Manager, so it uses a fallback mechanism to query CM directly when status is stale.
 func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
 	// first, decommission indexer peer with enforceCounts=true; this will rebalance buckets across other peers
 	complete, err := mgr.decommission(ctx, n, true)
@@ -832,6 +842,32 @@ func (mgr *indexerClusterPodManager) PrepareScaleDown(ctx context.Context, n int
 
 	// next, remove the peer
 	c := mgr.getClusterManagerClient(ctx)
+
+	// Capture peers length once to avoid race conditions from concurrent CR status updates
+	peersLen := int32(len(mgr.cr.Status.Peers))
+
+	// The first case: Peer index is out of bounds - this can happen when pods are deleted manually
+	// but the CR status hasn't updated yet. Fall back to querying CM directly.
+	// The second case: Peer ID is empty - this can happen after certain failures.
+	// In both cases, we use the peer name to query CM directly.
+	if n >= peersLen || (n < peersLen && mgr.cr.Status.Peers[n].ID == "") {
+		reason := "out-of-bounds"
+		if n < peersLen {
+			reason = "empty ID"
+		}
+
+		peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
+		mgr.log.Info("Using fallback to query Cluster Manager directly",
+			"peerIndex", n, "peerName", peerName, "statusPeersLength", peersLen, "reason", reason)
+
+		err := mgr.cleanupPeerFromClusterManager(ctx, peerName)
+		if err != nil {
+			return false, fmt.Errorf("failed to remove peer %s (%s at index %d, peers length %d): %w", peerName, reason, n, peersLen, err)
+		}
+		return true, nil
+	}
+
+	// Normal path: use peer ID from status
 	return true, c.RemoveIndexerClusterPeer(mgr.cr.Status.Peers[n].ID)
 }
 
@@ -853,8 +889,20 @@ func (mgr *indexerClusterPodManager) FinishRecycle(ctx context.Context, n int32)
 }
 
 // decommission for indexerClusterPodManager decommissions an indexer pod; it returns true when ready
+// NOTE: This method returns true for out-of-bounds cases because there's no peer state to track or decommission.
+// This differs from PrepareScaleDown which must actively remove the peer from CM and uses a fallback query mechanism.
 func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, enforceCounts bool) (bool, error) {
 	peerName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), n)
+
+	// Bounds check to prevent panic when accessing Status.Peers array
+	numPeers := int32(len(mgr.cr.Status.Peers))
+	if n >= numPeers {
+		// If peer index is out of bounds, there's no status entry to track decommission state.
+		// Return true to indicate decommission is complete - nothing to decommission.
+		mgr.log.Info("Peer index out of bounds in Status.Peers - treating as decommission complete",
+			"peerIndex", n, "peerName", peerName, "peersLength", numPeers)
+		return true, nil
+	}
 
 	switch mgr.cr.Status.Peers[n].Status {
 	case "Up":
@@ -888,12 +936,51 @@ func (mgr *indexerClusterPodManager) decommission(ctx context.Context, n int32, 
 		return true, nil
 
 	case "": // this can happen after the peer has been removed from the indexer cluster
-		mgr.log.Info("Peer has empty ID", "peerName", peerName)
-		return false, nil
+		mgr.log.Info("Peer has empty status - treating as decommission complete", "peerName", peerName)
+		return true, nil
 	}
 
 	// unhandled status
 	return false, fmt.Errorf("Status=%s", mgr.cr.Status.Peers[n].Status)
+}
+
+// cleanupPeerFromClusterManager removes a peer directly from the Cluster Manager by querying for the peer by name.
+// This is a fallback mechanism used when the CR status is stale or out of sync (e.g., after manual pod deletion).
+// It queries the Cluster Manager for all peers, finds the peer matching the given name, and removes it.
+// Returns nil if the peer is successfully removed or if the peer is not found (already removed).
+// Returns an error if the Cluster Manager query fails or if peer removal fails.
+func (mgr *indexerClusterPodManager) cleanupPeerFromClusterManager(ctx context.Context, peerName string) error {
+	mgr.log.Info("Attempting direct cleanup from Cluster Manager using peer name fallback",
+		"peerName", peerName, "reason", "CR status is stale or out of sync")
+
+	// Get all peers from the Cluster Manager
+	peers, err := GetClusterManagerPeersCall(ctx, mgr)
+	if err != nil {
+		return fmt.Errorf("failed to get peers from Cluster Manager: %w", err)
+	}
+
+	// Look for the peer by name (peers map uses peer name as key, but we also check Label field)
+	peerInfo, found := peers[peerName]
+	if !found {
+		// Peer not found in CM - this is OK, it may have already been removed
+		mgr.log.Info("Peer not found in Cluster Manager, likely already removed",
+			"peerName", peerName)
+		return nil
+	}
+
+	// Found the peer, now remove it using its ID
+	mgr.log.Info("Found peer in Cluster Manager, removing it",
+		"peerName", peerName, "peerID", peerInfo.ID, "peerStatus", peerInfo.Status)
+
+	c := mgr.getClusterManagerClient(ctx)
+	err = c.RemoveIndexerClusterPeer(peerInfo.ID)
+	if err != nil {
+		return fmt.Errorf("failed to remove peer %s (ID: %s) from Cluster Manager: %w", peerName, peerInfo.ID, err)
+	}
+
+	mgr.log.Info("Successfully removed peer from Cluster Manager",
+		"peerName", peerName, "peerID", peerInfo.ID)
+	return nil
 }
 
 // getClient for indexerClusterPodManager returns a SplunkClient for the member n
@@ -1082,7 +1169,7 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 }
 
 // helper function to get the list of IndexerCluster types in the current namespace
-func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.IndexerClusterList, error) {
+func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.IndexerClusterList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getIndexerClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 

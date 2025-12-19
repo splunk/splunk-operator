@@ -98,6 +98,43 @@ func getSplunkLabels(instanceIdentifier string, instanceType InstanceType, partO
 	return labels
 }
 
+// getFSGroupChangePolicy returns the fsGroupChangePolicy to use based on precedence:
+// 1. Annotation value (if valid)
+// 2. Spec field value (if set)
+// 3. Default value (OnRootMismatch)
+// Invalid annotation values are logged as warnings and ignored.
+func getFSGroupChangePolicy(ctx context.Context, annotations map[string]string, specPolicy *corev1.PodFSGroupChangePolicy) *corev1.PodFSGroupChangePolicy {
+	reqLogger := log.FromContext(ctx)
+
+	// Check annotation first (highest precedence)
+	if annotations != nil {
+		if annotationValue, exists := annotations[splctrl.FSGroupChangePolicyAnnotation]; exists {
+			switch annotationValue {
+			case string(corev1.FSGroupChangeAlways):
+				policy := corev1.FSGroupChangeAlways
+				return &policy
+			case string(corev1.FSGroupChangeOnRootMismatch):
+				policy := corev1.FSGroupChangeOnRootMismatch
+				return &policy
+			default:
+				reqLogger.Info("Invalid fsGroupChangePolicy annotation value, falling back to spec or default",
+					"annotation", splctrl.FSGroupChangePolicyAnnotation,
+					"value", annotationValue,
+					"validValues", []string{"Always", "OnRootMismatch"})
+			}
+		}
+	}
+
+	// Check spec field (second precedence)
+	if specPolicy != nil {
+		return specPolicy
+	}
+
+	// Return default (lowest precedence)
+	defaultPolicy := corev1.FSGroupChangeOnRootMismatch
+	return &defaultPolicy
+}
+
 // getSplunkVolumeClaims returns a standard collection of Kubernetes volume claims.
 func getSplunkVolumeClaims(cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec, labels map[string]string, volumeType string, adminManagedPV bool) (corev1.PersistentVolumeClaim, error) {
 	var storageCapacity resource.Quantity
@@ -897,12 +934,12 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
 	runAsNonRoot := true
-	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
+	fsGroupChangePolicy := getFSGroupChangePolicy(ctx, cr.GetAnnotations(), spec.FSGroupChangePolicy)
 	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
 		RunAsUser:           &runAsUser,
 		FSGroup:             &fsGroup,
 		RunAsNonRoot:        &runAsNonRoot,
-		FSGroupChangePolicy: &fsGroupChangePolicy,
+		FSGroupChangePolicy: fsGroupChangePolicy,
 	}
 
 	livenessProbe := getLivenessProbe(ctx, cr, instanceType, spec)
