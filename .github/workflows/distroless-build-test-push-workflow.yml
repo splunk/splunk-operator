@@ -11,14 +11,11 @@ on:
     - main
     - develop
 jobs:
+  approval-gate:
+    uses: ./.github/workflows/approval-gate.yml
   check-formating:
     runs-on: ubuntu-latest
-    environment: ${{
-        (github.event_name == 'pull_request_target' &&
-        !contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association))
-        && 'external-contributor-approval'
-        || ''
-      }}
+    needs: approval-gate
     steps:
       - uses: actions/checkout@v4
         with:
