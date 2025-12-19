@@ -24,6 +24,7 @@ jobs:
       - name: Approval status
         run: |
           echo "Event: ${{ github.event_name }}"
+          echo "Pull request: ${{ github.event.pull_request }}"
           echo "Author association: ${{ github.event.pull_request.author_association }}"
           echo "Approval granted or not required"
 
