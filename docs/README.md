@@ -21,7 +21,7 @@ deploy and use the latest release, please visit the published
 [Splunk Operator documentation site](https://splunk.github.io/splunk-operator/)
 or review the in-repo [Getting Started Documentation](GettingStarted.html).
 
-## Splunk General Terms Acceptance
+## Splunk General Terms Acceptance!
 
 Starting with operator version 3.0.0, which includes support for Splunk Enterprise version 10.x, an additional Docker-Splunk specific parameter is required to start containers. **This is a breaking change, and user action is required.**
 
