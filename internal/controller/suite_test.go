@@ -98,7 +98,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		Scheme: clientgoscheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	if err := (&BusReconciler{
+	if err := (&QueueReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {

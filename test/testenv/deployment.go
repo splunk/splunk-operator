@@ -431,9 +431,9 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 }
 
 // DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string, bus, lms corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IndexerCluster, error) {
+func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string, queue, lms corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
-	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage, bus, lms, serviceAccountName)
+	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage, queue, lms, serviceAccountName)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
@@ -445,10 +445,10 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseMana
 }
 
 // DeployIngestorCluster deploys the ingestor cluster
-func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, count int, bus, lms corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IngestorCluster, error) {
+func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, count int, queue, lms corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IngestorCluster, error) {
 	d.testenv.Log.Info("Deploying ingestor cluster", "name", name)
 
-	ingestor := newIngestorCluster(name, d.testenv.namespace, count, d.testenv.splunkImage, bus, lms, serviceAccountName)
+	ingestor := newIngestorCluster(name, d.testenv.namespace, count, d.testenv.splunkImage, queue, lms, serviceAccountName)
 	pdata, _ := json.Marshal(ingestor)
 
 	d.testenv.Log.Info("ingestor cluster spec", "cr", string(pdata))
@@ -460,20 +460,20 @@ func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, cou
 	return deployed.(*enterpriseApi.IngestorCluster), err
 }
 
-// DeployBus deploys the bus
-func (d *Deployment) DeployBus(ctx context.Context, name string, bus enterpriseApi.BusSpec) (*enterpriseApi.Bus, error) {
-	d.testenv.Log.Info("Deploying bus", "name", name)
+// DeployQueue deploys the queue
+func (d *Deployment) DeployQueue(ctx context.Context, name string, queue enterpriseApi.QueueSpec) (*enterpriseApi.Queue, error) {
+	d.testenv.Log.Info("Deploying queue", "name", name)
 
-	busCfg := newBus(name, d.testenv.namespace, bus)
-	pdata, _ := json.Marshal(busCfg)
+	queueCfg := newQueue(name, d.testenv.namespace, queue)
+	pdata, _ := json.Marshal(queueCfg)
 
-	d.testenv.Log.Info("bus spec", "cr", string(pdata))
-	deployed, err := d.deployCR(ctx, name, busCfg)
+	d.testenv.Log.Info("queue spec", "cr", string(pdata))
+	deployed, err := d.deployCR(ctx, name, queueCfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return deployed.(*enterpriseApi.Bus), err
+	return deployed.(*enterpriseApi.Queue), err
 }
 
 // DeployLargeMessageStore deploys the large message store
@@ -648,13 +648,13 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			ucr := cr.(*enterpriseApi.IngestorCluster)
 			current.Spec = ucr.Spec
 			cobject = current
-		case "Bus":
-			current := &enterpriseApi.Bus{}
+		case "Queue":
+			current := &enterpriseApi.Queue{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
 			if err != nil {
 				return err
 			}
-			ucr := cr.(*enterpriseApi.Bus)
+			ucr := cr.(*enterpriseApi.Queue)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "LargeMessageStore":

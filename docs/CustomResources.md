@@ -18,7 +18,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
-  - [Bus Resource Spec Parameters](#bus-resource-spec-parameters)
+  - [Queue Resource Spec Parameters](#queue-resource-spec-parameters)
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
   - [IngestorCluster Resource Spec Parameters](#ingestorcluster-resource-spec-parameters)
@@ -281,13 +281,13 @@ spec:
       cpu: "4"
 ```
 
-## Bus Resource Spec Parameters
+## Queue Resource Spec Parameters
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
-kind: Bus
+kind: Queue
 metadata:
-  name: bus
+  name: queue
 spec:
   replicas: 3
   provider: sqs
@@ -298,14 +298,14 @@ spec:
     dlq: sqs-dlq-test
 ```
 
-Bus inputs can be found in the table below. As of now, only SQS provider of message bus is supported.
+Queue inputs can be found in the table below. As of now, only SQS provider of message queue is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of message bus (Allowed values: sqs) |
-| sqs   | SQS | [Required if provider=sqs] SQS message bus inputs  |
+| provider   | string | [Required] Provider of message queue (Allowed values: sqs) |
+| sqs   | SQS | [Required if provider=sqs] SQS message queue inputs  |
 
-SQS message bus inputs can be found in the table below.
+SQS message queue inputs can be found in the table below.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
@@ -314,7 +314,7 @@ SQS message bus inputs can be found in the table below.
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
 
-Change of any of the bus inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
 ## ClusterManager Resource Spec Parameters
 ClusterManager resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
@@ -375,12 +375,12 @@ metadata:
   name: ic
 spec:
   replicas: 3
-  busRef: 
-    name: bus
+  queueRef: 
+    name: queue
   largeMessageStoreRef:
     name: lms
 ```
-Note:  `busRef` and `largeMessageStoreRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Bus and LargeMessageStore resources.
+Note:  `queueRef` and `largeMessageStoreRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Queue and LargeMessageStore resources.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
@@ -418,7 +418,7 @@ S3 large message store inputs can be found in the table below.
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
 | endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
 
-Change of any of the large message bus inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+Change of any of the large message queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
 ## MonitoringConsole Resource Spec Parameters
 
@@ -531,7 +531,7 @@ The Splunk Operator controller reconciles every Splunk Enterprise CR. However, t
 
 | Customer Resource Definition | Annotation |
 | ----------- | --------- |
-| bus.enterprise.splunk.com | "bus.enterprise.splunk.com/paused" |
+| queue.enterprise.splunk.com | "queue.enterprise.splunk.com/paused" |
 | clustermaster.enterprise.splunk.com | "clustermaster.enterprise.splunk.com/paused" |
 | clustermanager.enterprise.splunk.com | "clustermanager.enterprise.splunk.com/paused" |
 | indexercluster.enterprise.splunk.com | "indexercluster.enterprise.splunk.com/paused" |

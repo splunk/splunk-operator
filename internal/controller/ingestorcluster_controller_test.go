@@ -71,12 +71,12 @@ var _ = Describe("IngestorCluster Controller", func() {
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			bus := &enterpriseApi.Bus{
+			queue := &enterpriseApi.Queue{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "bus",
+					Name:      "queue",
 					Namespace: nsSpecs.Name,
 				},
-				Spec: enterpriseApi.BusSpec{
+				Spec: enterpriseApi.QueueSpec{
 					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
 						Name:     "smartbus-queue",
@@ -99,7 +99,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					},
 				},
 			}
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, bus)
+			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, queue)
 			icSpec, _ := GetIngestorCluster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
@@ -119,12 +119,12 @@ var _ = Describe("IngestorCluster Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			bus := &enterpriseApi.Bus{
+			queue := &enterpriseApi.Queue{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "bus",
+					Name:      "queue",
 					Namespace: nsSpecs.Name,
 				},
-				Spec: enterpriseApi.BusSpec{
+				Spec: enterpriseApi.QueueSpec{
 					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
 						Name:     "smartbus-queue",
@@ -147,7 +147,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					},
 				},
 			}
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, bus)
+			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, queue)
 			DeleteIngestorCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
@@ -220,7 +220,7 @@ func GetIngestorCluster(name string, namespace string) (*enterpriseApi.IngestorC
 	return ic, err
 }
 
-func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, lms *enterpriseApi.LargeMessageStore, bus *enterpriseApi.Bus) *enterpriseApi.IngestorCluster {
+func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, lms *enterpriseApi.LargeMessageStore, queue *enterpriseApi.Queue) *enterpriseApi.IngestorCluster {
 	By("Expecting IngestorCluster custom resource to be created successfully")
 
 	key := types.NamespacedName{
@@ -240,9 +240,9 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 				},
 			},
 			Replicas: 3,
-			BusRef: corev1.ObjectReference{
-				Name:      bus.Name,
-				Namespace: bus.Namespace,
+			QueueRef: corev1.ObjectReference{
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
 			},
 			LargeMessageStoreRef: corev1.ObjectReference{
 				Name:      lms.Name,

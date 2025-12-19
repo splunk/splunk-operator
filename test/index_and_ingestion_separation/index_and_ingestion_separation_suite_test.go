@@ -39,7 +39,7 @@ var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
 
-	bus = enterpriseApi.BusSpec{
+	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
 			Name:     "test-queue",
@@ -85,7 +85,7 @@ var (
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
 
-	updateBus = enterpriseApi.BusSpec{
+	updateQueue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
 			Name:     "test-queue-updated",

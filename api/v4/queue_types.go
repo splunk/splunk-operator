@@ -23,14 +23,14 @@ import (
 )
 
 const (
-	// BusPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// QueuePausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	BusPausedAnnotation = "bus.enterprise.splunk.com/paused"
+	QueuePausedAnnotation = "queue.enterprise.splunk.com/paused"
 )
 
 // +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
-// BusSpec defines the desired state of Bus
-type BusSpec struct {
+// QueueSpec defines the desired state of Queue
+type QueueSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=sqs
 	// Provider of queue resources
@@ -63,9 +63,9 @@ type SQSSpec struct {
 	Endpoint string `json:"endpoint"`
 }
 
-// BusStatus defines the observed state of Bus
-type BusStatus struct {
-	// Phase of the bus
+// QueueStatus defines the observed state of Queue
+type QueueStatus struct {
+	// Phase of the queue
 	Phase Phase `json:"phase"`
 
 	// Resource revision tracker
@@ -78,27 +78,27 @@ type BusStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// Bus is the Schema for a Splunk Enterprise bus
+// Queue is the Schema for a Splunk Enterprise queue
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=buses,scope=Namespaced,shortName=bus
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of bus"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of bus resource"
+// +kubebuilder:resource:path=queues,scope=Namespaced,shortName=queue
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of queue"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of queue resource"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
 
-// Bus is the Schema for the buses API
-type Bus struct {
+// Queue is the Schema for the queues API
+type Queue struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec   BusSpec   `json:"spec"`
-	Status BusStatus `json:"status,omitempty,omitzero"`
+	Spec   QueueSpec   `json:"spec"`
+	Status QueueStatus `json:"status,omitempty,omitzero"`
 }
 
 // DeepCopyObject implements runtime.Object
-func (in *Bus) DeepCopyObject() runtime.Object {
+func (in *Queue) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -107,20 +107,20 @@ func (in *Bus) DeepCopyObject() runtime.Object {
 
 // +kubebuilder:object:root=true
 
-// BusList contains a list of Bus
-type BusList struct {
+// QueueList contains a list of Queue
+type QueueList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Bus `json:"items"`
+	Items           []Queue `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Bus{}, &BusList{})
+	SchemeBuilder.Register(&Queue{}, &QueueList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to Kubernetes API
-func (bc *Bus) NewEvent(eventType, reason, message string) corev1.Event {
+func (bc *Queue) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -128,7 +128,7 @@ func (bc *Bus) NewEvent(eventType, reason, message string) corev1.Event {
 			Namespace:    bc.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Bus",
+			Kind:       "Queue",
 			Namespace:  bc.Namespace,
 			Name:       bc.Name,
 			UID:        bc.UID,
@@ -137,12 +137,12 @@ func (bc *Bus) NewEvent(eventType, reason, message string) corev1.Event {
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-bus-controller",
+			Component: "splunk-queue-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/bus-controller",
+		ReportingController: "enterprise.splunk.com/queue-controller",
 	}
 }

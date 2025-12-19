@@ -6,11 +6,11 @@ metadata:
   name: ingestor
 spec:
   replicas: 4
-  busRef:
-    name: bus
+  queueRef:
+    name: queue
 status:
   phase: Ready
-  bus:
+  queue:
     provider: sqs
     sqs:
       name: sqs-test

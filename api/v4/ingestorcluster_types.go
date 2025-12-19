@@ -40,8 +40,8 @@ type IngestorClusterSpec struct {
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
 	// +kubebuilder:validation:Required
-	// Bus reference
-	BusRef corev1.ObjectReference `json:"busRef"`
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +kubebuilder:validation:Required
 	// Large Message Store reference
@@ -74,8 +74,8 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus
-	Bus *BusSpec `json:"bus,omitempty"`
+	// Queue
+	Queue *QueueSpec `json:"queue,omitempty"`
 
 	// Large Message Store
 	LargeMessageStore *LargeMessageStoreSpec `json:"largeMessageStore,omitempty"`

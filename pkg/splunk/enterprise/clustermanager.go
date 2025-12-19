@@ -22,7 +22,6 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
@@ -427,9 +426,9 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 
 	return splunkClient.BundlePush(true)
 }
-
+	
 // helper function to get the list of ClusterManager types in the current namespace
-func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (int, error) {
+func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getClusterManagerList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 

@@ -5,9 +5,9 @@ splunk-operator:
     persistentVolumeClaim:
       storageClassName: gp2
 
-bus:
+queue:
   enabled: true
-  name: bus
+  name: queue
   provider: sqs
   sqs:
     name: sqs-test
@@ -27,8 +27,8 @@ ingestorCluster:
   enabled: true
   name: ingestor
   replicaCount: 3
-  busRef:
-    name: bus
+  queueRef:
+    name: queue
   largeMessageStoreRef:
     name: lms
 
@@ -43,7 +43,7 @@ indexerCluster:
   replicaCount: 3
   clusterManagerRef:
     name: cm
-  busRef:
-    name: bus
+  queueRef:
+    name: queue
   largeMessageStoreRef:
     name: lms

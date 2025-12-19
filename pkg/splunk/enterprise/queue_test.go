@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestApplyBus(t *testing.T) {
+func TestApplyQueue(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -39,16 +39,16 @@ func TestApplyBus(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	bus := &enterpriseApi.Bus{
+	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Bus",
+			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "bus",
+			Name:      "queue",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.BusSpec{
+		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
 				Name:     "test-queue",
@@ -58,12 +58,12 @@ func TestApplyBus(t *testing.T) {
 			},
 		},
 	}
-	c.Create(ctx, bus)
+	c.Create(ctx, queue)
 
-	// ApplyBus
-	result, err := ApplyBus(ctx, c, bus)
+	// ApplyQueue
+	result, err := ApplyQueue(ctx, c, queue)
 	assert.NoError(t, err)
 	assert.True(t, result.Requeue)
-	assert.NotEqual(t, enterpriseApi.PhaseError, bus.Status.Phase)
-	assert.Equal(t, enterpriseApi.PhaseReady, bus.Status.Phase)
+	assert.NotEqual(t, enterpriseApi.PhaseError, queue.Status.Phase)
+	assert.Equal(t, enterpriseApi.PhaseReady, queue.Status.Phase)
 }

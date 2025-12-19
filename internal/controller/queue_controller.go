@@ -36,34 +36,34 @@ import (
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
-// BusReconciler reconciles a Bus object
-type BusReconciler struct {
+// QueueReconciler reconciles a Queue object
+type QueueReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=buses,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=buses/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=buses/finalizers,verbs=update
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the Bus object against the actual cluster state, and then
+// the Queue object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
-func (r *BusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Bus")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "Bus")
+func (r *QueueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "Queue")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "Queue")
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("bus", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("queue", req.NamespacedName)
 
-	// Fetch the Bus
-	instance := &enterpriseApi.Bus{}
+	// Fetch the Queue
+	instance := &enterpriseApi.Queue{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -74,20 +74,20 @@ func (r *BusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load bus data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load queue data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.BusPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.QueuePausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyBus(ctx, r.Client, instance)
+	result, err := ApplyQueue(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -95,14 +95,14 @@ func (r *BusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return result, err
 }
 
-var ApplyBus = func(ctx context.Context, client client.Client, instance *enterpriseApi.Bus) (reconcile.Result, error) {
-	return enterprise.ApplyBus(ctx, client, instance)
+var ApplyQueue = func(ctx context.Context, client client.Client, instance *enterpriseApi.Queue) (reconcile.Result, error) {
+	return enterprise.ApplyQueue(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *BusReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *QueueReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.Bus{}).
+		For(&enterpriseApi.Queue{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),

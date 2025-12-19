@@ -128,7 +128,7 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
-  kind: Bus
+  kind: Queue
   path: github.com/splunk/splunk-operator/api/v4
   version: v4
 - api:

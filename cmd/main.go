@@ -230,11 +230,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "IngestorCluster")
 		os.Exit(1)
 	}
-	if err := (&controller.BusReconciler{
+	if err := (&controller.QueueReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Bus")
+		setupLog.Error(err, "unable to create controller", "controller", "Queue")
 		os.Exit(1)
 	}
 	if err := (&controller.LargeMessageStoreReconciler{

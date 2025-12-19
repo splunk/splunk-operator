@@ -350,7 +350,7 @@ indexerCluster:
   #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
   #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
-  busRef: {}
+  queueRef: {}
 
   largeMessageStoreRef: {}
 
@@ -901,6 +901,6 @@ ingestorCluster:
 
   affinity: {}
 
-  busRef: {}
+  queueRef: {}
 
   largeMessageStoreRef: {}

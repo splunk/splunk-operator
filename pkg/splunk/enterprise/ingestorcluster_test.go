@@ -65,16 +65,16 @@ func TestApplyIngestorCluster(t *testing.T) {
 	// Object definitions
 	provider := "sqs_smartbus"
 
-	bus := &enterpriseApi.Bus{
+	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Bus",
+			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "bus",
+			Name:      "queue",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.BusSpec{
+		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
 				Name:     "test-queue",
@@ -84,7 +84,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 			},
 		},
 	}
-	c.Create(ctx, bus)
+	c.Create(ctx, queue)
 
 	lms := enterpriseApi.LargeMessageStore{
 		TypeMeta: metav1.TypeMeta{
@@ -119,9 +119,9 @@ func TestApplyIngestorCluster(t *testing.T) {
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				Mock: true,
 			},
-			BusRef: corev1.ObjectReference{
-				Name:      bus.Name,
-				Namespace: bus.Namespace,
+			QueueRef: corev1.ObjectReference{
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
 			},
 			LargeMessageStoreRef: corev1.ObjectReference{
 				Name:      lms.Name,
@@ -285,18 +285,18 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), bus.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
 		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
 	}
 
 	body := buildFormBody(propertyKVList)
-	addRemoteQueueHandlersForIngestor(mockHTTPClient, cr, bus, cr.Status.ReadyReplicas, "conf-outputs", body)
+	addRemoteQueueHandlersForIngestor(mockHTTPClient, cr, queue, cr.Status.ReadyReplicas, "conf-outputs", body)
 
 	// default-mode.conf
 	propertyKVList = [][]string{
@@ -333,15 +333,15 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	// Object definitions
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
-	bus := enterpriseApi.Bus{
+	queue := enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Bus",
+			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "bus",
+			Name: "queue",
 		},
-		Spec: enterpriseApi.BusSpec{
+		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
 				Name:     "test-queue",
@@ -362,8 +362,8 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 2,
-			BusRef: corev1.ObjectReference{
-				Name: bus.Name,
+			QueueRef: corev1.ObjectReference{
+				Name: queue.Name,
 			},
 		},
 	}
@@ -416,18 +416,18 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	test(`{"kind":"StatefulSet","apiVersion":"apps/v1","metadata":{"name":"splunk-test-ingestor","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"ownerReferences":[{"apiVersion":"","kind":"IngestorCluster","name":"test","uid":"","controller":true}]},"spec":{"replicas":3,"selector":{"matchLabels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor"}},"template":{"metadata":{"creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"},"annotations":{"traffic.sidecar.istio.io/excludeOutboundPorts":"8089,8191,9997","traffic.sidecar.istio.io/includeInboundPorts":"8000,8088"}},"spec":{"volumes":[{"name":"splunk-test-probe-configmap","configMap":{"name":"splunk-test-probe-configmap","defaultMode":365}},{"name":"mnt-splunk-secrets","secret":{"secretName":"splunk-test-ingestor-secret-v1","defaultMode":420}}],"containers":[{"name":"splunk","image":"splunk/splunk","ports":[{"name":"http-splunkweb","containerPort":8000,"protocol":"TCP"},{"name":"http-hec","containerPort":8088,"protocol":"TCP"},{"name":"https-splunkd","containerPort":8089,"protocol":"TCP"},{"name":"tcp-s2s","containerPort":9997,"protocol":"TCP"},{"name":"user-defined","containerPort":32000,"protocol":"UDP"}],"env":[{"name":"TEST_ENV_VAR","value":"test_value"},{"name":"SPLUNK_HOME","value":"/opt/splunk"},{"name":"SPLUNK_START_ARGS","value":"--accept-license"},{"name":"SPLUNK_DEFAULTS_URL","value":"/mnt/splunk-secrets/default.yml"},{"name":"SPLUNK_HOME_OWNERSHIP_ENFORCEMENT","value":"false"},{"name":"SPLUNK_ROLE","value":"splunk_standalone"},{"name":"SPLUNK_DECLARATIVE_ADMIN_PASSWORD","value":"true"},{"name":"SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH","value":"/tmp/splunk_operator_k8s/probes/k8_liveness_driver.sh"},{"name":"SPLUNK_GENERAL_TERMS","value":"--accept-sgt-current-at-splunk-com"},{"name":"SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH","value":"true"}],"resources":{"limits":{"cpu":"4","memory":"8Gi"},"requests":{"cpu":"100m","memory":"512Mi"}},"volumeMounts":[{"name":"pvc-etc","mountPath":"/opt/splunk/etc"},{"name":"pvc-var","mountPath":"/opt/splunk/var"},{"name":"splunk-test-probe-configmap","mountPath":"/mnt/probes"},{"name":"mnt-splunk-secrets","mountPath":"/mnt/splunk-secrets"}],"livenessProbe":{"exec":{"command":["/mnt/probes/livenessProbe.sh"]},"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3},"readinessProbe":{"exec":{"command":["/mnt/probes/readinessProbe.sh"]},"initialDelaySeconds":10,"timeoutSeconds":5,"periodSeconds":5,"failureThreshold":3},"startupProbe":{"exec":{"command":["/mnt/probes/startupProbe.sh"]},"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12},"imagePullPolicy":"IfNotPresent","securityContext":{"capabilities":{"add":["NET_BIND_SERVICE"],"drop":["ALL"]},"privileged":false,"runAsUser":41812,"runAsNonRoot":true,"allowPrivilegeEscalation":false,"seccompProfile":{"type":"RuntimeDefault"}}}],"serviceAccountName":"defaults","securityContext":{"runAsUser":41812,"runAsNonRoot":true,"fsGroup":41812,"fsGroupChangePolicy":"OnRootMismatch"},"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"podAffinityTerm":{"labelSelector":{"matchExpressions":[{"key":"app.kubernetes.io/instance","operator":"In","values":["splunk-test-ingestor"]}]},"topologyKey":"kubernetes.io/hostname"}}]}},"schedulerName":"default-scheduler"}},"volumeClaimTemplates":[{"metadata":{"name":"pvc-etc","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"10Gi"}}},"status":{}},{"metadata":{"name":"pvc-var","namespace":"test","creationTimestamp":null,"labels":{"app.kubernetes.io/component":"ingestor","app.kubernetes.io/instance":"splunk-test-ingestor","app.kubernetes.io/managed-by":"splunk-operator","app.kubernetes.io/name":"ingestor","app.kubernetes.io/part-of":"splunk-test-ingestor","app.kubernetes.io/test-extra-label":"test-extra-label-value"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"100Gi"}}},"status":{}}],"serviceName":"splunk-test-ingestor-headless","podManagementPolicy":"Parallel","updateStrategy":{"type":"OnDelete"}},"status":{"replicas":0,"availableReplicas":0}}`)
 }
 
-func TestGetChangedBusFieldsForIngestor(t *testing.T) {
+func TestGetChangedQueueFieldsForIngestor(t *testing.T) {
 	provider := "sqs_smartbus"
 
-	bus := enterpriseApi.Bus{
+	queue := enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Bus",
+			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "bus",
+			Name: "queue",
 		},
-		Spec: enterpriseApi.BusSpec{
+		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
 				Name:     "test-queue",
@@ -457,8 +457,8 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 
 	newCR := &enterpriseApi.IngestorCluster{
 		Spec: enterpriseApi.IngestorClusterSpec{
-			BusRef: corev1.ObjectReference{
-				Name: bus.Name,
+			QueueRef: corev1.ObjectReference{
+				Name: queue.Name,
 			},
 			LargeMessageStoreRef: corev1.ObjectReference{
 				Name: lms.Name,
@@ -467,21 +467,21 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 		Status: enterpriseApi.IngestorClusterStatus{},
 	}
 
-	busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, false)
+	queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &lms, newCR, false)
 
-	assert.Equal(t, 10, len(busChangedFields))
+	assert.Equal(t, 10, len(queueChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), bus.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
 		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
-	}, busChangedFields)
+	}, queueChangedFields)
 
 	assert.Equal(t, 6, len(pipelineChangedFields))
 	assert.Equal(t, [][]string{
@@ -494,19 +494,19 @@ func TestGetChangedBusFieldsForIngestor(t *testing.T) {
 	}, pipelineChangedFields)
 }
 
-func TestHandlePushBusChange(t *testing.T) {
+func TestHandlePushQueueChange(t *testing.T) {
 	// Object definitions
 	provider := "sqs_smartbus"
 
-	bus := enterpriseApi.Bus{
+	queue := enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Bus",
+			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "bus",
+			Name: "queue",
 		},
-		Spec: enterpriseApi.BusSpec{
+		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
 				Name:     "test-queue",
@@ -543,8 +543,8 @@ func TestHandlePushBusChange(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
-			BusRef: corev1.ObjectReference{
-				Name: bus.Name,
+			QueueRef: corev1.ObjectReference{
+				Name: queue.Name,
 			},
 			LargeMessageStoreRef: corev1.ObjectReference{
 				Name: lms.Name,
@@ -553,7 +553,7 @@ func TestHandlePushBusChange(t *testing.T) {
 		Status: enterpriseApi.IngestorClusterStatus{
 			Replicas:          3,
 			ReadyReplicas:     3,
-			Bus:               &enterpriseApi.BusSpec{},
+			Queue:             &enterpriseApi.QueueSpec{},
 			LargeMessageStore: &enterpriseApi.LargeMessageStoreSpec{},
 		},
 	}
@@ -618,7 +618,7 @@ func TestHandlePushBusChange(t *testing.T) {
 	// Negative test case: secret not found
 	mgr := &ingestorClusterPodManager{}
 
-	err := mgr.handlePushBusChange(ctx, newCR, bus, lms, c)
+	err := mgr.handlePushQueueChange(ctx, newCR, queue, lms, c)
 	assert.NotNil(t, err)
 
 	// Mock secret
@@ -627,31 +627,31 @@ func TestHandlePushBusChange(t *testing.T) {
 	mockHTTPClient := &spltest.MockHTTPClient{}
 
 	// Negative test case: failure in creating remote queue stanza
-	mgr = newTestPushBusPipelineManager(mockHTTPClient)
+	mgr = newTestPushQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePushBusChange(ctx, newCR, bus, lms, c)
+	err = mgr.handlePushQueueChange(ctx, newCR, queue, lms, c)
 	assert.NotNil(t, err)
 
 	// outputs.conf
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), bus.Spec.SQS.Region},
-		{fmt.Sprintf("remote_queue.%s.endpoint", provider), bus.Spec.SQS.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
-		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), bus.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.max_count.%s.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
 		{fmt.Sprintf("remote_queue.%s.send_interval", provider), "5s"},
 	}
 
 	body := buildFormBody(propertyKVList)
-	addRemoteQueueHandlersForIngestor(mockHTTPClient, newCR, &bus, newCR.Status.ReadyReplicas, "conf-outputs", body)
+	addRemoteQueueHandlersForIngestor(mockHTTPClient, newCR, &queue, newCR.Status.ReadyReplicas, "conf-outputs", body)
 
 	// Negative test case: failure in creating remote queue stanza
-	mgr = newTestPushBusPipelineManager(mockHTTPClient)
+	mgr = newTestPushQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePushBusChange(ctx, newCR, bus, lms, c)
+	err = mgr.handlePushQueueChange(ctx, newCR, queue, lms, c)
 	assert.NotNil(t, err)
 
 	// default-mode.conf
@@ -678,13 +678,13 @@ func TestHandlePushBusChange(t *testing.T) {
 		}
 	}
 
-	mgr = newTestPushBusPipelineManager(mockHTTPClient)
+	mgr = newTestPushQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePushBusChange(ctx, newCR, bus, lms, c)
+	err = mgr.handlePushQueueChange(ctx, newCR, queue, lms, c)
 	assert.Nil(t, err)
 }
 
-func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IngestorCluster, bus *enterpriseApi.Bus, replicas int32, confName, body string) {
+func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, cr *enterpriseApi.IngestorCluster, queue *enterpriseApi.Queue, replicas int32, confName, body string) {
 	for i := 0; i < int(replicas); i++ {
 		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.GetName(), i)
 		baseURL := fmt.Sprintf(
@@ -692,18 +692,18 @@ func addRemoteQueueHandlersForIngestor(mockHTTPClient *spltest.MockHTTPClient, c
 			podName, cr.GetName(), cr.GetNamespace(), confName,
 		)
 
-		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name))
+		createReqBody := fmt.Sprintf("name=%s", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name))
 		reqCreate, _ := http.NewRequest("POST", baseURL, strings.NewReader(createReqBody))
 		mockHTTPClient.AddHandler(reqCreate, 200, "", nil)
 
-		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name))
+		updateURL := fmt.Sprintf("%s/%s", baseURL, fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name))
 		reqUpdate, _ := http.NewRequest("POST", updateURL, strings.NewReader(body))
 		mockHTTPClient.AddHandler(reqUpdate, 200, "", nil)
 	}
 }
 
-func newTestPushBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *ingestorClusterPodManager {
-	newSplunkClientForPushBusPipeline := func(uri, user, pass string) *splclient.SplunkClient {
+func newTestPushQueuePipelineManager(mockHTTPClient *spltest.MockHTTPClient) *ingestorClusterPodManager {
+	newSplunkClientForPushQueuePipeline := func(uri, user, pass string) *splclient.SplunkClient {
 		return &splclient.SplunkClient{
 			ManagementURI: uri,
 			Username:      user,
@@ -712,6 +712,6 @@ func newTestPushBusPipelineManager(mockHTTPClient *spltest.MockHTTPClient) *inge
 		}
 	}
 	return &ingestorClusterPodManager{
-		newSplunkClient: newSplunkClientForPushBusPipeline,
+		newSplunkClient: newSplunkClientForPushQueuePipeline,
 	}
 }

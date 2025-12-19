@@ -54,16 +54,16 @@ func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
 				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
 			},
 			Replicas: 3,
-			BusRef: corev1.ObjectReference{
-				Name: "bus",
+			QueueRef: corev1.ObjectReference{
+				Name: "queue",
 			},
 		},
 	}
 }
 
-// NewBus returns new Bus instance with its config hash
-func NewBus(name, ns string, spec enterpriseApi.BusSpec) *enterpriseApi.Bus {
-	return &enterpriseApi.Bus{
+// NewQueue returns new Queue instance with its config hash
+func NewQueue(name, ns string, spec enterpriseApi.QueueSpec) *enterpriseApi.Queue {
+	return &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: spec,
 	}

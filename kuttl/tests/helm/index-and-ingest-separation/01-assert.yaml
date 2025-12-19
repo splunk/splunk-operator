@@ -1,9 +1,9 @@
 ---
-# assert for bus custom resource to be ready
+# assert for queue custom resource to be ready
 apiVersion: enterprise.splunk.com/v4
-kind: Bus
+kind: Queue
 metadata:
-  name: bus
+  name: queue
 spec:
   provider: sqs
   sqs:
@@ -61,11 +61,11 @@ metadata:
   name: indexer
 spec:
   replicas: 3
-  busRef:
-    name: bus
+  queueRef:
+    name: queue
 status:
   phase: Ready
-  bus:
+  queue:
     provider: sqs
     sqs:
       name: sqs-test
@@ -102,11 +102,11 @@ metadata:
   name: ingestor
 spec:
   replicas: 3
-  busRef:
-    name: bus
+  queueRef:
+    name: queue
 status:
   phase: Ready
-  bus:
+  queue:
     provider: sqs
     sqs:
       name: sqs-test

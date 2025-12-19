@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -161,8 +160,8 @@ IndexerCluster:
 		}
 		// check if cluster is multisite
 		if clusterInfo.MultiSite == "true" {
-			opts := []rclient.ListOption{
-				rclient.InNamespace(cr.GetNamespace()),
+			opts := []runtime.ListOption{
+				runtime.InNamespace(cr.GetNamespace()),
 			}
 			indexerList, err := getIndexerClusterList(ctx, c, cr, opts)
 			if err != nil {
@@ -220,8 +219,8 @@ SearchHeadCluster:
 
 		// check if a search head cluster exists with the same ClusterManager instance attached
 		searchHeadClusterInstance := enterpriseApi.SearchHeadCluster{}
-		opts := []rclient.ListOption{
-			rclient.InNamespace(cr.GetNamespace()),
+		opts := []runtime.ListOption{
+			runtime.InNamespace(cr.GetNamespace()),
 		}
 		searchHeadList, err := getSearchHeadClusterList(ctx, c, cr, opts)
 		if err != nil {

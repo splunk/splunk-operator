@@ -34,14 +34,14 @@ const (
 	IndexerClusterPausedAnnotation = "indexercluster.enterprise.splunk.com/paused"
 )
 
-// +kubebuilder:validation:XValidation:rule="has(self.busRef) == has(self.largeMessageStoreRef)",message="busRef and largeMessageStoreRef must both be set or both be empty"
+// +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.largeMessageStoreRef)",message="queueRef and largeMessageStoreRef must both be set or both be empty"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// +optional
-	// Bus reference
-	BusRef corev1.ObjectReference `json:"busRef"`
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +optional
 	// Large Message Store reference
@@ -121,8 +121,8 @@ type IndexerClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus
-	Bus *BusSpec `json:"bus,omitempty"`
+	// Queue
+	Queue *QueueSpec `json:"queue,omitempty"`
 
 	// Large Message Store
 	LargeMessageStore *LargeMessageStoreSpec `json:"largeMessageStore,omitempty"`
