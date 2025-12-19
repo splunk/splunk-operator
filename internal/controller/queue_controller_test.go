@@ -73,10 +73,10 @@ var _ = Describe("Queue Controller", func() {
 			spec := enterpriseApi.QueueSpec{
 				Provider: "sqs",
 				SQS: enterpriseApi.SQSSpec{
-					Name:     "smartbus-queue",
-					Region:   "us-west-2",
-					DLQ:      "smartbus-dlq",
-					Endpoint: "https://sqs.us-west-2.amazonaws.com",
+					Name:       "smartbus-queue",
+					AuthRegion: "us-west-2",
+					DLQ:        "smartbus-dlq",
+					Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				},
 			}
 			CreateQueue("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
@@ -102,10 +102,10 @@ var _ = Describe("Queue Controller", func() {
 			spec := enterpriseApi.QueueSpec{
 				Provider: "sqs",
 				SQS: enterpriseApi.SQSSpec{
-					Name:     "smartbus-queue",
-					Region:   "us-west-2",
-					DLQ:      "smartbus-dlq",
-					Endpoint: "https://sqs.us-west-2.amazonaws.com",
+					Name:       "smartbus-queue",
+					AuthRegion: "us-west-2",
+					DLQ:        "smartbus-dlq",
+					Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				},
 			}
 			CreateQueue("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
@@ -141,10 +141,10 @@ var _ = Describe("Queue Controller", func() {
 			spec := enterpriseApi.QueueSpec{
 				Provider: "sqs",
 				SQS: enterpriseApi.SQSSpec{
-					Name:     "smartbus-queue",
-					Region:   "us-west-2",
-					DLQ:      "smartbus-dlq",
-					Endpoint: "https://sqs.us-west-2.amazonaws.com",
+					Name:       "smartbus-queue",
+					AuthRegion: "us-west-2",
+					DLQ:        "smartbus-dlq",
+					Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				},
 			}
 			bcSpec := testutils.NewQueue("test", namespace, spec)

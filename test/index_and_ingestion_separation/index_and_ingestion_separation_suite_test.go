@@ -42,10 +42,10 @@ var (
 	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			Name:     "test-queue",
-			Region:   "us-west-2",
-			Endpoint: "https://sqs.us-west-2.amazonaws.com",
-			DLQ:      "test-dead-letter-queue",
+			Name:       "test-queue",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "test-dead-letter-queue",
 		},
 	}
 	objectStorage = enterpriseApi.ObjectStorageSpec{
@@ -88,10 +88,10 @@ var (
 	updateQueue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			Name:     "test-queue-updated",
-			Region:   "us-west-2",
-			Endpoint: "https://sqs.us-west-2.amazonaws.com",
-			DLQ:      "test-dead-letter-queue-updated",
+			Name:       "test-queue-updated",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "test-dead-letter-queue-updated",
 		},
 	}
 

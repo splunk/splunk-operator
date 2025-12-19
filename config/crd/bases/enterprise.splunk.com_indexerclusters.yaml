@@ -8396,7 +8396,7 @@ spec:
                     properties:
                       endpoint:
                         description: S3-compatible Service endpoint
-                        pattern: ^https://s3(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$
+                        pattern: ^https?://[^\s/$.?#].[^\s]*$
                         type: string
                       path:
                         description: S3 bucket path
@@ -8464,26 +8464,25 @@ spec:
                   sqs:
                     description: sqs specific inputs
                     properties:
+                      authRegion:
+                        description: Auth Region of the resources
+                        pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
+                        type: string
                       dlq:
                         description: Name of the dead letter queue resource
                         minLength: 1
                         type: string
                       endpoint:
                         description: Amazon SQS Service endpoint
-                        pattern: ^https://sqs(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$
+                        pattern: ^https?://[^\s/$.?#].[^\s]*$
                         type: string
                       name:
                         description: Name of the queue
                         minLength: 1
                         type: string
-                      region:
-                        description: Region of the resources
-                        pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
-                        type: string
                     required:
                     - dlq
                     - name
-                    - region
                     type: object
                 required:
                 - provider

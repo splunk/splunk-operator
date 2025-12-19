@@ -47,10 +47,10 @@ type SQSSpec struct {
 	// Name of the queue
 	Name string `json:"name"`
 
-	// +kubebuilder:validation:Required
+	// +optional
 	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
-	// Region of the resources
-	Region string `json:"region"`
+	// Auth Region of the resources
+	AuthRegion string `json:"authRegion"`
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -58,7 +58,7 @@ type SQSSpec struct {
 	DLQ string `json:"dlq"`
 
 	// +optional
-	// +kubebuilder:validation:Pattern=`^https://sqs(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$`
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
 	// Amazon SQS Service endpoint
 	Endpoint string `json:"endpoint"`
 }

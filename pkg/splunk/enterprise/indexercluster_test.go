@@ -1355,10 +1355,10 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -2059,10 +2059,10 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -2099,7 +2099,7 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 	assert.Equal(t, 8, len(queueChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
@@ -2111,7 +2111,7 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 	assert.Equal(t, 10, len(queueChangedFieldsOutputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
@@ -2148,10 +2148,10 @@ func TestHandlePullQueueChange(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -2192,8 +2192,8 @@ func TestHandlePullQueueChange(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ReadyReplicas:     3,
-			Queue:             &enterpriseApi.QueueSpec{},
+			ReadyReplicas: 3,
+			Queue:         &enterpriseApi.QueueSpec{},
 			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
 		},
 	}
@@ -2276,7 +2276,7 @@ func TestHandlePullQueueChange(t *testing.T) {
 
 	// outputs.conf
 	propertyKVList := [][]string{
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
@@ -2407,10 +2407,10 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}

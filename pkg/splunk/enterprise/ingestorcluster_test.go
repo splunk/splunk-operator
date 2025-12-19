@@ -77,10 +77,10 @@ func TestApplyIngestorCluster(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -285,7 +285,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
@@ -344,10 +344,10 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -430,10 +430,10 @@ func TestGetChangedQueueFieldsForIngestor(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -472,7 +472,7 @@ func TestGetChangedQueueFieldsForIngestor(t *testing.T) {
 	assert.Equal(t, 10, len(queueChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
@@ -509,10 +509,10 @@ func TestHandlePushQueueChange(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
@@ -551,9 +551,9 @@ func TestHandlePushQueueChange(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
-			Replicas:          3,
-			ReadyReplicas:     3,
-			Queue:             &enterpriseApi.QueueSpec{},
+			Replicas:      3,
+			ReadyReplicas: 3,
+			Queue:         &enterpriseApi.QueueSpec{},
 			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
 		},
 	}
@@ -635,7 +635,7 @@ func TestHandlePushQueueChange(t *testing.T) {
 	// outputs.conf
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
-		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
+		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},

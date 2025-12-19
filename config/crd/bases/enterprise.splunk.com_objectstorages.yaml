@@ -64,7 +64,7 @@ spec:
                 properties:
                   endpoint:
                     description: S3-compatible Service endpoint
-                    pattern: ^https://s3(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$
+                    pattern: ^https?://[^\s/$.?#].[^\s]*$
                     type: string
                   path:
                     description: S3 bucket path

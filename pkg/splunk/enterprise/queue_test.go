@@ -51,10 +51,10 @@ func TestApplyQueue(t *testing.T) {
 		Spec: enterpriseApi.QueueSpec{
 			Provider: "sqs",
 			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}

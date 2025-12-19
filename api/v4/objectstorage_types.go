@@ -43,7 +43,7 @@ type ObjectStorageSpec struct {
 
 type S3Spec struct {
 	// +optional
-	// +kubebuilder:validation:Pattern=`^https://s3(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$`
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
 	// S3-compatible Service endpoint
 	Endpoint string `json:"endpoint"`
 

@@ -263,8 +263,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Can not override original queue spec due to comparison in the later code
 		queueCopy := queue
 		if queueCopy.Spec.Provider == "sqs" {
-			if queueCopy.Spec.SQS.Endpoint == "" {
-				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.Region)
+			if queueCopy.Spec.SQS.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
 			}
 		}
 
@@ -287,8 +287,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// Can not override original large message store spec due to comparison in the later code
 		osCopy := os
 		if osCopy.Spec.Provider == "s3" {
-			if osCopy.Spec.S3.Endpoint == "" {
-				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queueCopy.Spec.SQS.Region)
+			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
 			}
 		}
 
@@ -586,8 +586,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// Can not override original queue spec due to comparison in the later code
 		queueCopy := queue
 		if queueCopy.Spec.Provider == "sqs" {
-			if queueCopy.Spec.SQS.Endpoint == "" {
-				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.Region)
+			if queueCopy.Spec.SQS.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
 			}
 		}
 
@@ -610,8 +610,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// Can not override original queue spec due to comparison in the later code
 		osCopy := os
 		if osCopy.Spec.Provider == "s3" {
-			if osCopy.Spec.S3.Endpoint == "" {
-				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queueCopy.Spec.SQS.Region)
+			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
 			}
 		}
 
@@ -1391,7 +1391,7 @@ func pullQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldOS, newOS 
 	if newQueue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
 	}
- 	osProvider := ""
+	osProvider := ""
 	if newOS.Provider == "s3" {
 		osProvider = "sqs_smartbus"
 	}
@@ -1399,13 +1399,13 @@ func pullQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldOS, newOS 
 	if oldQueue.Provider != newQueue.Provider || afterDelete {
 		inputs = append(inputs, []string{"remote_queue.type", queueProvider})
 	}
-	if oldQueue.SQS.Region != newQueue.SQS.Region || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), newQueue.SQS.Region})
+	if newQueue.SQS.AuthRegion != "" &&(oldQueue.SQS.AuthRegion != newQueue.SQS.AuthRegion || afterDelete) {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), newQueue.SQS.AuthRegion})
 	}
-	if oldQueue.SQS.Endpoint != newQueue.SQS.Endpoint || afterDelete {
+	if newQueue.SQS.Endpoint != "" && (oldQueue.SQS.Endpoint != newQueue.SQS.Endpoint || afterDelete) {
 		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), newQueue.SQS.Endpoint})
 	}
-	if oldOS.S3.Endpoint != newOS.S3.Endpoint || afterDelete {
+	if newOS.S3.Endpoint != "" && (oldOS.S3.Endpoint != newOS.S3.Endpoint || afterDelete) {
 		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), newOS.S3.Endpoint})
 	}
 	if oldOS.S3.Path != newOS.S3.Path || afterDelete {
