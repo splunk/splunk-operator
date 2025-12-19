@@ -115,7 +115,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	}
 
-	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
@@ -248,7 +248,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			if cr.Spec.QueueRef.Namespace != "" {
 				ns = cr.Spec.QueueRef.Namespace
 			}
-			err = client.Get(context.Background(), types.NamespacedName{
+			err = client.Get(ctx, types.NamespacedName{
 				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
 			}, &queue)
@@ -272,7 +272,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			if cr.Spec.ObjectStorageRef.Namespace != "" {
 				ns = cr.Spec.ObjectStorageRef.Namespace
 			}
-			err = client.Get(context.Background(), types.NamespacedName{
+			err = client.Get(ctx, types.NamespacedName{
 				Name:      cr.Spec.ObjectStorageRef.Name,
 				Namespace: ns,
 			}, &os)
@@ -292,7 +292,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		// If bus is updated
 		if cr.Spec.QueueRef.Name != "" {
 			if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
-				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.handlePullQueueChange(ctx, cr, queueCopy, osCopy, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
@@ -443,7 +443,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	}
 
-	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+	mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 	// Check if we have configured enough number(<= RF) of replicas
 	if mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
 		err = VerifyRFPeers(ctx, mgr, client)
@@ -621,7 +621,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		// If bus is updated
 		if cr.Spec.QueueRef.Name != "" {
 			if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
-				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
+				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.handlePullQueueChange(ctx, cr, queueCopy, osCopy, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
@@ -722,12 +722,13 @@ type indexerClusterPodManager struct {
 }
 
 // newIndexerClusterPodManager function to create pod manager this is added to write unit test case
-var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
+var newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) indexerClusterPodManager {
 	return indexerClusterPodManager{
 		log:             log,
 		cr:              cr,
 		secrets:         secret,
 		newSplunkClient: newSplunkClient,
+		c:               c,
 	}
 }
 
@@ -1391,7 +1392,7 @@ func (mgr *indexerClusterPodManager) handlePullQueueChange(ctx context.Context, 
 func getChangedQueueFieldsForIndexer(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueStatus *enterpriseApi.QueueSpec, osStatus *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields [][]string) {
 	// Push all queue fields
 	queueChangedFieldsInputs, queueChangedFieldsOutputs = pullQueueChanged(queueStatus, &queue.Spec, osStatus, &os.Spec, afterDelete, s3AccessKey, s3SecretKey)
-	
+
 	// Always set all pipeline fields, not just changed ones
 	pipelineChangedFields = pipelineConfig(true)
 

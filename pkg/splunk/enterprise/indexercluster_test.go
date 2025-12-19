@@ -1569,7 +1569,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		return nil
 	}
 
-	newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
+	newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) indexerClusterPodManager {
 		return indexerClusterPodManager{
 			log:     log,
 			cr:      cr,
@@ -1579,6 +1579,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 				c.Client = mclient
 				return c
 			},
+			c: c,
 		}
 	}
 

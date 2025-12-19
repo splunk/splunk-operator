@@ -238,7 +238,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			if cr.Spec.ObjectStorageRef.Namespace != "" {
 				ns = cr.Spec.ObjectStorageRef.Namespace
 			}
-			err = client.Get(context.Background(), types.NamespacedName{
+			err = client.Get(ctx, types.NamespacedName{
 				Name:      cr.Spec.ObjectStorageRef.Name,
 				Namespace: ns,
 			}, &os)
@@ -420,7 +420,7 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 			}
 		}
 
-		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCrStatusQueue, newCrStatusObjectStorage,afterDelete, s3AccessKey, s3SecretKey)
+		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCrStatusQueue, newCrStatusObjectStorage, afterDelete, s3AccessKey, s3SecretKey)
 
 		for _, pbVal := range queueChangedFields {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
