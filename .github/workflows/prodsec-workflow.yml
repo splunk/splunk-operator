@@ -21,7 +21,7 @@ jobs:
     container:
       image: returntocorp/semgrep
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
     - run: semgrep ci
@@ -33,7 +33,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
     - name: Dotenv Action
