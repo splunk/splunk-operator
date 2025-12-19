@@ -1141,49 +1141,6 @@ spec:
                       type: object
                     type: array
                 type: object
-              busConfigurationRef:
-                description: Bus configuration reference
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               clusterManagerRef:
                 description: ClusterManagerRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
@@ -1582,6 +1539,92 @@ spec:
               monitoringConsoleRef:
                 description: MonitoringConsoleRef refers to a Splunk Enterprise monitoring
                   console managed by the operator within Kubernetes
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              objectStorageRef:
+                description: Object Storage reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              queueRef:
+                description: Queue reference
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -4259,6 +4302,9 @@ spec:
                   - name
                   type: object
                 type: array
+            required:
+            - objectStorageRef
+            - queueRef
             type: object
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
@@ -4545,30 +4591,38 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              busConfiguration:
-                description: Bus configuration
-                properties:
-                  sqs:
-                    properties:
-                      authRegion:
-                        type: string
-                      deadLetterQueueName:
-                        type: string
-                      endpoint:
-                        type: string
-                      largeMessageStoreEndpoint:
-                        type: string
-                      largeMessageStorePath:
-                        type: string
-                      queueName:
-                        type: string
-                    type: object
-                  type:
-                    type: string
-                type: object
               message:
                 description: Auxillary message describing CR status
                 type: string
+              objectStorage:
+                description: Object Storage
+                properties:
+                  provider:
+                    description: Provider of queue resources
+                    enum:
+                    - s3
+                    type: string
+                  s3:
+                    description: s3 specific inputs
+                    properties:
+                      endpoint:
+                        description: S3-compatible Service endpoint
+                        pattern: ^https?://[^\s/$.?#].[^\s]*$
+                        type: string
+                      path:
+                        description: S3 bucket path
+                        pattern: ^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$
+                        type: string
+                    required:
+                    - path
+                    type: object
+                required:
+                - provider
+                - s3
+                type: object
+                x-kubernetes-validations:
+                - message: s3 must be provided when provider is s3
+                  rule: self.provider != 's3' || has(self.s3)
               phase:
                 description: Phase of the ingestor pods
                 enum:
@@ -4580,6 +4634,44 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              queue:
+                description: Queue
+                properties:
+                  provider:
+                    description: Provider of queue resources
+                    enum:
+                    - sqs
+                    type: string
+                  sqs:
+                    description: sqs specific inputs
+                    properties:
+                      authRegion:
+                        description: Auth Region of the resources
+                        pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
+                        type: string
+                      dlq:
+                        description: Name of the dead letter queue resource
+                        minLength: 1
+                        type: string
+                      endpoint:
+                        description: Amazon SQS Service endpoint
+                        pattern: ^https?://[^\s/$.?#].[^\s]*$
+                        type: string
+                      name:
+                        description: Name of the queue
+                        minLength: 1
+                        type: string
+                    required:
+                    - dlq
+                    - name
+                    type: object
+                required:
+                - provider
+                - sqs
+                type: object
+                x-kubernetes-validations:
+                - message: sqs must be provided when provider is sqs
+                  rule: self.provider != 'sqs' || has(self.sqs)
               readyReplicas:
                 description: Number of ready ingestor pods
                 format: int32

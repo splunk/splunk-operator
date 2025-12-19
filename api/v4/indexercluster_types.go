@@ -34,12 +34,18 @@ const (
 	IndexerClusterPausedAnnotation = "indexercluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
-	// Bus configuration reference
-	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef,omitempty"`
+	// +optional
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
+
+	// +optional
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
@@ -115,8 +121,11 @@ type IndexerClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus configuration
-	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
+	// Queue
+	Queue *QueueSpec `json:"queue,omitempty"`
+
+	// Object Storage
+	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -39,15 +39,20 @@ var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
 
-	bus = enterpriseApi.BusConfigurationSpec{
-		Type: "sqs_smartbus",
+	queue = enterpriseApi.QueueSpec{
+		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			QueueName:                 "test-queue",
-			AuthRegion:                "us-west-2",
-			Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-			LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-			LargeMessageStorePath:     "s3://test-bucket/smartbus-test",
-			DeadLetterQueueName:       "test-dead-letter-queue",
+			Name:       "test-queue",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "test-dead-letter-queue",
+		},
+	}
+	objectStorage = enterpriseApi.ObjectStorageSpec{
+		Provider: "s3",
+		S3: enterpriseApi.S3Spec{
+			Endpoint: "https://s3.us-west-2.amazonaws.com",
+			Path:     "s3://test-bucket/smartbus-test",
 		},
 	}
 	serviceAccountName = "index-ingest-sa"
@@ -80,15 +85,13 @@ var (
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
 
-	updateBus = enterpriseApi.BusConfigurationSpec{
-		Type: "sqs_smartbus",
+	updateQueue = enterpriseApi.QueueSpec{
+		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			QueueName:                 "test-queue-updated",
-			AuthRegion:                "us-west-2",
-			Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-			LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-			LargeMessageStorePath:     "s3://test-bucket-updated/smartbus-test",
-			DeadLetterQueueName:       "test-dead-letter-queue-updated",
+			Name:       "test-queue-updated",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "test-dead-letter-queue-updated",
 		},
 	}
 

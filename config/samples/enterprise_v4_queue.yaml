@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v4
-kind: BusConfiguration
+kind: Queue
 metadata:
-  name: busconfiguration-sample
+  name: queue-sample
   finalizers:  
   - "enterprise.splunk.com/delete-pvc" 
 spec: {}

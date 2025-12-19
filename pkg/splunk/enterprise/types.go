@@ -63,8 +63,11 @@ const (
 	// SplunkIngestor may be a standalone or clustered ingestion peer
 	SplunkIngestor InstanceType = "ingestor"
 
-	// SplunkBusConfiguration is the bus configuration instance
-	SplunkBusConfiguration InstanceType = "busconfiguration"
+	// SplunkQueue is the queue instance
+	SplunkQueue InstanceType = "queue"
+
+	// SplunkObjectStorage is the large message store instance
+	SplunkObjectStorage InstanceType = "object-storage"
 
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
@@ -294,8 +297,10 @@ func KindToInstanceString(kind string) string {
 		return SplunkIndexer.ToString()
 	case "IngestorCluster":
 		return SplunkIngestor.ToString()
-	case "BusConfiguration":
-		return SplunkBusConfiguration.ToString()
+	case "Queue":
+		return SplunkQueue.ToString()
+	case "ObjectStorage":
+		return SplunkObjectStorage.ToString()
 	case "LicenseManager":
 		return SplunkLicenseManager.ToString()
 	case "LicenseMaster":

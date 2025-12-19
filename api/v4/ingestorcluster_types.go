@@ -39,8 +39,13 @@ type IngestorClusterSpec struct {
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
-	// Bus configuration reference
-	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef"`
+	// +kubebuilder:validation:Required
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
+
+	// +kubebuilder:validation:Required
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
@@ -69,8 +74,11 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus configuration
-	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
+	// Queue
+	Queue *QueueSpec `json:"queue,omitempty"`
+
+	// Object Storage
+	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

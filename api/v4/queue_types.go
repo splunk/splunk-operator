@@ -23,35 +23,49 @@ import (
 )
 
 const (
-	// BusConfigurationPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// QueuePausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	BusConfigurationPausedAnnotation = "busconfiguration.enterprise.splunk.com/paused"
+	QueuePausedAnnotation = "queue.enterprise.splunk.com/paused"
 )
 
-// BusConfigurationSpec defines the desired state of BusConfiguration
-type BusConfigurationSpec struct {
-	Type string `json:"type"`
+// +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
+// QueueSpec defines the desired state of Queue
+type QueueSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=sqs
+	// Provider of queue resources
+	Provider string `json:"provider"`
 
+	// +kubebuilder:validation:Required
+	// sqs specific inputs
 	SQS SQSSpec `json:"sqs"`
 }
 
 type SQSSpec struct {
-	QueueName string `json:"queueName"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Name of the queue
+	Name string `json:"name"`
 
+	// +optional
+	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
+	// Auth Region of the resources
 	AuthRegion string `json:"authRegion"`
 
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Name of the dead letter queue resource
+	DLQ string `json:"dlq"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
+	// Amazon SQS Service endpoint
 	Endpoint string `json:"endpoint"`
-
-	LargeMessageStoreEndpoint string `json:"largeMessageStoreEndpoint"`
-
-	LargeMessageStorePath string `json:"largeMessageStorePath"`
-
-	DeadLetterQueueName string `json:"deadLetterQueueName"`
 }
 
-// BusConfigurationStatus defines the observed state of BusConfiguration.
-type BusConfigurationStatus struct {
-	// Phase of the bus configuration
+// QueueStatus defines the observed state of Queue
+type QueueStatus struct {
+	// Phase of the queue
 	Phase Phase `json:"phase"`
 
 	// Resource revision tracker
@@ -64,27 +78,27 @@ type BusConfigurationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// BusConfiguration is the Schema for a Splunk Enterprise bus configuration
+// Queue is the Schema for a Splunk Enterprise queue
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=busconfigurations,scope=Namespaced,shortName=bus
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of bus configuration"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of bus configuration resource"
+// +kubebuilder:resource:path=queues,scope=Namespaced,shortName=queue
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of queue"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of queue resource"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
 
-// BusConfiguration is the Schema for the busconfigurations API
-type BusConfiguration struct {
+// Queue is the Schema for the queues API
+type Queue struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec   BusConfigurationSpec   `json:"spec"`
-	Status BusConfigurationStatus `json:"status,omitempty,omitzero"`
+	Spec   QueueSpec   `json:"spec"`
+	Status QueueStatus `json:"status,omitempty,omitzero"`
 }
 
 // DeepCopyObject implements runtime.Object
-func (in *BusConfiguration) DeepCopyObject() runtime.Object {
+func (in *Queue) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -93,42 +107,42 @@ func (in *BusConfiguration) DeepCopyObject() runtime.Object {
 
 // +kubebuilder:object:root=true
 
-// BusConfigurationList contains a list of BusConfiguration
-type BusConfigurationList struct {
+// QueueList contains a list of Queue
+type QueueList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []BusConfiguration `json:"items"`
+	Items           []Queue `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&BusConfiguration{}, &BusConfigurationList{})
+	SchemeBuilder.Register(&Queue{}, &QueueList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to Kubernetes API
-func (bc *BusConfiguration) NewEvent(eventType, reason, message string) corev1.Event {
+func (os *Queue) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    bc.ObjectMeta.Namespace,
+			Namespace:    os.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "BusConfiguration",
-			Namespace:  bc.Namespace,
-			Name:       bc.Name,
-			UID:        bc.UID,
+			Kind:       "Queue",
+			Namespace:  os.Namespace,
+			Name:       os.Name,
+			UID:        os.UID,
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-busconfiguration-controller",
+			Component: "splunk-queue-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/busconfiguration-controller",
+		ReportingController: "enterprise.splunk.com/queue-controller",
 	}
 }

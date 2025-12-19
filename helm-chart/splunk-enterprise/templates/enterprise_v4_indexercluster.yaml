@@ -163,8 +163,14 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.busConfigurationRef }}
-    busConfigurationRef:
+    {{- with $.Values.indexerCluster.queueRef }}
+    queueRef:
+      name: {{ .name }}
+    {{- if .namespace }}
+      namespace: {{ .namespace }}
+    {{- end }}
+    {{- with $.Values.indexerCluster.objectStorageRef }}
+    objectStorageRef:
       name: {{ .name }}
     {{- if .namespace }}
       namespace: {{ .namespace }}

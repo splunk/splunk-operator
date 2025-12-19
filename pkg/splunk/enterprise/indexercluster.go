@@ -37,7 +37,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -78,7 +77,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+		cr.Status.Queue = &enterpriseApi.QueueSpec{}
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -245,35 +244,67 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Bus config
-		busConfig := enterpriseApi.BusConfiguration{}
-		if cr.Spec.BusConfigurationRef.Name != "" {
+		// Queue
+		queue := enterpriseApi.Queue{}
+		if cr.Spec.QueueRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.BusConfigurationRef.Namespace != "" {
-				ns = cr.Spec.BusConfigurationRef.Namespace
+			if cr.Spec.QueueRef.Namespace != "" {
+				ns = cr.Spec.QueueRef.Namespace
 			}
 			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.BusConfigurationRef.Name,
+				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
-			}, &busConfig)
+			}, &queue)
 			if err != nil {
 				return result, err
 			}
 		}
 
-		// If bus config is updated
-		if cr.Spec.BusConfigurationRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+		// Can not override original queue spec due to comparison in the later code
+		queueCopy := queue
+		if queueCopy.Spec.Provider == "sqs" {
+			if queueCopy.Spec.SQS.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
+			}
+		}
+
+		// Large Message Store
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
+			}
+			err = client.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Spec.ObjectStorageRef.Name,
+				Namespace: ns,
+			}, &os)
+			if err != nil {
+				return result, err
+			}
+		}
+
+		// Can not override original large message store spec due to comparison in the later code
+		osCopy := os
+		if osCopy.Spec.Provider == "s3" {
+			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
+			}
+		}
+
+		// If queue is updated
+		if cr.Spec.QueueRef.Name != "" {
+			if !reflect.DeepEqual(cr.Status.Queue, queue.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+				err = mgr.handlePullQueueChange(ctx, cr, queueCopy, osCopy, client)
 				if err != nil {
-					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
-					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
+					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 					return result, err
 				}
 
-				cr.Status.BusConfiguration = busConfig.Spec
+				cr.Status.Queue = &queue.Spec
 			}
 		}
 
@@ -366,7 +397,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.BusConfiguration = enterpriseApi.BusConfigurationSpec{}
+		cr.Status.Queue = &enterpriseApi.QueueSpec{}
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -536,35 +567,67 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Bus config
-		busConfig := enterpriseApi.BusConfiguration{}
-		if cr.Spec.BusConfigurationRef.Name != "" {
+		// Queue
+		queue := enterpriseApi.Queue{}
+		if cr.Spec.QueueRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.BusConfigurationRef.Namespace != "" {
-				ns = cr.Spec.BusConfigurationRef.Namespace
+			if cr.Spec.QueueRef.Namespace != "" {
+				ns = cr.Spec.QueueRef.Namespace
 			}
 			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.BusConfigurationRef.Name,
+				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
-			}, &busConfig)
+			}, &queue)
 			if err != nil {
 				return result, err
 			}
 		}
 
-		// If bus config is updated
-		if cr.Spec.BusConfigurationRef.Name != "" {
-			if !reflect.DeepEqual(cr.Status.BusConfiguration, busConfig.Spec) {
+		// Can not override original queue spec due to comparison in the later code
+		queueCopy := queue
+		if queueCopy.Spec.Provider == "sqs" {
+			if queueCopy.Spec.SQS.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
+			}
+		}
+
+		// Large Message Store
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
+			ns := cr.GetNamespace()
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
+			}
+			err = client.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Spec.ObjectStorageRef.Name,
+				Namespace: ns,
+			}, &queue)
+			if err != nil {
+				return result, err
+			}
+		}
+
+		// Can not override original queue spec due to comparison in the later code
+		osCopy := os
+		if osCopy.Spec.Provider == "s3" {
+			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
+			}
+		}
+
+		// If queue is updated
+		if cr.Spec.QueueRef.Name != "" {
+			if !reflect.DeepEqual(cr.Status.Queue, queue.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-				err = mgr.handlePullBusChange(ctx, cr, busConfig, client)
+				err = mgr.handlePullQueueChange(ctx, cr, queueCopy, osCopy, client)
 				if err != nil {
-					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
-					scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
+					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 					return result, err
 				}
 
-				cr.Status.BusConfiguration = busConfig.Spec
+				cr.Status.Queue = &queue.Spec
 			}
 		}
 
@@ -1154,7 +1217,7 @@ func validateIndexerClusterSpec(ctx context.Context, c splcommon.ControllerClien
 }
 
 // helper function to get the list of IndexerCluster types in the current namespace
-func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []client.ListOption) (enterpriseApi.IndexerClusterList, error) {
+func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (enterpriseApi.IndexerClusterList, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("getIndexerClusterList").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
@@ -1231,12 +1294,12 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 	return extractedValue
 }
 
-var newSplunkClientForBusPipeline = splclient.NewSplunkClient
+var newSplunkClientForQueuePipeline = splclient.NewSplunkClient
 
-// Checks if only PullBus or Pipeline config changed, and updates the conf file if so
-func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, busConfig enterpriseApi.BusConfiguration, k8s client.Client) error {
+// Checks if only PullQueue or Pipeline config changed, and updates the conf file if so
+func (mgr *indexerClusterPodManager) handlePullQueueChange(ctx context.Context, newCR *enterpriseApi.IndexerCluster, queue enterpriseApi.Queue, os enterpriseApi.ObjectStorage, k8s rclient.Client) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("handlePullBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	scopedLog := reqLogger.WithName("handlePullQueueChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.ReadyReplicas
@@ -1250,30 +1313,30 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 		if err != nil {
 			return err
 		}
-		splunkClient := newSplunkClientForBusPipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
+		splunkClient := newSplunkClientForQueuePipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
 		afterDelete := false
-		if (busConfig.Spec.SQS.QueueName != "" && newCR.Status.BusConfiguration.SQS.QueueName != "" && busConfig.Spec.SQS.QueueName != newCR.Status.BusConfiguration.SQS.QueueName) ||
-			(busConfig.Spec.Type != "" && newCR.Status.BusConfiguration.Type != "" && busConfig.Spec.Type != newCR.Status.BusConfiguration.Type) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+		if (queue.Spec.SQS.Name != "" && newCR.Status.Queue.SQS.Name != "" && queue.Spec.SQS.Name != newCR.Status.Queue.SQS.Name) ||
+			(queue.Spec.Provider != "" && newCR.Status.Queue.Provider != "" && queue.Spec.Provider != newCR.Status.Queue.Provider) {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Queue.SQS.Name)); err != nil {
 				updateErr = err
 			}
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.BusConfiguration.SQS.QueueName)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Queue.SQS.Name)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
 		}
 
-		busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields := getChangedBusFieldsForIndexer(&busConfig, newCR, afterDelete)
+		queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR, afterDelete)
 
-		for _, pbVal := range busChangedFieldsOutputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+		for _, pbVal := range queueChangedFieldsOutputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
 
-		for _, pbVal := range busChangedFieldsInputs {
-			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", busConfig.Spec.SQS.QueueName), [][]string{pbVal}); err != nil {
+		for _, pbVal := range queueChangedFieldsInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
@@ -1289,15 +1352,23 @@ func (mgr *indexerClusterPodManager) handlePullBusChange(ctx context.Context, ne
 	return updateErr
 }
 
-// getChangedBusFieldsForIndexer returns a list of changed bus and pipeline fields for indexer pods
-func getChangedBusFieldsForIndexer(busConfig *enterpriseApi.BusConfiguration, busConfigIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (busChangedFieldsInputs, busChangedFieldsOutputs, pipelineChangedFields [][]string) {
-	// Compare bus fields
-	oldPB := busConfigIndexerStatus.Status.BusConfiguration
-	newPB := busConfig.Spec
+// getChangedQueueFieldsForIndexer returns a list of changed queue and pipeline fields for indexer pods
+func getChangedQueueFieldsForIndexer(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool) (queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields [][]string) {
+	// Compare queue fields
+	oldQueue := queueIndexerStatus.Status.Queue
+	if oldQueue == nil {
+		oldQueue = &enterpriseApi.QueueSpec{}
+	}
+	newQueue := queue.Spec
 
-	// Push all bus fields
-	busChangedFieldsInputs, busChangedFieldsOutputs = pullBusChanged(&oldPB, &newPB, afterDelete)
+	oldOS := queueIndexerStatus.Status.ObjectStorage
+	if oldOS == nil {
+		oldOS = &enterpriseApi.ObjectStorageSpec{}
+	}
+	newOS := os.Spec
 
+	// Push all queue fields
+	queueChangedFieldsInputs, queueChangedFieldsOutputs = pullQueueChanged(oldQueue, &newQueue, oldOS, &newOS, afterDelete)
 	// Always set all pipeline fields, not just changed ones
 	pipelineChangedFields = pipelineConfig(true)
 
@@ -1315,34 +1386,43 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 	return strings.HasPrefix(previousVersion, "8") && strings.HasPrefix(currentVersion, "9")
 }
 
-func pullBusChanged(oldBus, newBus *enterpriseApi.BusConfigurationSpec, afterDelete bool) (inputs, outputs [][]string) {
-	if oldBus.Type != newBus.Type || afterDelete {
-		inputs = append(inputs, []string{"remote_queue.type", newBus.Type})
+func pullQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldOS, newOS *enterpriseApi.ObjectStorageSpec, afterDelete bool) (inputs, outputs [][]string) {
+	queueProvider := ""
+	if newQueue.Provider == "sqs" {
+		queueProvider = "sqs_smartbus"
 	}
-	if oldBus.SQS.AuthRegion != newBus.SQS.AuthRegion || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", newBus.Type), newBus.SQS.AuthRegion})
+	osProvider := ""
+	if newOS.Provider == "s3" {
+		osProvider = "sqs_smartbus"
 	}
-	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", newBus.Type), newBus.SQS.Endpoint})
+
+	if oldQueue.Provider != newQueue.Provider || afterDelete {
+		inputs = append(inputs, []string{"remote_queue.type", queueProvider})
 	}
-	if oldBus.SQS.LargeMessageStoreEndpoint != newBus.SQS.LargeMessageStoreEndpoint || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", newBus.Type), newBus.SQS.LargeMessageStoreEndpoint})
+	if newQueue.SQS.AuthRegion != "" &&(oldQueue.SQS.AuthRegion != newQueue.SQS.AuthRegion || afterDelete) {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), newQueue.SQS.AuthRegion})
 	}
-	if oldBus.SQS.LargeMessageStorePath != newBus.SQS.LargeMessageStorePath || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", newBus.Type), newBus.SQS.LargeMessageStorePath})
+	if newQueue.SQS.Endpoint != "" && (oldQueue.SQS.Endpoint != newQueue.SQS.Endpoint || afterDelete) {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), newQueue.SQS.Endpoint})
 	}
-	if oldBus.SQS.DeadLetterQueueName != newBus.SQS.DeadLetterQueueName || afterDelete {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", newBus.Type), newBus.SQS.DeadLetterQueueName})
+	if newOS.S3.Endpoint != "" && (oldOS.S3.Endpoint != newOS.S3.Endpoint || afterDelete) {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), newOS.S3.Endpoint})
+	}
+	if oldOS.S3.Path != newOS.S3.Path || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), newOS.S3.Path})
+	}
+	if oldQueue.SQS.DLQ != newQueue.SQS.DLQ || afterDelete {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), newQueue.SQS.DLQ})
 	}
 	inputs = append(inputs,
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", newBus.Type), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", newBus.Type), "max_count"},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
 	)
 
 	outputs = inputs
 	outputs = append(outputs,
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", newBus.Type), "5s"},
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", newBus.Type), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"},
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
 	)
 
 	return inputs, outputs

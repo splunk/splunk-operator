@@ -36,34 +36,34 @@ import (
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
-// BusConfigurationReconciler reconciles a BusConfiguration object
-type BusConfigurationReconciler struct {
+// ObjectStorageReconciler reconciles a ObjectStorage object
+type ObjectStorageReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=busconfigurations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=busconfigurations/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=busconfigurations/finalizers,verbs=update
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=objectstorages,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=objectstorages/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=objectstorages/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the BusConfiguration object against the actual cluster state, and then
+// the ObjectStorage object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
-func (r *BusConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "BusConfiguration")).Inc()
-	defer recordInstrumentionData(time.Now(), req, "controller", "BusConfiguration")
+func (r *ObjectStorageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "ObjectStorage")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "ObjectStorage")
 
 	reqLogger := log.FromContext(ctx)
-	reqLogger = reqLogger.WithValues("busconfiguration", req.NamespacedName)
+	reqLogger = reqLogger.WithValues("objectstorage", req.NamespacedName)
 
-	// Fetch the BusConfiguration
-	instance := &enterpriseApi.BusConfiguration{}
+	// Fetch the ObjectStorage
+	instance := &enterpriseApi.ObjectStorage{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -74,20 +74,20 @@ func (r *BusConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return ctrl.Result{}, errors.Wrap(err, "could not load bus configuration data")
+		return ctrl.Result{}, errors.Wrap(err, "could not load objectstorage data")
 	}
 
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
-		if _, ok := annotations[enterpriseApi.BusConfigurationPausedAnnotation]; ok {
+		if _, ok := annotations[enterpriseApi.ObjectStoragePausedAnnotation]; ok {
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	result, err := ApplyBusConfiguration(ctx, r.Client, instance)
+	result, err := ApplyObjectStorage(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
 		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
 	}
@@ -95,14 +95,14 @@ func (r *BusConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return result, err
 }
 
-var ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
-	return enterprise.ApplyBusConfiguration(ctx, client, instance)
+var ApplyObjectStorage = func(ctx context.Context, client client.Client, instance *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
+	return enterprise.ApplyObjectStorage(ctx, client, instance)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *BusConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ObjectStorageReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterpriseApi.BusConfiguration{}).
+		For(&enterpriseApi.ObjectStorage{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),

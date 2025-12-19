@@ -350,7 +350,9 @@ indexerCluster:
   #    nodeAffinityPolicy: [Honor|Ignore] # optional; beta since v1.26
   #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
-  busConfigurationRef: {}
+  queueRef: {}
+
+  objectStorageRef: {}
 
 searchHeadCluster:
 
@@ -899,4 +901,6 @@ ingestorCluster:
 
   affinity: {}
 
-  busConfigurationRef: {}
+  queueRef: {}
+
+  objectStorageRef: {}

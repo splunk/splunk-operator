@@ -47,7 +47,6 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations
   - clustermanagers
   - clustermasters
   - indexerclusters
@@ -55,6 +54,8 @@ rules:
   - licensemanagers
   - licensemasters
   - monitoringconsoles
+  - objectstorages
+  - queues
   - searchheadclusters
   - standalones
   verbs:
@@ -68,7 +69,6 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations/finalizers
   - clustermanagers/finalizers
   - clustermasters/finalizers
   - indexerclusters/finalizers
@@ -76,6 +76,8 @@ rules:
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
+  - objectstorages/finalizers
+  - queues/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
   verbs:
@@ -83,7 +85,6 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - busconfigurations/status
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
@@ -91,6 +92,8 @@ rules:
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
+  - objectstorages/status
+  - queues/status
   - searchheadclusters/status
   - standalones/status
   verbs:

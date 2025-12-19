@@ -4,7 +4,7 @@ Separation between ingestion and indexing services within Splunk Operator for Ku
 
 This separation enables:
 - Independent scaling: Match resource allocation to ingestion or indexing workload.
-- Data durability: Off‑load buffer management and retry logic to a durable message bus.
+- Data durability: Off‑load buffer management and retry logic to a durable message queue.
 - Operational clarity: Separate monitoring dashboards for ingestion throughput vs indexing latency.
 
 # Important Note
@@ -16,52 +16,83 @@ This separation enables:
 
 - SPLUNK_IMAGE_VERSION: Splunk Enterprise Docker Image version
 
-# BusConfiguration
+# Queue
 
-BusConfiguration is introduced to store message bus configuration to be shared among IngestorCluster and IndexerCluster.
+Queue is introduced to store message queue information to be shared among IngestorCluster and IndexerCluster.
 
 ## Spec
 
-BusConfiguration inputs can be found in the table below. As of now, only SQS type of message bus is supported.
+Queue inputs can be found in the table below. As of now, only SQS provider of message queue is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| type   | string | Type of message bus (Only sqs_smartbus as of now) |
-| sqs   | SQS | SQS message bus inputs  |
+| provider   | string | [Required] Provider of message queue (Allowed values: sqs) |
+| sqs   | SQS | [Required if provider=sqs] SQS message queue inputs  |
 
-SQS message bus inputs can be found in the table below.
+SQS message queue inputs can be found in the table below.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| queueName   | string | Name of the SQS queue |
-| authRegion   | string | Region where the SQS queue is located  |
-| endpoint   | string | AWS SQS endpoint
-| largeMessageStoreEndpoint   | string | AWS S3 Large Message Store endpoint |
-| largeMessageStorePath   | string | S3 path for Large Message Store |
-| deadLetterQueueName   | string | Name of the SQS dead letter queue |
+| name   | string | [Required] Name of the queue |
+| region   | string | [Required] Region where the queue is located  |
+| endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
+| dlq   | string | [Required] Name of the dead letter queue |
 
-Change of any of the bus inputs does not restart Splunk. It just updates the config values with no disruptions.
+Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
 ## Example
 ```
 apiVersion: enterprise.splunk.com/v4
-kind: BusConfiguration
+kind: Queue
 metadata:
-  name: bus-config
+  name: queue
 spec:
-  type: sqs_smartbus
+  provider: sqs
   sqs:
-    queueName: sqs-test
-    authRegion: us-west-2
+    name: sqs-test
+    region: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
-    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-    largeMessageStorePath: s3://ingestion/smartbus-test
-    deadLetterQueueName: sqs-dlq-test
+    dlq: sqs-dlq-test
+```
+
+# ObjectStorage
+
+ObjectStorage is introduced to store large message (messages that exceed the size of messages that can be stored in SQS) store information to be shared among IngestorCluster and IndexerCluster.
+
+## Spec
+
+ObjectStorage inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
+
+| Key        | Type    | Description                                       |
+| ---------- | ------- | ------------------------------------------------- |
+| provider   | string | [Required] Provider of large message store (Allowed values: s3) |
+| s3   | S3 | [Required if provider=s3] S3 large message store inputs  |
+
+S3 large message store inputs can be found in the table below.
+
+| Key        | Type    | Description                                       |
+| ---------- | ------- | ------------------------------------------------- |
+| path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
+| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
+
+Change of any of the large message queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+
+## Example
+```
+apiVersion: enterprise.splunk.com/v4
+kind: ObjectStorage
+metadata:
+  name: os
+spec:
+  provider: s3
+  s3:
+    path: s3://ingestion/smartbus-test
+    endpoint: https://s3.us-west-2.amazonaws.com
 ```
 
 # IngestorCluster
 
-IngestorCluster is introduced for high‑throughput data ingestion into a durable message bus. Its Splunk pods are configured to receive events (outputs.conf) and publish them to a message bus. 
+IngestorCluster is introduced for high‑throughput data ingestion into a durable message queue. Its Splunk pods are configured to receive events (outputs.conf) and publish them to a message queue. 
 
 ## Spec
 
@@ -70,11 +101,12 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| busConfigurationRef   | corev1.ObjectReference | Message bus configuration reference |
+| queueRef   | corev1.ObjectReference | Message queue reference |
+| objectStorageRef   | corev1.ObjectReference | Large message store reference |
 
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Push Bus reference allows the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
@@ -89,13 +121,15 @@ spec:
   serviceAccount: ingestor-sa 
   replicas: 3
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 ```
 
 # IndexerCluster
 
-IndexerCluster is enhanced to support index‑only mode enabling independent scaling, loss‑safe buffering, and simplified day‑0/day‑n management via Kubernetes CRDs. Its Splunk pods are configured to pull events from the bus (inputs.conf) and index them.
+IndexerCluster is enhanced to support index‑only mode enabling independent scaling, loss‑safe buffering, and simplified day‑0/day‑n management via Kubernetes CRDs. Its Splunk pods are configured to pull events from the queue (inputs.conf) and index them.
 
 ## Spec
 
@@ -104,11 +138,12 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
-| busConfigurationRef   | corev1.ObjectReference | Message bus configuration reference |
+| queueRef   | corev1.ObjectReference | Message queue reference |
+| objectStorageRef   | corev1.ObjectReference | Large message store reference |
 
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Pull Bus reference allows the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
@@ -135,8 +170,10 @@ spec:
   serviceAccount: ingestor-sa
   replicas: 3 
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 ```
 
 # Common Spec
@@ -145,24 +182,32 @@ Common spec values for all SOK Custom Resources can be found in [CustomResources
 
 # Helm Charts
 
-An IngestorCluster template has been added to the splunk/splunk-enterprise Helm chart. The IndexerCluster template has also been enhanced to support new inputs.
+Queue, ObjectStorage and IngestorCluster have been added to the splunk/splunk-enterprise Helm chart. IndexerCluster has also been enhanced to support new inputs.
 
 ## Example
 
-Below examples describe how to define values for BusConfiguration, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
+Below examples describe how to define values for Queue, ObjectStorage, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
 
 ```
-busConfiguration::
+queue:
   enabled: true
-  name: bus-config
-  type: sqs_smartbus
+  name: queue
+  provider: sqs
   sqs:
-    queueName: sqs-test
-    authRegion: us-west-2
+    name: sqs-test
+    region: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
-    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-    largeMessageStorePath: s3://ingestion/smartbus-test
-    deadLetterQueueName: sqs-dlq-test
+    dlq: sqs-dlq-test
+```
+
+```
+objectStorage:
+  enabled: true
+  name: os
+  provider: s3
+  s3:
+    endpoint: https://s3.us-west-2.amazonaws.com
+    path: s3://ingestion/smartbus-test
 ```
 
 ```
@@ -171,8 +216,10 @@ ingestorCluster:
   name: ingestor
   replicaCount: 3
   serviceAccount: ingestor-sa 
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 ```
 
 ```
@@ -189,8 +236,10 @@ indexerCluster:
   serviceAccount: ingestor-sa 
   clusterManagerRef:
     name: cm
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 ```
 
 # Service Account
@@ -492,45 +541,43 @@ $ aws iam list-attached-role-policies --role-name eksctl-ind-ing-sep-demo-addon-
 }
 ```
 
-3. Install BusConfiguration resource.
+3. Install Queue resource.
 
 ```
-$ cat bus.yaml          
+$ cat queue.yaml          
 apiVersion: enterprise.splunk.com/v4
-kind: BusConfiguration
+kind: Queue
 metadata:
-  name: bus
+  name: queue
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
-  type: sqs_smartbus
+  provider: sqs
   sqs:
-    queueName: sqs-test
-    authRegion: us-west-2
+    name: sqs-test
+    region: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
-    largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-    largeMessageStorePath: s3://ingestion/smartbus-test
-    deadLetterQueueName: sqs-dlq-test
+    dlq: sqs-dlq-test
 ```
 
 ```
-$ kubectl apply -f bus.yaml     
+$ kubectl apply -f queue.yaml     
 ```
 
 ```
-$ kubectl get busconfiguration                        
+$ kubectl get queue                        
 NAME   PHASE   AGE   MESSAGE
-bus    Ready   20s  
+queue  Ready   20s  
 ```
 
 ```
-kubectl describe busconfiguration                                
-Name:         bus
+kubectl describe queue                               
+Name:         queue
 Namespace:    default
 Labels:       <none>
 Annotations:  <none>
 API Version:  enterprise.splunk.com/v4
-Kind:         BusConfiguration
+Kind:         Queue
 Metadata:
   Creation Timestamp:  2025-10-27T10:25:53Z
   Finalizers:
@@ -540,13 +587,11 @@ Metadata:
   UID:               12345678-1234-5678-1234-012345678911
 Spec:
   Sqs:
-    Auth Region:                   us-west-2
-    Dead Letter Queue Name:        sqs-dlq-test
+    Region:                        us-west-2
+    DLQ:                           sqs-dlq-test
     Endpoint:                      https://sqs.us-west-2.amazonaws.com
-    Large Message Store Endpoint:  https://s3.us-west-2.amazonaws.com
-    Large Message Store Path:      s3://ingestion/smartbus-test
-    Queue Name:                    sqs-test
-  Type:                            sqs_smartbus
+    Name:                          sqs-test
+  Provider:                        sqs
 Status:
   Message:  
   Phase:    Ready
@@ -554,7 +599,61 @@ Status:
 Events:  <none>
 ```
 
-4. Install IngestorCluster resource.
+4. Install ObjectStorage resource.
+
+```
+$ cat os.yaml          
+apiVersion: enterprise.splunk.com/v4
+kind: ObjectStorage
+metadata:
+  name: os
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  provider: s3
+  s3:
+    endpoint: https://s3.us-west-2.amazonaws.com
+    path: s3://ingestion/smartbus-test
+```
+
+```
+$ kubectl apply -f os.yaml     
+```
+
+```
+$ kubectl get os                        
+NAME   PHASE   AGE   MESSAGE
+os    Ready   20s  
+```
+
+```
+kubectl describe os                               
+Name:         os
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+API Version:  enterprise.splunk.com/v4
+Kind:         ObjectStorage
+Metadata:
+  Creation Timestamp:  2025-10-27T10:25:53Z
+  Finalizers:
+    enterprise.splunk.com/delete-pvc
+  Generation:        1
+  Resource Version:  12345678
+  UID:               12345678-1234-5678-1234-012345678911
+Spec:
+  S3:
+    Endpoint:  https://s3.us-west-2.amazonaws.com
+    Path:      s3://ingestion/smartbus-test
+  Provider:    s3
+Status:
+  Message:  
+  Phase:    Ready
+  Resource Rev Map:
+Events:  <none>
+```
+
+5. Install IngestorCluster resource.
 
 ```
 $ cat ingestor.yaml          
@@ -568,8 +667,10 @@ spec:
   serviceAccount: ingestor-sa 
   replicas: 3
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 ```
 
 ```
@@ -598,10 +699,13 @@ Metadata:
   Resource Version:    12345678
   UID:                 12345678-1234-1234-1234-1234567890123
 Spec:
-  Bus Configuration Ref:
-    Name:           bus-config
+  Queue Ref:
+    Name:           queue
     Namespace:      default
   Image:  splunk/splunk:${SPLUNK_IMAGE_VERSION}
+  Large Message Store Ref:
+    Name:           os
+    Namespace:      default
   Replicas:                          3
   Service Account:                   ingestor-sa
 Status:
@@ -616,15 +720,18 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
-  Bus Configuration:
+  Queue:
     Sqs:
-      Auth Region:                   us-west-2
-      Dead Letter Queue Name:        sqs-dlq-test
-      Endpoint:                      https://sqs.us-west-2.amazonaws.com
-      Large Message Store Endpoint:  https://s3.us-west-2.amazonaws.com
-      Large Message Store Path:      s3://ingestion/smartbus-test
-      Queue Name:                    sqs-test
-    Type:                            sqs_smartbus
+      Region:                   us-west-2
+      DLQ:                      sqs-dlq-test
+      Endpoint:                 https://sqs.us-west-2.amazonaws.com
+      Name:                     sqs-test
+    Provider:                   sqs
+  Large Message Store:
+    S3:
+      Endpoint:  https://s3.us-west-2.amazonaws.com
+      Path:      s3://ingestion/smartbus-test
+    Provider:    s3
   Message:                      
   Phase:                        Ready
   Ready Replicas:               3
@@ -678,7 +785,7 @@ remote_queue.sqs_smartbus.send_interval = 5s
 remote_queue.type = sqs_smartbus
 ```
 
-5. Install IndexerCluster resource.
+6. Install IndexerCluster resource.
 
 ```
 $ cat idxc.yaml 
@@ -704,8 +811,10 @@ spec:
   clusterManagerRef:
     name: cm
   serviceAccount: ingestor-sa 
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 ```
 
 ```
@@ -777,7 +886,7 @@ disabled = false
 disabled = true
 ```
 
-6. Install Horizontal Pod Autoscaler for IngestorCluster.
+7. Install Horizontal Pod Autoscaler for IngestorCluster.
 
 ```
 $ cat hpa-ing.yaml 
@@ -860,7 +969,7 @@ NAME      REFERENCE                  TARGETS         MINPODS   MAXPODS   REPLICA
 ing-hpa   IngestorCluster/ingestor   cpu: 115%/50%   3         10        10         8m54s
 ```
 
-7. Generate fake load.
+8. Generate fake load.
 
 - HEC_TOKEN: HEC token for making fake calls
 

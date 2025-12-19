@@ -79,14 +79,19 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// Deploy Bus Configuration
-			testcaseEnvInst.Log.Info("Deploy Bus Configuration")
-			bc, err := deployment.DeployBusConfiguration(ctx, "bus-config", bus)
-			Expect(err).To(Succeed(), "Unable to deploy Bus Configuration")
+			// Deploy Queue
+			testcaseEnvInst.Log.Info("Deploy Queue")
+			q, err := deployment.DeployQueue(ctx, "queue", queue)
+			Expect(err).To(Succeed(), "Unable to deploy Queue")
+
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: bc.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -96,7 +101,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: bc.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -125,12 +130,19 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.DeleteCR(ctx, ingest)
 			Expect(err).To(Succeed(), "Unable to delete Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
 
-			// Delete the Bus Configuration
-			busConfiguration := &enterpriseApi.BusConfiguration{}
-			err = deployment.GetInstance(ctx, "bus-config", busConfiguration)
-			Expect(err).To(Succeed(), "Unable to get Bus Configuration instance", "Bus Configuration Name", busConfiguration)
-			err = deployment.DeleteCR(ctx, busConfiguration)
-			Expect(err).To(Succeed(), "Unable to delete Bus Configuration", "Bus Configuration Name", busConfiguration)
+			// Delete the Queue
+			queue := &enterpriseApi.Queue{}
+			err = deployment.GetInstance(ctx, "queue", queue)
+			Expect(err).To(Succeed(), "Unable to get Queue instance", "Queue Name", queue)
+			err = deployment.DeleteCR(ctx, queue)
+			Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", queue)
+
+			// Delete the ObjectStorage
+			objStorage = &enterpriseApi.ObjectStorage{}
+			err = deployment.GetInstance(ctx, "os", objStorage)
+			Expect(err).To(Succeed(), "Unable to get ObjectStorage instance", "ObjectStorage Name", objStorage)
+			err = deployment.DeleteCR(ctx, objStorage)
+			Expect(err).To(Succeed(), "Unable to delete ObjectStorage", "ObjectStorage Name", objStorage)
 		})
 	})
 
@@ -140,10 +152,15 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// Deploy Bus Configuration
-			testcaseEnvInst.Log.Info("Deploy Bus Configuration")
-			bc, err := deployment.DeployBusConfiguration(ctx, "bus-config", bus)
-			Expect(err).To(Succeed(), "Unable to deploy Bus Configuration")
+			// Deploy Queue
+			testcaseEnvInst.Log.Info("Deploy Queue")
+			q, err := deployment.DeployQueue(ctx, "queue", queue)
+			Expect(err).To(Succeed(), "Unable to deploy Queue")
+
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Upload apps to S3
 			testcaseEnvInst.Log.Info("Upload apps to S3")
@@ -188,9 +205,10 @@ var _ = Describe("indingsep test", func() {
 							Image:           testcaseEnvInst.GetSplunkImage(),
 						},
 					},
-					BusConfigurationRef: v1.ObjectReference{Name: bc.Name},
-					Replicas:            3,
-					AppFrameworkConfig:  appFrameworkSpec,
+					QueueRef:             v1.ObjectReference{Name: q.Name},
+					ObjectStorageRef:     v1.ObjectReference{Name: objStorage.Name},
+					Replicas:             3,
+					AppFrameworkConfig:   appFrameworkSpec,
 				},
 			}
 
@@ -238,14 +256,19 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// Deploy Bus Configuration
-			testcaseEnvInst.Log.Info("Deploy Bus Configuration")
-			bc, err := deployment.DeployBusConfiguration(ctx, "bus-config", bus)
-			Expect(err).To(Succeed(), "Unable to deploy Bus Configuration")
+			// Deploy Queue
+			testcaseEnvInst.Log.Info("Deploy Queue")
+			q, err := deployment.DeployQueue(ctx, "queue", queue)
+			Expect(err).To(Succeed(), "Unable to deploy Queue")
+
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: bc.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -255,7 +278,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: bc.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -278,7 +301,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.BusConfiguration).To(Equal(bus), "Ingestor bus configuration status is not the same as provided as input")
+			Expect(ingest.Status.Queue).To(Equal(queue), "Ingestor queue status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -288,7 +311,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.BusConfiguration).To(Equal(bus), "Indexer bus configuration status is not the same as provided as input")
+			Expect(index.Status.Queue).To(Equal(queue), "Indexer queue status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")
@@ -340,14 +363,19 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Create Service Account")
 			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// Deploy Bus Configuration
-			testcaseEnvInst.Log.Info("Deploy Bus Configuration")
-			bc, err := deployment.DeployBusConfiguration(ctx, "bus-config", bus)
-			Expect(err).To(Succeed(), "Unable to deploy Bus Configuration")
+			// Deploy Queue
+			testcaseEnvInst.Log.Info("Deploy Queue")
+			q, err := deployment.DeployQueue(ctx, "queue", queue)
+			Expect(err).To(Succeed(), "Unable to deploy Queue")
+
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: bc.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -357,7 +385,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: bc.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -372,17 +400,17 @@ var _ = Describe("indingsep test", func() {
 			testcaseEnvInst.Log.Info("Ensure that Indexer Cluster is in Ready phase")
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
-			// Get instance of current Bus Configuration CR with latest config
-			testcaseEnvInst.Log.Info("Get instance of current Bus Configuration CR with latest config")
-			bus := &enterpriseApi.BusConfiguration{}
-			err = deployment.GetInstance(ctx, bc.Name, bus)
-			Expect(err).To(Succeed(), "Failed to get instance of Bus Configuration")
+			// Get instance of current Queue CR with latest config
+			testcaseEnvInst.Log.Info("Get instance of current Queue CR with latest config")
+			queue := &enterpriseApi.Queue{}
+			err = deployment.GetInstance(ctx, q.Name, queue)
+			Expect(err).To(Succeed(), "Failed to get instance of Queue")
 
-			// Update instance of BusConfiguration CR with new bus configuration
-			testcaseEnvInst.Log.Info("Update instance of BusConfiguration CR with new bus configuration")
-			bus.Spec = updateBus
-			err = deployment.UpdateCR(ctx, bus)
-			Expect(err).To(Succeed(), "Unable to deploy Bus Configuration with updated CR")
+			// Update instance of Queue CR with new queue
+			testcaseEnvInst.Log.Info("Update instance of Queue CR with new queue")
+			queue.Spec = updateQueue
+			err = deployment.UpdateCR(ctx, queue)
+			Expect(err).To(Succeed(), "Unable to deploy Queue with updated CR")
 
 			// Ensure that Ingestor Cluster has not been restarted
 			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster has not been restarted")
@@ -400,7 +428,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.BusConfiguration).To(Equal(updateBus), "Ingestor bus configuration status is not the same as provided as input")
+			Expect(ingest.Status.Queue).To(Equal(updateQueue), "Ingestor queue status is not the same as provided as input")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -410,7 +438,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.BusConfiguration).To(Equal(updateBus), "Indexer bus configuration status is not the same as provided as input")
+			Expect(index.Status.Queue).To(Equal(updateQueue), "Indexer queue status is not the same as provided as input")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")

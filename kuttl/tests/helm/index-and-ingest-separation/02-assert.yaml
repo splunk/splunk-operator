@@ -6,19 +6,22 @@ metadata:
   name: ingestor
 spec:
   replicas: 4
-  busConfigurationRef:
-    name: bus-config
+  queueRef:
+    name: queue
 status:
   phase: Ready
-  busConfiguration:
-    type: sqs_smartbus
+  queue:
+    provider: sqs
     sqs:
-      queueName: sqs-test
-      authRegion: us-west-2
+      name: sqs-test
+      region: us-west-2
       endpoint: https://sqs.us-west-2.amazonaws.com
-      largeMessageStoreEndpoint: https://s3.us-west-2.amazonaws.com
-      largeMessageStorePath: s3://ingestion/smartbus-test
-      deadLetterQueueName: sqs-dlq-test
+      dlq: sqs-dlq-test
+  objectStorage:
+    provider: s3
+    s3:
+      endpoint: https://s3.us-west-2.amazonaws.com
+      path: s3://ingestion/smartbus-test
 
 ---
 # check for stateful sets and replicas updated

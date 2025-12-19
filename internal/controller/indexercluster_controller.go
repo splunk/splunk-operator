@@ -172,9 +172,9 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
-		Watches(&enterpriseApi.BusConfiguration{},
+		Watches(&enterpriseApi.Queue{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				bc, ok := obj.(*enterpriseApi.BusConfiguration)
+				b, ok := obj.(*enterpriseApi.Queue)
 				if !ok {
 					return nil
 				}
@@ -184,11 +184,39 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
-					ns := ic.Spec.BusConfigurationRef.Namespace
+					ns := ic.Spec.QueueRef.Namespace
 					if ns == "" {
 						ns = ic.Namespace
 					}
-					if ic.Spec.BusConfigurationRef.Name == bc.Name && ns == bc.Namespace {
+					if ic.Spec.QueueRef.Name == b.Name && ns == b.Namespace {
+						reqs = append(reqs, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ic.Name,
+								Namespace: ic.Namespace,
+							},
+						})
+					}
+				}
+				return reqs
+			}),
+		).
+		Watches(&enterpriseApi.ObjectStorage{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				os, ok := obj.(*enterpriseApi.ObjectStorage)
+				if !ok {
+					return nil
+				}
+				var list enterpriseApi.IndexerClusterList
+				if err := r.Client.List(ctx, &list); err != nil {
+					return nil
+				}
+				var reqs []reconcile.Request
+				for _, ic := range list.Items {
+					ns := ic.Spec.ObjectStorageRef.Namespace
+					if ns == "" {
+						ns = ic.Namespace
+					}
+					if ic.Spec.ObjectStorageRef.Name == os.Name && ns == os.Namespace {
 						reqs = append(reqs, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Name:      ic.Name,

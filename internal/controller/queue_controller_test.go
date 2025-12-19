@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("BusConfiguration Controller", func() {
+var _ = Describe("Queue Controller", func() {
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
 	})
@@ -43,47 +43,55 @@ var _ = Describe("BusConfiguration Controller", func() {
 
 	})
 
-	Context("BusConfiguration Management", func() {
+	Context("Queue Management", func() {
 
-		It("Get BusConfiguration custom resource should fail", func() {
-			namespace := "ns-splunk-bus-1"
-			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
+		It("Get Queue custom resource should fail", func() {
+			namespace := "ns-splunk-queue-1"
+			ApplyQueue = func(ctx context.Context, client client.Client, instance *enterpriseApi.Queue) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			_, err := GetBusConfiguration("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("busconfigurations.enterprise.splunk.com \"test\" not found"))
-
+			_, err := GetQueue("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("queues.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create BusConfiguration custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-bus-2"
+		It("Create Queue custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-queue-2"
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.BusConfigurationPausedAnnotation] = ""
-			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
+			annotations[enterpriseApi.QueuePausedAnnotation] = ""
+			ApplyQueue = func(ctx context.Context, client client.Client, instance *enterpriseApi.Queue) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			CreateBusConfiguration("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			icSpec, _ := GetBusConfiguration("test", nsSpecs.Name)
+			spec := enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:       "smartbus-queue",
+					AuthRegion: "us-west-2",
+					DLQ:        "smartbus-dlq",
+					Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				},
+			}
+			CreateQueue("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
+			icSpec, _ := GetQueue("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
 			icSpec.Status.Phase = "Ready"
-			UpdateBusConfiguration(icSpec, enterpriseApi.PhaseReady)
-			DeleteBusConfiguration("test", nsSpecs.Name)
+			UpdateQueue(icSpec, enterpriseApi.PhaseReady, spec)
+			DeleteQueue("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create BusConfiguration custom resource should succeeded", func() {
-			namespace := "ns-splunk-bus-3"
-			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
+		It("Create Queue custom resource should succeeded", func() {
+			namespace := "ns-splunk-queue-3"
+			ApplyQueue = func(ctx context.Context, client client.Client, instance *enterpriseApi.Queue) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -91,14 +99,23 @@ var _ = Describe("BusConfiguration Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			CreateBusConfiguration("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady)
-			DeleteBusConfiguration("test", nsSpecs.Name)
+			spec := enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:       "smartbus-queue",
+					AuthRegion: "us-west-2",
+					DLQ:        "smartbus-dlq",
+					Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				},
+			}
+			CreateQueue("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
+			DeleteQueue("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-bus-4"
-			ApplyBusConfiguration = func(ctx context.Context, client client.Client, instance *enterpriseApi.BusConfiguration) (reconcile.Result, error) {
+			namespace := "ns-splunk-queue-4"
+			ApplyQueue = func(ctx context.Context, client client.Client, instance *enterpriseApi.Queue) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -108,7 +125,7 @@ var _ = Describe("BusConfiguration Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := BusConfigurationReconciler{
+			instance := QueueReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -121,11 +138,20 @@ var _ = Describe("BusConfiguration Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
-			bcSpec := testutils.NewBusConfiguration("test", namespace, "image")
+			spec := enterpriseApi.QueueSpec{
+				Provider: "sqs",
+				SQS: enterpriseApi.SQSSpec{
+					Name:       "smartbus-queue",
+					AuthRegion: "us-west-2",
+					DLQ:        "smartbus-dlq",
+					Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				},
+			}
+			bcSpec := testutils.NewQueue("test", namespace, spec)
 			Expect(c.Create(ctx, bcSpec)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.BusConfigurationPausedAnnotation] = ""
+			annotations[enterpriseApi.QueuePausedAnnotation] = ""
 			bcSpec.Annotations = annotations
 			Expect(c.Update(ctx, bcSpec)).Should(Succeed())
 
@@ -147,86 +173,87 @@ var _ = Describe("BusConfiguration Controller", func() {
 	})
 })
 
-func GetBusConfiguration(name string, namespace string) (*enterpriseApi.BusConfiguration, error) {
-	By("Expecting BusConfiguration custom resource to be retrieved successfully")
+func GetQueue(name string, namespace string) (*enterpriseApi.Queue, error) {
+	By("Expecting Queue custom resource to be retrieved successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	bc := &enterpriseApi.BusConfiguration{}
+	b := &enterpriseApi.Queue{}
 
-	err := k8sClient.Get(context.Background(), key, bc)
+	err := k8sClient.Get(context.Background(), key, b)
 	if err != nil {
 		return nil, err
 	}
 
-	return bc, err
+	return b, err
 }
 
-func CreateBusConfiguration(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase) *enterpriseApi.BusConfiguration {
-	By("Expecting BusConfiguration custom resource to be created successfully")
+func CreateQueue(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, spec enterpriseApi.QueueSpec) *enterpriseApi.Queue {
+	By("Expecting Queue custom resource to be created successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	ingSpec := &enterpriseApi.BusConfiguration{
+	ingSpec := &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
 			Annotations: annotations,
 		},
+		Spec: spec,
 	}
 
 	Expect(k8sClient.Create(context.Background(), ingSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	bc := &enterpriseApi.BusConfiguration{}
+	b := &enterpriseApi.Queue{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, bc)
+		_ = k8sClient.Get(context.Background(), key, b)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
-			bc.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), bc)).Should(Succeed())
+			b.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), b)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())
 
-	return bc
+	return b
 }
 
-func UpdateBusConfiguration(instance *enterpriseApi.BusConfiguration, status enterpriseApi.Phase) *enterpriseApi.BusConfiguration {
-	By("Expecting BusConfiguration custom resource to be updated successfully")
+func UpdateQueue(instance *enterpriseApi.Queue, status enterpriseApi.Phase, spec enterpriseApi.QueueSpec) *enterpriseApi.Queue {
+	By("Expecting Queue custom resource to be updated successfully")
 
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	bcSpec := testutils.NewBusConfiguration(instance.Name, instance.Namespace, "image")
-	bcSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), bcSpec)).Should(Succeed())
+	bSpec := testutils.NewQueue(instance.Name, instance.Namespace, spec)
+	bSpec.ResourceVersion = instance.ResourceVersion
+	Expect(k8sClient.Update(context.Background(), bSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	bc := &enterpriseApi.BusConfiguration{}
+	b := &enterpriseApi.Queue{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, bc)
+		_ = k8sClient.Get(context.Background(), key, b)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
-			bc.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), bc)).Should(Succeed())
+			b.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), b)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())
 
-	return bc
+	return b
 }
 
-func DeleteBusConfiguration(name string, namespace string) {
-	By("Expecting BusConfiguration custom resource to be deleted successfully")
+func DeleteQueue(name string, namespace string) {
+	By("Expecting Queue custom resource to be deleted successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
@@ -234,9 +261,9 @@ func DeleteBusConfiguration(name string, namespace string) {
 	}
 
 	Eventually(func() error {
-		bc := &enterpriseApi.BusConfiguration{}
-		_ = k8sClient.Get(context.Background(), key, bc)
-		err := k8sClient.Delete(context.Background(), bc)
+		b := &enterpriseApi.Queue{}
+		_ = k8sClient.Get(context.Background(), key, b)
+		err := k8sClient.Delete(context.Background(), b)
 		return err
 	}, timeout, interval).Should(Succeed())
 }
