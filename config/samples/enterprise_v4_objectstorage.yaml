@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v4
-kind: LargeMessageStore
+kind: ObjectStorage
 metadata:
-  name: largemessagestore-sample
+  name: objectstorage-sample
   finalizers:  
   - "enterprise.splunk.com/delete-pvc" 
 spec: {}

@@ -55,13 +55,13 @@ spec:
     dlq: sqs-dlq-test
 ```
 
-# LargeMessageStore
+# ObjectStorage
 
-LargeMessageStore is introduced to store large message (messages that exceed the size of messages that can be stored in SQS) store information to be shared among IngestorCluster and IndexerCluster.
+ObjectStorage is introduced to store large message (messages that exceed the size of messages that can be stored in SQS) store information to be shared among IngestorCluster and IndexerCluster.
 
 ## Spec
 
-LargeMessageStore inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
+ObjectStorage inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
@@ -80,9 +80,9 @@ Change of any of the large message queue inputs triggers the restart of Splunk s
 ## Example
 ```
 apiVersion: enterprise.splunk.com/v4
-kind: LargeMessageStore
+kind: ObjectStorage
 metadata:
-  name: lms
+  name: os
 spec:
   provider: s3
   s3:
@@ -102,11 +102,11 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | queueRef   | corev1.ObjectReference | Message queue reference |
-| largeMessageStoreRef   | corev1.ObjectReference | Large message store reference |
+| objectStorageRef   | corev1.ObjectReference | Large message store reference |
 
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and LargeMessageStore references allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
@@ -123,8 +123,8 @@ spec:
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
 
 # IndexerCluster
@@ -139,11 +139,11 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | queueRef   | corev1.ObjectReference | Message queue reference |
-| largeMessageStoreRef   | corev1.ObjectReference | Large message store reference |
+| objectStorageRef   | corev1.ObjectReference | Large message store reference |
 
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and LargeMessageStore references allow the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
@@ -172,8 +172,8 @@ spec:
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
 
 # Common Spec
@@ -182,11 +182,11 @@ Common spec values for all SOK Custom Resources can be found in [CustomResources
 
 # Helm Charts
 
-Queue, LargeMessageStore and IngestorCluster have been added to the splunk/splunk-enterprise Helm chart. IndexerCluster has also been enhanced to support new inputs.
+Queue, ObjectStorage and IngestorCluster have been added to the splunk/splunk-enterprise Helm chart. IndexerCluster has also been enhanced to support new inputs.
 
 ## Example
 
-Below examples describe how to define values for Queue, LargeMessageStoe, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
+Below examples describe how to define values for Queue, ObjectStorage, IngestorCluster and IndexerCluster similarly to the above yaml files specifications.
 
 ```
 queue:
@@ -201,9 +201,9 @@ queue:
 ```
 
 ```
-largeMessageStore:
+objectStorage:
   enabled: true
-  name: lms
+  name: os
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
@@ -218,8 +218,8 @@ ingestorCluster:
   serviceAccount: ingestor-sa 
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
 
 ```
@@ -238,8 +238,8 @@ indexerCluster:
     name: cm
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
 
 # Service Account
@@ -599,14 +599,14 @@ Status:
 Events:  <none>
 ```
 
-4. Install LargeMessageStore resource.
+4. Install ObjectStorage resource.
 
 ```
-$ cat lms.yaml          
+$ cat os.yaml          
 apiVersion: enterprise.splunk.com/v4
-kind: LargeMessageStore
+kind: ObjectStorage
 metadata:
-  name: lms
+  name: os
   finalizers:
     - enterprise.splunk.com/delete-pvc
 spec:
@@ -617,23 +617,23 @@ spec:
 ```
 
 ```
-$ kubectl apply -f lms.yaml     
+$ kubectl apply -f os.yaml     
 ```
 
 ```
-$ kubectl get lms                        
+$ kubectl get os                        
 NAME   PHASE   AGE   MESSAGE
-lms    Ready   20s  
+os    Ready   20s  
 ```
 
 ```
-kubectl describe lms                               
-Name:         lms
+kubectl describe os                               
+Name:         os
 Namespace:    default
 Labels:       <none>
 Annotations:  <none>
 API Version:  enterprise.splunk.com/v4
-Kind:         LargeMessageStore
+Kind:         ObjectStorage
 Metadata:
   Creation Timestamp:  2025-10-27T10:25:53Z
   Finalizers:
@@ -669,8 +669,8 @@ spec:
   image: splunk/splunk:${SPLUNK_IMAGE_VERSION}
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
 
 ```
@@ -704,7 +704,7 @@ Spec:
     Namespace:      default
   Image:  splunk/splunk:${SPLUNK_IMAGE_VERSION}
   Large Message Store Ref:
-    Name:           lms
+    Name:           os
     Namespace:      default
   Replicas:                          3
   Service Account:                   ingestor-sa
@@ -813,8 +813,8 @@ spec:
   serviceAccount: ingestor-sa 
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
 
 ```

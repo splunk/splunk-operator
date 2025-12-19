@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var _ = Describe("LargeMessageStore Controller", func() {
+var _ = Describe("ObjectStorage Controller", func() {
 	BeforeEach(func() {
 		time.Sleep(2 * time.Second)
 	})
@@ -43,53 +43,53 @@ var _ = Describe("LargeMessageStore Controller", func() {
 
 	})
 
-	Context("LargeMessageStore Management", func() {
+	Context("ObjectStorage Management", func() {
 
-		It("Get LargeMessageStore custom resource should fail", func() {
-			namespace := "ns-splunk-largemessagestore-1"
-			ApplyLargeMessageStore = func(ctx context.Context, client client.Client, instance *enterpriseApi.LargeMessageStore) (reconcile.Result, error) {
+		It("Get ObjectStorage custom resource should fail", func() {
+			namespace := "ns-splunk-objectstorage-1"
+			ApplyObjectStorage = func(ctx context.Context, client client.Client, instance *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			_, err := GetLargeMessageStore("test", nsSpecs.Name)
-			Expect(err.Error()).Should(Equal("largemessagestores.enterprise.splunk.com \"test\" not found"))
+			_, err := GetObjectStorage("test", nsSpecs.Name)
+			Expect(err.Error()).Should(Equal("objectstorages.enterprise.splunk.com \"test\" not found"))
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LargeMessageStore custom resource with annotations should pause", func() {
-			namespace := "ns-splunk-largemessagestore-2"
+		It("Create ObjectStorage custom resource with annotations should pause", func() {
+			namespace := "ns-splunk-objectstorage-2"
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.LargeMessageStorePausedAnnotation] = ""
-			ApplyLargeMessageStore = func(ctx context.Context, client client.Client, instance *enterpriseApi.LargeMessageStore) (reconcile.Result, error) {
+			annotations[enterpriseApi.ObjectStoragePausedAnnotation] = ""
+			ApplyObjectStorage = func(ctx context.Context, client client.Client, instance *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			spec := enterpriseApi.LargeMessageStoreSpec{
+			spec := enterpriseApi.ObjectStorageSpec{
 				Provider: "s3",
 				S3: enterpriseApi.S3Spec{
 					Endpoint: "https://s3.us-west-2.amazonaws.com",
 					Path:     "s3://ingestion/smartbus-test",
 				},
 			}
-			CreateLargeMessageStore("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
-			icSpec, _ := GetLargeMessageStore("test", nsSpecs.Name)
+			CreateObjectStorage("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
+			osSpec, _ := GetObjectStorage("test", nsSpecs.Name)
 			annotations = map[string]string{}
-			icSpec.Annotations = annotations
-			icSpec.Status.Phase = "Ready"
-			UpdateLargeMessageStore(icSpec, enterpriseApi.PhaseReady, spec)
-			DeleteLargeMessageStore("test", nsSpecs.Name)
+			osSpec.Annotations = annotations
+			osSpec.Status.Phase = "Ready"
+			UpdateObjectStorage(osSpec, enterpriseApi.PhaseReady, spec)
+			DeleteObjectStorage("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
-		It("Create LargeMessageStore custom resource should succeeded", func() {
-			namespace := "ns-splunk-largemessagestore-3"
-			ApplyLargeMessageStore = func(ctx context.Context, client client.Client, instance *enterpriseApi.LargeMessageStore) (reconcile.Result, error) {
+		It("Create ObjectStorage custom resource should succeeded", func() {
+			namespace := "ns-splunk-objectstorage-3"
+			ApplyObjectStorage = func(ctx context.Context, client client.Client, instance *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -97,21 +97,21 @@ var _ = Describe("LargeMessageStore Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			spec := enterpriseApi.LargeMessageStoreSpec{
+			spec := enterpriseApi.ObjectStorageSpec{
 				Provider: "s3",
 				S3: enterpriseApi.S3Spec{
 					Endpoint: "https://s3.us-west-2.amazonaws.com",
 					Path:     "s3://ingestion/smartbus-test",
 				},
 			}
-			CreateLargeMessageStore("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
-			DeleteLargeMessageStore("test", nsSpecs.Name)
+			CreateObjectStorage("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, spec)
+			DeleteObjectStorage("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
 
 		It("Cover Unused methods", func() {
-			namespace := "ns-splunk-largemessagestore-4"
-			ApplyLargeMessageStore = func(ctx context.Context, client client.Client, instance *enterpriseApi.LargeMessageStore) (reconcile.Result, error) {
+			namespace := "ns-splunk-objectstorage-4"
+			ApplyObjectStorage = func(ctx context.Context, client client.Client, instance *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
 				return reconcile.Result{}, nil
 			}
 			nsSpecs := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
@@ -121,7 +121,7 @@ var _ = Describe("LargeMessageStore Controller", func() {
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
-			instance := LargeMessageStoreReconciler{
+			instance := ObjectStorageReconciler{
 				Client: c,
 				Scheme: scheme.Scheme,
 			}
@@ -134,32 +134,32 @@ var _ = Describe("LargeMessageStore Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
-			spec := enterpriseApi.LargeMessageStoreSpec{
+			spec := enterpriseApi.ObjectStorageSpec{
 				Provider: "s3",
 				S3: enterpriseApi.S3Spec{
 					Endpoint: "https://s3.us-west-2.amazonaws.com",
 					Path:     "s3://ingestion/smartbus-test",
 				},
 			}
-			lmsSpec := testutils.NewLargeMessageStore("test", namespace, spec)
-			Expect(c.Create(ctx, lmsSpec)).Should(Succeed())
+			osSpec := testutils.NewObjectStorage("test", namespace, spec)
+			Expect(c.Create(ctx, osSpec)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			annotations[enterpriseApi.LargeMessageStorePausedAnnotation] = ""
-			lmsSpec.Annotations = annotations
-			Expect(c.Update(ctx, lmsSpec)).Should(Succeed())
+			annotations[enterpriseApi.ObjectStoragePausedAnnotation] = ""
+			osSpec.Annotations = annotations
+			Expect(c.Update(ctx, osSpec)).Should(Succeed())
 
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
 			annotations = map[string]string{}
-			lmsSpec.Annotations = annotations
-			Expect(c.Update(ctx, lmsSpec)).Should(Succeed())
+			osSpec.Annotations = annotations
+			Expect(c.Update(ctx, osSpec)).Should(Succeed())
 
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
-			lmsSpec.DeletionTimestamp = &metav1.Time{}
+			osSpec.DeletionTimestamp = &metav1.Time{}
 			_, err = instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -167,31 +167,30 @@ var _ = Describe("LargeMessageStore Controller", func() {
 	})
 })
 
-func GetLargeMessageStore(name string, namespace string) (*enterpriseApi.LargeMessageStore, error) {
-	By("Expecting LargeMessageStore custom resource to be retrieved successfully")
+func GetObjectStorage(name string, namespace string) (*enterpriseApi.ObjectStorage, error) {
+	By("Expecting ObjectStorage custom resource to be retrieved successfully")
 
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	lms := &enterpriseApi.LargeMessageStore{}
+	os := &enterpriseApi.ObjectStorage{}
 
-	err := k8sClient.Get(context.Background(), key, lms)
+	err := k8sClient.Get(context.Background(), key, os)
 	if err != nil {
 		return nil, err
 	}
 
-	return lms, err
+	return os, err
 }
 
-func CreateLargeMessageStore(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, spec enterpriseApi.LargeMessageStoreSpec) *enterpriseApi.LargeMessageStore {
-	By("Expecting LargeMessageStore custom resource to be created successfully")
-
+func CreateObjectStorage(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, spec enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	By("Expecting ObjectStorage custom resource to be created successfully")
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
-	lmsSpec := &enterpriseApi.LargeMessageStore{
+	osSpec := &enterpriseApi.ObjectStorage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
 			Namespace:   namespace,
@@ -200,64 +199,62 @@ func CreateLargeMessageStore(name string, namespace string, annotations map[stri
 		Spec: spec,
 	}
 
-	Expect(k8sClient.Create(context.Background(), lmsSpec)).Should(Succeed())
+	Expect(k8sClient.Create(context.Background(), osSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	lms := &enterpriseApi.LargeMessageStore{}
+	os := &enterpriseApi.ObjectStorage{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, lms)
+		_ = k8sClient.Get(context.Background(), key, os)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
-			lms.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), lms)).Should(Succeed())
+			os.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), os)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())
 
-	return lms
+	return os
 }
 
-func UpdateLargeMessageStore(instance *enterpriseApi.LargeMessageStore, status enterpriseApi.Phase, spec enterpriseApi.LargeMessageStoreSpec) *enterpriseApi.LargeMessageStore {
-	By("Expecting LargeMessageStore custom resource to be updated successfully")
-
+func UpdateObjectStorage(instance *enterpriseApi.ObjectStorage, status enterpriseApi.Phase, spec enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	By("Expecting ObjectStorage custom resource to be updated successfully")
 	key := types.NamespacedName{
 		Name:      instance.Name,
 		Namespace: instance.Namespace,
 	}
 
-	lmsSpec := testutils.NewLargeMessageStore(instance.Name, instance.Namespace, spec)
-	lmsSpec.ResourceVersion = instance.ResourceVersion
-	Expect(k8sClient.Update(context.Background(), lmsSpec)).Should(Succeed())
+	osSpec := testutils.NewObjectStorage(instance.Name, instance.Namespace, spec)
+	osSpec.ResourceVersion = instance.ResourceVersion
+	Expect(k8sClient.Update(context.Background(), osSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)
 
-	lms := &enterpriseApi.LargeMessageStore{}
+	os := &enterpriseApi.ObjectStorage{}
 	Eventually(func() bool {
-		_ = k8sClient.Get(context.Background(), key, lms)
+		_ = k8sClient.Get(context.Background(), key, os)
 		if status != "" {
 			fmt.Printf("status is set to %v", status)
-			lms.Status.Phase = status
-			Expect(k8sClient.Status().Update(context.Background(), lms)).Should(Succeed())
+			os.Status.Phase = status
+			Expect(k8sClient.Status().Update(context.Background(), os)).Should(Succeed())
 			time.Sleep(2 * time.Second)
 		}
 		return true
 	}, timeout, interval).Should(BeTrue())
 
-	return lms
+	return os
 }
 
-func DeleteLargeMessageStore(name string, namespace string) {
-	By("Expecting LargeMessageStore custom resource to be deleted successfully")
-
+func DeleteObjectStorage(name string, namespace string) {
+	By("Expecting ObjectStorage custom resource to be deleted successfully")
 	key := types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 
 	Eventually(func() error {
-		lms := &enterpriseApi.LargeMessageStore{}
-		_ = k8sClient.Get(context.Background(), key, lms)
-		err := k8sClient.Delete(context.Background(), lms)
+		os := &enterpriseApi.ObjectStorage{}
+		_ = k8sClient.Get(context.Background(), key, os)
+		err := k8sClient.Delete(context.Background(), os)
 		return err
 	}, timeout, interval).Should(Succeed())
 }

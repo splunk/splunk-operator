@@ -431,9 +431,9 @@ func (d *Deployment) DeployClusterMasterWithSmartStoreIndexes(ctx context.Contex
 }
 
 // DeployIndexerCluster deploys the indexer cluster
-func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string, queue, lms corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IndexerCluster, error) {
+func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseManagerName string, count int, clusterManagerRef string, ansibleConfig string, queue, os corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IndexerCluster, error) {
 	d.testenv.Log.Info("Deploying indexer cluster", "name", name, "CM", clusterManagerRef)
-	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage, queue, lms, serviceAccountName)
+	indexer := newIndexerCluster(name, d.testenv.namespace, LicenseManagerName, count, clusterManagerRef, ansibleConfig, d.testenv.splunkImage, queue, os, serviceAccountName)
 	pdata, _ := json.Marshal(indexer)
 	d.testenv.Log.Info("indexer cluster spec", "cr", string(pdata))
 	deployed, err := d.deployCR(ctx, name, indexer)
@@ -445,10 +445,10 @@ func (d *Deployment) DeployIndexerCluster(ctx context.Context, name, LicenseMana
 }
 
 // DeployIngestorCluster deploys the ingestor cluster
-func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, count int, queue, lms corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IngestorCluster, error) {
+func (d *Deployment) DeployIngestorCluster(ctx context.Context, name string, count int, queue, os corev1.ObjectReference, serviceAccountName string) (*enterpriseApi.IngestorCluster, error) {
 	d.testenv.Log.Info("Deploying ingestor cluster", "name", name)
 
-	ingestor := newIngestorCluster(name, d.testenv.namespace, count, d.testenv.splunkImage, queue, lms, serviceAccountName)
+	ingestor := newIngestorCluster(name, d.testenv.namespace, count, d.testenv.splunkImage, queue, os, serviceAccountName)
 	pdata, _ := json.Marshal(ingestor)
 
 	d.testenv.Log.Info("ingestor cluster spec", "cr", string(pdata))
@@ -476,20 +476,20 @@ func (d *Deployment) DeployQueue(ctx context.Context, name string, queue enterpr
 	return deployed.(*enterpriseApi.Queue), err
 }
 
-// DeployLargeMessageStore deploys the large message store
-func (d *Deployment) DeployLargeMessageStore(ctx context.Context, name string, lms enterpriseApi.LargeMessageStoreSpec) (*enterpriseApi.LargeMessageStore, error) {
-	d.testenv.Log.Info("Deploying large message store", "name", name)
+// DeployObjectStorage deploys the object storage
+func (d *Deployment) DeployObjectStorage(ctx context.Context, name string, objStorage enterpriseApi.ObjectStorageSpec) (*enterpriseApi.ObjectStorage, error) {
+	d.testenv.Log.Info("Deploying object storage", "name", name)
 
-	lmsCfg := newLargeMessageStore(name, d.testenv.namespace, lms)
-	pdata, _ := json.Marshal(lmsCfg)
+	objStorageCfg := newObjectStorage(name, d.testenv.namespace, objStorage)
+	pdata, _ := json.Marshal(objStorageCfg)
 
-	d.testenv.Log.Info("large message store spec", "cr", string(pdata))
-	deployed, err := d.deployCR(ctx, name, lmsCfg)
+	d.testenv.Log.Info("object storage spec", "cr", string(pdata))
+	deployed, err := d.deployCR(ctx, name, objStorageCfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return deployed.(*enterpriseApi.LargeMessageStore), err
+	return deployed.(*enterpriseApi.ObjectStorage), err
 }
 
 // DeployIngestorClusterWithAdditionalConfiguration deploys the ingestor cluster with additional configuration
@@ -657,13 +657,13 @@ func (d *Deployment) UpdateCR(ctx context.Context, cr client.Object) error {
 			ucr := cr.(*enterpriseApi.Queue)
 			current.Spec = ucr.Spec
 			cobject = current
-		case "LargeMessageStore":
-			current := &enterpriseApi.LargeMessageStore{}
+		case "ObjectStorage":
+			current := &enterpriseApi.ObjectStorage{}
 			err = d.testenv.GetKubeClient().Get(ctx, namespacedName, current)
 			if err != nil {
 				return err
 			}
-			ucr := cr.(*enterpriseApi.LargeMessageStore)
+			ucr := cr.(*enterpriseApi.ObjectStorage)
 			current.Spec = ucr.Spec
 			cobject = current
 		case "ClusterMaster":

@@ -169,8 +169,8 @@ items:
     {{- if .namespace }}
       namespace: {{ .namespace }}
     {{- end }}
-    {{- with $.Values.indexerCluster.largeMessageStoreRef }}
-    largeMessageStoreRef:
+    {{- with $.Values.indexerCluster.objectStorageRef }}
+    objectStorageRef:
       name: {{ .name }}
     {{- if .namespace }}
       namespace: {{ .namespace }}

@@ -2305,19 +2305,19 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.Queue).Status.DeepCopyInto(&latestQueueCR.Status)
 		return latestQueueCR, nil
 
-	case "LargeMessageStore":
-		latestLmsCR := &enterpriseApi.LargeMessageStore{}
-		err = client.Get(ctx, namespacedName, latestLmsCR)
+	case "ObjectStorage":
+		latestOsCR := &enterpriseApi.ObjectStorage{}
+		err = client.Get(ctx, namespacedName, latestOsCR)
 		if err != nil {
 			return nil, err
 		}
 
-		origCR.(*enterpriseApi.LargeMessageStore).Status.Message = ""
+		origCR.(*enterpriseApi.ObjectStorage).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.LargeMessageStore).Status.Message = (*crError).Error()
+			origCR.(*enterpriseApi.ObjectStorage).Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.LargeMessageStore).Status.DeepCopyInto(&latestLmsCR.Status)
-		return latestLmsCR, nil
+		origCR.(*enterpriseApi.ObjectStorage).Status.DeepCopyInto(&latestOsCR.Status)
+		return latestOsCR, nil
 
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}

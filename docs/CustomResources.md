@@ -22,7 +22,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
   - [IngestorCluster Resource Spec Parameters](#ingestorcluster-resource-spec-parameters)
-  - [LargeMessageStore Resource Spec Parameters](#largemessagestore-resource-spec-parameters)
+  - [ObjectStorage Resource Spec Parameters](#objectstorage-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
@@ -377,10 +377,10 @@ spec:
   replicas: 3
   queueRef: 
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 ```
-Note:  `queueRef` and `largeMessageStoreRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Queue and LargeMessageStore resources.
+Note:  `queueRef` and `objectStorageRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Queue and ObjectStorage resources.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
@@ -390,13 +390,13 @@ the `IngestorCluster` resource provides the following `Spec` configuration param
 | ---------- | ------- | ----------------------------------------------------- |
 | replicas   | integer | The number of ingestor peers (minimum of 3 which is the default) |
 
-## LargeMessageStore Resource Spec Parameters
+## ObjectStorage Resource Spec Parameters
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
-kind: LargeMessageStore
+kind: ObjectStorage
 metadata:
-  name: lms
+  name: os
 spec:
   provider: s3
   s3:
@@ -404,7 +404,7 @@ spec:
     endpoint: https://s3.us-west-2.amazonaws.com
 ```
 
-LargeMessageStore inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
+ObjectStorage inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
@@ -536,7 +536,7 @@ The Splunk Operator controller reconciles every Splunk Enterprise CR. However, t
 | clustermanager.enterprise.splunk.com | "clustermanager.enterprise.splunk.com/paused" |
 | indexercluster.enterprise.splunk.com | "indexercluster.enterprise.splunk.com/paused" |
 | ingestorcluster.enterprise.splunk.com | "ingestorcluster.enterprise.splunk.com/paused" |
-| largemessagestore.enterprise.splunk.com | "largemessagestore.enterprise.splunk.com/paused" |
+| objectstorage.enterprise.splunk.com | "objectstorage.enterprise.splunk.com/paused" |
 | licensemaster.enterprise.splunk.com | "licensemaster.enterprise.splunk.com/paused" |
 | monitoringconsole.enterprise.splunk.com | "monitoringconsole.enterprise.splunk.com/paused" |
 | searchheadcluster.enterprise.splunk.com | "searchheadcluster.enterprise.splunk.com/paused" |

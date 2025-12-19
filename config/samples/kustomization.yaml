@@ -15,5 +15,5 @@ resources:
 - enterprise_v4_licensemanager.yaml
 - enterprise_v4_ingestorcluster.yaml
 - enterprise_v4_queue.yaml
-- enterprise_v4_largemessagestore.yaml
+- enterprise_v4_objectstorage.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

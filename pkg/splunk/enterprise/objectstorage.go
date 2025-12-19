@@ -27,8 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyLargeMessageStore reconciles the state of an IngestorCluster custom resource
-func ApplyLargeMessageStore(ctx context.Context, client client.Client, cr *enterpriseApi.LargeMessageStore) (reconcile.Result, error) {
+// ApplyObjectStorage reconciles the state of an IngestorCluster custom resource
+func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
 	var err error
 
 	// Unless modified, reconcile for this object will be requeued after 5 seconds
@@ -44,7 +44,7 @@ func ApplyLargeMessageStore(ctx context.Context, client client.Client, cr *enter
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
-	cr.Kind = "LargeMessageStore"
+	cr.Kind = "ObjectStorage"
 
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError

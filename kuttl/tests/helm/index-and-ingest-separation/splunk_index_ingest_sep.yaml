@@ -15,9 +15,9 @@ queue:
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
 
-largeMessageStore:
+objectStorage:
   enabled: true
-  name: lms
+  name: os
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
@@ -29,8 +29,8 @@ ingestorCluster:
   replicaCount: 3
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os
 
 clusterManager:
   enabled: true
@@ -45,5 +45,5 @@ indexerCluster:
     name: cm
   queueRef:
     name: queue
-  largeMessageStoreRef:
-    name: lms
+  objectStorageRef:
+    name: os

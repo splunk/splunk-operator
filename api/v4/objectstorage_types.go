@@ -23,14 +23,14 @@ import (
 )
 
 const (
-	// LargeMessageStorePausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// ObjectStoragePausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	LargeMessageStorePausedAnnotation = "largemessagestore.enterprise.splunk.com/paused"
+	ObjectStoragePausedAnnotation = "objectstorage.enterprise.splunk.com/paused"
 )
 
 // +kubebuilder:validation:XValidation:rule="self.provider != 's3' || has(self.s3)",message="s3 must be provided when provider is s3"
-// LargeMessageStoreSpec defines the desired state of LargeMessageStore
-type LargeMessageStoreSpec struct {
+// ObjectStorageSpec defines the desired state of ObjectStorage
+type ObjectStorageSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=s3
 	// Provider of queue resources
@@ -53,8 +53,8 @@ type S3Spec struct {
 	Path string `json:"path"`
 }
 
-// LargeMessageStoreStatus defines the observed state of LargeMessageStore.
-type LargeMessageStoreStatus struct {
+// ObjectStorageStatus defines the observed state of ObjectStorage.
+type ObjectStorageStatus struct {
 	// Phase of the large message store
 	Phase Phase `json:"phase"`
 
@@ -68,27 +68,27 @@ type LargeMessageStoreStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// LargeMessageStore is the Schema for a Splunk Enterprise large message store
+// ObjectStorage is the Schema for a Splunk Enterprise object storage
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=largemessagestores,scope=Namespaced,shortName=lms
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of large message store"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of large message store resource"
+// +kubebuilder:resource:path=objectstorages,scope=Namespaced,shortName=os
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of object storage"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of object storage resource"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
 
-// LargeMessageStore is the Schema for the largemessagestores API
-type LargeMessageStore struct {
+// ObjectStorage is the Schema for the objectstorages API
+type ObjectStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec   LargeMessageStoreSpec   `json:"spec"`
-	Status LargeMessageStoreStatus `json:"status,omitempty,omitzero"`
+	Spec   ObjectStorageSpec   `json:"spec"`
+	Status ObjectStorageStatus `json:"status,omitempty,omitzero"`
 }
 
 // DeepCopyObject implements runtime.Object
-func (in *LargeMessageStore) DeepCopyObject() runtime.Object {
+func (in *ObjectStorage) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -97,42 +97,42 @@ func (in *LargeMessageStore) DeepCopyObject() runtime.Object {
 
 // +kubebuilder:object:root=true
 
-// LargeMessageStoreList contains a list of LargeMessageStore
-type LargeMessageStoreList struct {
+// ObjectStorageList contains a list of ObjectStorage
+type ObjectStorageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LargeMessageStore `json:"items"`
+	Items           []ObjectStorage `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&LargeMessageStore{}, &LargeMessageStoreList{})
+	SchemeBuilder.Register(&ObjectStorage{}, &ObjectStorageList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to Kubernetes API
-func (bc *LargeMessageStore) NewEvent(eventType, reason, message string) corev1.Event {
+func (os *ObjectStorage) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    bc.ObjectMeta.Namespace,
+			Namespace:    os.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "LargeMessageStore",
-			Namespace:  bc.Namespace,
-			Name:       bc.Name,
-			UID:        bc.UID,
+			Kind:       "ObjectStorage",
+			Namespace:  os.Namespace,
+			Name:       os.Name,
+			UID:        os.UID,
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-large-message-store-controller",
+			Component: "splunk-object-storage-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/large-message-store-controller",
+		ReportingController: "enterprise.splunk.com/object-storage-controller",
 	}
 }

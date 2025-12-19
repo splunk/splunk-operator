@@ -48,7 +48,7 @@ var (
 			DLQ:      "test-dead-letter-queue",
 		},
 	}
-	lms = enterpriseApi.LargeMessageStoreSpec{
+	objectStorage = enterpriseApi.ObjectStorageSpec{
 		Provider: "s3",
 		S3: enterpriseApi.S3Spec{
 			Endpoint: "https://s3.us-west-2.amazonaws.com",

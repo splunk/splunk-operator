@@ -2067,15 +2067,15 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 		},
 	}
 
-	lms := enterpriseApi.LargeMessageStore{
+	os := enterpriseApi.ObjectStorage{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "LargeMessageStore",
+			Kind:       "ObjectStorage",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "lms",
+			Name: "os",
 		},
-		Spec: enterpriseApi.LargeMessageStoreSpec{
+		Spec: enterpriseApi.ObjectStorageSpec{
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
@@ -2089,20 +2089,20 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 			QueueRef: corev1.ObjectReference{
 				Name: queue.Name,
 			},
-			LargeMessageStoreRef: corev1.ObjectReference{
-				Name: lms.Name,
+			ObjectStorageRef: corev1.ObjectReference{
+				Name: os.Name,
 			},
 		},
 	}
 
-	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &lms, newCR, false)
+	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR, false)
 	assert.Equal(t, 8, len(queueChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
@@ -2113,8 +2113,8 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 		{"remote_queue.type", provider},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
@@ -2156,16 +2156,16 @@ func TestHandlePullQueueChange(t *testing.T) {
 		},
 	}
 
-	lms := enterpriseApi.LargeMessageStore{
+	os := enterpriseApi.ObjectStorage{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "LargeMessageStore",
+			Kind:       "ObjectStorage",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lms",
+			Name:      "os",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LargeMessageStoreSpec{
+		Spec: enterpriseApi.ObjectStorageSpec{
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
@@ -2186,15 +2186,15 @@ func TestHandlePullQueueChange(t *testing.T) {
 			QueueRef: corev1.ObjectReference{
 				Name: queue.Name,
 			},
-			LargeMessageStoreRef: corev1.ObjectReference{
-				Name:      lms.Name,
-				Namespace: lms.Namespace,
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      os.Name,
+				Namespace: os.Namespace,
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
 			ReadyReplicas:     3,
 			Queue:             &enterpriseApi.QueueSpec{},
-			LargeMessageStore: &enterpriseApi.LargeMessageStoreSpec{},
+			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
 		},
 	}
 
@@ -2252,7 +2252,7 @@ func TestHandlePullQueueChange(t *testing.T) {
 	c := spltest.NewMockClient()
 	ctx := context.TODO()
 	c.Create(ctx, &queue)
-	c.Create(ctx, &lms)
+	c.Create(ctx, &os)
 	c.Create(ctx, newCR)
 	c.Create(ctx, pod0)
 	c.Create(ctx, pod1)
@@ -2260,7 +2260,7 @@ func TestHandlePullQueueChange(t *testing.T) {
 
 	// Negative test case: secret not found
 	mgr := &indexerClusterPodManager{}
-	err := mgr.handlePullQueueChange(ctx, newCR, queue, lms, c)
+	err := mgr.handlePullQueueChange(ctx, newCR, queue, os, c)
 	assert.NotNil(t, err)
 
 	// Mock secret
@@ -2271,15 +2271,15 @@ func TestHandlePullQueueChange(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestPullQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullQueueChange(ctx, newCR, queue, lms, c)
+	err = mgr.handlePullQueueChange(ctx, newCR, queue, os, c)
 	assert.NotNil(t, err)
 
 	// outputs.conf
 	propertyKVList := [][]string{
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.Region},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), lms.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), lms.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
@@ -2295,7 +2295,7 @@ func TestHandlePullQueueChange(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestPullQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullQueueChange(ctx, newCR, queue, lms, c)
+	err = mgr.handlePullQueueChange(ctx, newCR, queue, os, c)
 	assert.NotNil(t, err)
 
 	// inputs.conf
@@ -2305,7 +2305,7 @@ func TestHandlePullQueueChange(t *testing.T) {
 	// Negative test case: failure in updating remote queue stanza
 	mgr = newTestPullQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullQueueChange(ctx, newCR, queue, lms, c)
+	err = mgr.handlePullQueueChange(ctx, newCR, queue, os, c)
 	assert.NotNil(t, err)
 
 	// default-mode.conf
@@ -2333,7 +2333,7 @@ func TestHandlePullQueueChange(t *testing.T) {
 
 	mgr = newTestPullQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.handlePullQueueChange(ctx, newCR, queue, lms, c)
+	err = mgr.handlePullQueueChange(ctx, newCR, queue, os, c)
 	assert.Nil(t, err)
 }
 

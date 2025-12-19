@@ -12,7 +12,7 @@ resources:
 - bases/enterprise.splunk.com_standalones.yaml
 - bases/enterprise.splunk.com_ingestorclusters.yaml
 - bases/enterprise.splunk.com_queues.yaml
-- bases/enterprise.splunk.com_largemessagestores.yaml
+- bases/enterprise.splunk.com_objectstorages.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 

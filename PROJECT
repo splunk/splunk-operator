@@ -137,7 +137,7 @@ resources:
   controller: true
   domain: splunk.com
   group: enterprise
-  kind: LargeMessageStore
+  kind: ObjectStorage
   path: github.com/splunk/splunk-operator/api/v4
   version: v4
 version: "3"

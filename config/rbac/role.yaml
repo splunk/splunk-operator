@@ -51,10 +51,10 @@ rules:
   - clustermasters
   - indexerclusters
   - ingestorclusters
-  - largemessagestores
   - licensemanagers
   - licensemasters
   - monitoringconsoles
+  - objectstorages
   - queues
   - searchheadclusters
   - standalones
@@ -73,10 +73,10 @@ rules:
   - clustermasters/finalizers
   - indexerclusters/finalizers
   - ingestorclusters/finalizers
-  - largemessagestores/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
+  - objectstorages/finalizers
   - queues/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
@@ -89,10 +89,10 @@ rules:
   - clustermasters/status
   - indexerclusters/status
   - ingestorclusters/status
-  - largemessagestores/status
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
+  - objectstorages/status
   - queues/status
   - searchheadclusters/status
   - standalones/status

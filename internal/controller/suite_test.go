@@ -128,7 +128,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	}).SetupWithManager(k8sManager); err != nil {
 		Expect(err).NotTo(HaveOccurred())
 	}
-	if err := (&LargeMessageStoreReconciler{
+	if err := (&ObjectStorageReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {

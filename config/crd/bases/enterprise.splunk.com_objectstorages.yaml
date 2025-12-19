@@ -4,24 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: largemessagestores.enterprise.splunk.com
+  name: objectstorages.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: LargeMessageStore
-    listKind: LargeMessageStoreList
-    plural: largemessagestores
+    kind: ObjectStorage
+    listKind: ObjectStorageList
+    plural: objectstorages
     shortNames:
-    - lms
-    singular: largemessagestore
+    - os
+    singular: objectstorage
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of large message store
+    - description: Status of object storage
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of large message store resource
+    - description: Age of object storage resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -32,7 +32,7 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: LargeMessageStore is the Schema for the largemessagestores API
+        description: ObjectStorage is the Schema for the objectstorages API
         properties:
           apiVersion:
             description: |-
@@ -52,7 +52,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: LargeMessageStoreSpec defines the desired state of LargeMessageStore
+            description: ObjectStorageSpec defines the desired state of ObjectStorage
             properties:
               provider:
                 description: Provider of queue resources
@@ -81,7 +81,7 @@ spec:
             - message: s3 must be provided when provider is s3
               rule: self.provider != 's3' || has(self.s3)
           status:
-            description: LargeMessageStoreStatus defines the observed state of LargeMessageStore.
+            description: ObjectStorageStatus defines the observed state of ObjectStorage.
             properties:
               message:
                 description: Auxillary message describing CR status

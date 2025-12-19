@@ -66,8 +66,8 @@ const (
 	// SplunkQueue is the queue instance
 	SplunkQueue InstanceType = "queue"
 
-	// SplunkLargeMessageStore is the large message store instance
-	SplunkLargeMessageStore InstanceType = "large-message-store"
+	// SplunkObjectStorage is the large message store instance
+	SplunkObjectStorage InstanceType = "object-storage"
 
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
@@ -299,8 +299,8 @@ func KindToInstanceString(kind string) string {
 		return SplunkIngestor.ToString()
 	case "Queue":
 		return SplunkQueue.ToString()
-	case "LargeMessageStore":
-		return SplunkLargeMessageStore.ToString()
+	case "ObjectStorage":
+		return SplunkObjectStorage.ToString()
 	case "LicenseManager":
 		return SplunkLicenseManager.ToString()
 	case "LicenseMaster":

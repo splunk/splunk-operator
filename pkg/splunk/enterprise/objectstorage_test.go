@@ -43,7 +43,7 @@ func init() {
 	}
 }
 
-func TestApplyLargeMessageStore(t *testing.T) {
+func TestApplyObjectStorage(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -55,16 +55,16 @@ func TestApplyLargeMessageStore(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	lms := &enterpriseApi.LargeMessageStore{
+	os := &enterpriseApi.ObjectStorage{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "LargeMessageStore",
+			Kind:       "ObjectStorage",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lms",
+			Name:      "os",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LargeMessageStoreSpec{
+		Spec: enterpriseApi.ObjectStorageSpec{
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
@@ -72,12 +72,12 @@ func TestApplyLargeMessageStore(t *testing.T) {
 			},
 		},
 	}
-	c.Create(ctx, lms)
+	c.Create(ctx, os)
 
-	// ApplyLargeMessageStore
-	result, err := ApplyLargeMessageStore(ctx, c, lms)
+	// ApplyObjectStorage
+	result, err := ApplyObjectStorage(ctx, c, os)
 	assert.NoError(t, err)
 	assert.True(t, result.Requeue)
-	assert.NotEqual(t, enterpriseApi.PhaseError, lms.Status.Phase)
-	assert.Equal(t, enterpriseApi.PhaseReady, lms.Status.Phase)
+	assert.NotEqual(t, enterpriseApi.PhaseError, os.Status.Phase)
+	assert.Equal(t, enterpriseApi.PhaseReady, os.Status.Phase)
 }

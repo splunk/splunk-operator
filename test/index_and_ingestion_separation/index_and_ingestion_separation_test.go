@@ -84,14 +84,14 @@ var _ = Describe("indingsep test", func() {
 			q, err := deployment.DeployQueue(ctx, "queue", queue)
 			Expect(err).To(Succeed(), "Unable to deploy Queue")
 
-			// Deploy LargeMessageStore
-			testcaseEnvInst.Log.Info("Deploy LargeMessageStore")
-			lm, err := deployment.DeployLargeMessageStore(ctx, "lms", lms)
-			Expect(err).To(Succeed(), "Unable to deploy LargeMessageStore")
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: lm.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -101,7 +101,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: lm.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -137,12 +137,12 @@ var _ = Describe("indingsep test", func() {
 			err = deployment.DeleteCR(ctx, queue)
 			Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", queue)
 
-			// Delete the LargeMessageStore
-			lm = &enterpriseApi.LargeMessageStore{}
-			err = deployment.GetInstance(ctx, "lms", lm)
-			Expect(err).To(Succeed(), "Unable to get LargeMessageStore instance", "LargeMessageStore Name", lm)
-			err = deployment.DeleteCR(ctx, lm)
-			Expect(err).To(Succeed(), "Unable to delete LargeMessageStore", "LargeMessageStore Name", lm)
+			// Delete the ObjectStorage
+			objStorage = &enterpriseApi.ObjectStorage{}
+			err = deployment.GetInstance(ctx, "os", objStorage)
+			Expect(err).To(Succeed(), "Unable to get ObjectStorage instance", "ObjectStorage Name", objStorage)
+			err = deployment.DeleteCR(ctx, objStorage)
+			Expect(err).To(Succeed(), "Unable to delete ObjectStorage", "ObjectStorage Name", objStorage)
 		})
 	})
 
@@ -157,10 +157,10 @@ var _ = Describe("indingsep test", func() {
 			q, err := deployment.DeployQueue(ctx, "queue", queue)
 			Expect(err).To(Succeed(), "Unable to deploy Queue")
 
-			// Deploy LargeMessageStore
-			testcaseEnvInst.Log.Info("Deploy LargeMessageStore")
-			lm, err := deployment.DeployLargeMessageStore(ctx, "lms", lms)
-			Expect(err).To(Succeed(), "Unable to deploy LargeMessageStore")
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Upload apps to S3
 			testcaseEnvInst.Log.Info("Upload apps to S3")
@@ -206,7 +206,7 @@ var _ = Describe("indingsep test", func() {
 						},
 					},
 					QueueRef:             v1.ObjectReference{Name: q.Name},
-					LargeMessageStoreRef: v1.ObjectReference{Name: lm.Name},
+					ObjectStorageRef:     v1.ObjectReference{Name: objStorage.Name},
 					Replicas:             3,
 					AppFrameworkConfig:   appFrameworkSpec,
 				},
@@ -261,14 +261,14 @@ var _ = Describe("indingsep test", func() {
 			q, err := deployment.DeployQueue(ctx, "queue", queue)
 			Expect(err).To(Succeed(), "Unable to deploy Queue")
 
-			// Deploy LargeMessageStore
-			testcaseEnvInst.Log.Info("Deploy LargeMessageStore")
-			lm, err := deployment.DeployLargeMessageStore(ctx, "lms", lms)
-			Expect(err).To(Succeed(), "Unable to deploy LargeMessageStore")
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: lm.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -278,7 +278,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: lm.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -368,14 +368,14 @@ var _ = Describe("indingsep test", func() {
 			q, err := deployment.DeployQueue(ctx, "queue", queue)
 			Expect(err).To(Succeed(), "Unable to deploy Queue")
 
-			// Deploy LargeMessageStore
-			testcaseEnvInst.Log.Info("Deploy LargeMessageStore")
-			lm, err := deployment.DeployLargeMessageStore(ctx, "lms", lms)
-			Expect(err).To(Succeed(), "Unable to deploy LargeMessageStore")
+			// Deploy ObjectStorage
+			testcaseEnvInst.Log.Info("Deploy ObjectStorage")
+			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
+			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: lm.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -385,7 +385,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: lm.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase

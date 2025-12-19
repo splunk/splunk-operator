@@ -352,7 +352,7 @@ indexerCluster:
 
   queueRef: {}
 
-  largeMessageStoreRef: {}
+  objectStorageRef: {}
 
 searchHeadCluster:
 
@@ -903,4 +903,4 @@ ingestorCluster:
 
   queueRef: {}
 
-  largeMessageStoreRef: {}
+  objectStorageRef: {}

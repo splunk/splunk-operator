@@ -359,7 +359,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, queue, lms corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, queue, os corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IndexerCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -398,7 +398,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 			},
 			Replicas:             int32(replicas),
 			QueueRef:             queue,
-			LargeMessageStoreRef: lms,
+			ObjectStorageRef: os,
 		},
 	}
 
@@ -406,7 +406,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 }
 
 // newIngestorCluster creates and initialize the CR for IngestorCluster Kind
-func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue, lms corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IngestorCluster {
+func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue, os corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IngestorCluster {
 	return &enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngestorCluster",
@@ -428,7 +428,7 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue
 			},
 			Replicas:             int32(replicas),
 			QueueRef:             queue,
-			LargeMessageStoreRef: lms,
+			ObjectStorageRef: os,
 		},
 	}
 }
@@ -447,17 +447,17 @@ func newQueue(name, ns string, queue enterpriseApi.QueueSpec) *enterpriseApi.Que
 	}
 }
 
-// newLargeMessageStore creates and initializes the CR for LargeMessageStore Kind
-func newLargeMessageStore(name, ns string, lms enterpriseApi.LargeMessageStoreSpec) *enterpriseApi.LargeMessageStore {
-	return &enterpriseApi.LargeMessageStore{
+// newObjectStorage creates and initializes the CR for ObjectStorage Kind
+func newObjectStorage(name, ns string, objStorage enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	return &enterpriseApi.ObjectStorage{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LargeMessageStore",
+			Kind: "ObjectStorage",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: lms,
+		Spec: objStorage,
 	}
 }
 

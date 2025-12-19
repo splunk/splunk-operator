@@ -69,9 +69,9 @@ func NewQueue(name, ns string, spec enterpriseApi.QueueSpec) *enterpriseApi.Queu
 	}
 }
 
-// NewLargeMessageStore returns new LargeMessageStore instance with its config hash
-func NewLargeMessageStore(name, ns string, spec enterpriseApi.LargeMessageStoreSpec) *enterpriseApi.LargeMessageStore {
-	return &enterpriseApi.LargeMessageStore{
+// NewObjectStorage returns new ObjectStorage instance with its config hash
+func NewObjectStorage(name, ns string, spec enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	return &enterpriseApi.ObjectStorage{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: spec,
 	}

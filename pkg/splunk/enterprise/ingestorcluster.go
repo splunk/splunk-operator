@@ -235,26 +235,26 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 
 		// Large Message Store
-		lms := enterpriseApi.LargeMessageStore{}
-		if cr.Spec.LargeMessageStoreRef.Name != "" {
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.LargeMessageStoreRef.Namespace != "" {
-				ns = cr.Spec.LargeMessageStoreRef.Namespace
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
 			}
 			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.LargeMessageStoreRef.Name,
+				Name:      cr.Spec.ObjectStorageRef.Name,
 				Namespace: ns,
-			}, &lms)
+			}, &os)
 			if err != nil {
 				return result, err
 			}
 		}
 
 		// Can not override original queue spec due to comparison in the later code
-		lmsCopy := lms
-		if lmsCopy.Spec.Provider == "s3" {
-			if lmsCopy.Spec.S3.Endpoint == "" {
-				lmsCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.Region)
+		osCopy := os
+		if osCopy.Spec.Provider == "s3" {
+			if osCopy.Spec.S3.Endpoint == "" {
+				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.Region)
 			}
 		}
 
@@ -262,7 +262,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		if !reflect.DeepEqual(cr.Status.Queue, queue.Spec) {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient)
 
-			err = mgr.handlePushQueueChange(ctx, cr, queueCopy, lmsCopy, client)
+			err = mgr.handlePushQueueChange(ctx, cr, queueCopy, osCopy, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
@@ -343,7 +343,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // Checks if only Queue or Pipeline config changed, and updates the conf file if so
-func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue enterpriseApi.Queue, lms enterpriseApi.LargeMessageStore, k8s client.Client) error {
+func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue enterpriseApi.Queue, os enterpriseApi.ObjectStorage, k8s client.Client) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("handlePushQueueChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
@@ -370,7 +370,7 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 			afterDelete = true
 		}
 
-		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &lms, newCR, afterDelete)
+		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR, afterDelete)
 
 		for _, pbVal := range queueChangedFields {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
@@ -390,21 +390,20 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 }
 
 // getChangedQueueFieldsForIngestor returns a list of changed queue and pipeline fields for ingestor pods
-func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, lms *enterpriseApi.LargeMessageStore, queueIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (queueChangedFields, pipelineChangedFields [][]string) {
-	oldPB := queueIngestorStatus.Status.Queue
-	if oldPB == nil {
-		oldPB = &enterpriseApi.QueueSpec{}
+func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool) (queueChangedFields, pipelineChangedFields [][]string) {
+	oldQueue := queueIngestorStatus.Status.Queue
+	if oldQueue == nil {
+		oldQueue = &enterpriseApi.QueueSpec{}
 	}
-	newPB := &queue.Spec
+	newQueue := &queue.Spec
 
-	oldLMS := queueIngestorStatus.Status.LargeMessageStore
-	if oldLMS == nil {
-		oldLMS = &enterpriseApi.LargeMessageStoreSpec{}
+	oldOS := queueIngestorStatus.Status.ObjectStorage
+	if oldOS == nil {
+		oldOS = &enterpriseApi.ObjectStorageSpec{}
 	}
-	newLMS := &lms.Spec
-
+	newOS := &os.Spec	
 	// Push changed queue fields
-	queueChangedFields = pushQueueChanged(oldPB, newPB, oldLMS, newLMS, afterDelete)
+	queueChangedFields = pushQueueChanged(oldQueue, newQueue, oldOS, newOS, afterDelete)
 
 	// Always changed pipeline fields
 	pipelineChangedFields = pipelineConfig(false)
@@ -443,14 +442,14 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 	return output
 }
 
-func pushQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldLMS, newLMS *enterpriseApi.LargeMessageStoreSpec, afterDelete bool) (output [][]string) {
+func pushQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldOS, newOS *enterpriseApi.ObjectStorageSpec, afterDelete bool) (output [][]string) {
 	queueProvider := ""
 	if newQueue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
 	}
-	lmsProvider := ""
-	if newLMS.Provider == "s3" {
-		lmsProvider = "sqs_smartbus"
+	osProvider := ""
+	if newOS.Provider == "s3" {
+		osProvider = "sqs_smartbus"
 	}
 
 	if oldQueue.Provider != newQueue.Provider || afterDelete {
@@ -462,11 +461,11 @@ func pushQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldLMS, newLM
 	if oldQueue.SQS.Endpoint != newQueue.SQS.Endpoint || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), newQueue.SQS.Endpoint})
 	}
-	if oldLMS.S3.Endpoint != newLMS.S3.Endpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", lmsProvider), newLMS.S3.Endpoint})
+	if oldOS.S3.Endpoint != newOS.S3.Endpoint || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), newOS.S3.Endpoint})
 	}
-	if oldLMS.S3.Path != newLMS.S3.Path || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", lmsProvider), newLMS.S3.Path})
+	if oldOS.S3.Path != newOS.S3.Path || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), newOS.S3.Path})
 	}
 	if oldQueue.SQS.DLQ != newQueue.SQS.DLQ || afterDelete {
 		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), newQueue.SQS.DLQ})

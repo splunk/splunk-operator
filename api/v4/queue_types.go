@@ -120,18 +120,18 @@ func init() {
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to Kubernetes API
-func (bc *Queue) NewEvent(eventType, reason, message string) corev1.Event {
+func (os *Queue) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    bc.ObjectMeta.Namespace,
+			Namespace:    os.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       "Queue",
-			Namespace:  bc.Namespace,
-			Name:       bc.Name,
-			UID:        bc.UID,
+			Namespace:  os.Namespace,
+			Name:       os.Name,
+			UID:        os.UID,
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,

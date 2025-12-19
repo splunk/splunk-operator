@@ -44,8 +44,8 @@ type IngestorClusterSpec struct {
 	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +kubebuilder:validation:Required
-	// Large Message Store reference
-	LargeMessageStoreRef corev1.ObjectReference `json:"largeMessageStoreRef"`
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
@@ -77,8 +77,8 @@ type IngestorClusterStatus struct {
 	// Queue
 	Queue *QueueSpec `json:"queue,omitempty"`
 
-	// Large Message Store
-	LargeMessageStore *LargeMessageStoreSpec `json:"largeMessageStore,omitempty"`
+	// Object Storage
+	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
