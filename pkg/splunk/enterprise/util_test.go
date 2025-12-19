@@ -2624,8 +2624,8 @@ func TestUpdateCRStatus(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
-		WithStatusSubresource(&enterpriseApi.Bus{}).
-		WithStatusSubresource(&enterpriseApi.LargeMessageStore{}).
+		WithStatusSubresource(&enterpriseApi.Queue{}).
+		WithStatusSubresource(&enterpriseApi.ObjectStorage{}).
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
 	c := builder.Build()
@@ -3307,8 +3307,8 @@ func TestGetCurrentImage(t *testing.T) {
 		WithStatusSubresource(&enterpriseApi.MonitoringConsole{}).
 		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
-		WithStatusSubresource(&enterpriseApi.Bus{}).
-		WithStatusSubresource(&enterpriseApi.LargeMessageStore{}).
+		WithStatusSubresource(&enterpriseApi.Queue{}).
+		WithStatusSubresource(&enterpriseApi.ObjectStorage{}).
 		WithStatusSubresource(&enterpriseApi.IngestorCluster{})
 	client := builder.Build()
 	client.Create(ctx, &current)

@@ -417,8 +417,8 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
 }
 
-// GetBusRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
-func GetBusRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, error) {
+// GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
+func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, error) {
 	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 	if err != nil {
 		return "", "", err

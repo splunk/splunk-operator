@@ -2111,6 +2111,8 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
+		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
+		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
 	}, queueChangedFieldsInputs)
 
 	assert.Equal(t, 12, len(queueChangedFieldsOutputs))
