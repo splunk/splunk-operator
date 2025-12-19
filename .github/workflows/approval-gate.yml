@@ -1,0 +1,27 @@
+name: Approval Gate
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        description: 'Environment name for approval'
+        required: false
+        type: string
+        default: 'external-contributor-approval'
+
+jobs:
+  approval-gate:
+    runs-on: ubuntu-latest
+    environment: ${{
+            (github.event_name == 'pull_request_target' &&
+            !contains(fromJSON('["MEMBER", "OWNER"]'), github.event.pull_request.author_association))
+            && inputs.environment-name
+            || ''
+        }}
+    steps:
+      - name: Approval status
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Author association: ${{ github.event.pull_request.author_association }}"
+          echo "Approval granted or not required"
+

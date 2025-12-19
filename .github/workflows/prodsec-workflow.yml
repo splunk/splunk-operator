@@ -4,13 +4,16 @@ permissions:
   packages: write
   pull-requests: write
 on:
-  pull_request: {}
+  pull_request_target: {}
   push:
     branches:
     - main
     - develop
 jobs:
+  approval-gate:
+    uses: ./.github/workflows/approval-gate.yml
   semgrep:
+    needs: approval-gate
     name: Semgrep Scanner
     runs-on: ubuntu-24.04
     env:
@@ -32,7 +35,7 @@ jobs:
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Run FOSSA Test 
+    - name: Run FOSSA Test
       uses: fossas/fossa-action@main
       with:
         api-key: ${{secrets.FOSSA_API_TOKEN}}

@@ -5,14 +5,17 @@ permissions:
   id-token: write
   pull-requests: write
 on:
-  pull_request: {}
+  pull_request_target: {}
   push:
     branches:
     - main
     - develop
 jobs:
+  approval-gate:
+    uses: ./.github/workflows/approval-gate.yml
   check-formating:
     runs-on: ubuntu-latest
+    needs: approval-gate
     steps:
       - uses: actions/checkout@v2
       - name: Dotenv Action
