@@ -1327,20 +1327,22 @@ func (mgr *indexerClusterPodManager) handlePullQueueChange(ctx context.Context, 
 		}
 		splunkClient := newSplunkClientForQueuePipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		if newCR.Status.Queue == nil {
-			newCR.Status.Queue = &enterpriseApi.QueueSpec{}
+		newCrStatusQueue := newCR.Status.Queue
+		if newCrStatusQueue == nil {
+			newCrStatusQueue = &enterpriseApi.QueueSpec{}
 		}
-		if newCR.Status.ObjectStorage == nil {
-			newCR.Status.ObjectStorage = &enterpriseApi.ObjectStorageSpec{}
+		newCrStatusObjectStorage := newCR.Status.ObjectStorage
+		if newCrStatusObjectStorage == nil {
+			newCrStatusObjectStorage = &enterpriseApi.ObjectStorageSpec{}
 		}
 
 		afterDelete := false
-		if (queue.Spec.SQS.Name != "" && newCR.Status.Queue.SQS.Name != "" && queue.Spec.SQS.Name != newCR.Status.Queue.SQS.Name) ||
-			(queue.Spec.Provider != "" && newCR.Status.Queue.Provider != "" && queue.Spec.Provider != newCR.Status.Queue.Provider) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Queue.SQS.Name)); err != nil {
+		if (queue.Spec.SQS.Name != "" && newCrStatusQueue.SQS.Name != "" && queue.Spec.SQS.Name != newCrStatusQueue.SQS.Name) ||
+			(queue.Spec.Provider != "" && newCrStatusQueue.Provider != "" && queue.Spec.Provider != newCrStatusQueue.Provider) {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCrStatusQueue.SQS.Name)); err != nil {
 				updateErr = err
 			}
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Queue.SQS.Name)); err != nil {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "inputs", fmt.Sprintf("remote_queue:%s", newCrStatusQueue.SQS.Name)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -1360,7 +1362,7 @@ func (mgr *indexerClusterPodManager) handlePullQueueChange(ctx context.Context, 
 			}
 		}
 
-		queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR, afterDelete, s3AccessKey, s3SecretKey)
+		queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCrStatusQueue, newCrStatusObjectStorage, afterDelete, s3AccessKey, s3SecretKey)
 
 		for _, pbVal := range queueChangedFieldsOutputs {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
@@ -1386,22 +1388,10 @@ func (mgr *indexerClusterPodManager) handlePullQueueChange(ctx context.Context, 
 }
 
 // getChangedQueueFieldsForIndexer returns a list of changed queue and pipeline fields for indexer pods
-func getChangedQueueFieldsForIndexer(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueIndexerStatus *enterpriseApi.IndexerCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields [][]string) {
-	// Compare queue fields
-	oldQueue := queueIndexerStatus.Status.Queue
-	if oldQueue == nil {
-		oldQueue = &enterpriseApi.QueueSpec{}
-	}
-	newQueue := queue.Spec
-
-	oldOS := queueIndexerStatus.Status.ObjectStorage
-	if oldOS == nil {
-		oldOS = &enterpriseApi.ObjectStorageSpec{}
-	}
-	newOS := os.Spec
-
+func getChangedQueueFieldsForIndexer(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueStatus *enterpriseApi.QueueSpec, osStatus *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields [][]string) {
 	// Push all queue fields
-	queueChangedFieldsInputs, queueChangedFieldsOutputs = pullQueueChanged(oldQueue, &newQueue, oldOS, &newOS, afterDelete, s3AccessKey, s3SecretKey)
+	queueChangedFieldsInputs, queueChangedFieldsOutputs = pullQueueChanged(queueStatus, &queue.Spec, osStatus, &os.Spec, afterDelete, s3AccessKey, s3SecretKey)
+	
 	// Always set all pipeline fields, not just changed ones
 	pipelineChangedFields = pipelineConfig(true)
 

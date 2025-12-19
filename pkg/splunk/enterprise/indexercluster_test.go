@@ -2096,11 +2096,15 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 				Name: os.Name,
 			},
 		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			Queue:         &enterpriseApi.QueueSpec{},
+			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
+		},
 	}
 
 	key := "key"
 	secret := "secret"
-	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR, false, key, secret)
+	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR.Status.Queue, newCR.Status.ObjectStorage, false, key, secret)
 	assert.Equal(t, 10, len(queueChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},

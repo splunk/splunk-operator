@@ -388,17 +388,19 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		if newCR.Status.Queue == nil {
-			newCR.Status.Queue = &enterpriseApi.QueueSpec{}
+		newCrStatusQueue := newCR.Status.Queue
+		if newCrStatusQueue == nil {
+			newCrStatusQueue = &enterpriseApi.QueueSpec{}
 		}
-		if newCR.Status.ObjectStorage == nil {
-			newCR.Status.ObjectStorage = &enterpriseApi.ObjectStorageSpec{}
+		newCrStatusObjectStorage := newCR.Status.ObjectStorage
+		if newCrStatusObjectStorage == nil {
+			newCrStatusObjectStorage = &enterpriseApi.ObjectStorageSpec{}
 		}
 
 		afterDelete := false
-		if (queue.Spec.SQS.Name != "" && newCR.Status.Queue.SQS.Name != "" && queue.Spec.SQS.Name != newCR.Status.Queue.SQS.Name) ||
-			(queue.Spec.Provider != "" && newCR.Status.Queue.Provider != "" && queue.Spec.Provider != newCR.Status.Queue.Provider) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Queue.SQS.Name)); err != nil {
+		if (queue.Spec.SQS.Name != "" && newCrStatusQueue.SQS.Name != "" && queue.Spec.SQS.Name != newCrStatusQueue.SQS.Name) ||
+			(queue.Spec.Provider != "" && newCrStatusQueue.Provider != "" && queue.Spec.Provider != newCrStatusQueue.Provider) {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCrStatusQueue.SQS.Name)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -418,7 +420,7 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 			}
 		}
 
-		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR, afterDelete, s3AccessKey, s3SecretKey)
+		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCrStatusQueue, newCrStatusObjectStorage,afterDelete, s3AccessKey, s3SecretKey)
 
 		for _, pbVal := range queueChangedFields {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
@@ -438,15 +440,9 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 }
 
 // getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
-func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFields, pipelineChangedFields [][]string) {
-	oldQueue := queueIngestorStatus.Status.Queue
-	newQueue := &queue.Spec
-
-	oldOS := queueIngestorStatus.Status.ObjectStorage
-	newOS := &os.Spec
-
+func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueStatus *enterpriseApi.QueueSpec, osStatus *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFields, pipelineChangedFields [][]string) {
 	// Push changed bus fields
-	queueChangedFields = pushQueueChanged(oldQueue, newQueue, oldOS, newOS, afterDelete, s3AccessKey, s3SecretKey)
+	queueChangedFields = pushQueueChanged(queueStatus, &queue.Spec, osStatus, &os.Spec, afterDelete, s3AccessKey, s3SecretKey)
 
 	// Always changed pipeline fields
 	pipelineChangedFields = pipelineConfig(false)

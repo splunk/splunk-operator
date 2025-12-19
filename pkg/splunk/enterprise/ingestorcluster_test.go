@@ -462,7 +462,7 @@ func TestGetChangedQueueFieldsForIngestor(t *testing.T) {
 
 	key := "key"
 	secret := "secret"
-	queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR, false, key, secret)
+	queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR.Status.Queue, newCR.Status.ObjectStorage, false, key, secret)
 
 	assert.Equal(t, 12, len(queueChangedFields))
 	assert.Equal(t, [][]string{
