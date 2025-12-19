@@ -1,21 +1,21 @@
-{{- if .Values.bus }}
-{{- if .Values.bus.enabled }}
+{{- if .Values.queue }}
+{{- if .Values.queue.enabled }}
 apiVersion: enterprise.splunk.com/v4
-kind: Bus
+kind: Queue
 metadata:
-  name: {{ .Values.bus.name }}
-  namespace: {{ default .Release.Namespace .Values.bus.namespaceOverride }}
-  {{- with .Values.bus.additionalLabels }}
+  name: {{ .Values.queue.name }}
+  namespace: {{ default .Release.Namespace .Values.queue.namespaceOverride }}
+  {{- with .Values.queue.additionalLabels }}
   labels:
 {{ toYaml . | nindent 4 }}
   {{- end }}
-  {{- with .Values.bus.additionalAnnotations }}
+  {{- with .Values.queue.additionalAnnotations }}
   annotations:
 {{ toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  provider: {{ .Values.bus.provider | quote }}
-  {{- with .Values.bus.sqs }}
+  provider: {{ .Values.queue.provider | quote }}
+  {{- with .Values.queue.sqs }}
   sqs:
     {{- if .endpoint }}
     endpoint: {{ .endpoint | quote }}

@@ -16,6 +16,7 @@ package enterprise
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -27,7 +28,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestApplyBus(t *testing.T) {
+func init() {
+	GetReadinessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
+		return fileLocation
+	}
+	GetLivenessScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
+		return fileLocation
+	}
+	GetStartupScriptLocation = func() string {
+		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
+		return fileLocation
+	}
+}
+
+func TestApplyObjectStorage(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -39,31 +55,29 @@ func TestApplyBus(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	bus := &enterpriseApi.Bus{
+	os := &enterpriseApi.ObjectStorage{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Bus",
+			Kind:       "ObjectStorage",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "bus",
+			Name:      "os",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.BusSpec{
-			Provider: "sqs",
-			SQS: enterpriseApi.SQSSpec{
-				Name:     "test-queue",
-				Region:   "us-west-2",
-				Endpoint: "https://sqs.us-west-2.amazonaws.com",
-				DLQ:      "sqs-dlq-test",
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "s3://bucket/key",
 			},
 		},
 	}
-	c.Create(ctx, bus)
+	c.Create(ctx, os)
 
-	// ApplyBus
-	result, err := ApplyBus(ctx, c, bus)
+	// ApplyObjectStorage
+	result, err := ApplyObjectStorage(ctx, c, os)
 	assert.NoError(t, err)
 	assert.True(t, result.Requeue)
-	assert.NotEqual(t, enterpriseApi.PhaseError, bus.Status.Phase)
-	assert.Equal(t, enterpriseApi.PhaseReady, bus.Status.Phase)
+	assert.NotEqual(t, enterpriseApi.PhaseError, os.Status.Phase)
+	assert.Equal(t, enterpriseApi.PhaseReady, os.Status.Phase)
 }

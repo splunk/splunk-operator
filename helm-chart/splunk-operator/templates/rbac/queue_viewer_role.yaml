@@ -4,16 +4,16 @@
 # Grants read-only access to enterprise.splunk.com resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
-
+{{- if .Values.splunkOperator.clusterWideAccess }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: largemessagestore-viewer-role
+  name: {{ include "splunk-operator.operator.fullname" . }}-queue-viewer-role
 rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - largemessagestores
+  - queues
   verbs:
   - get
   - list
@@ -21,6 +21,27 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - largemessagestores/status
+  - queues/status
   verbs:
   - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-queue-viewer-role
+rules:
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - queues
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - queues/status
+  verbs:
+  - get
+{{- end }}

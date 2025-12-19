@@ -23,53 +23,39 @@ import (
 )
 
 const (
-	// BusPausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// ObjectStoragePausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	BusPausedAnnotation = "bus.enterprise.splunk.com/paused"
+	ObjectStoragePausedAnnotation = "objectstorage.enterprise.splunk.com/paused"
 )
 
-// +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
-// BusSpec defines the desired state of Bus
-type BusSpec struct {
+// +kubebuilder:validation:XValidation:rule="self.provider != 's3' || has(self.s3)",message="s3 must be provided when provider is s3"
+// ObjectStorageSpec defines the desired state of ObjectStorage
+type ObjectStorageSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=sqs
+	// +kubebuilder:validation:Enum=s3
 	// Provider of queue resources
 	Provider string `json:"provider"`
 
 	// +kubebuilder:validation:Required
-	// sqs specific inputs
-	SQS SQSSpec `json:"sqs"`
+	// s3 specific inputs
+	S3 S3Spec `json:"s3"`
 }
 
-type SQSSpec struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	// Name of the queue
-	Name string `json:"name"`
-
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
-	// Region of the resources
-	Region string `json:"region"`
-
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	// Name of the dead letter queue resource
-	DLQ string `json:"dlq"`
-
+type S3Spec struct {
 	// +optional
-	// +kubebuilder:validation:Pattern=`^https://sqs(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$`
-	// Amazon SQS Service endpoint
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
+	// S3-compatible Service endpoint
 	Endpoint string `json:"endpoint"`
 
-	// +optional
-	// List of remote storage volumes
-	VolList []VolumeSpec `json:"volumes,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$`
+	// S3 bucket path
+	Path string `json:"path"`
 }
 
-// BusStatus defines the observed state of Bus
-type BusStatus struct {
-	// Phase of the bus
+// ObjectStorageStatus defines the observed state of ObjectStorage.
+type ObjectStorageStatus struct {
+	// Phase of the large message store
 	Phase Phase `json:"phase"`
 
 	// Resource revision tracker
@@ -82,27 +68,27 @@ type BusStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// Bus is the Schema for a Splunk Enterprise bus
+// ObjectStorage is the Schema for a Splunk Enterprise object storage
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=buses,scope=Namespaced,shortName=bus
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of bus"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of bus resource"
+// +kubebuilder:resource:path=objectstorages,scope=Namespaced,shortName=os
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of object storage"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of object storage resource"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
 
-// Bus is the Schema for the buses API
-type Bus struct {
+// ObjectStorage is the Schema for the objectstorages API
+type ObjectStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec   BusSpec   `json:"spec"`
-	Status BusStatus `json:"status,omitempty,omitzero"`
+	Spec   ObjectStorageSpec   `json:"spec"`
+	Status ObjectStorageStatus `json:"status,omitempty,omitzero"`
 }
 
 // DeepCopyObject implements runtime.Object
-func (in *Bus) DeepCopyObject() runtime.Object {
+func (in *ObjectStorage) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -111,42 +97,42 @@ func (in *Bus) DeepCopyObject() runtime.Object {
 
 // +kubebuilder:object:root=true
 
-// BusList contains a list of Bus
-type BusList struct {
+// ObjectStorageList contains a list of ObjectStorage
+type ObjectStorageList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Bus `json:"items"`
+	Items           []ObjectStorage `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Bus{}, &BusList{})
+	SchemeBuilder.Register(&ObjectStorage{}, &ObjectStorageList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to Kubernetes API
-func (bc *Bus) NewEvent(eventType, reason, message string) corev1.Event {
+func (os *ObjectStorage) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    bc.ObjectMeta.Namespace,
+			Namespace:    os.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Bus",
-			Namespace:  bc.Namespace,
-			Name:       bc.Name,
-			UID:        bc.UID,
+			Kind:       "ObjectStorage",
+			Namespace:  os.Namespace,
+			Name:       os.Name,
+			UID:        os.UID,
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-bus-controller",
+			Component: "splunk-object-storage-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/bus-controller",
+		ReportingController: "enterprise.splunk.com/object-storage-controller",
 	}
 }

@@ -39,16 +39,16 @@ var (
 	testenvInstance *testenv.TestEnv
 	testSuiteName   = "indingsep-" + testenv.RandomDNSName(3)
 
-	bus = enterpriseApi.BusSpec{
+	queue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			Name:     "test-queue",
-			Region:   "us-west-2",
-			Endpoint: "https://sqs.us-west-2.amazonaws.com",
-			DLQ:      "test-dead-letter-queue",
+			Name:       "test-queue",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "test-dead-letter-queue",
 		},
 	}
-	lms = enterpriseApi.LargeMessageStoreSpec{
+	objectStorage = enterpriseApi.ObjectStorageSpec{
 		Provider: "s3",
 		S3: enterpriseApi.S3Spec{
 			Endpoint: "https://s3.us-west-2.amazonaws.com",
@@ -85,13 +85,13 @@ var (
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
 
-	updateBus = enterpriseApi.BusSpec{
+	updateQueue = enterpriseApi.QueueSpec{
 		Provider: "sqs",
 		SQS: enterpriseApi.SQSSpec{
-			Name:     "test-queue-updated",
-			Region:   "us-west-2",
-			Endpoint: "https://sqs.us-west-2.amazonaws.com",
-			DLQ:      "test-dead-letter-queue-updated",
+			Name:       "test-queue-updated",
+			AuthRegion: "us-west-2",
+			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+			DLQ:        "test-dead-letter-queue-updated",
 		},
 	}
 

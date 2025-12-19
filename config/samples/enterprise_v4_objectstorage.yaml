@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v4
-kind: Bus
+kind: ObjectStorage
 metadata:
-  name: bus-sample
+  name: objectstorage-sample
   finalizers:  
   - "enterprise.splunk.com/delete-pvc" 
 spec: {}

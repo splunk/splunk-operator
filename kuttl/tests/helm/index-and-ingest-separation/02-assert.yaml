@@ -103,21 +103,21 @@ kind: IngestorCluster
 metadata:
   name: ingestor
 spec:
-  replicas: 3
-  busRef:
-    name: bus
-  largeMessageStoreRef:
-    name: lms
+  replicas: 4
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 status:
   phase: Ready
-  bus:
+  queue:
     provider: sqs
     sqs:
       name: sqs-test
       region: us-west-2
       endpoint: https://sqs.us-west-2.amazonaws.com
       dlq: sqs-dlq-test
-  largeMessageStore:
+  objectStorage:
     provider: s3
     s3:
       endpoint: https://s3.us-west-2.amazonaws.com

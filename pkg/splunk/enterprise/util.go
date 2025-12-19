@@ -2310,33 +2310,33 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
 		return latestIngCR, nil
 
-	case "Bus":
-		latestBusCR := &enterpriseApi.Bus{}
-		err = client.Get(ctx, namespacedName, latestBusCR)
+	case "Queue":
+		latestQueueCR := &enterpriseApi.Queue{}
+		err = client.Get(ctx, namespacedName, latestQueueCR)
 		if err != nil {
 			return nil, err
 		}
 
-		origCR.(*enterpriseApi.Bus).Status.Message = ""
+		origCR.(*enterpriseApi.Queue).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.Bus).Status.Message = (*crError).Error()
+			origCR.(*enterpriseApi.Queue).Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.Bus).Status.DeepCopyInto(&latestBusCR.Status)
-		return latestBusCR, nil
+		origCR.(*enterpriseApi.Queue).Status.DeepCopyInto(&latestQueueCR.Status)
+		return latestQueueCR, nil
 
-	case "LargeMessageStore":
-		latestLmsCR := &enterpriseApi.LargeMessageStore{}
-		err = client.Get(ctx, namespacedName, latestLmsCR)
+	case "ObjectStorage":
+		latestOsCR := &enterpriseApi.ObjectStorage{}
+		err = client.Get(ctx, namespacedName, latestOsCR)
 		if err != nil {
 			return nil, err
 		}
 
-		origCR.(*enterpriseApi.LargeMessageStore).Status.Message = ""
+		origCR.(*enterpriseApi.ObjectStorage).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.LargeMessageStore).Status.Message = (*crError).Error()
+			origCR.(*enterpriseApi.ObjectStorage).Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.LargeMessageStore).Status.DeepCopyInto(&latestLmsCR.Status)
-		return latestLmsCR, nil
+		origCR.(*enterpriseApi.ObjectStorage).Status.DeepCopyInto(&latestOsCR.Status)
+		return latestOsCR, nil
 
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
@@ -2566,7 +2566,7 @@ func loadFixture(t *testing.T, filename string) string {
 	if err != nil {
 		t.Fatalf("Failed to load fixture %s: %v", filename, err)
 	}
-	
+
 	// Compact the JSON to match the output from json.Marshal
 	var compactJSON bytes.Buffer
 	if err := json.Compact(&compactJSON, data); err != nil {

@@ -4,24 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
-  name: buses.enterprise.splunk.com
+  name: queues.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: Bus
-    listKind: BusList
-    plural: buses
+    kind: Queue
+    listKind: QueueList
+    plural: queues
     shortNames:
-    - bus
-    singular: bus
+    - queue
+    singular: queue
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Status of bus
+    - description: Status of queue
       jsonPath: .status.phase
       name: Phase
       type: string
-    - description: Age of bus resource
+    - description: Age of queue resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -32,7 +32,7 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: Bus is the Schema for the buses API
+        description: Queue is the Schema for the queues API
         properties:
           apiVersion:
             description: |-
@@ -52,7 +52,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: BusSpec defines the desired state of Bus
+            description: QueueSpec defines the desired state of Queue
             properties:
               provider:
                 description: Provider of queue resources
@@ -62,21 +62,21 @@ spec:
               sqs:
                 description: sqs specific inputs
                 properties:
+                  authRegion:
+                    description: Auth Region of the resources
+                    pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
+                    type: string
                   dlq:
                     description: Name of the dead letter queue resource
                     minLength: 1
                     type: string
                   endpoint:
                     description: Amazon SQS Service endpoint
-                    pattern: ^https://sqs(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$
+                    pattern: ^https?://[^\s/$.?#].[^\s]*$
                     type: string
                   name:
                     description: Name of the queue
                     minLength: 1
-                    type: string
-                  region:
-                    description: Region of the resources
-                    pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
                     type: string
                   volumes:
                     description: List of remote storage volumes
@@ -114,7 +114,6 @@ spec:
                 required:
                 - dlq
                 - name
-                - region
                 type: object
             required:
             - provider
@@ -124,13 +123,13 @@ spec:
             - message: sqs must be provided when provider is sqs
               rule: self.provider != 'sqs' || has(self.sqs)
           status:
-            description: BusStatus defines the observed state of Bus
+            description: QueueStatus defines the observed state of Queue
             properties:
               message:
                 description: Auxillary message describing CR status
                 type: string
               phase:
-                description: Phase of the bus
+                description: Phase of the queue
                 enum:
                 - Pending
                 - Ready

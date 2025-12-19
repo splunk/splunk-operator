@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v4
-kind: LargeMessageStore
+kind: Queue
 metadata:
-  name: largemessagestore-sample
+  name: queue-sample
   finalizers:  
   - "enterprise.splunk.com/delete-pvc" 
 spec: {}

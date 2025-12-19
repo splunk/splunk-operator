@@ -207,61 +207,61 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// No need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
-		// Bus
-		bus := enterpriseApi.Bus{}
-		if cr.Spec.BusRef.Name != "" {
+		// Queue
+		queue := enterpriseApi.Queue{}
+		if cr.Spec.QueueRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.BusRef.Namespace != "" {
-				ns = cr.Spec.BusRef.Namespace
+			if cr.Spec.QueueRef.Namespace != "" {
+				ns = cr.Spec.QueueRef.Namespace
 			}
 			err = client.Get(ctx, types.NamespacedName{
-				Name:      cr.Spec.BusRef.Name,
+				Name:      cr.Spec.QueueRef.Name,
 				Namespace: ns,
-			}, &bus)
+			}, &queue)
 			if err != nil {
 				return result, err
 			}
 		}
 
-		// Can not override original bus spec due to comparison in the later code
-		busCopy := bus
-		if busCopy.Spec.Provider == "sqs" {
-			if busCopy.Spec.SQS.Endpoint == "" {
-				busCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", busCopy.Spec.SQS.Region)
+		// Can not override original queue spec due to comparison in the later code
+		queueCopy := queue
+		if queueCopy.Spec.Provider == "sqs" {
+			if queueCopy.Spec.SQS.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
 			}
 		}
 
 		// Large Message Store
-		lms := enterpriseApi.LargeMessageStore{}
-		if cr.Spec.LargeMessageStoreRef.Name != "" {
+		os := enterpriseApi.ObjectStorage{}
+		if cr.Spec.ObjectStorageRef.Name != "" {
 			ns := cr.GetNamespace()
-			if cr.Spec.LargeMessageStoreRef.Namespace != "" {
-				ns = cr.Spec.LargeMessageStoreRef.Namespace
+			if cr.Spec.ObjectStorageRef.Namespace != "" {
+				ns = cr.Spec.ObjectStorageRef.Namespace
 			}
 			err = client.Get(context.Background(), types.NamespacedName{
-				Name:      cr.Spec.LargeMessageStoreRef.Name,
+				Name:      cr.Spec.ObjectStorageRef.Name,
 				Namespace: ns,
-			}, &lms)
+			}, &os)
 			if err != nil {
 				return result, err
 			}
 		}
 
-		// Can not override original bus spec due to comparison in the later code
-		lmsCopy := lms
-		if lmsCopy.Spec.Provider == "s3" {
-			if lmsCopy.Spec.S3.Endpoint == "" {
-				lmsCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", bus.Spec.SQS.Region)
+		// Can not override original queue spec due to comparison in the later code
+		osCopy := os
+		if osCopy.Spec.Provider == "s3" {
+			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
+				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
 			}
 		}
 
 		// If bus is updated
-		if cr.Status.Bus == nil || cr.Status.LargeMessageStore == nil || !reflect.DeepEqual(*cr.Status.Bus, bus.Spec) || !reflect.DeepEqual(*cr.Status.LargeMessageStore, lms.Spec) {
+		if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-			err = mgr.handlePushBusChange(ctx, cr, busCopy, lmsCopy, client)
+			err = mgr.handlePushQueueChange(ctx, cr, queueCopy, osCopy, client)
 			if err != nil {
-				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Bus/Pipeline config change after pod creation: %s", err.Error()))
-				scopedLog.Error(err, "Failed to update conf file for Bus/Pipeline config change after pod creation")
+				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
+				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
 				return result, err
 			}
 
@@ -274,8 +274,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				scopedLog.Info("Restarted splunk", "ingestor", i)
 			}
 
-			cr.Status.Bus = &bus.Spec
-			cr.Status.LargeMessageStore = &lms.Spec
+			cr.Status.Queue = &queue.Spec
+			cr.Status.ObjectStorage = &os.Spec
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -369,10 +369,10 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	return ss, nil
 }
 
-// Checks if only Bus or Pipeline config changed, and updates the conf file if so
-func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, bus enterpriseApi.Bus, lms enterpriseApi.LargeMessageStore, k8s client.Client) error {
+// Checks if only Queue or Pipeline config changed, and updates the conf file if so
+func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue enterpriseApi.Queue, os enterpriseApi.ObjectStorage, k8s client.Client) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("handlePushBusChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	scopedLog := reqLogger.WithName("handlePushQueueChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.Replicas
@@ -388,17 +388,17 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		if newCR.Status.Bus == nil {
-			newCR.Status.Bus = &enterpriseApi.BusSpec{}
+		if newCR.Status.Queue == nil {
+			newCR.Status.Queue = &enterpriseApi.QueueSpec{}
 		}
-		if newCR.Status.LargeMessageStore == nil {
-			newCR.Status.LargeMessageStore = &enterpriseApi.LargeMessageStoreSpec{}
+		if newCR.Status.ObjectStorage == nil {
+			newCR.Status.ObjectStorage = &enterpriseApi.ObjectStorageSpec{}
 		}
 
 		afterDelete := false
-		if (bus.Spec.SQS.Name != "" && newCR.Status.Bus.SQS.Name != "" && bus.Spec.SQS.Name != newCR.Status.Bus.SQS.Name) ||
-			(bus.Spec.Provider != "" && newCR.Status.Bus.Provider != "" && bus.Spec.Provider != newCR.Status.Bus.Provider) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Bus.SQS.Name)); err != nil {
+		if (queue.Spec.SQS.Name != "" && newCR.Status.Queue.SQS.Name != "" && queue.Spec.SQS.Name != newCR.Status.Queue.SQS.Name) ||
+			(queue.Spec.Provider != "" && newCR.Status.Queue.Provider != "" && queue.Spec.Provider != newCR.Status.Queue.Provider) {
+			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCR.Status.Queue.SQS.Name)); err != nil {
 				updateErr = err
 			}
 			afterDelete = true
@@ -406,22 +406,22 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 
 		// Secret reference
 		s3AccessKey, s3SecretKey := "", ""
-		if bus.Spec.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
-			for _, vol := range bus.Spec.SQS.VolList {
+		if queue.Spec.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
 				if vol.SecretRef != "" {
-					s3AccessKey, s3SecretKey, err = GetBusRemoteVolumeSecrets(ctx, vol, k8s, newCR)
+					s3AccessKey, s3SecretKey, err = GetQueueRemoteVolumeSecrets(ctx, vol, k8s, newCR)
 					if err != nil {
-						scopedLog.Error(err, "Failed to get bus remote volume secrets")
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
 						return err
 					}
 				}
 			}
 		}
 
-		busChangedFields, pipelineChangedFields := getChangedBusFieldsForIngestor(&bus, &lms, newCR, afterDelete, s3AccessKey, s3SecretKey)
+		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR, afterDelete, s3AccessKey, s3SecretKey)
 
-		for _, pbVal := range busChangedFields {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", bus.Spec.SQS.Name), [][]string{pbVal}); err != nil {
+		for _, pbVal := range queueChangedFields {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
 				updateErr = err
 			}
 		}
@@ -438,15 +438,15 @@ func (mgr *ingestorClusterPodManager) handlePushBusChange(ctx context.Context, n
 }
 
 // getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
-func getChangedBusFieldsForIngestor(bus *enterpriseApi.Bus, lms *enterpriseApi.LargeMessageStore, busIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (busChangedFields, pipelineChangedFields [][]string) {
-	oldPB := busIngestorStatus.Status.Bus
-	newPB := &bus.Spec
+func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueIngestorStatus *enterpriseApi.IngestorCluster, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFields, pipelineChangedFields [][]string) {
+	oldQueue := queueIngestorStatus.Status.Queue
+	newQueue := &queue.Spec
 
-	oldLMS := busIngestorStatus.Status.LargeMessageStore
-	newLMS := &lms.Spec
+	oldOS := queueIngestorStatus.Status.ObjectStorage
+	newOS := &os.Spec
 
 	// Push changed bus fields
-	busChangedFields = pushBusChanged(oldPB, newPB, oldLMS, newLMS, afterDelete, s3AccessKey, s3SecretKey)
+	queueChangedFields = pushQueueChanged(oldQueue, newQueue, oldOS, newOS, afterDelete, s3AccessKey, s3SecretKey)
 
 	// Always changed pipeline fields
 	pipelineChangedFields = pipelineConfig(false)
@@ -487,46 +487,46 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 	return output
 }
 
-func pushBusChanged(oldBus, newBus *enterpriseApi.BusSpec, oldLMS, newLMS *enterpriseApi.LargeMessageStoreSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (output [][]string) {
-	busProvider := ""
-	if newBus.Provider == "sqs" {
-		busProvider = "sqs_smartbus"
+func pushQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldOS, newOS *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (output [][]string) {
+	queueProvider := ""
+	if newQueue.Provider == "sqs" {
+		queueProvider = "sqs_smartbus"
 	}
-	lmsProvider := ""
-	if newLMS.Provider == "s3" {
-		lmsProvider = "sqs_smartbus"
+	osProvider := ""
+	if newOS.Provider == "s3" {
+		osProvider = "sqs_smartbus"
 	}
 
-	if oldBus.Provider != newBus.Provider || afterDelete {
-		output = append(output, []string{"remote_queue.type", busProvider})
+	if oldQueue.Provider != newQueue.Provider || afterDelete {
+		output = append(output, []string{"remote_queue.type", queueProvider})
 	}
-	if !reflect.DeepEqual(oldBus.SQS.VolList, newBus.SQS.VolList) || afterDelete {
+	if !reflect.DeepEqual(oldQueue.SQS.VolList, newQueue.SQS.VolList) || afterDelete {
 		if s3AccessKey != "" && s3SecretKey != "" {
-			output = append(output, []string{fmt.Sprintf("remote_queue.%s.access_key", busProvider), s3AccessKey})
-			output = append(output, []string{fmt.Sprintf("remote_queue.%s.secret_key", busProvider), s3SecretKey})
+			output = append(output, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), s3AccessKey})
+			output = append(output, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), s3SecretKey})
 		}
 	}
-	if oldBus.SQS.Region != newBus.SQS.Region || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", busProvider), newBus.SQS.Region})
+	if oldQueue.SQS.AuthRegion != newQueue.SQS.AuthRegion || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), newQueue.SQS.AuthRegion})
 	}
-	if oldBus.SQS.Endpoint != newBus.SQS.Endpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", busProvider), newBus.SQS.Endpoint})
+	if newQueue.SQS.Endpoint != "" && (oldQueue.SQS.Endpoint != newQueue.SQS.Endpoint || afterDelete) {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), newQueue.SQS.Endpoint})
 	}
-	if oldLMS.S3.Endpoint != newLMS.S3.Endpoint || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", lmsProvider), newLMS.S3.Endpoint})
+	if newOS.S3.Endpoint != "" && (oldOS.S3.Endpoint != newOS.S3.Endpoint || afterDelete) {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), newOS.S3.Endpoint})
 	}
-	if oldLMS.S3.Path != newLMS.S3.Path || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", lmsProvider), newLMS.S3.Path})
+	if oldOS.S3.Path != newOS.S3.Path || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), newOS.S3.Path})
 	}
-	if oldBus.SQS.DLQ != newBus.SQS.DLQ || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", busProvider), newBus.SQS.DLQ})
+	if oldQueue.SQS.DLQ != newQueue.SQS.DLQ || afterDelete {
+		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), newQueue.SQS.DLQ})
 	}
 
 	output = append(output,
-		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", busProvider), "s2s"},
-		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", busProvider), "4"},
-		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", busProvider), "max_count"},
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", busProvider), "5s"})
+		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
+		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
+		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"})
 
 	return output
 }

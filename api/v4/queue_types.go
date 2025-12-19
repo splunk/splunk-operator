@@ -23,39 +23,53 @@ import (
 )
 
 const (
-	// LargeMessageStorePausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// QueuePausedAnnotation is the annotation that pauses the reconciliation (triggers
 	// an immediate requeue)
-	LargeMessageStorePausedAnnotation = "largemessagestore.enterprise.splunk.com/paused"
+	QueuePausedAnnotation = "queue.enterprise.splunk.com/paused"
 )
 
-// +kubebuilder:validation:XValidation:rule="self.provider != 's3' || has(self.s3)",message="s3 must be provided when provider is s3"
-// LargeMessageStoreSpec defines the desired state of LargeMessageStore
-type LargeMessageStoreSpec struct {
+// +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
+// QueueSpec defines the desired state of Queue
+type QueueSpec struct {
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=s3
+	// +kubebuilder:validation:Enum=sqs
 	// Provider of queue resources
 	Provider string `json:"provider"`
 
 	// +kubebuilder:validation:Required
-	// s3 specific inputs
-	S3 S3Spec `json:"s3"`
+	// sqs specific inputs
+	SQS SQSSpec `json:"sqs"`
 }
 
-type S3Spec struct {
+type SQSSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Name of the queue
+	Name string `json:"name"`
+
 	// +optional
-	// +kubebuilder:validation:Pattern=`^https://s3(?:-fips)?\.[a-z]+-[a-z]+(?:-[a-z]+)?-\d+\.amazonaws\.com(?:\.cn)?(?:/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)?$`
-	// S3-compatible Service endpoint
-	Endpoint string `json:"endpoint"`
+	// +kubebuilder:validation:Pattern=`^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$`
+	// Auth Region of the resources
+	AuthRegion string `json:"authRegion"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$`
-	// S3 bucket path
-	Path string `json:"path"`
+	// +kubebuilder:validation:MinLength=1
+	// Name of the dead letter queue resource
+	DLQ string `json:"dlq"`
+
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
+	// Amazon SQS Service endpoint
+	Endpoint string `json:"endpoint"`
+
+	// +optional
+	// List of remote storage volumes
+	VolList []VolumeSpec `json:"volumes,omitempty"`
 }
 
-// LargeMessageStoreStatus defines the observed state of LargeMessageStore.
-type LargeMessageStoreStatus struct {
-	// Phase of the large message store
+// QueueStatus defines the observed state of Queue
+type QueueStatus struct {
+	// Phase of the queue
 	Phase Phase `json:"phase"`
 
 	// Resource revision tracker
@@ -68,27 +82,27 @@ type LargeMessageStoreStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// LargeMessageStore is the Schema for a Splunk Enterprise large message store
+// Queue is the Schema for a Splunk Enterprise queue
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:resource:path=largemessagestores,scope=Namespaced,shortName=lms
-// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of large message store"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of large message store resource"
+// +kubebuilder:resource:path=queues,scope=Namespaced,shortName=queue
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of queue"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of queue resource"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
 // +kubebuilder:storageversion
 
-// LargeMessageStore is the Schema for the largemessagestores API
-type LargeMessageStore struct {
+// Queue is the Schema for the queues API
+type Queue struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	Spec   LargeMessageStoreSpec   `json:"spec"`
-	Status LargeMessageStoreStatus `json:"status,omitempty,omitzero"`
+	Spec   QueueSpec   `json:"spec"`
+	Status QueueStatus `json:"status,omitempty,omitzero"`
 }
 
 // DeepCopyObject implements runtime.Object
-func (in *LargeMessageStore) DeepCopyObject() runtime.Object {
+func (in *Queue) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
@@ -97,42 +111,42 @@ func (in *LargeMessageStore) DeepCopyObject() runtime.Object {
 
 // +kubebuilder:object:root=true
 
-// LargeMessageStoreList contains a list of LargeMessageStore
-type LargeMessageStoreList struct {
+// QueueList contains a list of Queue
+type QueueList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LargeMessageStore `json:"items"`
+	Items           []Queue `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&LargeMessageStore{}, &LargeMessageStoreList{})
+	SchemeBuilder.Register(&Queue{}, &QueueList{})
 }
 
 // NewEvent creates a new event associated with the object and ready
 // to be published to Kubernetes API
-func (bc *LargeMessageStore) NewEvent(eventType, reason, message string) corev1.Event {
+func (os *Queue) NewEvent(eventType, reason, message string) corev1.Event {
 	t := metav1.Now()
 	return corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: reason + "-",
-			Namespace:    bc.ObjectMeta.Namespace,
+			Namespace:    os.ObjectMeta.Namespace,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:       "LargeMessageStore",
-			Namespace:  bc.Namespace,
-			Name:       bc.Name,
-			UID:        bc.UID,
+			Kind:       "Queue",
+			Namespace:  os.Namespace,
+			Name:       os.Name,
+			UID:        os.UID,
 			APIVersion: GroupVersion.String(),
 		},
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-large-message-store-controller",
+			Component: "splunk-queue-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/large-message-store-controller",
+		ReportingController: "enterprise.splunk.com/queue-controller",
 	}
 }

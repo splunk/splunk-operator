@@ -47,15 +47,15 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - buses
   - clustermanagers
   - clustermasters
   - indexerclusters
   - ingestorclusters
-  - largemessagestores
   - licensemanagers
   - licensemasters
   - monitoringconsoles
+  - objectstorages
+  - queues
   - searchheadclusters
   - standalones
   verbs:
@@ -69,15 +69,15 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - buses/finalizers
   - clustermanagers/finalizers
   - clustermasters/finalizers
   - indexerclusters/finalizers
   - ingestorclusters/finalizers
-  - largemessagestores/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
+  - objectstorages/finalizers
+  - queues/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
   verbs:
@@ -85,15 +85,15 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - buses/status
   - clustermanagers/status
   - clustermasters/status
   - indexerclusters/status
   - ingestorclusters/status
-  - largemessagestores/status
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
+  - objectstorages/status
+  - queues/status
   - searchheadclusters/status
   - standalones/status
   verbs:

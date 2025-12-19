@@ -141,9 +141,9 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IngestorCluster{},
 			)).
-		Watches(&enterpriseApi.Bus{},
+		Watches(&enterpriseApi.Queue{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				b, ok := obj.(*enterpriseApi.Bus)
+				queue, ok := obj.(*enterpriseApi.Queue)
 				if !ok {
 					return nil
 				}
@@ -153,11 +153,11 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
-					ns := ic.Spec.BusRef.Namespace
+					ns := ic.Spec.QueueRef.Namespace
 					if ns == "" {
 						ns = ic.Namespace
 					}
-					if ic.Spec.BusRef.Name == b.Name && ns == b.Namespace {
+					if ic.Spec.QueueRef.Name == queue.Name && ns == queue.Namespace {
 						reqs = append(reqs, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Name:      ic.Name,
@@ -169,23 +169,23 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return reqs
 			}),
 		).
-		Watches(&enterpriseApi.LargeMessageStore{},
+		Watches(&enterpriseApi.ObjectStorage{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				lms, ok := obj.(*enterpriseApi.LargeMessageStore)
+				os, ok := obj.(*enterpriseApi.ObjectStorage)
 				if !ok {
 					return nil
 				}
-				var list enterpriseApi.IndexerClusterList
+				var list enterpriseApi.IngestorClusterList
 				if err := r.Client.List(ctx, &list); err != nil {
 					return nil
 				}
 				var reqs []reconcile.Request
 				for _, ic := range list.Items {
-					ns := ic.Spec.LargeMessageStoreRef.Namespace
+					ns := ic.Spec.ObjectStorageRef.Namespace
 					if ns == "" {
 						ns = ic.Namespace
 					}
-					if ic.Spec.LargeMessageStoreRef.Name == lms.Name && ns == lms.Namespace {
+					if ic.Spec.ObjectStorageRef.Name == os.Name && ns == os.Namespace {
 						reqs = append(reqs, reconcile.Request{
 							NamespacedName: types.NamespacedName{
 								Name:      ic.Name,

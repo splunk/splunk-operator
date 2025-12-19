@@ -34,18 +34,18 @@ const (
 	IndexerClusterPausedAnnotation = "indexercluster.enterprise.splunk.com/paused"
 )
 
-// +kubebuilder:validation:XValidation:rule="has(self.busRef) == has(self.largeMessageStoreRef)",message="busRef and largeMessageStoreRef must both be set or both be empty"
+// +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// +optional
-	// Bus reference
-	BusRef corev1.ObjectReference `json:"busRef"`
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +optional
-	// Large Message Store reference
-	LargeMessageStoreRef corev1.ObjectReference `json:"largeMessageStoreRef"`
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
 	// Number of search head pods; a search head cluster will be created if > 1
 	Replicas int32 `json:"replicas"`
@@ -121,11 +121,11 @@ type IndexerClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus
-	Bus *BusSpec `json:"bus,omitempty"`
+	// Queue
+	Queue *QueueSpec `json:"queue,omitempty"`
 
-	// Large Message Store
-	LargeMessageStore *LargeMessageStoreSpec `json:"largeMessageStore,omitempty"`
+	// Object Storage
+	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

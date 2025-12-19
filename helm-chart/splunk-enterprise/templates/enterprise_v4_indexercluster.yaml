@@ -163,15 +163,15 @@ items:
 {{ toYaml . | indent 6 }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.busRef }}
-    busRef:
+    {{- with $.Values.indexerCluster.queueRef }}
+    queueRef:
       name: {{ .name }}
     {{- if .namespace }}
       namespace: {{ .namespace }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.largeMessageStoreRef }}
-    largeMessageStoreRef:
+    {{- with $.Values.indexerCluster.objectStoreRef }}
+    objectStoreRef:
       name: {{ .name }}
     {{- if .namespace }}
       namespace: {{ .namespace }}

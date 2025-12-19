@@ -71,27 +71,27 @@ var _ = Describe("IngestorCluster Controller", func() {
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
-			bus := &enterpriseApi.Bus{
+			queue := &enterpriseApi.Queue{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "bus",
+					Name:      "queue",
 					Namespace: nsSpecs.Name,
 				},
-				Spec: enterpriseApi.BusSpec{
+				Spec: enterpriseApi.QueueSpec{
 					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
-						Name:     "smartbus-queue",
-						Region:   "us-west-2",
-						DLQ:      "smartbus-dlq",
-						Endpoint: "https://sqs.us-west-2.amazonaws.com",
+						Name:       "smartbus-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "smartbus-dlq",
+						Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 					},
 				},
 			}
-			lms := &enterpriseApi.LargeMessageStore{
+			os := &enterpriseApi.ObjectStorage{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "lms",
+					Name:      "os",
 					Namespace: nsSpecs.Name,
 				},
-				Spec: enterpriseApi.LargeMessageStoreSpec{
+				Spec: enterpriseApi.ObjectStorageSpec{
 					Provider: "s3",
 					S3: enterpriseApi.S3Spec{
 						Endpoint: "https://s3.us-west-2.amazonaws.com",
@@ -99,7 +99,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					},
 				},
 			}
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, bus)
+			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, os, queue)
 			icSpec, _ := GetIngestorCluster("test", nsSpecs.Name)
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
@@ -119,27 +119,27 @@ var _ = Describe("IngestorCluster Controller", func() {
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
 			annotations := make(map[string]string)
-			bus := &enterpriseApi.Bus{
+			queue := &enterpriseApi.Queue{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "bus",
+					Name:      "queue",
 					Namespace: nsSpecs.Name,
 				},
-				Spec: enterpriseApi.BusSpec{
+				Spec: enterpriseApi.QueueSpec{
 					Provider: "sqs",
 					SQS: enterpriseApi.SQSSpec{
-						Name:     "smartbus-queue",
-						Region:   "us-west-2",
-						DLQ:      "smartbus-dlq",
-						Endpoint: "https://sqs.us-west-2.amazonaws.com",
+						Name:       "smartbus-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "smartbus-dlq",
+						Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 					},
 				},
 			}
-			lms := &enterpriseApi.LargeMessageStore{
+			os := &enterpriseApi.ObjectStorage{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "lms",
+					Name:      "os",
 					Namespace: nsSpecs.Name,
 				},
-				Spec: enterpriseApi.LargeMessageStoreSpec{
+				Spec: enterpriseApi.ObjectStorageSpec{
 					Provider: "s3",
 					S3: enterpriseApi.S3Spec{
 						Endpoint: "https://s3.us-west-2.amazonaws.com",
@@ -147,7 +147,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					},
 				},
 			}
-			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, lms, bus)
+			CreateIngestorCluster("test", nsSpecs.Name, annotations, enterpriseApi.PhaseReady, os, queue)
 			DeleteIngestorCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
@@ -220,7 +220,7 @@ func GetIngestorCluster(name string, namespace string) (*enterpriseApi.IngestorC
 	return ic, err
 }
 
-func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, lms *enterpriseApi.LargeMessageStore, bus *enterpriseApi.Bus) *enterpriseApi.IngestorCluster {
+func CreateIngestorCluster(name string, namespace string, annotations map[string]string, status enterpriseApi.Phase, os *enterpriseApi.ObjectStorage, queue *enterpriseApi.Queue) *enterpriseApi.IngestorCluster {
 	By("Expecting IngestorCluster custom resource to be created successfully")
 
 	key := types.NamespacedName{
@@ -240,13 +240,13 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 				},
 			},
 			Replicas: 3,
-			BusRef: corev1.ObjectReference{
-				Name:      bus.Name,
-				Namespace: bus.Namespace,
+			QueueRef: corev1.ObjectReference{
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
 			},
-			LargeMessageStoreRef: corev1.ObjectReference{
-				Name:      lms.Name,
-				Namespace: lms.Namespace,
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      os.Name,
+				Namespace: os.Namespace,
 			},
 		},
 	}

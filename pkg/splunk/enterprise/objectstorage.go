@@ -27,8 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// ApplyBus reconciles the state of an IngestorCluster custom resource
-func ApplyBus(ctx context.Context, client client.Client, cr *enterpriseApi.Bus) (reconcile.Result, error) {
+// ApplyObjectStorage reconciles the state of an IngestorCluster custom resource
+func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpriseApi.ObjectStorage) (reconcile.Result, error) {
 	var err error
 
 	// Unless modified, reconcile for this object will be requeued after 5 seconds
@@ -44,7 +44,7 @@ func ApplyBus(ctx context.Context, client client.Client, cr *enterpriseApi.Bus) 
 	eventPublisher, _ := newK8EventPublisher(client, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
-	cr.Kind = "Bus"
+	cr.Kind = "ObjectStorage"
 
 	// Initialize phase
 	cr.Status.Phase = enterpriseApi.PhaseError

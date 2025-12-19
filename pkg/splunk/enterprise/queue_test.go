@@ -16,7 +16,6 @@ package enterprise
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -28,22 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func init() {
-	GetReadinessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + readinessScriptLocation)
-		return fileLocation
-	}
-	GetLivenessScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + livenessScriptLocation)
-		return fileLocation
-	}
-	GetStartupScriptLocation = func() string {
-		fileLocation, _ := filepath.Abs("../../../" + startupScriptLocation)
-		return fileLocation
-	}
-}
-
-func TestApplyLargeMessageStore(t *testing.T) {
+func TestApplyQueue(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
@@ -55,29 +39,31 @@ func TestApplyLargeMessageStore(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	lms := &enterpriseApi.LargeMessageStore{
+	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "LargeMessageStore",
+			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lms",
+			Name:      "queue",
 			Namespace: "test",
 		},
-		Spec: enterpriseApi.LargeMessageStoreSpec{
-			Provider: "s3",
-			S3: enterpriseApi.S3Spec{
-				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+		Spec: enterpriseApi.QueueSpec{
+			Provider: "sqs",
+			SQS: enterpriseApi.SQSSpec{
+				Name:       "test-queue",
+				AuthRegion: "us-west-2",
+				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+				DLQ:        "sqs-dlq-test",
 			},
 		},
 	}
-	c.Create(ctx, lms)
+	c.Create(ctx, queue)
 
-	// ApplyLargeMessageStore
-	result, err := ApplyLargeMessageStore(ctx, c, lms)
+	// ApplyQueue
+	result, err := ApplyQueue(ctx, c, queue)
 	assert.NoError(t, err)
 	assert.True(t, result.Requeue)
-	assert.NotEqual(t, enterpriseApi.PhaseError, lms.Status.Phase)
-	assert.Equal(t, enterpriseApi.PhaseReady, lms.Status.Phase)
+	assert.NotEqual(t, enterpriseApi.PhaseError, queue.Status.Phase)
+	assert.Equal(t, enterpriseApi.PhaseReady, queue.Status.Phase)
 }

@@ -359,7 +359,7 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 }
 
 // newIndexerCluster creates and initialize the CR for IndexerCluster Kind
-func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, bus, lms corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IndexerCluster {
+func newIndexerCluster(name, ns, licenseManagerName string, replicas int, clusterManagerRef, ansibleConfig, splunkImage string, queue, os corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IndexerCluster {
 
 	licenseMasterRef, licenseManagerRef := swapLicenseManager(name, licenseManagerName)
 	clusterMasterRef, clusterManagerRef := swapClusterManager(name, clusterManagerRef)
@@ -396,9 +396,9 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				},
 				Defaults: ansibleConfig,
 			},
-			Replicas: int32(replicas),
-			BusRef:   bus,
-			LargeMessageStoreRef: lms,
+			Replicas:             int32(replicas),
+			QueueRef:             queue,
+			ObjectStorageRef: os,
 		},
 	}
 
@@ -406,7 +406,7 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 }
 
 // newIngestorCluster creates and initialize the CR for IngestorCluster Kind
-func newIngestorCluster(name, ns string, replicas int, splunkImage string, bus, lms corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IngestorCluster {
+func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue, os corev1.ObjectReference, serviceAccountName string) *enterpriseApi.IngestorCluster {
 	return &enterpriseApi.IngestorCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "IngestorCluster",
@@ -427,37 +427,37 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, bus, 
 				},
 			},
 			Replicas:             int32(replicas),
-			BusRef:               bus,
-			LargeMessageStoreRef: lms,
+			QueueRef:             queue,
+			ObjectStorageRef: os,
 		},
 	}
 }
 
-// newBus creates and initializes the CR for Bus Kind
-func newBus(name, ns string, bus enterpriseApi.BusSpec) *enterpriseApi.Bus {
-	return &enterpriseApi.Bus{
+// newQueue creates and initializes the CR for Queue Kind
+func newQueue(name, ns string, queue enterpriseApi.QueueSpec) *enterpriseApi.Queue {
+	return &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "Bus",
+			Kind: "Queue",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: bus,
+		Spec: queue,
 	}
 }
 
-// newLargeMessageStore creates and initializes the CR for LargeMessageStore Kind
-func newLargeMessageStore(name, ns string, lms enterpriseApi.LargeMessageStoreSpec) *enterpriseApi.LargeMessageStore {
-	return &enterpriseApi.LargeMessageStore{
+// newObjectStorage creates and initializes the CR for ObjectStorage Kind
+func newObjectStorage(name, ns string, objStorage enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	return &enterpriseApi.ObjectStorage{
 		TypeMeta: metav1.TypeMeta{
-			Kind: "LargeMessageStore",
+			Kind: "ObjectStorage",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: lms,
+		Spec: objStorage,
 	}
 }
 

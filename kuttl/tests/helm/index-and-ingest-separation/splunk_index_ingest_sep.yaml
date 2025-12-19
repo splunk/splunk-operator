@@ -5,9 +5,9 @@ splunk-operator:
     persistentVolumeClaim:
       storageClassName: gp2
 
-bus:
+queue:
   enabled: true
-  name: bus
+  name: queue
   provider: sqs
   sqs:
     name: sqs-test
@@ -18,9 +18,9 @@ bus:
       - name: helm-bus-secret-ref-test
         secretRef: s3-secret
 
-largeMessageStore:
+objectStorage:
   enabled: true
-  name: lms
+  name: os
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
@@ -30,10 +30,10 @@ ingestorCluster:
   enabled: true
   name: ingestor
   replicaCount: 3
-  busRef:
-    name: bus
-  largeMessageStoreRef:
-    name: lms
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 
 clusterManager:
   enabled: true
@@ -46,7 +46,7 @@ indexerCluster:
   replicaCount: 3
   clusterManagerRef:
     name: cm
-  busRef:
-    name: bus
-  largeMessageStoreRef:
-    name: lms
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
