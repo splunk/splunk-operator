@@ -50,6 +50,7 @@ jobs:
           echo "Commit message:"
           echo "$COMMIT_MSG"
   approval-gate:
+    needs: get-commit-info
     permissions:
       contents: read
     runs-on: ubuntu-latest
