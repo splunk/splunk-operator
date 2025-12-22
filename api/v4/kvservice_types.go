@@ -23,6 +23,12 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	// KVServicePausedAnnotation is the annotation that pauses the reconciliation (triggers
+	// an immediate requeue)
+	KVServicePausedAnnotation = "kvservice.enterprise.splunk.com/paused"
+)
+
 // KVServiceSpec defines the desired state of KVService
 type KVServiceSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster

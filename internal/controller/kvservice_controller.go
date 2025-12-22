@@ -18,13 +18,21 @@ package controller
 
 import (
 	"context"
+	"time"
 
+	"github.com/pkg/errors"
+	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"github.com/splunk/splunk-operator/internal/controller/common"
+	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // KVServiceReconciler reconciles a KVService object
@@ -32,6 +40,19 @@ type KVServiceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
+//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=endpoints,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/status,verbs=get;update;patch
@@ -47,16 +68,81 @@ type KVServiceReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *KVServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	metrics.ReconcileCounters.With(metrics.GetPrometheusLabels(req, "KVService")).Inc()
+	defer recordInstrumentionData(time.Now(), req, "controller", "KVService")
 
-	// TODO(user): your logic here
+	reqLogger := log.FromContext(ctx)
+	reqLogger = reqLogger.WithValues("kvservice", req.NamespacedName)
+
+	// Fetch the KVService
+	instance := &enterprisev4.KVService{}
+	err := r.Get(ctx, req.NamespacedName, instance)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// Request object not found, could have been deleted after
+			// reconcile request.  Owned objects are automatically
+			// garbage collected. For additional cleanup logic use
+			// finalizers.  Return and don't requeue
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		return ctrl.Result{}, errors.Wrap(err, "could not load kvservice data")
+	}
+
+	// If the reconciliation is paused, requeue
+	annotations := instance.GetAnnotations()
+	if annotations != nil {
+		if _, ok := annotations[enterprisev4.KVServicePausedAnnotation]; ok {
+			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
+		}
+	}
+
+	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	// ToDo: Commenting for now, will be implementing in follow-up stories
+	// result, err := ApplyKVService(ctx, r.Client, instance)
+	// if result.Requeue && result.RequeueAfter != 0 {
+	// 	reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	// }
+
+	// return result, err
 
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
 func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev4.KVService{}).
+		WithEventFilter(predicate.Or(
+			common.GenerationChangedPredicate(),
+			common.AnnotationChangedPredicate(),
+			common.LabelChangedPredicate(),
+			common.SecretChangedPredicate(),
+			common.StatefulsetChangedPredicate(),
+			common.PodChangedPredicate(),
+			common.ConfigMapChangedPredicate(),
+			common.CrdChangedPredicate(),
+		)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterprisev4.KVService{},
+			)).
+		Watches(&corev1.Pod{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterprisev4.KVService{},
+			)).
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterprisev4.KVService{},
+			)).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: enterprisev4.TotalWorker,
+		}).
 		Complete(r)
 }
