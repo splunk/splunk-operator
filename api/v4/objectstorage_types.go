@@ -55,7 +55,7 @@ type S3Spec struct {
 
 // ObjectStorageStatus defines the observed state of ObjectStorage.
 type ObjectStorageStatus struct {
-	// Phase of the large message store
+	// Phase of the object storage
 	Phase Phase `json:"phase"`
 
 	// Resource revision tracker

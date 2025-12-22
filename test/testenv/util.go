@@ -396,8 +396,8 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				},
 				Defaults: ansibleConfig,
 			},
-			Replicas:             int32(replicas),
-			QueueRef:             queue,
+			Replicas:         int32(replicas),
+			QueueRef:         queue,
 			ObjectStorageRef: os,
 		},
 	}
@@ -426,8 +426,8 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue
 					Image:           splunkImage,
 				},
 			},
-			Replicas:             int32(replicas),
-			QueueRef:             queue,
+			Replicas:         int32(replicas),
+			QueueRef:         queue,
 			ObjectStorageRef: os,
 		},
 	}

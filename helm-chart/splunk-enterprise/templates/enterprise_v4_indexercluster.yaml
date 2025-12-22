@@ -170,8 +170,8 @@ items:
       namespace: {{ .namespace }}
     {{- end }}
   {{- end }}
-    {{- with $.Values.indexerCluster.objectStoreRef }}
-    objectStoreRef:
+    {{- with $.Values.indexerCluster.objectStorageRef }}
+    objectStorageRef:
       name: {{ .name }}
     {{- if .namespace }}
       namespace: {{ .namespace }}

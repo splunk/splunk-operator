@@ -75,13 +75,13 @@ var _ = Describe("indingsep test", func() {
 
 	Context("Ingestor and Indexer deployment", func() {
 		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers", func() {
+			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
-			testcaseEnvInst.Log.Info("Create Service Account")
-			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+			// testcaseEnvInst.Log.Info("Create Service Account")
+			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			queue.SQS.VolList = volumeSpec
 			updateQueue.SQS.VolList = volumeSpec
 
@@ -97,7 +97,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "") // , serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -107,7 +107,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "") // , serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -137,11 +137,11 @@ var _ = Describe("indingsep test", func() {
 			Expect(err).To(Succeed(), "Unable to delete Ingestor Cluster instance", "Ingestor Cluster Name", ingest)
 
 			// Delete the Queue
-			queue := &enterpriseApi.Queue{}
-			err = deployment.GetInstance(ctx, "queue", queue)
-			Expect(err).To(Succeed(), "Unable to get Queue instance", "Queue Name", queue)
-			err = deployment.DeleteCR(ctx, queue)
-			Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", queue)
+			q = &enterpriseApi.Queue{}
+			err = deployment.GetInstance(ctx, "queue", q)
+			Expect(err).To(Succeed(), "Unable to get Queue instance", "Queue Name", q)
+			err = deployment.DeleteCR(ctx, q)
+			Expect(err).To(Succeed(), "Unable to delete Queue", "Queue Name", q)
 
 			// Delete the ObjectStorage
 			objStorage = &enterpriseApi.ObjectStorage{}
@@ -154,13 +154,13 @@ var _ = Describe("indingsep test", func() {
 
 	Context("Ingestor and Indexer deployment", func() {
 		It("indingsep, smoke, indingsep: Splunk Operator can deploy Ingestors and Indexers with additional configurations", func() {
+			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
-			testcaseEnvInst.Log.Info("Create Service Account")
-			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+			// testcaseEnvInst.Log.Info("Create Service Account")
+			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			queue.SQS.VolList = volumeSpec
 			updateQueue.SQS.VolList = volumeSpec
 
@@ -174,24 +174,19 @@ var _ = Describe("indingsep test", func() {
 			objStorage, err := deployment.DeployObjectStorage(ctx, "os", objectStorage)
 			Expect(err).To(Succeed(), "Unable to deploy ObjectStorage")
 
-			// Upload apps to S3
-			testcaseEnvInst.Log.Info("Upload apps to S3")
-			appFileList := testenv.GetAppFileList(appListV1)
-			_, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), "Unable to upload V1 apps to S3 test directory for IngestorCluster")
-
 			// Deploy Ingestor Cluster with additional configurations (similar to standalone app framework test)
 			appSourceName := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
 			appFrameworkSpec := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeName, enterpriseApi.ScopeLocal, appSourceName, s3TestDir, 60)
 			appFrameworkSpec.MaxConcurrentAppDownloads = uint64(5)
 			ic := &enterpriseApi.IngestorCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      deployment.GetName() + "-ingest",
-					Namespace: testcaseEnvInst.GetName(),
+					Name:       deployment.GetName() + "-ingest",
+					Namespace:  testcaseEnvInst.GetName(),
+					Finalizers: []string{"enterprise.splunk.com/delete-pvc"},
 				},
 				Spec: enterpriseApi.IngestorClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						ServiceAccount:               serviceAccountName,
+						// ServiceAccount:               serviceAccountName,
 						LivenessInitialDelaySeconds:  600,
 						ReadinessInitialDelaySeconds: 50,
 						StartupProbe: &enterpriseApi.Probe{
@@ -217,10 +212,10 @@ var _ = Describe("indingsep test", func() {
 							Image:           testcaseEnvInst.GetSplunkImage(),
 						},
 					},
-					QueueRef:             v1.ObjectReference{Name: q.Name},
-					ObjectStorageRef:     v1.ObjectReference{Name: objStorage.Name},
-					Replicas:             3,
-					AppFrameworkConfig:   appFrameworkSpec,
+					QueueRef:           v1.ObjectReference{Name: q.Name},
+					ObjectStorageRef:   v1.ObjectReference{Name: objStorage.Name},
+					Replicas:           3,
+					AppFrameworkConfig: appFrameworkSpec,
 				},
 			}
 
@@ -231,6 +226,12 @@ var _ = Describe("indingsep test", func() {
 			// Ensure that Ingestor Cluster is in Ready phase
 			testcaseEnvInst.Log.Info("Ensure that Ingestor Cluster is in Ready phase")
 			testenv.IngestorReady(ctx, deployment, testcaseEnvInst)
+
+			// Upload apps to S3
+			testcaseEnvInst.Log.Info("Upload apps to S3")
+			appFileList := testenv.GetAppFileList(appListV1)
+			_, err = testenv.UploadFilesToS3(testS3Bucket, s3TestDir, appFileList, downloadDirV1)
+			Expect(err).To(Succeed(), "Unable to upload V1 apps to S3 test directory for IngestorCluster")
 
 			// Verify Ingestor Cluster Pods have apps installed
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Pods have apps installed")
@@ -264,15 +265,15 @@ var _ = Describe("indingsep test", func() {
 
 	Context("Ingestor and Indexer deployment", func() {
 		It("indingsep, integration, indingsep: Splunk Operator can deploy Ingestors and Indexers with correct setup", func() {
+			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
-			testcaseEnvInst.Log.Info("Create Service Account")
-			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+			// testcaseEnvInst.Log.Info("Create Service Account")
+			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			queue.SQS.VolList = volumeSpec
-			
+
 			// Deploy Queue
 			testcaseEnvInst.Log.Info("Deploy Queue")
 			q, err := deployment.DeployQueue(ctx, "queue", queue)
@@ -285,7 +286,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "") // , serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -295,7 +296,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "") // , serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase
@@ -376,13 +377,13 @@ var _ = Describe("indingsep test", func() {
 
 	Context("Ingestor and Indexer deployment", func() {
 		It("indingsep, integration, indingsep: Splunk Operator can update Ingestors and Indexers with correct setup", func() {
+			// TODO: Remove secret reference and uncomment serviceAccountName part once IRSA fixed for Splunk and EKS 1.34+
 			// Create Service Account
-			testcaseEnvInst.Log.Info("Create Service Account")
-			testcaseEnvInst.CreateServiceAccount(serviceAccountName)
+			// testcaseEnvInst.Log.Info("Create Service Account")
+			// testcaseEnvInst.CreateServiceAccount(serviceAccountName)
 
-			// TODO: Remove secret reference once IRSA fixed for Splunk and EKS 1.34+
 			// Secret reference
-			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateBusVolumeSpec("bus-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
+			volumeSpec := []enterpriseApi.VolumeSpec{testenv.GenerateQueueVolumeSpec("queue-secret-ref-volume", testcaseEnvInst.GetIndexSecretName())}
 			queue.SQS.VolList = volumeSpec
 			updateQueue.SQS.VolList = volumeSpec
 
@@ -398,7 +399,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Ingestor Cluster
 			testcaseEnvInst.Log.Info("Deploy Ingestor Cluster")
-			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
+			_, err = deployment.DeployIngestorCluster(ctx, deployment.GetName()+"-ingest", 3, v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "") // , serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Ingestor Cluster")
 
 			// Deploy Cluster Manager
@@ -408,7 +409,7 @@ var _ = Describe("indingsep test", func() {
 
 			// Deploy Indexer Cluster
 			testcaseEnvInst.Log.Info("Deploy Indexer Cluster")
-			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, serviceAccountName)
+			_, err = deployment.DeployIndexerCluster(ctx, deployment.GetName()+"-idxc", "", 3, deployment.GetName(), "", v1.ObjectReference{Name: q.Name}, v1.ObjectReference{Name: objStorage.Name}, "") // , serviceAccountName)
 			Expect(err).To(Succeed(), "Unable to deploy Indexer Cluster")
 
 			// Ensure that Ingestor Cluster is in Ready phase

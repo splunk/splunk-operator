@@ -71,7 +71,10 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
-
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.Queue = nil
+		cr.Status.ObjectStorage = nil
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
 	// If needed, migrate the app framework status
@@ -231,7 +234,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
-		// Large Message Store
+		// Object Storage
 		os := enterpriseApi.ObjectStorage{}
 		if cr.Spec.ObjectStorageRef.Name != "" {
 			ns := cr.GetNamespace()
@@ -255,7 +258,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
-		// If bus is updated
+		// If queue is updated
 		if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = mgr.handlePushQueueChange(ctx, cr, queueCopy, osCopy, client)
@@ -439,9 +442,9 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 	return updateErr
 }
 
-// getChangedBusFieldsForIngestor returns a list of changed bus and pipeline fields for ingestor pods
+// getChangedQueueFieldsForIngestor returns a list of changed queue and pipeline fields for ingestor pods
 func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueStatus *enterpriseApi.QueueSpec, osStatus *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFields, pipelineChangedFields [][]string) {
-	// Push changed bus fields
+	// Push changed queue fields
 	queueChangedFields = pushQueueChanged(queueStatus, &queue.Spec, osStatus, &os.Spec, afterDelete, s3AccessKey, s3SecretKey)
 
 	// Always changed pipeline fields

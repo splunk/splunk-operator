@@ -44,7 +44,7 @@ SQS message queue inputs can be found in the table below.
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
 
-**First provisioning or update of any of the bus inputs requires Ingestor Cluster and Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
+**First provisioning or update of any of the queue inputs requires Ingestor Cluster and Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
 
 ## Example
 ```
@@ -67,21 +67,21 @@ ObjectStorage is introduced to store large message (messages that exceed the siz
 
 ## Spec
 
-ObjectStorage inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
+ObjectStorage inputs can be found in the table below. As of now, only S3 provider of object storage is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of large message store (Allowed values: s3) |
-| s3   | S3 | [Required if provider=s3] S3 large message store inputs  |
+| provider   | string | [Required] Provider of object storage (Allowed values: s3) |
+| s3   | S3 | [Required if provider=s3] S3 object storage inputs  |
 
-S3 large message store inputs can be found in the table below.
+S3 object storage inputs can be found in the table below.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
 | endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
 
-Change of any of the large message queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+Change of any of the object storage inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
 ## Example
 ```
@@ -108,13 +108,13 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | queueRef   | corev1.ObjectReference | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | Large message store reference |
+| objectStorageRef   | corev1.ObjectReference | Object storage reference |
 
 ## Example
 
 The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -145,13 +145,13 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | queueRef   | corev1.ObjectReference | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | Large message store reference |
+| objectStorageRef   | corev1.ObjectReference | Object storage reference |
 
 ## Example
 
 The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
 
-In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -717,7 +717,7 @@ Spec:
     Name:           queue
     Namespace:      default
   Image:  splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  Large Message Store Ref:
+  Object Storage Ref:
     Name:           os
     Namespace:      default
   Replicas:                          3
@@ -741,7 +741,7 @@ Status:
       Endpoint:                 https://sqs.us-west-2.amazonaws.com
       Name:                     sqs-test
     Provider:                   sqs
-  Large Message Store:
+  Object Storage:
     S3:
       Endpoint:  https://s3.us-west-2.amazonaws.com
       Path:      s3://ingestion/smartbus-test

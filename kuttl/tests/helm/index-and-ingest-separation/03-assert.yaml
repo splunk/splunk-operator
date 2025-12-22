@@ -6,24 +6,24 @@ metadata:
   name: ingestor
 spec:
   replicas: 4
-  busRef:
-    name: bus
-  largeMessageStoreRef:
-    name: lms
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
 status:
   phase: Ready
-  bus:
+  queue:
     provider: sqs
     sqs:
-      name: sqs-test
-      region: us-west-2
+      name: index-ingest-separation-test-q
+      authRegion: us-west-2
       endpoint: https://sqs.us-west-2.amazonaws.com
-      dlq: sqs-dlq-test
-  largeMessageStore:
+      dlq: index-ingest-separation-test-dlq
+  objectStorage:
     provider: s3
     s3:
       endpoint: https://s3.us-west-2.amazonaws.com
-      path: s3://ingestion/smartbus-test
+      path: s3://index-ingest-separation-test-bucket/smartbus-test
 
 ---
 # check for stateful sets and replicas updated

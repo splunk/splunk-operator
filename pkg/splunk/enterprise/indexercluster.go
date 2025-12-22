@@ -76,6 +76,10 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.Queue = nil
+		cr.Status.ObjectStorage = nil
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -265,7 +269,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
-		// Large Message Store
+		// Object Storage
 		os := enterpriseApi.ObjectStorage{}
 		if cr.Spec.ObjectStorageRef.Name != "" {
 			ns := cr.GetNamespace()
@@ -281,7 +285,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
-		// Can not override original large message store spec due to comparison in the later code
+		// Can not override original object storage spec due to comparison in the later code
 		osCopy := os
 		if osCopy.Spec.Provider == "s3" {
 			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
@@ -289,7 +293,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
-		// If bus is updated
+		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
 			if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
@@ -402,6 +406,10 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	// updates status after function completes
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
+	if cr.Status.Replicas < cr.Spec.Replicas {
+		cr.Status.Queue = nil
+		cr.Status.ObjectStorage = nil
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
 	if cr.Status.Peers == nil {
@@ -594,7 +602,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
-		// Large Message Store
+		// Object Storage
 		os := enterpriseApi.ObjectStorage{}
 		if cr.Spec.ObjectStorageRef.Name != "" {
 			ns := cr.GetNamespace()
@@ -618,7 +626,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
-		// If bus is updated
+		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
 			if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)

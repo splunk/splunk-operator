@@ -86,8 +86,8 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 	return true
 }
 
-// GeneratBusVolumeSpec return VolumeSpec struct with given values
-func GenerateBusVolumeSpec(name, secretRef string) enterpriseApi.VolumeSpec {
+// GenerateQueueVolumeSpec return VolumeSpec struct with given values
+func GenerateQueueVolumeSpec(name, secretRef string) enterpriseApi.VolumeSpec {
 	return enterpriseApi.VolumeSpec{
 		Name:      name,
 		SecretRef: secretRef,
