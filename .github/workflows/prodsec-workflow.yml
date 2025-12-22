@@ -24,11 +24,12 @@ jobs:
     container:
       image: returntocorp/semgrep
     steps:
-    - uses: actions/checkout@v4
+    - uses:  actions/checkout@v6
       with:
-        ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+        ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - run: semgrep ci
   FOSSA-scanner:
+    needs: approval-gate
     runs-on: ubuntu-latest
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
@@ -36,9 +37,9 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v4
+    - uses:  actions/checkout@v6
       with:
-        ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+        ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
