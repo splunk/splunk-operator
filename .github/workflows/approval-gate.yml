@@ -23,6 +23,8 @@ jobs:
   # 'github.event.pull_request.head.sha' to get the actual PR commit info.
   # For 'push' events, we fall back to 'github.sha' (the pushed commit).
   get-commit-info:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       commit-sha: ${{ steps.get-sha.outputs.commit_sha }}
