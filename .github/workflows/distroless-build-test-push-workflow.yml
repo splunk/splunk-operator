@@ -1,6 +1,6 @@
 name: Build and Test Distroless
 on:
-  pull_request: {}
+  pull_request_target: {}
   push:
     branches:
     - main
