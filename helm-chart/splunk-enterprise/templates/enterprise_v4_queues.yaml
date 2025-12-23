@@ -26,8 +26,12 @@ spec:
     {{- if .name }}
     name: {{ .name | quote }}
     {{- end }}
-    {{- if .region }}
-    region: {{ .region | quote }}
+    {{- if .authRegion }}
+    authRegion: {{ .authRegion | quote }}
+    {{- end }}
+    {{- if .volumes }}
+    volumes:
+    {{ toYaml . | indent 4 }}
     {{- end }}
   {{- end }}
 {{- end }}

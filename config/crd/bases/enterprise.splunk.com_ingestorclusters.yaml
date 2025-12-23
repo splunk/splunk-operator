@@ -4661,6 +4661,40 @@ spec:
                         description: Name of the queue
                         minLength: 1
                         type: string
+                      volumes:
+                        description: List of remote storage volumes
+                        items:
+                          description: VolumeSpec defines remote volume config
+                          properties:
+                            endpoint:
+                              description: Remote volume URI
+                              type: string
+                            name:
+                              description: Remote volume name
+                              type: string
+                            path:
+                              description: Remote volume path
+                              type: string
+                            provider:
+                              description: 'App Package Remote Store provider. Supported
+                                values: aws, minio, azure, gcp.'
+                              type: string
+                            region:
+                              description: Region of the remote storage volume where
+                                apps reside. Used for aws, if provided. Not used for
+                                minio and azure.
+                              type: string
+                            secretRef:
+                              description: Secret object name
+                              type: string
+                            storageType:
+                              description: 'Remote Storage type. Supported values:
+                                s3, blob, gcs. s3 works with aws or minio providers,
+                                whereas blob works with azure provider, gcs works
+                                for gcp.'
+                              type: string
+                          type: object
+                        type: array
                     required:
                     - dlq
                     - name

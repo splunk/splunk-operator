@@ -25,6 +25,7 @@ import (
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -117,7 +117,8 @@ func TestApplyIngestorCluster(t *testing.T) {
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock: true,
+				Mock:           true,
+				ServiceAccount: "sa",
 			},
 			QueueRef: corev1.ObjectReference{
 				Name:      queue.Name,
@@ -247,34 +248,12 @@ func TestApplyIngestorCluster(t *testing.T) {
 	assert.True(t, result.Requeue)
 	assert.NotEqual(t, enterpriseApi.PhaseError, cr.Status.Phase)
 
-	// Ensure stored StatefulSet status reflects readiness after any reconcile modifications
-	fetched := &appsv1.StatefulSet{}
-	_ = c.Get(ctx, types.NamespacedName{Name: "splunk-test-ingestor", Namespace: "test"}, fetched)
-	fetched.Status.Replicas = replicas
-	fetched.Status.ReadyReplicas = replicas
-	fetched.Status.UpdatedReplicas = replicas
-	if fetched.Status.UpdateRevision == "" {
-		fetched.Status.UpdateRevision = "v1"
-	}
-	c.Update(ctx, fetched)
-
-	// Guarantee all pods have matching revision label
-	for _, pn := range []string{"splunk-test-ingestor-0", "splunk-test-ingestor-1", "splunk-test-ingestor-2"} {
-		p := &corev1.Pod{}
-		if err := c.Get(ctx, types.NamespacedName{Name: pn, Namespace: "test"}, p); err == nil {
-			if p.Labels == nil {
-				p.Labels = map[string]string{}
-			}
-			p.Labels["controller-revision-hash"] = fetched.Status.UpdateRevision
-			c.Update(ctx, p)
-		}
-	}
-
 	// outputs.conf
 	origNew := newIngestorClusterPodManager
 	mockHTTPClient := &spltest.MockHTTPClient{}
-	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc) ingestorClusterPodManager {
+	newIngestorClusterPodManager = func(l logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, _ NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 		return ingestorClusterPodManager{
+			c:   c,
 			log: l, cr: cr, secrets: secret,
 			newSplunkClient: func(uri, user, pass string) *splclient.SplunkClient {
 				return &splclient.SplunkClient{ManagementURI: uri, Username: user, Password: pass, Client: mockHTTPClient}
@@ -284,6 +263,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 	defer func() { newIngestorClusterPodManager = origNew }()
 
 	propertyKVList := [][]string{
+		{"remote_queue.type", provider},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
@@ -320,6 +300,13 @@ func TestApplyIngestorCluster(t *testing.T) {
 			req, _ = http.NewRequest("POST", updateURL, strings.NewReader(fmt.Sprintf("%s=%s", field[1], field[2])))
 			mockHTTPClient.AddHandler(req, 200, "", nil)
 		}
+	}
+
+	for i := 0; i < int(cr.Status.ReadyReplicas); i++ {
+		podName := fmt.Sprintf("splunk-test-ingestor-%d", i)
+		baseURL := fmt.Sprintf("https://%s.splunk-%s-ingestor-headless.%s.svc.cluster.local:8089/services/server/control/restart", podName, cr.GetName(), cr.GetNamespace())
+		req, _ := http.NewRequest("POST", baseURL, nil)
+		mockHTTPClient.AddHandler(req, 200, "", nil)
 	}
 
 	// Second reconcile should now yield Ready
@@ -434,6 +421,9 @@ func TestGetChangedQueueFieldsForIngestor(t *testing.T) {
 				AuthRegion: "us-west-2",
 				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				DLQ:        "sqs-dlq-test",
+				VolList: []enterpriseApi.VolumeSpec{
+					{SecretRef: "secret"},
+				},
 			},
 		},
 	}
@@ -464,14 +454,21 @@ func TestGetChangedQueueFieldsForIngestor(t *testing.T) {
 				Name: os.Name,
 			},
 		},
-		Status: enterpriseApi.IngestorClusterStatus{},
+		Status: enterpriseApi.IngestorClusterStatus{
+			Queue:         &enterpriseApi.QueueSpec{},
+			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
+		},
 	}
 
-	queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR, false)
+	key := "key"
+	secret := "secret"
+	queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCR.Status.Queue, newCR.Status.ObjectStorage, false, key, secret)
 
-	assert.Equal(t, 10, len(queueChangedFields))
+	assert.Equal(t, 12, len(queueChangedFields))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},

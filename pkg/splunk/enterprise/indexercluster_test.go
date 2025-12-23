@@ -1569,7 +1569,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		return nil
 	}
 
-	newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc) indexerClusterPodManager {
+	newIndexerClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IndexerCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) indexerClusterPodManager {
 		return indexerClusterPodManager{
 			log:     log,
 			cr:      cr,
@@ -1579,6 +1579,7 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 				c.Client = mclient
 				return c
 			},
+			c: c,
 		}
 	}
 
@@ -2063,6 +2064,9 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 				AuthRegion: "us-west-2",
 				Endpoint:   "https://sqs.us-west-2.amazonaws.com",
 				DLQ:        "sqs-dlq-test",
+				VolList: []enterpriseApi.VolumeSpec{
+					{SecretRef: "secret"},
+				},
 			},
 		},
 	}
@@ -2093,12 +2097,20 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 				Name: os.Name,
 			},
 		},
+		Status: enterpriseApi.IndexerClusterStatus{
+			Queue:         &enterpriseApi.QueueSpec{},
+			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
+		},
 	}
 
-	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR, false)
-	assert.Equal(t, 8, len(queueChangedFieldsInputs))
+	key := "key"
+	secret := "secret"
+	queueChangedFieldsInputs, queueChangedFieldsOutputs, pipelineChangedFields := getChangedQueueFieldsForIndexer(&queue, &os, newCR.Status.Queue, newCR.Status.ObjectStorage, false, key, secret)
+	assert.Equal(t, 10, len(queueChangedFieldsInputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
@@ -2108,9 +2120,11 @@ func TestGetChangedQueueFieldsForIndexer(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
 	}, queueChangedFieldsInputs)
 
-	assert.Equal(t, 10, len(queueChangedFieldsOutputs))
+	assert.Equal(t, 12, len(queueChangedFieldsOutputs))
 	assert.Equal(t, [][]string{
 		{"remote_queue.type", provider},
+		{fmt.Sprintf("remote_queue.%s.access_key", provider), key},
+		{fmt.Sprintf("remote_queue.%s.secret_key", provider), secret},
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
@@ -2395,7 +2409,7 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Object definitions
-	queue := enterpriseApi.Queue{
+	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Queue",
 			APIVersion: "enterprise.splunk.com/v4",
@@ -2414,7 +2428,26 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 			},
 		},
 	}
-	c.Create(ctx, &queue)
+	c.Create(ctx, queue)
+
+	os := &enterpriseApi.ObjectStorage{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ObjectStorage",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "os",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ObjectStorageSpec{
+			Provider: "s3",
+			S3: enterpriseApi.S3Spec{
+				Endpoint: "https://s3.us-west-2.amazonaws.com",
+				Path:     "s3://bucket/key",
+			},
+		},
+	}
+	c.Create(ctx, os)
 
 	cm := &enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"},
@@ -2439,6 +2472,10 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 			QueueRef: corev1.ObjectReference{
 				Name:      queue.Name,
 				Namespace: queue.Namespace,
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      os.Name,
+				Namespace: os.Namespace,
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				ClusterManagerRef: corev1.ObjectReference{

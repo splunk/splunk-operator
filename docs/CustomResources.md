@@ -404,21 +404,21 @@ spec:
     endpoint: https://s3.us-west-2.amazonaws.com
 ```
 
-ObjectStorage inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
+ObjectStorage inputs can be found in the table below. As of now, only S3 provider of object storage is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of large message store (Allowed values: s3) |
-| s3   | S3 | [Required if provider=s3] S3 large message store inputs  |
+| provider   | string | [Required] Provider of object storage (Allowed values: s3) |
+| s3   | S3 | [Required if provider=s3] S3 object storage inputs  |
 
-S3 large message store inputs can be found in the table below.
+S3 object storage inputs can be found in the table below.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
 | endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
 
-Change of any of the large message queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+Change of any of the object storage inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
 
 ## MonitoringConsole Resource Spec Parameters
 
