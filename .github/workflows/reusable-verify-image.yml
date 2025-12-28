@@ -1,0 +1,105 @@
+name: 'Reusable Image Verification'
+
+# This workflow verifies container image signatures using cosign
+# Use this before deploying images to production or when consuming images from external sources
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: 'Full image name with tag to verify (registry/repo:tag)'
+        required: true
+        type: string
+      cloud-provider:
+        description: 'Cloud provider for authentication (aws, azure, gcp)'
+        required: false
+        type: string
+        default: 'aws'
+    secrets:
+      # AWS Secrets
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_DEFAULT_REGION:
+        required: false
+      ECR_REPOSITORY:
+        required: false
+      # Azure Secrets
+      AZURE_CREDENTIALS:
+        required: false
+      # GCP Secrets
+      GCP_SERVICE_ACCOUNT_KEY:
+        required: false
+      # Cosign Public Key
+      COSIGN_PUBLIC_KEY:
+        required: true
+    outputs:
+      verified:
+        description: 'Whether the image signature was verified successfully'
+        value: ${{ jobs.verify.outputs.verified }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Cloud Authentication
+        uses: ./.github/actions/configure-cloud-auth
+        with:
+          cloud-provider: ${{ inputs.cloud-provider }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+          azure-credentials: ${{ secrets.AZURE_CREDENTIALS }}
+          gcp-service-account-key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Login to Container Registry
+        run: |
+          case "${{ inputs.cloud-provider }}" in
+            aws)
+              aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+              ;;
+            azure)
+              # Azure login handled by configure-cloud-auth
+              echo "Azure registry login handled by authentication step"
+              ;;
+            gcp)
+              # GCP login handled by configure-cloud-auth
+              echo "GCP registry login handled by authentication step"
+              ;;
+          esac
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@main
+
+      - name: Verify Image Signature
+        id: verify
+        run: |
+          echo "Verifying signature for image: ${{ inputs.image-name }}"
+
+          if cosign verify --key env://COSIGN_PUBLIC_KEY ${{ inputs.image-name }}; then
+            echo "✅ Image signature verified successfully!"
+            echo "verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Image signature verification failed!"
+            echo "verified=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+
+      - name: Display Verification Result
+        run: |
+          echo "## Image Signature Verification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image**: \`${{ inputs.image-name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ Verified" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
