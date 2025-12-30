@@ -51,13 +51,12 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
 
-	// Get event recorder from context
-	var eventPublisher *K8EventPublisher
-	if recorder := ctx.Value(splcommon.EventRecorderKey); recorder != nil {
-		if rec, ok := recorder.(record.EventRecorder); ok {
-			eventPublisher, _ = newK8EventPublisher(rec, cr)
-		}
+	// Get event recorder from context and create event publisher
+	var recorder record.EventRecorder
+	if rec := ctx.Value(splcommon.EventRecorderKey); rec != nil {
+		recorder, _ = rec.(record.EventRecorder)
 	}
+	eventPublisher, _ := newK8EventPublisher(recorder, cr)
 
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "ClusterManager"

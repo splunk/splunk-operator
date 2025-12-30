@@ -29,8 +29,8 @@ type K8EventPublisher struct {
 	instance runtime.Object
 }
 
-// newK8EventPublisher creates a new k8s event publisher
-func newK8EventPublisher(recorder record.EventRecorder, instance runtime.Object) (*K8EventPublisher, error) {
+// newK8EventPublisher creates a new k8s event publisher (variable to allow mocking in tests)
+var newK8EventPublisher = func(recorder record.EventRecorder, instance runtime.Object) (*K8EventPublisher, error) {
 	eventPublisher := &K8EventPublisher{
 		recorder: recorder,
 		instance: instance,
