@@ -331,12 +331,13 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	// Get event publisher from context
+	// Get event publisher from context, create one if not present
 	var eventPublisher *K8EventPublisher
 	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
+		eventPublisher, _ = pub.(*K8EventPublisher)
+	}
+	if eventPublisher == nil {
+		eventPublisher, _ = newK8EventPublisher(nil, cr)
 	}
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
