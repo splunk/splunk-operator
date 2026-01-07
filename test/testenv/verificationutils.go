@@ -997,7 +997,10 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
-					return phase
+					gomega.Expect(err).To(gomega.Succeed())
+				}
+				if appDeploymentInfo.AppName == "" {
+					gomega.Expect(fmt.Errorf("app deployment info not found for app %s (CR %s/%s, AppSource %s)", appName, crKind, name, appSourceName)).To(gomega.Succeed())
 				}
 				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase should not be %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App State", appDeploymentInfo)
 				return appDeploymentInfo.PhaseInfo.Phase
@@ -1010,7 +1013,10 @@ func VerifyAppListPhase(ctx context.Context, deployment *Deployment, testenvInst
 				appDeploymentInfo, err := GetAppDeploymentInfo(ctx, deployment, testenvInstance, name, crKind, appSourceName, appName)
 				if err != nil {
 					testenvInstance.Log.Error(err, "Failed to get app deployment info")
-					return enterpriseApi.PhaseDownload
+					gomega.Expect(err).To(gomega.Succeed())
+				}
+				if appDeploymentInfo.AppName == "" {
+					gomega.Expect(fmt.Errorf("app deployment info not found for app %s (CR %s/%s, AppSource %s)", appName, crKind, name, appSourceName)).To(gomega.Succeed())
 				}
 				testenvInstance.Log.Info(fmt.Sprintf("App State found for CR %s NAME %s APP NAME %s Expected Phase %s", crKind, name, appName, phase), "Actual Phase", appDeploymentInfo.PhaseInfo.Phase, "App Phase Status", appDeploymentInfo.PhaseInfo.Status, "App State", appDeploymentInfo)
 				if appDeploymentInfo.PhaseInfo.Status != enterpriseApi.AppPkgInstallComplete {
