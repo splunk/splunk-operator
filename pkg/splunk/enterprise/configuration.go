@@ -941,6 +941,8 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: livenessProbeDriverPathEnv, Value: GetLivenessDriverFilePath()},
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		// this will be read by ansible and used to set the kvstore type in server.conf
+		{Name: "SPLUNK_KVSTORE_TYPE", Value: spec.DefaultKVStoreType},
 	}
 
 	// update variables for licensing, if configured

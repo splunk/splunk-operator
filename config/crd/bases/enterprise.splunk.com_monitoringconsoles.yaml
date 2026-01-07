@@ -1225,6 +1225,10 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              defaultKVStoreType:
+                description: DefaultKVStoreType specifies the default KV store type
+                  for this Splunk instance
+                type: string
               defaults:
                 description: Inline map of default.yml overrides used to initialize
                   the environment
@@ -5742,6 +5746,10 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              defaultKVStoreType:
+                description: DefaultKVStoreType specifies the default KV store type
+                  for this Splunk instance
+                type: string
               defaults:
                 description: Inline map of default.yml overrides used to initialize
                   the environment
