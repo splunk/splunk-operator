@@ -802,8 +802,9 @@ func setupAnsibleInitContainer(podTemplateSpec *corev1.PodTemplateSpec, image st
 			`if [ ! -f /opt/ansible-rw/ansible.cfg ]; then
 				cp -a /opt/ansible/. /opt/ansible-rw/
 			fi
-			if [ ! -f /opt/splunk/share-rw/splunk/search_mrsparkle/modules/.initialized ]; then
-				cp -a /opt/splunk/share/. /opt/splunk/share-rw/ && touch /opt/splunk/share-rw/splunk/search_mrsparkle/modules/.initialized
+			if [ ! -f /opt/splunk/share-rw/.initialized ]; then
+				cp -rL /opt/splunk/share/. /opt/splunk/share-rw/ 2>/dev/null || cp -r /opt/splunk/share/. /opt/splunk/share-rw/
+				touch /opt/splunk/share-rw/.initialized
 			fi`,
 		},
 		VolumeMounts: []corev1.VolumeMount{
