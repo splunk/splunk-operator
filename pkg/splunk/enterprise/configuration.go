@@ -906,6 +906,9 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	addSplunkVolumeToTemplate(podTemplateSpec, "home-splunk", "/home/splunk", corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
+	addSplunkVolumeToTemplate(podTemplateSpec, "splunk-share", "/opt/splunk/share", corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	})
 
 	// update security context
 	runAsUser := int64(41812)

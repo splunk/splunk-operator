@@ -801,19 +801,23 @@ func setupAnsibleInitContainer(podTemplateSpec *corev1.PodTemplateSpec, image st
 		Args: []string{
 			`if [ ! -f /opt/ansible-rw/ansible.cfg ]; then
 				cp -a /opt/ansible/. /opt/ansible-rw/
+			fi
+			if [ ! -f /opt/splunk/share-rw/splunk/search_mrsparkle/modules/.initialized ]; then
+				cp -a /opt/splunk/share/. /opt/splunk/share-rw/ && touch /opt/splunk/share-rw/splunk/search_mrsparkle/modules/.initialized
 			fi`,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "ansible", MountPath: "/opt/ansible-rw"},
+			{Name: "splunk-share", MountPath: "/opt/splunk/share-rw"},
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("0.1"),
-				corev1.ResourceMemory: resource.MustParse("64Mi"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("0.5"),
-				corev1.ResourceMemory: resource.MustParse("256Mi"),
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
