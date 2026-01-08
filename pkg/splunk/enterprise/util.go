@@ -787,6 +787,53 @@ func setupInitContainer(podTemplateSpec *corev1.PodTemplateSpec, Image string, i
 	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
 }
 
+// setupAnsibleInitContainer adds an initContainer to copy ansible directory for read-only root filesystem
+func setupAnsibleInitContainer(podTemplateSpec *corev1.PodTemplateSpec, image string, imagePullPolicy string) {
+	runAsUser := int64(41812)
+	runAsNonRoot := true
+	privileged := false
+
+	containerSpec := corev1.Container{
+		Image:           image,
+		ImagePullPolicy: corev1.PullPolicy(imagePullPolicy),
+		Name:            "copy-ansible-dir",
+		Command:         []string{"/bin/sh", "-c"},
+		Args: []string{
+			`if [ ! -f /opt/ansible-rw/ansible.cfg ]; then
+				cp -a /opt/ansible/. /opt/ansible-rw/
+			fi`,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "ansible", MountPath: "/opt/ansible-rw"},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.1"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("0.5"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{
+					"ALL",
+				},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+	}
+	podTemplateSpec.Spec.InitContainers = append(podTemplateSpec.Spec.InitContainers, containerSpec)
+}
+
 // DeleteOwnerReferencesForResources used to delete any outstanding owner references
 // Ideally we should be removing the owner reference wherever the CR is not controller for the resource
 func DeleteOwnerReferencesForResources(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) error {

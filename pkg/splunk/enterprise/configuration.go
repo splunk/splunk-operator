@@ -893,6 +893,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		}
 	}
 
+	// Add writable volumes required for read-only root filesystem
+	addSplunkVolumeToTemplate(podTemplateSpec, "tmp", "/tmp", corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	})
+	addSplunkVolumeToTemplate(podTemplateSpec, "container-artifact", "/opt/container_artifact", corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	})
+	addSplunkVolumeToTemplate(podTemplateSpec, "ansible", "/opt/ansible", corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	})
+	addSplunkVolumeToTemplate(podTemplateSpec, "home-splunk", "/home/splunk", corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	})
+
 	// update security context
 	runAsUser := int64(41812)
 	fsGroup := int64(41812)
@@ -1093,6 +1107,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
 			AllowPrivilegeEscalation: &[]bool{false}[0],
+			ReadOnlyRootFilesystem:   &[]bool{true}[0],
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{
 					"ALL",
