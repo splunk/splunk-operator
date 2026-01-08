@@ -16,7 +16,7 @@ queue:
     dlq: index-ingest-separation-test-dlq
     volumes:
       - name: helm-bus-secret-ref-test
-        secretRef: s3-secret
+        secretRef: index-ing-sep-secret
 
 objectStorage:
   enabled: true

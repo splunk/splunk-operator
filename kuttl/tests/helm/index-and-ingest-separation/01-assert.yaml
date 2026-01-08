@@ -2,4 +2,4 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: s3-secret
+  name: index-ing-sep-secret
