@@ -46,6 +46,10 @@ func NewK8EventPublisherWithRecorder(recorder record.EventRecorder, instance run
 
 // publishEvent adds events to k8s using event recorder
 func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, message string) {
+	if k == nil {
+		return
+	}
+
 	// in the case of testing, recorder is not passed
 	if k.recorder == nil {
 		return
