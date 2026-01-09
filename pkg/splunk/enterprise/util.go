@@ -799,18 +799,25 @@ func setupAnsibleInitContainer(podTemplateSpec *corev1.PodTemplateSpec, image st
 		Name:            "copy-ansible-dir",
 		Command:         []string{"/bin/sh", "-c"},
 		Args: []string{
-			`if [ ! -f /opt/ansible-rw/ansible.cfg ]; then
+			`# Copy ansible directory
+			if [ ! -f /opt/ansible-rw/ansible.cfg ]; then
 				cp -r /opt/ansible/. /opt/ansible-rw/
 				chmod -R 755 /opt/ansible-rw/* /opt/ansible-rw/.[!.]* 2>/dev/null || true
 			fi
-			if [ ! -f /opt/splunk/share-rw/.initialized ]; then
-				cp -rL /opt/splunk/share/. /opt/splunk/share-rw/ 2>/dev/null || cp -r /opt/splunk/share/. /opt/splunk/share-rw/
-				touch /opt/splunk/share-rw/.initialized
+			if [ -f /opt/ansible-rw/ansible.cfg ]; then
+				sed -i 's/^become\s*=.*/become = false/' /opt/ansible-rw/ansible.cfg
+			fi
+			# Copy splunk share directory
+			# Mount the emptyDir volume at /mnt/splunk-share-staging in initContainer
+			# then copy original /opt/splunk/share from the image to staging
+			if [ ! -f /mnt/splunk-share-staging/.initialized ]; then
+				cp -rL /opt/splunk/share/. /mnt/splunk-share-staging/ 2>/dev/null || cp -r /opt/splunk/share/. /mnt/splunk-share-staging/
+				touch /mnt/splunk-share-staging/.initialized
 			fi`,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "ansible", MountPath: "/opt/ansible-rw"},
-			{Name: "splunk-share", MountPath: "/opt/splunk/share-rw"},
+			{Name: "splunk-share", MountPath: "/mnt/splunk-share-staging"},
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{

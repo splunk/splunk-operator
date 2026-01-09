@@ -903,13 +903,19 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	addSplunkVolumeToTemplate(podTemplateSpec, "container-artifact", "/opt/container_artifact", corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
-	addSplunkVolumeToTemplate(podTemplateSpec, "ansible", "/opt/ansible", corev1.VolumeSource{
+	addSplunkVolumeToTemplate(podTemplateSpec, "ansible", "/opt/ansible-rw", corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
 	addSplunkVolumeToTemplate(podTemplateSpec, "home-splunk", "/home/splunk", corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
+	// Mount the emptyDir at the original /opt/splunk/share path so Splunk can write directly
+	// The initContainer copies original files from the image to this writable location
 	addSplunkVolumeToTemplate(podTemplateSpec, "splunk-share", "/opt/splunk/share", corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	})
+	// Mount writable directory for quarantined_files (Splunk needs to write quarantine manifest)
+	addSplunkVolumeToTemplate(podTemplateSpec, "splunk-quarantined-files", "/opt/splunk/quarantined_files", corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
 
@@ -1101,7 +1107,28 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		env = removeDuplicateEnvVars(env)
 	}
 
+	// Set SPLUNK_ANSIBLE_HOME to writable location so entrypoint.sh can modify ansible.cfg
+	// Also set ANSIBLE_CONFIG to use the writable copy
+	// This is required because emptyDir volumes are world-writable by default,
+	// but /opt/ansible-rw is where we copy and modify the ansible configuration
+	env = append(env, corev1.EnvVar{
+		Name:  "SPLUNK_ANSIBLE_HOME",
+		Value: "/opt/ansible-rw",
+	})
+	env = append(env, corev1.EnvVar{
+		Name:  "ANSIBLE_CONFIG",
+		Value: "/opt/ansible-rw/ansible.cfg",
+	})
+	// Disable become entirely - the initContainer already sets become=false in ansible.cfg
+	// and we run as splunk user, so become_user=splunk is unnecessary
+	env = append(env, corev1.EnvVar{
+		Name:  "ANSIBLE_BECOME",
+		Value: "no",
+	})
+
 	privileged := false
+	readOnlyFS := true
+
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
@@ -1113,7 +1140,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
 			AllowPrivilegeEscalation: &[]bool{false}[0],
-			ReadOnlyRootFilesystem:   &[]bool{true}[0],
+			ReadOnlyRootFilesystem:   &readOnlyFS,
 			Capabilities: &corev1.Capabilities{
 				Drop: []corev1.Capability{
 					"ALL",
