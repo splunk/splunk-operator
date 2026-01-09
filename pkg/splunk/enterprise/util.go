@@ -801,7 +801,7 @@ func setupAnsibleInitContainer(podTemplateSpec *corev1.PodTemplateSpec, image st
 		Args: []string{
 			`if [ ! -f /opt/ansible-rw/ansible.cfg ]; then
 				cp -r /opt/ansible/. /opt/ansible-rw/
-				chmod -R 755 /opt/ansible-rw
+				chmod -R 755 /opt/ansible-rw/* /opt/ansible-rw/.[!.]* 2>/dev/null || true
 			fi
 			if [ ! -f /opt/splunk/share-rw/.initialized ]; then
 				cp -rL /opt/splunk/share/. /opt/splunk/share-rw/ 2>/dev/null || cp -r /opt/splunk/share/. /opt/splunk/share-rw/
