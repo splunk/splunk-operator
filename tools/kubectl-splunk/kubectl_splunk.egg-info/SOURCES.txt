@@ -1,0 +1,12 @@
+README.md
+setup.py
+kubectl_splunk/__init__.py
+kubectl_splunk/main.py
+kubectl_splunk.egg-info/PKG-INFO
+kubectl_splunk.egg-info/SOURCES.txt
+kubectl_splunk.egg-info/dependency_links.txt
+kubectl_splunk.egg-info/entry_points.txt
+kubectl_splunk.egg-info/requires.txt
+kubectl_splunk.egg-info/top_level.txt
+tests/__init__.py
+tests/test_kubectl_splunk.py

@@ -1,0 +1,14 @@
+
+ ▐▛███▜▌   Claude Code v2.0.30
+▝▜█████▛▘  arn:aws:bedrock:us-west-2:387769110234:application-inference-profile/6jde9z7l97o8 · API Usage Billing
+  ▘▘ ▝▝    /Users/viveredd/Projects/splunk-operator
+═══════════════════════════════════════════════════════════════════ Conversation compacted · ctrl+o for history ══════════════════════════════════════════════════════════════════
+
+> /compact 
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Read .github/workflows/modernized-build-test-push.yml (134 lines)
+  ⎿  Read .github/workflows/test-composite-actions.yml (107 lines)
+
+
+
+

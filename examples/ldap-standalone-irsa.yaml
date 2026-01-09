@@ -1,0 +1,62 @@
+---
+# Kubernetes Service Account with IRSA annotation for S3 access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: splunk-app-s3-reader
+  namespace: splunk-operator
+  annotations:
+    # IRSA annotation - links this K8s SA to AWS IAM role
+    eks.amazonaws.com/role-arn: arn:aws:iam::YOUR_ACCOUNT_ID:role/splunk-app-framework-s3-read
+
+---
+# LDAP Bind Password Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-credentials
+  namespace: splunk-operator
+type: Opaque
+stringData:
+  bind-password: "ChangeThisToYourActualLDAPPassword"
+
+---
+# Standalone Splunk with LDAP app via App Framework using IRSA
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: ldap-test-irsa
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+
+  # Use the service account with IRSA for S3 access
+  serviceAccount: splunk-app-s3-reader
+
+  # App Framework configuration
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: authApps
+        location: authAppsLoc/
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: YOUR_BUCKET_NAME/apps/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        # No secretRef needed when using IRSA!
+
+  # Environment variable for LDAP bind password
+  extraEnv:
+    - name: LDAP_BIND_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: ldap-credentials
+          key: bind-password

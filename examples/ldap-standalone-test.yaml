@@ -1,0 +1,39 @@
+---
+# Simple Standalone deployment with LDAP app via App Framework
+# Based on the documented examples in docs/AppFramework.md
+
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: ldap-test
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+
+  # App Framework configuration
+  appRepo:
+    appsRepoPollIntervalSeconds: 600
+    defaults:
+      volumeName: volume_app_repo
+      scope: local
+    appSources:
+      - name: authApps
+        location: authAppsLoc/
+    volumes:
+      - name: volume_app_repo
+        storageType: s3
+        provider: aws
+        path: bucket-app-framework/Standalone-us/
+        endpoint: https://s3-us-west-2.amazonaws.com
+        region: us-west-2
+        secretRef: s3-secret
+
+  # Environment variable for LDAP bind password
+  extraEnv:
+    - name: LDAP_BIND_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: ldap-credentials
+          key: bind-password

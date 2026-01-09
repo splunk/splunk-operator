@@ -1,0 +1,90 @@
+---
+# LDAP Bind Password Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-credentials
+  namespace: splunk-operator
+type: Opaque
+stringData:
+  bind-password: "ChangeThisToYourActualLDAPPassword"
+
+---
+# S3 Credentials Secret (for App Framework)
+# Replace with your actual S3 credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-secret
+  namespace: splunk-operator
+type: Opaque
+stringData:
+  s3_access_key: "YOUR_AWS_ACCESS_KEY"
+  s3_secret_key: "YOUR_AWS_SECRET_KEY"
+
+---
+# Standalone Splunk with LDAP Configuration via App Framework
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: standalone-ldap-test
+  namespace: splunk-operator
+  finalizers:
+    - enterprise.splunk.com/delete-pvc
+spec:
+  replicas: 1
+
+  # App Framework Configuration
+  appRepo:
+    # Poll interval - how often to check for app updates (in seconds)
+    appsRepoPollIntervalSeconds: 600
+
+    # Default settings for app sources
+    defaults:
+      volumeName: ldap-app-volume
+      scope: local  # Install apps locally on standalone instance
+
+    # App sources - where to find the apps
+    appSources:
+      - name: ldap-auth-apps
+        location: ldap-config/  # Folder in S3 bucket containing the app
+        volumeName: ldap-app-volume
+        scope: local
+
+    # Remote storage volumes
+    volumes:
+      - name: ldap-app-volume
+        storageType: s3
+        provider: aws
+        path: your-bucket-name/apps/  # Update this to your actual S3 bucket path
+        endpoint: https://s3-us-west-2.amazonaws.com  # Update to your region
+        region: us-west-2  # Update to your region
+        secretRef: s3-secret
+
+  # Environment Variables
+  # This is how we pass the LDAP bind password to the app
+  extraEnv:
+    - name: LDAP_BIND_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: ldap-credentials
+          key: bind-password
+
+  # Optional: Resource limits
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "0.1"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+---
+# Example ConfigMap for manual app updates (if needed)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: splunk-splunk-operator-standalone-ldap-test-configmap
+  namespace: splunk-operator
+data:
+  manualUpdate: "false"

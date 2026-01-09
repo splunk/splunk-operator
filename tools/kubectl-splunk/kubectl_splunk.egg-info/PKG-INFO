@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: kubectl-splunk
+Version: 1.6
+Summary: A kubectl plugin to manage Splunk instances within Kubernetes pods.
+Home-page: https://github.com/splunk/splunk-operator/tools/kubectl-splunk
+Author: Splunk
+Author-email: support@splunk.com
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Requires-Dist: requests
+Requires-Dist: argcomplete
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

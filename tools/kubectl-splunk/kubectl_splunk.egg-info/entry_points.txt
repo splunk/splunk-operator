@@ -1,0 +1,2 @@
+[console_scripts]
+kubectl-splunk = kubectl_splunk.main:main

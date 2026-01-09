@@ -1,0 +1,157 @@
+direction: right
+
+user: User {
+  shape: person
+  style.fill: "#E8F5E9"
+}
+
+splunk_pod: Splunk Enterprise Pod {
+  shape: rectangle
+  style.fill: "#E3F2FD"
+
+  splunk_app: Splunk Process {
+    shape: hexagon
+  }
+
+  auth_config: authentication.conf {
+    shape: document
+    style.fill: "#FFF9C4"
+  }
+
+  app_dir: /opt/splunk/etc/apps/\nldap-auth-config-app/ {
+    shape: stored_data
+  }
+}
+
+operator_pod: Splunk Operator Pod {
+  shape: rectangle
+  style.fill: "#F3E5F5"
+
+  controller: Controller Manager {
+    shape: hexagon
+  }
+
+  app_framework: App Framework\nScheduler {
+    shape: diamond
+  }
+}
+
+ldap_pod: OpenLDAP Pod {
+  shape: rectangle
+  style.fill: "#FFF3E0"
+
+  ldap_service: LDAP Service {
+    shape: cylinder
+  }
+
+  users: Users OU {
+    shape: stored_data
+  }
+
+  groups: Groups OU {
+    shape: stored_data
+  }
+}
+
+s3: AWS S3 Bucket {
+  shape: cloud
+  style.fill: "#FFEBEE"
+
+  ldap_app: ldap-auth-config-app.tgz {
+    shape: document
+  }
+}
+
+iam: AWS IAM {
+  shape: cloud
+  style.fill: "#FCE4EC"
+
+  role: IAM Role\n(IRSA) {
+    shape: hexagon
+  }
+
+  trust_policy: Trust Policy\n(OIDC) {
+    shape: document
+  }
+}
+
+k8s: Kubernetes Cluster {
+  shape: rectangle
+  style.stroke-dash: 3
+
+  sa_operator: ServiceAccount\nsplunk-operator-\ncontroller-manager {
+    shape: page
+  }
+
+  sa_splunk: ServiceAccount\nsplunk-app-\ns3-reader {
+    shape: page
+  }
+}
+
+# User authentication flow
+user -> splunk_pod.splunk_app: 1. Login with\nLDAP credentials {
+  style.stroke: "#4CAF50"
+  style.stroke-width: 3
+}
+
+splunk_pod.auth_config -> splunk_pod.splunk_app: 2. Read LDAP\nconfig {
+  style.stroke: "#2196F3"
+}
+
+splunk_pod.splunk_app -> ldap_pod.ldap_service: 3. Authenticate\nuser {
+  style.stroke: "#FF9800"
+  style.stroke-width: 3
+}
+
+ldap_pod.ldap_service -> ldap_pod.users: 4. Validate\ncredentials {
+  style.stroke: "#9C27B0"
+}
+
+ldap_pod.ldap_service -> ldap_pod.groups: 5. Get group\nmembership {
+  style.stroke: "#9C27B0"
+}
+
+ldap_pod.ldap_service -> splunk_pod.splunk_app: 6. Return user\n+ groups {
+  style.stroke: "#FF9800"
+  style.stroke-width: 3
+}
+
+splunk_pod.splunk_app -> user: 7. Grant access\nwith mapped role {
+  style.stroke: "#4CAF50"
+  style.stroke-width: 3
+}
+
+# App Framework deployment flow
+operator_pod.controller -> operator_pod.app_framework: Monitor\nStandalone CR {
+  style.stroke: "#607D8B"
+}
+
+operator_pod.app_framework -> k8s.sa_operator: Use IRSA\ncredentials {
+  style.stroke: "#795548"
+}
+
+k8s.sa_operator -> iam.role: Assume\nrole {
+  style.stroke: "#795548"
+}
+
+iam.trust_policy -> iam.role: OIDC\nvalidation {
+  style.stroke: "#E91E63"
+}
+
+operator_pod.app_framework -> s3: Download\nLDAP app {
+  style.stroke: "#00BCD4"
+  style.stroke-width: 2
+}
+
+s3 -> operator_pod.app_framework: Return\napp package {
+  style.stroke: "#00BCD4"
+}
+
+operator_pod.app_framework -> splunk_pod.app_dir: Install\napp {
+  style.stroke: "#3F51B5"
+  style.stroke-width: 2
+}
+
+splunk_pod.app_dir -> splunk_pod.auth_config: Contains {
+  style.stroke: "#2196F3"
+}

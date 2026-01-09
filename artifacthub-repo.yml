@@ -1,0 +1,26 @@
+# Artifact Hub repository metadata file
+# This file provides metadata about the Helm chart repository for Artifact Hub
+# See: https://artifacthub.io/docs/topics/repositories/#helm-charts-repositories
+
+repositoryID: splunk-operator
+displayName: Splunk Operator for Kubernetes
+name: splunk-operator
+url: https://github.com/splunk/splunk-operator/releases
+owners:
+  - name: Splunk
+    email: splunk-operator@splunk.com
+links:
+  - name: Source Code
+    url: https://github.com/splunk/splunk-operator
+  - name: Issues
+    url: https://github.com/splunk/splunk-operator/issues
+  - name: Documentation
+    url: https://github.com/splunk/splunk-operator/blob/main/README.md
+  - name: Installation Guide
+    url: https://github.com/splunk/splunk-operator/blob/main/docs/Install.md
+  - name: Helm Charts (OCI)
+    url: https://github.com/orgs/splunk/packages?repo_name=splunk-operator
+  - name: Docker Hub
+    url: https://hub.docker.com/r/splunk/splunk-operator
+  - name: GHCR
+    url: https://ghcr.io/splunk/splunk-operator

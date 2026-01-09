@@ -1,0 +1,68 @@
+direction: down
+
+title: LDAP Authentication Flow {
+  style.font-size: 24
+  style.bold: true
+}
+
+step1: User Login Attempt {
+  shape: rectangle
+  style.fill: "#E8F5E9"
+}
+
+step2: Splunk Reads\nauthentication.conf {
+  shape: rectangle
+  style.fill: "#E3F2FD"
+}
+
+step3: Connect to\nLDAP Server {
+  shape: rectangle
+  style.fill: "#FFF9C4"
+}
+
+step4: Bind with\nService Account {
+  shape: diamond
+  style.fill: "#FFECB3"
+}
+
+step5: Search User\nin userBaseDN {
+  shape: rectangle
+  style.fill: "#FFF3E0"
+}
+
+step6: Validate\nPassword {
+  shape: diamond
+  style.fill: "#FFE0B2"
+}
+
+step7: Get User's\nGroup Membership {
+  shape: rectangle
+  style.fill: "#FFCCBC"
+}
+
+step8: Map Groups\nto Splunk Roles {
+  shape: rectangle
+  style.fill: "#D1C4E9"
+}
+
+step9: Grant Access {
+  shape: rectangle
+  style.fill: "#C5E1A5"
+}
+
+error: Authentication\nFailed {
+  shape: rectangle
+  style.fill: "#FFCDD2"
+}
+
+step1 -> step2
+step2 -> step3
+step3 -> step4
+step4 -> step5: Success
+step4 -> error: Bind Failed
+step5 -> step6: User Found
+step5 -> error: User Not Found
+step6 -> step7: Password Valid
+step6 -> error: Invalid Password
+step7 -> step8
+step8 -> step9

@@ -1,0 +1,79 @@
+name: 'Example: Deploy with Verification'
+
+# This is an EXAMPLE workflow showing how to use the image verification module
+# Copy and modify this for your actual deployment workflows
+# Rename file to remove .example extension to activate
+
+on:
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: 'Image tag to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  # Step 1: Verify the image signature before deployment
+  verify-image:
+    name: Verify Image Signature
+    uses: ./.github/workflows/reusable-verify-image.yml
+    with:
+      image-name: ${{ format('{0}/splunk/splunk-operator:{1}', secrets.ECR_REPOSITORY, inputs.image-tag) }}
+      cloud-provider: aws
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+
+  # Step 2: Only deploy if verification succeeds
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    needs: verify-image
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Operator
+        run: |
+          echo "Deploying verified image to ${{ inputs.environment }}"
+          echo "Image: ${{ format('{0}/splunk/splunk-operator:{1}', secrets.ECR_REPOSITORY, inputs.image-tag) }}"
+          echo "Verification status: ${{ needs.verify-image.outputs.verified }}"
+
+          # Your actual deployment commands here
+          # Example:
+          # kubectl set image deployment/splunk-operator \
+          #   splunk-operator=${{ format('{0}/splunk/splunk-operator:{1}', secrets.ECR_REPOSITORY, inputs.image-tag) }}
+
+      - name: Verify Deployment
+        run: |
+          echo "Verifying deployment health..."
+          # Add health check commands here
+
+  # Step 3: Notify deployment status
+  notify:
+    name: Send Notification
+    needs: [verify-image, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag**: ${{ inputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Verified**: ${{ needs.verify-image.outputs.verified }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Status**: ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
