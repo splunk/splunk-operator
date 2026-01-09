@@ -781,6 +781,9 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	// update statefulset's pod template with common splunk pod config
 	updateSplunkPodTemplateWithConfig(ctx, client, &statefulSet.Spec.Template, cr, spec, instanceType, extraEnv, statefulSetSecret.GetName())
 
+	// Setup initContainer for ansible directory (required for read-only root filesystem)
+	setupAnsibleInitContainer(&statefulSet.Spec.Template, spec.Image, spec.ImagePullPolicy)
+
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
