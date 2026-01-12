@@ -1,0 +1,32 @@
+name: Lint Workflows
+permissions:
+  contents: read
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+
+jobs:
+  check-checkout-ref:
+    name: Check actions/checkout has ref specified
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Check all actions/checkout have ref specified
+        run: python .github/scripts/check-checkout-ref.py

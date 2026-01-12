@@ -16,8 +16,12 @@ GitHub's `pull_request` event doesn't expose secrets to fork PRs (for security).
 ### Security Requirements
 
 1. **Always use `approval-gate.yml`** as a dependency for jobs needing secrets
-2. **Always use `target-checkout`** action to checkout the correct PR commit (not the base branch)
-3. **Always pass the approval gate's `commit-sha`** to prevent testing unapproved code:
+2. **Always specify `with.ref`** on all `actions/checkout` steps (enforced by `lint-workflows.yml`)
+3. **Always pass the approval gate's `commit-sha`** to prevent testing unapproved code
+
+### Checkout Patterns
+
+**For workflows using approval-gate** (recommended for `pull_request_target`):
 
 ```yaml
 jobs:
@@ -27,9 +31,23 @@ jobs:
   build:
     needs: approval-gate
     steps:
-      - uses: ./.github/actions/target-checkout
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.approval-gate.outputs.commit-sha }}
+```
+
+**For simpler workflows** (e.g., `pull_request` or `push` triggers):
+
+```yaml
+# Preferred: Define ref once at workflow level, reuse in all jobs
+env:
+  CHECKOUT_REF: ${{ github.ref }}
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
 ```
 
 > ⚠️ Without these safeguards, a malicious commit could be added after approval but before execution.
