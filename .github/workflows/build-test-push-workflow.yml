@@ -13,6 +13,8 @@ on:
       - 'docs/**'
       - '*.md'
   pull_request:
+    # Commented to enable PR testing before merging to main
+    # TODO: Uncomment after merge
     # branches-ignore:
     #   - 'develop'
     paths-ignore:
