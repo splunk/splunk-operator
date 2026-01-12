@@ -5,14 +5,26 @@ permissions:
   id-token: write
   pull-requests: write
 on:
+  # See .github/README.md for PR testing strategy documentation
   pull_request_target:
     branches:
       - 'develop'
-      - 'CSPL-4372-add-approval-gate-exec-in-target'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    branches-ignore:
+      - 'develop'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   push:
     branches:
-    - main
-    - develop
+      - main
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
   approval-gate:
     uses: ./.github/workflows/approval-gate.yml
