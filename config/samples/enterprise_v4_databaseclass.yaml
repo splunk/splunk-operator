@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v4
+kind: DatabaseClass
+metadata:
+  labels:
+    app.kubernetes.io/name: splunk-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: databaseclass-sample
+spec:
+  foo: "2"

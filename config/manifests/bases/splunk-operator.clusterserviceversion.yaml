@@ -28,6 +28,16 @@ spec:
       kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       version: v3
+    - description: DatabaseClass is the Schema for the databaseclasses API.
+      displayName: Database Class
+      kind: DatabaseClass
+      name: databaseclasses.enterprise.splunk.com
+      version: v4
+    - description: Database is the Schema for the databases API.
+      displayName: Database
+      kind: Database
+      name: databases.enterprise.splunk.com
+      version: v4
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       displayName: Indexer Cluster
       kind: IndexerCluster

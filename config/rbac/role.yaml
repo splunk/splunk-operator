@@ -5,6 +5,19 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
@@ -49,6 +62,8 @@ rules:
   resources:
   - clustermanagers
   - clustermasters
+  - databaseclasses
+  - databases
   - indexerclusters
   - licensemanagers
   - licensemasters
@@ -68,6 +83,8 @@ rules:
   resources:
   - clustermanagers/finalizers
   - clustermasters/finalizers
+  - databaseclasses/finalizers
+  - databases/finalizers
   - indexerclusters/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
@@ -81,6 +98,8 @@ rules:
   resources:
   - clustermanagers/status
   - clustermasters/status
+  - databaseclasses/status
+  - databases/status
   - indexerclusters/status
   - licensemanagers/status
   - licensemasters/status
@@ -91,3 +110,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters
+  - databases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters/status
+  - databases/status
+  verbs:
+  - get

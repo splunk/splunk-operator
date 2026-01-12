@@ -65,7 +65,31 @@ metadata:
           "metadata": {
             "name": "clustermanager-sample"
           },
-          "spec": {}
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "Database",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "splunk-operator"
+            },
+            "name": "database-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "DatabaseClass",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "splunk-operator"
+            },
+            "name": "databaseclass-sample"
+          },
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -73,7 +97,7 @@ metadata:
           "metadata": {
             "name": "indexercluster-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -81,7 +105,7 @@ metadata:
           "metadata": {
             "name": "licensemanager-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -89,7 +113,7 @@ metadata:
           "metadata": {
             "name": "monitoringconsole-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -97,7 +121,7 @@ metadata:
           "metadata": {
             "name": "searchheadcluster-sample"
           },
-          "spec": {}
+          "spec": null
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -105,19 +129,19 @@ metadata:
           "metadata": {
             "name": "standalone-sample"
           },
-          "spec": {}
+          "spec": null
         }
       ]
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2025-09-08T10:17:59Z"
+    createdAt: "2026-01-05T14:32:06Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
       administrative workflows using Kubernetes best practices.
     olm.properties: '[{"type": "olm.maxOpenShiftVersion", "value": "4.19"}]'
-    operators.operatorframework.io/builder: operator-sdk-v1.39.0
+    operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/splunk/splunk-operator
   name: splunk-operator.v3.0.0
@@ -142,6 +166,16 @@ spec:
     - kind: ClusterMaster
       name: clustermasters.enterprise.splunk.com
       version: v2
+    - description: DatabaseClass is the Schema for the databaseclasses API.
+      displayName: Database Class
+      kind: DatabaseClass
+      name: databaseclasses.enterprise.splunk.com
+      version: v4
+    - description: Database is the Schema for the databases API.
+      displayName: Database
+      kind: Database
+      name: databases.enterprise.splunk.com
+      version: v4
     - description: IndexerCluster is the Schema for a Splunk Enterprise indexer cluster
       displayName: Indexer Cluster
       kind: IndexerCluster
@@ -275,6 +309,8 @@ spec:
           resources:
           - clustermanagers
           - clustermasters
+          - databaseclasses
+          - databases
           - indexerclusters
           - licensemanagers
           - licensemasters
@@ -294,6 +330,8 @@ spec:
           resources:
           - clustermanagers/finalizers
           - clustermasters/finalizers
+          - databaseclasses/finalizers
+          - databases/finalizers
           - indexerclusters/finalizers
           - licensemanagers/finalizers
           - licensemasters/finalizers
@@ -307,6 +345,8 @@ spec:
           resources:
           - clustermanagers/status
           - clustermasters/status
+          - databaseclasses/status
+          - databases/status
           - indexerclusters/status
           - licensemanagers/status
           - licensemasters/status
@@ -366,7 +406,7 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:10.0.0
+                  value: docker.io/splunk/splunk
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: SPLUNK_GENERAL_TERMS
@@ -375,7 +415,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: docker.io/splunk/splunk-operator:3.0.0
+                image: localhost:5001/sok-operator-mploski:v1.0.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -488,7 +528,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: docker.io/splunk/splunk:10.0.0
+  - image: docker.io/splunk/splunk
     name: splunk-enterprise
   replaces: splunk-operator.v2.8.1
   version: 3.0.0
