@@ -18,7 +18,7 @@ jobs:
       ARTIFACT_REGISTRY: ${{ secrets.GCP_ARTIFACT_REGISTRY }}  # Updated for Artifact Registry
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: ./.github/actions/target-checkout
 
       - name: Load Environment Variables
         id: dotenv
@@ -66,7 +66,7 @@ jobs:
   create-cluster-and-run-tests:
     strategy:
       matrix:
-        test_focus: 
+        test_focus:
           - { order: 1, name: "c3_gcp_sanity" }
           - { order: 2, name: "c3_mgr_gcp_sanity" }
           - { order: 3, name: "m4_gcp_sanity" }
@@ -116,7 +116,7 @@ jobs:
           echo "CLUSTER_NAME=gke-${{ matrix.test_focus.order }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
           echo "TEST_CLUSTER_NAME=gke-${{ matrix.test_focus.order }}-$GITHUB_RUN_ID" >> $GITHUB_ENV
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: ./.github/actions/target-checkout
 
       - name: Load Environment Variables
         id: dotenv
@@ -128,7 +128,7 @@ jobs:
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-      
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
@@ -187,7 +187,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
-    
+
       - name: Install Go Lint
         run: |
           go version
@@ -207,7 +207,7 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      - name: Pull Splunk Enterprise Image 
+      - name: Pull Splunk Enterprise Image
         run: docker pull ${{ env.SPLUNK_ENTERPRISE_IMAGE }}
 
       - name: Pull Splunk Operator Image Locally
@@ -230,7 +230,7 @@ jobs:
         with:
           cluster_name: ${{ env.CLUSTER_NAME }}
           location: ${{ env.GCP_ZONE }}
-  
+
       - name: Install Metrics Server
         run: |
           curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -248,7 +248,7 @@ jobs:
       - name: Verify kubectl Configuration
         run: |
           kubectl config current-context
-      
+
       - name: Apply StorageClass
         run: |
           kubectl apply -f test/gcp-storageclass.yaml

@@ -19,7 +19,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: ./.github/actions/target-checkout
 
     - name: Deep Fetch
       run: |

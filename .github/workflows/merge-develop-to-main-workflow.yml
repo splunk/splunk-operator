@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
     steps:
-      - uses: actions/checkout@v2
+      - uses: ./.github/actions/target-checkout
         with:
           ref: main
       - name: Reset main branch
@@ -52,7 +52,7 @@ jobs:
       SPLUNK_OPERATOR_RC_IMAGE_NAME: splunk/splunk-operator-rc
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: ./.github/actions/target-checkout
         with:
           ref: "promote-develop-to-main-${{ github.event.inputs.release_version }}"
 

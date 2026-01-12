@@ -1,0 +1,20 @@
+# .github/actions/target-checkout/action.yml
+name: 'Target Checkout'
+description: |
+  Checkout that handles pull_request_target correctly.
+  This was created to fix the issue where the default checkout in pull_request_target is the main branch, not the PR head.
+inputs:
+  ref:
+    description: |
+      The commit SHA to checkout (required if workflow needs approval gate).
+      If not provided, the PR head or the pushed commit will be used.
+    required: false
+    default: ''
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        # Use provided ref, or fall back to PR head for pull_request_target, or default
+        ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}

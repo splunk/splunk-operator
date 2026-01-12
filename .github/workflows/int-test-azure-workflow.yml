@@ -16,7 +16,7 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: ./.github/actions/target-checkout
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -63,7 +63,7 @@ jobs:
       AZURE_REGION: ${{ secrets.AZURE_REGION }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: ./.github/actions/target-checkout
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -138,7 +138,7 @@ jobs:
         run: |
           echo "TEST_CLUSTER_NAME=az${{ github.run_id }}" >> $GITHUB_ENV
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: ./.github/actions/target-checkout
       - name: Dotenv Action
         id: dotenv
         uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359

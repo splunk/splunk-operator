@@ -1,6 +1,6 @@
 # .github/workflows/ci.yml
 
-name: Kubectl Splunk CI 
+name: Kubectl Splunk CI
 
 permissions:
   contents: read
@@ -9,18 +9,18 @@ permissions:
 
 on:
   push:
-    branches: 
-        - feature/CSPL-3152 
+    branches:
+        - feature/CSPL-3152
   pull_request:
-    branches: 
-        - feature/CSPL-3152 
+    branches:
+        - feature/CSPL-3152
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: ./.github/actions/target-checkout
 
     - name: Set up Python
       uses: actions/setup-python@v2

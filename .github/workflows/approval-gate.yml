@@ -31,7 +31,7 @@ jobs:
       commit-message: ${{ steps.get-message.outputs.commit_message }}
     steps:
       - name: Checkout repository
-        uses:  actions/checkout@v6
+        uses: ./.github/actions/target-checkout
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Get commit SHA
@@ -58,7 +58,6 @@ jobs:
             (github.event_name == 'pull_request_target' &&
             !contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association))
             && inputs.environment-name
-            || (github.event_name == 'pull_request' && inputs.environment-name)
             || ''
         }}
     steps:
