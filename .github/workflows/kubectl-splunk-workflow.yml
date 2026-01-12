@@ -15,13 +15,17 @@ on:
     branches:
         - feature/CSPL-3152
 
+env:
+  CHECKOUT_REF: ${{ github.ref }}
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: ./.github/actions/target-checkout
-
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Set up Python
       uses: actions/setup-python@v2
       with:

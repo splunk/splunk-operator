@@ -12,6 +12,8 @@ on:
       operator_image_tag:
         description: 'Tag for Splunk Operator Image'
         required: true
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   bundle-push:
     name: Bundle Push Post Release
@@ -19,8 +21,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
     - name: Checkout code
-      uses: ./.github/actions/target-checkout
-
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Deep Fetch
       run: |
         git fetch --prune --unshallow

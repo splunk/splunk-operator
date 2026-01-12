@@ -16,6 +16,8 @@ on:
       enterprise_version:
         description: 'Enterprise Image Version. Should match with Tag on Splunk Enterprise Docker Repo'
         required: true
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   automated-release:
     name: Automated Release Workflow
@@ -31,8 +33,9 @@ jobs:
       uses: sigstore/cosign-installer@main
 
     - name: Checkout code
-      uses: ./.github/actions/target-checkout
-
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Deep Fetch
       run: |
         git fetch --prune --unshallow

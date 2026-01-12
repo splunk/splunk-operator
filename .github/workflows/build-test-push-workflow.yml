@@ -13,8 +13,8 @@ on:
       - 'docs/**'
       - '*.md'
   pull_request:
-    branches-ignore:
-      - 'develop'
+    # branches-ignore:
+    #   - 'develop'
     paths-ignore:
       - 'docs/**'
       - '*.md'
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: approval-gate
     steps:
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
         ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - name: Dotenv Action
@@ -52,7 +52,7 @@ jobs:
       - check-formating
       - approval-gate
     steps:
-      - uses: ./.github/actions/target-checkout
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.approval-gate.outputs.commit-sha }}
       - name: Dotenv Action
@@ -94,7 +94,7 @@ jobs:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
 
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
         ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - name: Dotenv Action
@@ -155,7 +155,7 @@ jobs:
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
         ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - name: Dotenv Action
@@ -233,7 +233,7 @@ jobs:
       DEPLOYMENT_TYPE: ""
     steps:
       - name: Chekcout code
-        uses: ./.github/actions/target-checkout
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.approval-gate.outputs.commit-sha }}
       - name: Set Test Cluster Name

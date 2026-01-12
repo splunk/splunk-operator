@@ -16,7 +16,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
         ref: develop
     - name: Dotenv Action
@@ -93,7 +93,7 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - uses: ./.github/actions/target-checkout
+      - uses: actions/checkout@v6
         with:
           ref: develop
       - name: Set Test Cluster Name
@@ -217,7 +217,7 @@ jobs:
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
           ref: develop
     - name: Dotenv Action

@@ -7,15 +7,17 @@ on:
   push:
     branches:
       - main
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: ./.github/actions/target-checkout
+        uses: actions/checkout@v6
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
-
       - name: Configure Git
         run: |
           git config user.name "$GITHUB_ACTOR"

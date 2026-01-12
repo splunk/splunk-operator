@@ -36,7 +36,7 @@ jobs:
     container:
       image: returntocorp/semgrep
     steps:
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
         ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - run: semgrep ci
@@ -49,7 +49,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: ./.github/actions/target-checkout
+    - uses: actions/checkout@v6
       with:
         ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - name: Dotenv Action
