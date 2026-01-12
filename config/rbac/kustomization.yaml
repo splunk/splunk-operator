@@ -18,3 +18,14 @@ resources:
 - metrics_auth_role.yaml
 - metrics_auth_role_binding.yaml
 - metrics_reader_role.yaml
+# For each CRD, "Admin", "Editor" and "Viewer" roles are scaffolded by
+# default, aiding admins in cluster management. Those roles are
+# not used by the splunk-operator itself. You can comment the following lines
+# if you do not want those helpers be installed with your Project.
+- databaseclass_admin_role.yaml
+- databaseclass_editor_role.yaml
+- databaseclass_viewer_role.yaml
+- database_admin_role.yaml
+- database_editor_role.yaml
+- database_viewer_role.yaml
+
