@@ -1,4 +1,6 @@
 name: Approval Gate
+permissions:
+  contents: read
 
 on:
   workflow_call:
@@ -23,8 +25,6 @@ jobs:
   # 'github.event.pull_request.head.sha' to get the actual PR commit info.
   # For 'push' events, we fall back to 'github.sha' (the pushed commit).
   get-commit-info:
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     outputs:
       commit-sha: ${{ steps.get-sha.outputs.commit_sha }}
@@ -51,8 +51,6 @@ jobs:
           echo "$COMMIT_MSG"
   approval-gate:
     needs: get-commit-info
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     environment: ${{
             (github.event_name == 'pull_request_target' &&
