@@ -11,8 +11,6 @@ spec:
     authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: index-ingest-separation-test-dlq
-status:
-  phase: Ready
 
 ---
 # assert for object storage custom resource to be ready
@@ -25,8 +23,6 @@ spec:
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
     path: s3://index-ingest-separation-test-bucket/smartbus-test
-status:
-  phase: Ready
 
 ---
 # assert for cluster manager custom resource to be ready
