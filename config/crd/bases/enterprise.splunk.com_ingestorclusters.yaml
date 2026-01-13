@@ -4621,6 +4621,10 @@ spec:
                 - s3
                 type: object
                 x-kubernetes-validations:
+                - message: provider is immutable once created
+                  rule: self.provider == oldSelf.provider
+                - message: s3 is immutable once created
+                  rule: self.s3 == oldSelf.s3
                 - message: s3 must be provided when provider is s3
                   rule: self.provider != 's3' || has(self.s3)
               phase:
@@ -4704,6 +4708,10 @@ spec:
                 - sqs
                 type: object
                 x-kubernetes-validations:
+                - message: provider is immutable once created
+                  rule: self.provider == oldSelf.provider
+                - message: sqs is immutable once created
+                  rule: self.sqs == oldSelf.sqs
                 - message: sqs must be provided when provider is sqs
                   rule: self.provider != 'sqs' || has(self.sqs)
               readyReplicas:

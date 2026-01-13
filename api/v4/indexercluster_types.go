@@ -40,10 +40,12 @@ type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// +optional
+	// +kubebuilder:validation:Immutable
 	// Queue reference
 	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +optional
+	// +kubebuilder:validation:Immutable
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 

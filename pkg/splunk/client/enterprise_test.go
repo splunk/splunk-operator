@@ -705,35 +705,3 @@ func TestUpdateConfFile(t *testing.T) {
 		t.Errorf("UpdateConfFile expected error on update, got nil")
 	}
 }
-
-func TestDeleteConfFileProperty(t *testing.T) {
-	// Test successful deletion of conf property
-	property := "myproperty"
-	fileName := "outputs"
-
-	reqLogger := log.FromContext(context.TODO())
-	scopedLog := reqLogger.WithName("TestDeleteConfFileProperty")
-
-	wantDeleteRequest, _ := http.NewRequest("DELETE", fmt.Sprintf("https://localhost:8089/servicesNS/nobody/system/configs/conf-outputs/%s", property), nil)
-
-	mockSplunkClient := &spltest.MockHTTPClient{}
-	mockSplunkClient.AddHandler(wantDeleteRequest, 200, "", nil)
-
-	c := NewSplunkClient("https://localhost:8089", "admin", "p@ssw0rd")
-	c.Client = mockSplunkClient
-
-	err := c.DeleteConfFileProperty(scopedLog, fileName, property)
-	if err != nil {
-		t.Errorf("DeleteConfFileProperty err = %v", err)
-	}
-	mockSplunkClient.CheckRequests(t, "TestDeleteConfFileProperty")
-
-	// Negative test: error on delete
-	mockSplunkClient = &spltest.MockHTTPClient{}
-	mockSplunkClient.AddHandler(wantDeleteRequest, 500, "", nil)
-	c.Client = mockSplunkClient
-	err = c.DeleteConfFileProperty(scopedLog, fileName, property)
-	if err == nil {
-		t.Errorf("DeleteConfFileProperty expected error on delete, got nil")
-	}
-}

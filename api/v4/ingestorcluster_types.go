@@ -40,10 +40,12 @@ type IngestorClusterSpec struct {
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Immutable
 	// Queue reference
 	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Immutable
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 }

@@ -225,12 +225,9 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				return result, err
 			}
 		}
-
-		// Can not override original queue spec due to comparison in the later code
-		queueCopy := queue
-		if queueCopy.Spec.Provider == "sqs" {
-			if queueCopy.Spec.SQS.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
-				queueCopy.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queueCopy.Spec.SQS.AuthRegion)
+		if queue.Spec.Provider == "sqs" {
+			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				queue.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
 			}
 		}
 
@@ -249,19 +246,16 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				return result, err
 			}
 		}
-
-		// Can not override original queue spec due to comparison in the later code
-		osCopy := os
-		if osCopy.Spec.Provider == "s3" {
-			if osCopy.Spec.S3.Endpoint == "" && queueCopy.Spec.SQS.AuthRegion != "" {
-				osCopy.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+		if os.Spec.Provider == "s3" {
+			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
+				os.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
 			}
 		}
 
 		// If queue is updated
-		if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil || !reflect.DeepEqual(*cr.Status.Queue, queue.Spec) || !reflect.DeepEqual(*cr.Status.ObjectStorage, os.Spec) {
+		if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-			err = mgr.handlePushQueueChange(ctx, cr, queueCopy, osCopy, client)
+			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
@@ -344,7 +338,7 @@ func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *s
 
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
 func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
-	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in an ingestor cluster
+	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in the ingestor cluster
 	if cr.Spec.Replicas < 3 {
 		cr.Spec.Replicas = 3
 	}
@@ -372,10 +366,10 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 	return ss, nil
 }
 
-// Checks if only Queue or Pipeline config changed, and updates the conf file if so
-func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue enterpriseApi.Queue, os enterpriseApi.ObjectStorage, k8s client.Client) error {
+// updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
+func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, k8s client.Client) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("handlePushQueueChange").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
+	scopedLog := reqLogger.WithName("updateIngestorConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
 	// Only update config for pods that exist
 	readyReplicas := newCR.Status.Replicas
@@ -391,28 +385,10 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		newCrStatusQueue := newCR.Status.Queue
-		if newCrStatusQueue == nil {
-			newCrStatusQueue = &enterpriseApi.QueueSpec{}
-		}
-		newCrStatusObjectStorage := newCR.Status.ObjectStorage
-		if newCrStatusObjectStorage == nil {
-			newCrStatusObjectStorage = &enterpriseApi.ObjectStorageSpec{}
-		}
-
-		afterDelete := false
-		if (queue.Spec.SQS.Name != "" && newCrStatusQueue.SQS.Name != "" && queue.Spec.SQS.Name != newCrStatusQueue.SQS.Name) ||
-			(queue.Spec.Provider != "" && newCrStatusQueue.Provider != "" && queue.Spec.Provider != newCrStatusQueue.Provider) {
-			if err := splunkClient.DeleteConfFileProperty(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", newCrStatusQueue.SQS.Name)); err != nil {
-				updateErr = err
-			}
-			afterDelete = true
-		}
-
 		// Secret reference
 		s3AccessKey, s3SecretKey := "", ""
-		if queue.Spec.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
-			for _, vol := range queue.Spec.SQS.VolList {
+		if queue.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
+			for _, vol := range queue.SQS.VolList {
 				if vol.SecretRef != "" {
 					s3AccessKey, s3SecretKey, err = GetQueueRemoteVolumeSecrets(ctx, vol, k8s, newCR)
 					if err != nil {
@@ -423,32 +399,31 @@ func (mgr *ingestorClusterPodManager) handlePushQueueChange(ctx context.Context,
 			}
 		}
 
-		queueChangedFields, pipelineChangedFields := getChangedQueueFieldsForIngestor(&queue, &os, newCrStatusQueue, newCrStatusObjectStorage, afterDelete, s3AccessKey, s3SecretKey)
+		queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(queue, os, s3AccessKey, s3SecretKey)
 
-		for _, pbVal := range queueChangedFields {
-			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.Spec.SQS.Name), [][]string{pbVal}); err != nil {
+		for _, input := range queueInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
 				updateErr = err
 			}
 		}
 
-		for _, field := range pipelineChangedFields {
-			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", field[0], [][]string{{field[1], field[2]}}); err != nil {
+		for _, input := range pipelineInputs {
+			if err := splunkClient.UpdateConfFile(scopedLog, "default-mode", input[0], [][]string{{input[1], input[2]}}); err != nil {
 				updateErr = err
 			}
 		}
 	}
 
-	// Do NOT restart Splunk
 	return updateErr
 }
 
-// getChangedQueueFieldsForIngestor returns a list of changed queue and pipeline fields for ingestor pods
-func getChangedQueueFieldsForIngestor(queue *enterpriseApi.Queue, os *enterpriseApi.ObjectStorage, queueStatus *enterpriseApi.QueueSpec, osStatus *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (queueChangedFields, pipelineChangedFields [][]string) {
-	// Push changed queue fields
-	queueChangedFields = pushQueueChanged(queueStatus, &queue.Spec, osStatus, &os.Spec, afterDelete, s3AccessKey, s3SecretKey)
+// getQueueAndPipelineInputsForIngestorConfFiles returns a list of queue and pipeline inputs for ingestor pods conf files
+func getQueueAndPipelineInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, s3AccessKey, s3SecretKey string) (queueInputs, pipelineInputs [][]string) {
+	// Queue Inputs
+	queueInputs = getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, s3AccessKey, s3SecretKey)
 
-	// Always changed pipeline fields
-	pipelineChangedFields = pipelineConfig(false)
+	// Pipeline inputs
+	pipelineInputs = getPipelineInputsForConfFile(false)
 
 	return
 }
@@ -461,7 +436,7 @@ type ingestorClusterPodManager struct {
 	newSplunkClient func(managementURI, username, password string) *splclient.SplunkClient
 }
 
-// newIngestorClusterPodManager function to create pod manager this is added to write unit test case
+// newIngestorClusterPodManager creates pod manager to handle unit test cases
 var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.IngestorCluster, secret *corev1.Secret, newSplunkClient NewSplunkClientFunc, c splcommon.ControllerClient) ingestorClusterPodManager {
 	return ingestorClusterPodManager{
 		log:             log,
@@ -472,8 +447,9 @@ var newIngestorClusterPodManager = func(log logr.Logger, cr *enterpriseApi.Inges
 	}
 }
 
-func pipelineConfig(isIndexer bool) (output [][]string) {
-	output = append(output,
+// getPipelineInputsForConfFile returns a list of pipeline inputs for conf file
+func getPipelineInputsForConfFile(isIndexer bool) (config [][]string) {
+	config = append(config,
 		[]string{"pipeline:remotequeueruleset", "disabled", "false"},
 		[]string{"pipeline:ruleset", "disabled", "true"},
 		[]string{"pipeline:remotequeuetyping", "disabled", "false"},
@@ -481,51 +457,40 @@ func pipelineConfig(isIndexer bool) (output [][]string) {
 		[]string{"pipeline:typing", "disabled", "true"},
 	)
 	if !isIndexer {
-		output = append(output, []string{"pipeline:indexerPipe", "disabled", "true"})
+		config = append(config, []string{"pipeline:indexerPipe", "disabled", "true"})
 	}
-	return output
+
+	return
 }
 
-func pushQueueChanged(oldQueue, newQueue *enterpriseApi.QueueSpec, oldOS, newOS *enterpriseApi.ObjectStorageSpec, afterDelete bool, s3AccessKey, s3SecretKey string) (output [][]string) {
+// getQueueAndObjectStorageInputsForConfFiles returns a list of queue and object storage inputs for conf files
+func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, s3AccessKey, s3SecretKey string) (config [][]string) {
 	queueProvider := ""
-	if newQueue.Provider == "sqs" {
+	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
 	}
 	osProvider := ""
-	if newOS.Provider == "s3" {
+	if os.Provider == "s3" {
 		osProvider = "sqs_smartbus"
 	}
-
-	if oldQueue.Provider != newQueue.Provider || afterDelete {
-		output = append(output, []string{"remote_queue.type", queueProvider})
-	}
-	if !reflect.DeepEqual(oldQueue.SQS.VolList, newQueue.SQS.VolList) || afterDelete {
-		if s3AccessKey != "" && s3SecretKey != "" {
-			output = append(output, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), s3AccessKey})
-			output = append(output, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), s3SecretKey})
-		}
-	}
-	if oldQueue.SQS.AuthRegion != newQueue.SQS.AuthRegion || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), newQueue.SQS.AuthRegion})
-	}
-	if newQueue.SQS.Endpoint != "" && (oldQueue.SQS.Endpoint != newQueue.SQS.Endpoint || afterDelete) {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), newQueue.SQS.Endpoint})
-	}
-	if newOS.S3.Endpoint != "" && (oldOS.S3.Endpoint != newOS.S3.Endpoint || afterDelete) {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), newOS.S3.Endpoint})
-	}
-	if oldOS.S3.Path != newOS.S3.Path || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), newOS.S3.Path})
-	}
-	if oldQueue.SQS.DLQ != newQueue.SQS.DLQ || afterDelete {
-		output = append(output, []string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), newQueue.SQS.DLQ})
-	}
-
-	output = append(output,
+	config = append(config,
+		[]string{"remote_queue.type", queueProvider},
+		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), queue.SQS.AuthRegion},
+		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), queue.SQS.Endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), os.S3.Endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), os.S3.Path},
+		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), queue.SQS.DLQ},
 		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
 		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
 		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
-		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"})
+		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"},
+	)
 
-	return output
+	// TODO: Handle credentials change
+	if s3AccessKey != "" && s3SecretKey != "" {
+		config = append(config, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), s3AccessKey})
+		config = append(config, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), s3SecretKey})
+	}
+
+	return
 }

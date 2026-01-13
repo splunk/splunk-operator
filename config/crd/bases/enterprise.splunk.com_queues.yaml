@@ -120,6 +120,10 @@ spec:
             - sqs
             type: object
             x-kubernetes-validations:
+            - message: provider is immutable once created
+              rule: self.provider == oldSelf.provider
+            - message: sqs is immutable once created
+              rule: self.sqs == oldSelf.sqs
             - message: sqs must be provided when provider is sqs
               rule: self.provider != 'sqs' || has(self.sqs)
           status:

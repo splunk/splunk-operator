@@ -28,6 +28,8 @@ const (
 	QueuePausedAnnotation = "queue.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.provider == oldSelf.provider",message="provider is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.sqs == oldSelf.sqs",message="sqs is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
 // QueueSpec defines the desired state of Queue
 type QueueSpec struct {

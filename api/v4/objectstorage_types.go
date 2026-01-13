@@ -28,6 +28,8 @@ const (
 	ObjectStoragePausedAnnotation = "objectstorage.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.provider == oldSelf.provider",message="provider is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.s3 == oldSelf.s3",message="s3 is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.provider != 's3' || has(self.s3)",message="s3 must be provided when provider is s3"
 // ObjectStorageSpec defines the desired state of ObjectStorage
 type ObjectStorageSpec struct {

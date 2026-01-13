@@ -85,36 +85,6 @@ var (
 		"AWS_STS_REGIONAL_ENDPOINTS=regional",
 	}
 
-	updateQueue = enterpriseApi.QueueSpec{
-		Provider: "sqs",
-		SQS: enterpriseApi.SQSSpec{
-			Name:       "index-ingest-separation-test-q-updated",
-			AuthRegion: "us-west-2",
-			Endpoint:   "https://sqs.us-west-2.amazonaws.com",
-			DLQ:        "index-ingest-separation-test-dlq-updated",
-		},
-	}
-
-	updatedInputs = []string{
-		"[remote_queue:index-ingest-separation-test-q-updated]",
-		"remote_queue.type = sqs_smartbus",
-		"remote_queue.sqs_smartbus.auth_region = us-west-2",
-		"remote_queue.sqs_smartbus.dead_letter_queue.name = index-ingest-separation-test-dlq-updated",
-		"remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com",
-		"remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com",
-		"remote_queue.sqs_smartbus.large_message_store.path = s3://index-ingest-separation-test-bucket/smartbus-test",
-		"remote_queue.sqs_smartbus.retry_policy = max",
-		"remote_queue.max.sqs_smartbus.max_retries_per_part = 5"}
-	updatedOutputs     = append(updatedInputs, "remote_queue.sqs_smartbus.encoding_format = s2s", "remote_queue.sqs_smartbus.send_interval = 4s")
-	updatedDefaultsAll = []string{
-		"[pipeline:remotequeueruleset]\ndisabled = false",
-		"[pipeline:ruleset]\ndisabled = false",
-		"[pipeline:remotequeuetyping]\ndisabled = false",
-		"[pipeline:remotequeueoutput]\ndisabled = false",
-		"[pipeline:typing]\ndisabled = true",
-	}
-	updatedDefaultsIngest = append(updatedDefaultsAll, "[pipeline:indexerPipe]\ndisabled = true")
-
 	inputsShouldNotContain = []string{
 		"[remote_queue:index-ingest-separation-test-q]",
 		"remote_queue.sqs_smartbus.dead_letter_queue.name = index-ingest-separation-test-dlq",
