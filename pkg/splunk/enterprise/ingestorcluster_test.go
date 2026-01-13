@@ -484,6 +484,9 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 	// Object definitions
 	provider := "sqs_smartbus"
 
+	accessKey := "accessKey"
+	secretKey := "secretKey"
+
 	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Queue",
@@ -537,10 +540,9 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
-			Replicas:      3,
-			ReadyReplicas: 3,
-			Queue:         &enterpriseApi.QueueSpec{},
-			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
+			Replicas:                       3,
+			ReadyReplicas:                  3,
+			QueueBucketAccessSecretVersion: "123",
 		},
 	}
 
@@ -601,7 +603,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 	// Negative test case: secret not found
 	mgr := &ingestorClusterPodManager{}
 
-	err := mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err := mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// Mock secret
@@ -612,7 +614,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestIngestorQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// outputs.conf
@@ -634,7 +636,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestIngestorQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// default-mode.conf
@@ -663,7 +665,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 
 	mgr = newTestIngestorQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.Nil(t, err)
 }
 

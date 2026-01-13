@@ -76,8 +76,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.Queue = nil
-		cr.Status.ObjectStorage = nil
+		cr.Status.QueueBucketAccessSecretVersion = "0"
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -286,11 +285,27 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
+		// Secret reference
+		accessKey, secretKey, version := "", "", ""
+		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
+						return result, err
+					}
+				}
+			}
+		}
+
+		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+
 		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
-			if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil {
+			if secretChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, client)
+				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
@@ -306,8 +321,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
 
-				cr.Status.Queue = &queue.Spec
-				cr.Status.ObjectStorage = &os.Spec
+				cr.Status.QueueBucketAccessSecretVersion = version
 			}
 		}
 
@@ -400,8 +414,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.Queue = nil
-		cr.Status.ObjectStorage = nil
+		cr.Status.QueueBucketAccessSecretVersion = "0"
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -613,10 +626,26 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
+		// Secret reference
+		accessKey, secretKey, version := "", "", ""
+		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
+						return result, err
+					}
+				}
+			}
+		}
+
+		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+
 		if cr.Spec.QueueRef.Name != "" {
-			if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil {
+			if secretChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, client)
+				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 				if err != nil {
 					eventPublisher.Warning(ctx, "ApplyIndexerClusterManager", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 					scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
@@ -632,8 +661,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
 
-				cr.Status.Queue = &queue.Spec
-				cr.Status.ObjectStorage = &os.Spec
+				cr.Status.QueueBucketAccessSecretVersion = version
 			}
 		}
 
@@ -1304,7 +1332,7 @@ func getSiteName(ctx context.Context, c splcommon.ControllerClient, cr *enterpri
 var newSplunkClientForQueuePipeline = splclient.NewSplunkClient
 
 // updateIndexerConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
-func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context, newCR *enterpriseApi.IndexerCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, k8s rclient.Client) error {
+func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context, newCR *enterpriseApi.IndexerCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s rclient.Client) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateIndexerConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
@@ -1322,21 +1350,7 @@ func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context,
 		}
 		splunkClient := newSplunkClientForQueuePipeline(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		// Secret reference
-		s3AccessKey, s3SecretKey := "", ""
-		if queue.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
-			for _, vol := range queue.SQS.VolList {
-				if vol.SecretRef != "" {
-					s3AccessKey, s3SecretKey, err = GetQueueRemoteVolumeSecrets(ctx, vol, k8s, newCR)
-					if err != nil {
-						scopedLog.Error(err, "Failed to get queue remote volume secrets")
-						return err
-					}
-				}
-			}
-		}
-
-		queueInputs, queueOutputs, pipelineInputs := getQueueAndPipelineInputsForIndexerConfFiles(queue, os, s3AccessKey, s3SecretKey)
+		queueInputs, queueOutputs, pipelineInputs := getQueueAndPipelineInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
 
 		for _, pbVal := range queueOutputs {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{pbVal}); err != nil {
@@ -1361,9 +1375,9 @@ func (mgr *indexerClusterPodManager) updateIndexerConfFiles(ctx context.Context,
 }
 
 // getQueueAndPipelineInputsForIndexerConfFiles returns a list of queue and pipeline inputs for indexer pods conf files
-func getQueueAndPipelineInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, s3AccessKey, s3SecretKey string) (queueInputs, queueOutputs, pipelineInputs [][]string) {
+func getQueueAndPipelineInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (queueInputs, queueOutputs, pipelineInputs [][]string) {
 	// Queue Inputs
-	queueInputs, queueOutputs = getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, s3AccessKey, s3SecretKey)
+	queueInputs, queueOutputs = getQueueAndObjectStorageInputsForIndexerConfFiles(queue, os, accessKey, secretKey)
 
 	// Pipeline inputs
 	pipelineInputs = getPipelineInputsForConfFile(true)
@@ -1383,7 +1397,7 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 }
 
 // getQueueAndObjectStorageInputsForIndexerConfFiles returns a list of queue and object storage inputs for conf files
-func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, s3AccessKey, s3SecretKey string) (inputs, outputs [][]string) {
+func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (inputs, outputs [][]string) {
 	queueProvider := ""
 	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
@@ -1405,9 +1419,9 @@ func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.Queu
 	)
 
 	// TODO: Handle credentials change
-	if s3AccessKey != "" && s3SecretKey != "" {
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), s3AccessKey})
-		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), s3SecretKey})
+	if accessKey != "" && secretKey != "" {
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), accessKey})
+		inputs = append(inputs, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), secretKey})
 	}
 
 	outputs = inputs

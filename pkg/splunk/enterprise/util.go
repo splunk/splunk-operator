@@ -418,22 +418,24 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 }
 
 // GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
-func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, error) {
+func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
 	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
 	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
 
+	version := namespaceScopedSecret.ResourceVersion
+
 	if accessKey == "" {
-		return "", "", errors.New("access Key is missing")
+		return "", "", "", errors.New("access Key is missing")
 	} else if secretKey == "" {
-		return "", "", errors.New("secret Key is missing")
+		return "", "", "", errors.New("secret Key is missing")
 	}
 
-	return accessKey, secretKey, nil
+	return accessKey, secretKey, version, nil
 }
 
 // getLocalAppFileName generates the local app file name

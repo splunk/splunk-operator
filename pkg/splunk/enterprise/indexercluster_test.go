@@ -2139,6 +2139,9 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 	// Object definitions
 	provider := "sqs_smartbus"
 
+	accessKey := "accessKey"
+	secretKey := "secretKey"
+
 	queue := &enterpriseApi.Queue{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Queue",
@@ -2197,9 +2200,8 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ReadyReplicas: 3,
-			Queue:         &enterpriseApi.QueueSpec{},
-			ObjectStorage: &enterpriseApi.ObjectStorageSpec{},
+			ReadyReplicas:                  3,
+			QueueBucketAccessSecretVersion: "123",
 		},
 	}
 	c.Create(ctx, cr)
@@ -2260,7 +2262,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 
 	// Negative test case: secret not found
 	mgr := &indexerClusterPodManager{}
-	err := mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err := mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// Mock secret
@@ -2271,7 +2273,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// outputs.conf
@@ -2295,7 +2297,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 	// Negative test case: failure in creating remote queue stanza
 	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// inputs.conf
@@ -2305,7 +2307,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 	// Negative test case: failure in updating remote queue stanza
 	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.NotNil(t, err)
 
 	// default-mode.conf
@@ -2333,7 +2335,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 
 	mgr = newTestIndexerQueuePipelineManager(mockHTTPClient)
 
-	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, c)
+	err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, c)
 	assert.Nil(t, err)
 }
 

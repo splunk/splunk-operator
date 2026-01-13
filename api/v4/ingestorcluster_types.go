@@ -76,11 +76,8 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Queue
-	Queue *QueueSpec `json:"queue,omitempty"`
-
-	// Object Storage
-	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
+	// Queue and bucket access secret version
+	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true

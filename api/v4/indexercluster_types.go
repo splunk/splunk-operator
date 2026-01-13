@@ -123,11 +123,8 @@ type IndexerClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Queue
-	Queue *QueueSpec `json:"queue,omitempty"`
-
-	// Object Storage
-	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
+	// Queue and bucket access secret version
+	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

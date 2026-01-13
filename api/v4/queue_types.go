@@ -17,7 +17,6 @@ limitations under the License.
 package v4
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -122,33 +121,4 @@ type QueueList struct {
 
 func init() {
 	SchemeBuilder.Register(&Queue{}, &QueueList{})
-}
-
-// NewEvent creates a new event associated with the object and ready
-// to be published to Kubernetes API
-func (os *Queue) NewEvent(eventType, reason, message string) corev1.Event {
-	t := metav1.Now()
-	return corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: reason + "-",
-			Namespace:    os.ObjectMeta.Namespace,
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Queue",
-			Namespace:  os.Namespace,
-			Name:       os.Name,
-			UID:        os.UID,
-			APIVersion: GroupVersion.String(),
-		},
-		Reason:  reason,
-		Message: message,
-		Source: corev1.EventSource{
-			Component: "splunk-queue-controller",
-		},
-		FirstTimestamp:      t,
-		LastTimestamp:       t,
-		Count:               1,
-		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/queue-controller",
-	}
 }

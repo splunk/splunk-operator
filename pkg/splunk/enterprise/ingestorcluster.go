@@ -72,8 +72,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.Queue = nil
-		cr.Status.ObjectStorage = nil
+		cr.Status.QueueBucketAccessSecretVersion = "0"
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
@@ -252,10 +251,26 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
+		// Secret reference
+		accessKey, secretKey, version := "", "", ""
+		if queue.Spec.Provider == "sqs" && cr.Spec.ServiceAccount == "" {
+			for _, vol := range queue.Spec.SQS.VolList {
+				if vol.SecretRef != "" {
+					accessKey, secretKey, version, err = GetQueueRemoteVolumeSecrets(ctx, vol, client, cr)
+					if err != nil {
+						scopedLog.Error(err, "Failed to get queue remote volume secrets")
+						return result, err
+					}
+				}
+			}
+		}
+
+		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+
 		// If queue is updated
-		if cr.Status.Queue == nil || cr.Status.ObjectStorage == nil {
+		if secretChanged {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
-			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, client)
+			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 			if err != nil {
 				eventPublisher.Warning(ctx, "ApplyIngestorCluster", fmt.Sprintf("Failed to update conf file for Queue/Pipeline config change after pod creation: %s", err.Error()))
 				scopedLog.Error(err, "Failed to update conf file for Queue/Pipeline config change after pod creation")
@@ -271,8 +286,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				scopedLog.Info("Restarted splunk", "ingestor", i)
 			}
 
-			cr.Status.Queue = &queue.Spec
-			cr.Status.ObjectStorage = &os.Spec
+			cr.Status.QueueBucketAccessSecretVersion = version
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -367,7 +381,7 @@ func getIngestorStatefulSet(ctx context.Context, client splcommon.ControllerClie
 }
 
 // updateIngestorConfFiles checks if Queue or Pipeline inputs are created for the first time and updates the conf file if so
-func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, k8s client.Client) error {
+func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Context, newCR *enterpriseApi.IngestorCluster, queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string, k8s client.Client) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateIngestorConfFiles").WithValues("name", newCR.GetName(), "namespace", newCR.GetNamespace())
 
@@ -385,21 +399,7 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 		}
 		splunkClient := mgr.newSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", string(adminPwd))
 
-		// Secret reference
-		s3AccessKey, s3SecretKey := "", ""
-		if queue.Provider == "sqs" && newCR.Spec.ServiceAccount == "" {
-			for _, vol := range queue.SQS.VolList {
-				if vol.SecretRef != "" {
-					s3AccessKey, s3SecretKey, err = GetQueueRemoteVolumeSecrets(ctx, vol, k8s, newCR)
-					if err != nil {
-						scopedLog.Error(err, "Failed to get queue remote volume secrets")
-						return err
-					}
-				}
-			}
-		}
-
-		queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(queue, os, s3AccessKey, s3SecretKey)
+		queueInputs, pipelineInputs := getQueueAndPipelineInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
 
 		for _, input := range queueInputs {
 			if err := splunkClient.UpdateConfFile(scopedLog, "outputs", fmt.Sprintf("remote_queue:%s", queue.SQS.Name), [][]string{input}); err != nil {
@@ -418,9 +418,9 @@ func (mgr *ingestorClusterPodManager) updateIngestorConfFiles(ctx context.Contex
 }
 
 // getQueueAndPipelineInputsForIngestorConfFiles returns a list of queue and pipeline inputs for ingestor pods conf files
-func getQueueAndPipelineInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, s3AccessKey, s3SecretKey string) (queueInputs, pipelineInputs [][]string) {
+func getQueueAndPipelineInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (queueInputs, pipelineInputs [][]string) {
 	// Queue Inputs
-	queueInputs = getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, s3AccessKey, s3SecretKey)
+	queueInputs = getQueueAndObjectStorageInputsForIngestorConfFiles(queue, os, accessKey, secretKey)
 
 	// Pipeline inputs
 	pipelineInputs = getPipelineInputsForConfFile(false)
@@ -464,7 +464,7 @@ func getPipelineInputsForConfFile(isIndexer bool) (config [][]string) {
 }
 
 // getQueueAndObjectStorageInputsForConfFiles returns a list of queue and object storage inputs for conf files
-func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, s3AccessKey, s3SecretKey string) (config [][]string) {
+func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (config [][]string) {
 	queueProvider := ""
 	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
@@ -486,10 +486,9 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 		[]string{fmt.Sprintf("remote_queue.%s.send_interval", queueProvider), "5s"},
 	)
 
-	// TODO: Handle credentials change
-	if s3AccessKey != "" && s3SecretKey != "" {
-		config = append(config, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), s3AccessKey})
-		config = append(config, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), s3SecretKey})
+	if accessKey != "" && secretKey != "" {
+		config = append(config, []string{fmt.Sprintf("remote_queue.%s.access_key", queueProvider), accessKey})
+		config = append(config, []string{fmt.Sprintf("remote_queue.%s.secret_key", queueProvider), secretKey})
 	}
 
 	return
