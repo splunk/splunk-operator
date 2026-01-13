@@ -122,8 +122,14 @@ spec:
             x-kubernetes-validations:
             - message: provider is immutable once created
               rule: self.provider == oldSelf.provider
-            - message: sqs is immutable once created
-              rule: self.sqs == oldSelf.sqs
+            - message: sqs.name is immutable once created
+              rule: self.sqs.name == oldSelf.sqs.name
+            - message: sqs.authRegion is immutable once created
+              rule: self.sqs.authRegion == oldSelf.sqs.authRegion
+            - message: sqs.dlq is immutable once created
+              rule: self.sqs.dlq == oldSelf.sqs.dlq
+            - message: sqs.endpoint is immutable once created
+              rule: self.sqs.endpoint == oldSelf.sqs.endpoint
             - message: sqs must be provided when provider is sqs
               rule: self.provider != 'sqs' || has(self.sqs)
           status:

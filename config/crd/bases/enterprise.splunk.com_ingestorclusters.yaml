@@ -4306,6 +4306,11 @@ spec:
             - objectStorageRef
             - queueRef
             type: object
+            x-kubernetes-validations:
+            - message: queueRef is immutable once created
+              rule: self.queueRef == oldSelf.queueRef
+            - message: objectStorageRef is immutable once created
+              rule: self.objectStorageRef == oldSelf.objectStorageRef
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
               Cluster

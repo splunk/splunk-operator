@@ -43,8 +43,9 @@ SQS message queue inputs can be found in the table below.
 | region   | string | [Required] Region where the queue is located  |
 | endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
+| volumes | []VolumeSpec | [Optional] List of remote storage volumes used to mount the credentials for queue and bucket access (must contain s3_access_key and s3_secret_key) |
 
-**First provisioning or update of any of the queue inputs requires Ingestor Cluster and Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
+**SOK doesn't support update of any of the Queue inputs except from the volumes which allow the change of secrets.**
 
 ## Example
 ```
@@ -59,6 +60,9 @@ spec:
     region: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
+    volumes:
+      - name: s3-sqs-volume
+        secretRef: s3-secret
 ```
 
 # ObjectStorage
@@ -81,7 +85,7 @@ S3 object storage inputs can be found in the table below.
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
 | endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
 
-Change of any of the object storage inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+**SOK doesn't support update of any of the ObjectStorage inputs.**
 
 ## Example
 ```
@@ -110,9 +114,13 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | queueRef   | corev1.ObjectReference | Message queue reference |
 | objectStorageRef   | corev1.ObjectReference | Object storage reference |
 
+**SOK doesn't support update of queueRef and objectStorageRef.**
+
+**First provisioning or scaling up the number of replicas requires Ingestor Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
+
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
@@ -147,9 +155,13 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | queueRef   | corev1.ObjectReference | Message queue reference |
 | objectStorageRef   | corev1.ObjectReference | Object storage reference |
 
+**SOK doesn't support update of queueRef and objectStorageRef.**
+
+**First provisioning or scaling up the number of replicas requires Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
+
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
 
 In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
@@ -204,6 +216,9 @@ queue:
     region: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
+    volumes:
+        - name: s3-sqs-volume
+          secretRef: s3-secret
 ```
 
 ```
@@ -734,18 +749,7 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
-  Queue:
-    Sqs:
-      Region:                   us-west-2
-      DLQ:                      sqs-dlq-test
-      Endpoint:                 https://sqs.us-west-2.amazonaws.com
-      Name:                     sqs-test
-    Provider:                   sqs
-  Object Storage:
-    S3:
-      Endpoint:  https://s3.us-west-2.amazonaws.com
-      Path:      s3://ingestion/smartbus-test
-    Provider:    s3
+  Queue Bucket Access Secret Version:  33744270
   Message:                      
   Phase:                        Ready
   Ready Replicas:               3

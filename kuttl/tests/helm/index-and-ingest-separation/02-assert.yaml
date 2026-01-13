@@ -67,18 +67,6 @@ spec:
     name: os
 status:
   phase: Ready
-  queue:
-    provider: sqs
-    sqs:
-      name: index-ingest-separation-test-q
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      dlq: index-ingest-separation-test-dlq
-  objectStorage:
-    provider: s3
-    s3:
-      endpoint: https://s3.us-west-2.amazonaws.com
-      path: s3://index-ingest-separation-test-bucket/smartbus-test
   
 ---
 # check for stateful set and replicas as configured
@@ -110,18 +98,6 @@ spec:
     name: os
 status:
   phase: Ready
-  queue:
-    provider: sqs
-    sqs:
-      name: index-ingest-separation-test-q
-      authRegion: us-west-2
-      endpoint: https://sqs.us-west-2.amazonaws.com
-      dlq: index-ingest-separation-test-dlq
-  objectStorage:
-    provider: s3
-    s3:
-      endpoint: https://s3.us-west-2.amazonaws.com
-      path: s3://index-ingest-separation-test-bucket/smartbus-test
 
 ---
 # check for stateful set and replicas as configured

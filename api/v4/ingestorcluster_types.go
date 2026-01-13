@@ -28,6 +28,8 @@ const (
 	IngestorClusterPausedAnnotation = "ingestorcluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IngestorClusterSpec defines the spec of Ingestor Cluster
 type IngestorClusterSpec struct {
 	// Common Splunk spec
@@ -40,12 +42,10 @@ type IngestorClusterSpec struct {
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Immutable
 	// Queue reference
 	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Immutable
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 }

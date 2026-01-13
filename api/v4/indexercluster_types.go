@@ -35,17 +35,17 @@ const (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
+// +kubebuilder:validation:XValidation:rule="self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// +optional
-	// +kubebuilder:validation:Immutable
 	// Queue reference
 	QueueRef corev1.ObjectReference `json:"queueRef"`
 
 	// +optional
-	// +kubebuilder:validation:Immutable
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 
