@@ -799,6 +799,9 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
 
 	// test scale up (1 ready scaling to 2; wait for ready)
+	// Now includes Update+Get for setScaleUpWaitStarted annotation tracking
+	// Reset revised to avoid carrying annotations from previous test
+	revised = current.DeepCopy()
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
@@ -806,6 +809,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, scaleUpCalls, nil, current, pod)
 
 	// test scale up (1 ready scaling to 2)
+	// Reset revised to avoid carrying annotations from previous test
+	revised = current.DeepCopy()
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1
@@ -814,6 +819,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
 	// test scale down (2 ready, 1 desired)
+	// Reset revised to avoid carrying annotations from previous test
+	revised = current.DeepCopy()
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 2
@@ -822,6 +829,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
 
 	// test scale down (2 ready scaling down to 1)
+	// Reset revised to avoid carrying annotations from previous test
+	revised = current.DeepCopy()
 	pvcCalls := []MockFuncCall{
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
@@ -842,6 +851,8 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleDownCalls, nil, current, pod, pvcList[0], pvcList[1])
 
 	// test pod not found
+	// Reset revised to avoid carrying annotations from previous test
+	revised = current.DeepCopy()
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 1

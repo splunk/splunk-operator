@@ -769,8 +769,14 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		}
 	}
 
-	// append labels and annotations from parent
-	splcommon.AppendParentMeta(statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta())
+	// sync labels and annotations from parent to Pod Template
+	// Pass selectLabels as protectedLabels to prevent CR labels from overwriting selector labels
+	// Pass empty slices for previousManaged since Pod Template is rebuilt fresh each reconcile
+	splcommon.SyncParentMetaToPodTemplate(ctx, statefulSet.Spec.Template.GetObjectMeta(), cr.GetObjectMeta(), selectLabels, nil, nil)
+
+	// sync labels and annotations from parent to StatefulSet ObjectMeta
+	// Pass selectLabels to protect selector labels from removal
+	splcommon.SyncParentMetaToStatefulSet(ctx, statefulSet.GetObjectMeta(), cr.GetObjectMeta(), selectLabels)
 
 	// retrieve the secret to upload to the statefulSet pod
 	statefulSetSecret, err := splutil.GetLatestVersionedSecret(ctx, client, cr, cr.GetNamespace(), statefulSet.GetName())
