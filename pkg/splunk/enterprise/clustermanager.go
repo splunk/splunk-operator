@@ -159,6 +159,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 			return result, err
 		}
 
+		// Remove owner reference from KVService CR (delete if last owner)
+		err = DeleteKVServiceCR(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "DeleteKVServiceCR", fmt.Sprintf("remove KVService owner reference failed %s", err.Error()))
+			return result, err
+		}
+
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkClusterManager)
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
@@ -177,6 +184,13 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	// create or update a regular service for the cluster manager
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkClusterManager, false))
 	if err != nil {
+		return result, err
+	}
+
+	// create or update KVService CR with owner reference
+	err = ApplyKVServiceCR(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
 		return result, err
 	}
 
