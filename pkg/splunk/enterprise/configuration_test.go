@@ -1831,3 +1831,55 @@ func TestGetSplunkPorts(t *testing.T) {
 	test(SplunkIngestor)
 	test(SplunkMonitoringConsole)
 }
+
+// TestGetSplunkStatefulSet_SeparateLabelMaps verifies that StatefulSet.ObjectMeta.Labels
+// and StatefulSet.Spec.Template.ObjectMeta.Labels are separate maps that don't share memory.
+// This is critical because modifications to one should not affect the other.
+func TestGetSplunkStatefulSet_SeparateLabelMaps(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-standalone",
+			Namespace: "test",
+		},
+	}
+
+	c := spltest.NewMockClient()
+
+	// Create namespace scoped secret
+	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
+	if err != nil {
+		t.Fatalf("Failed to create namespace scoped object: %v", err)
+	}
+
+	statefulSet, err := getSplunkStatefulSet(ctx, c, &cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, 1, nil)
+	if err != nil {
+		t.Fatalf("getSplunkStatefulSet failed: %v", err)
+	}
+
+	// Verify that both maps exist
+	if statefulSet.ObjectMeta.Labels == nil {
+		t.Fatal("StatefulSet.ObjectMeta.Labels is nil")
+	}
+	if statefulSet.Spec.Template.ObjectMeta.Labels == nil {
+		t.Fatal("StatefulSet.Spec.Template.ObjectMeta.Labels is nil")
+	}
+
+	// Modify StatefulSet.ObjectMeta.Labels
+	statefulSet.ObjectMeta.Labels["test-sts-only-label"] = "should-not-appear-in-template"
+
+	// Verify Template.Labels was NOT affected
+	if _, exists := statefulSet.Spec.Template.ObjectMeta.Labels["test-sts-only-label"]; exists {
+		t.Error("Label added to StatefulSet.ObjectMeta.Labels incorrectly appeared in Template.Labels - maps share memory!")
+	}
+
+	// Modify Template.Labels
+	statefulSet.Spec.Template.ObjectMeta.Labels["test-template-only-label"] = "should-not-appear-in-sts"
+
+	// Verify StatefulSet.ObjectMeta.Labels was NOT affected
+	if _, exists := statefulSet.ObjectMeta.Labels["test-template-only-label"]; exists {
+		t.Error("Label added to Template.Labels incorrectly appeared in StatefulSet.ObjectMeta.Labels - maps share memory!")
+	}
+}
