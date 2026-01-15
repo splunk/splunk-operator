@@ -18,14 +18,24 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
+    - [Search Head Deployer Resource](#search-head-deployer-resource)
+      - [Example](#example)
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
+      - [Scaling Behavior Annotations](#scaling-behavior-annotations)
+        - [Scale-Up Ready Wait Timeout](#scale-up-ready-wait-timeout)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
     - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
     - [A BestEffort QoS Class example:](#a-besteffort-qos-class-example)
     - [Pod Resources Management](#pod-resources-management)
+    - [Troubleshooting](#troubleshooting)
+      - [CR Status Message](#cr-status-message)
+      - [Pause Annotations](#pause-annotations)
+      - [admin-managed-pv Annotations](#admin-managed-pv-annotations)
+        - [PV label values](#pv-label-values)
+      - [Container Logs](#container-logs)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -352,6 +362,66 @@ The Splunk Operator now includes a CRD for the Monitoring Console (MC). This off
 
 The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
 
+#### Scaling Behavior Annotations
+
+The Splunk Operator supports annotations that control how StatefulSets scale up when pods are not ready. These annotations can be set on any Splunk Enterprise CR (Standalone, IndexerCluster, SearchHeadCluster, etc.) and will automatically propagate to the underlying StatefulSets.
+
+##### Scale-Up Ready Wait Timeout
+
+**Annotation:** `operator.splunk.com/scale-up-ready-wait-timeout`
+
+By default, when scaling up a StatefulSet, the operator proceeds immediately without waiting for existing pods to become ready. This allows faster scaling operations. The `scale-up-ready-wait-timeout` annotation allows you to configure a specific timeout if you want to wait for existing pods to be ready before proceeding.
+
+**Default Value:** `0` (no wait - scale up immediately)
+
+**Supported Values:**
+- Any valid Go duration string like `"5s"`, `"30s"`, `"5m"`, `"10m"`, `"1h"`, `"48h"`, `"168h"` (7 days), etc.
+- `"0s"` or `"0"` (default) to immediately proceed with scale-up without waiting
+- Negative values like `"-1"` to wait indefinitely for all pods to be ready
+- Empty or missing annotation uses default (no wait)
+- Invalid format uses default (no wait)
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs (Standalone, IndexerCluster, SearchHeadCluster, etc.), use the `sts-only.` prefix to prevent the annotation from propagating to pod templates:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/scale-up-ready-wait-timeout: "5m"
+```
+
+The `sts-only.` prefix ensures the annotation is only applied to the StatefulSet and not to the pod template. The unprefixed key (`operator.splunk.com/scale-up-ready-wait-timeout`) is for advanced use cases where you need to annotate the StatefulSet directly.
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Recommended: use sts-only. prefix on CRs
+    sts-only.operator.splunk.com/scale-up-ready-wait-timeout: "5m"
+spec:
+  replicas: 5
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. When scaling up from N to N+M replicas, the operator checks if existing pods are ready
+2. By default (no annotation or `"0"`), the operator proceeds immediately with scale-up without waiting
+3. If a positive timeout is configured, the operator waits up to that duration for existing pods to be ready before proceeding
+4. Setting a negative value like `"-1"` waits indefinitely for all pods to be ready before scaling up
+
+**Use Cases:**
+- **Default behavior (fast scaling):** Omit the annotation for immediate scale-up without waiting
+- **Bounded waiting:** Set a specific timeout like `"5m"` or `"30m"` to wait for pods to be ready, but proceed after timeout
+- **Maximum stability:** Set to `"-1"` to wait indefinitely, ensuring all pods are ready before adding more
+- **Development workflows:** Use short timeouts like `"1m"` to balance speed and stability
+
+**Note:** This annotation affects scale-up operations only. Scale-down operations always proceed to remove pods even if other pods are not ready, as removing pods doesn't add additional load to the cluster.
 
 ## Examples of Guaranteed and Burstable QoS
 

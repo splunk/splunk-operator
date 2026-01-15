@@ -791,15 +791,16 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	methodPlus := fmt.Sprintf("%s(%s)", method, "Update StatefulSet")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, updateCalls, nil, current)
 
-	// test scale up (zero ready so far; wait for ready)
+	// test scale up (zero ready so far; with default timeout=0, proceed immediately)
+	// Default behavior is to scale up immediately without waiting
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingUp, revised, scaleUpCalls, nil, current)
 
-	// test scale up (1 ready scaling to 2; wait for ready)
-	// Now includes Update+Get for setScaleUpWaitStarted annotation tracking
+	// test scale up (1 ready scaling to 2; with default timeout=0, proceed immediately)
+	// Default behavior is to scale up immediately without waiting
 	// Reset revised to avoid carrying annotations from previous test
 	revised = current.DeepCopy()
 	replicas = 2
@@ -819,16 +820,18 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
 	// test scale down (2 ready, 1 desired)
+	// In this case readyReplicas > replicas, so no clearScaleUpWaitStarted is called
 	// Reset revised to avoid carrying annotations from previous test
 	revised = current.DeepCopy()
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 2
-	delete(scaleUpCalls, "Update")
+	scaleDownReadyCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleDownReadyCalls, nil, current, pod)
 
 	// test scale down (2 ready scaling down to 1)
+	// The Get calls are: initial StatefulSet re-fetch, then PVC lookups for deletion.
 	// Reset revised to avoid carrying annotations from previous test
 	revised = current.DeepCopy()
 	pvcCalls := []MockFuncCall{
