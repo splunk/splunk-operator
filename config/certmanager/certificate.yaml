@@ -30,9 +30,9 @@ metadata:
   namespace: system
 spec:
   dnsNames:
-  - splunk-operator-webhook-service.splunk-operator.svc
-  - splunk-operator-webhook-service.splunk-operator.svc.cluster.local
+  - $(SERVICE_NAME).$(SERVICE_NAMESPACE).svc
+  - $(SERVICE_NAME).$(SERVICE_NAMESPACE).svc.cluster.local
   issuerRef:
     kind: Issuer
-    name: splunk-operator-selfsigned-issuer
+    name: selfsigned-issuer
   secretName: webhook-server-cert
