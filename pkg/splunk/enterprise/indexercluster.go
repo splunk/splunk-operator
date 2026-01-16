@@ -787,9 +787,16 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	if mgr.c == nil {
 		mgr.c = c
 	}
+
+	// Get eventPublisher from context
+	var eventPublisher splcommon.K8EventPublisher
+	if ep := ctx.Value(splcommon.EventPublisherKey); ep != nil {
+		eventPublisher = ep.(splcommon.K8EventPublisher)
+	}
+
 	// update statefulset, if necessary
 	if mgr.cr.Status.ClusterManagerPhase == enterpriseApi.PhaseReady || mgr.cr.Status.ClusterMasterPhase == enterpriseApi.PhaseReady {
-		_, err = splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+		_, err = splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet, eventPublisher)
 		if err != nil {
 			return enterpriseApi.PhaseError, err
 		}
@@ -815,7 +822,31 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	phase, updateErr := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+
+	// Check if CPU-aware scaling completed and CR needs update via annotation
+	if splctrl.IsCPUPreservingScalingFinished(statefulSet) {
+		targetReplicas, needsSync := splctrl.SyncCRReplicasFromCPUAwareTransition(statefulSet, mgr.cr.Spec.Replicas)
+		scopedLog := log.FromContext(ctx).WithName("indexerClusterPodManager.Update")
+		if needsSync {
+			scopedLog.Info("CPU-aware transition complete, updating CR replicas",
+				"from", mgr.cr.Spec.Replicas, "to", targetReplicas)
+
+			mgr.cr.Spec.Replicas = targetReplicas
+			if crUpdateErr := c.Update(ctx, mgr.cr); crUpdateErr != nil {
+				scopedLog.Error(crUpdateErr, "Failed to update CR replicas")
+				return phase, crUpdateErr
+			}
+
+			// CR updated successfully, now clear the annotation
+			if clearErr := splctrl.ClearCPUAwareTransitionAnnotation(ctx, c, statefulSet); clearErr != nil {
+				scopedLog.Error(clearErr, "Failed to clear CPU-aware transition annotation")
+				return phase, clearErr
+			}
+		}
+	}
+
+	return phase, updateErr
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready

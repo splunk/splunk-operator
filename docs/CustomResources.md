@@ -25,6 +25,9 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
       - [Scaling Behavior Annotations](#scaling-behavior-annotations)
         - [Scale-Up Ready Wait Timeout](#scale-up-ready-wait-timeout)
+        - [Preserve Total CPU](#preserve-total-cpu)
+        - [Parallel Pod Updates](#parallel-pod-updates)
+        - [Unified Transition Stall Timeout](#unified-transition-stall-timeout)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
     - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
@@ -422,6 +425,161 @@ spec:
 - **Development workflows:** Use short timeouts like `"1m"` to balance speed and stability
 
 **Note:** This annotation affects scale-up operations only. Scale-down operations always proceed to remove pods even if other pods are not ready, as removing pods doesn't add additional load to the cluster.
+
+##### Preserve Total CPU
+
+**Annotation:** `operator.splunk.com/preserve-total-cpu`
+
+The `preserve-total-cpu` annotation enables CPU-aware scaling, which automatically adjusts the number of replicas to maintain the same total CPU allocation when CPU requests per pod change. This is useful for license-based or cost-optimized deployments where total resource allocation should remain constant regardless of individual pod sizing.
+
+**Default Value:** Not set (disabled)
+
+**Supported Values:**
+- `"true"` or `"both"`: Enable CPU-preserving scaling for both scale-up and scale-down directions
+- `"down"`: Enable CPU-preserving scaling only when replicas decrease (i.e., when CPU per pod increases)
+- `"up"`: Enable CPU-preserving scaling only when replicas increase (i.e., when CPU per pod decreases)
+- Empty or missing annotation: Feature is disabled
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs (Standalone, IndexerCluster, SearchHeadCluster, etc.), use the `sts-only.` prefix to prevent the annotation from propagating to pod templates:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/preserve-total-cpu: "both"
+```
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Enable CPU-preserving scaling for both directions
+    sts-only.operator.splunk.com/preserve-total-cpu: "both"
+spec:
+  replicas: 4
+  resources:
+    requests:
+      cpu: "2"
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. When CPU requests per pod change, the operator calculates the new replica count to preserve total CPU
+2. For example, if you have 4 replicas with 2 CPU each (total 8 CPU) and change to 1 CPU per pod, the operator will scale to 8 replicas to maintain 8 total CPU
+3. The direction setting allows you to control which scaling operations are allowed
+4. During the transition, the operator manages pod recycling to maintain cluster stability
+
+**Use Cases:**
+- **License optimization:** Maintain consistent CPU allocation that matches your Splunk license
+- **Cost control:** Ensure total resource usage stays within budget when changing pod specs
+- **Cluster rebalancing:** Safely transition between different pod sizes while maintaining capacity
+
+##### Parallel Pod Updates
+
+**Annotation:** `operator.splunk.com/parallel-pod-updates`
+
+The `parallel-pod-updates` annotation controls how many pods can be deleted/recycled simultaneously during rolling updates. This can significantly speed up large cluster updates while maintaining cluster stability.
+
+**Default Value:** `1` (sequential updates - one pod at a time)
+
+**Supported Values:**
+- A floating-point value `<= 1.0`: Interpreted as a percentage of total replicas (e.g., `"0.25"` means 25% of pods can be updated in parallel)
+- A value `> 1.0`: Interpreted as an absolute number of pods (e.g., `"3"` allows up to 3 pods to be updated at once)
+- Invalid or missing annotation uses default (sequential updates)
+- Values are clamped to the range [1, total replicas]
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs, use the `sts-only.` prefix:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/parallel-pod-updates: "3"
+```
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Allow up to 25% of pods to be updated in parallel
+    sts-only.operator.splunk.com/parallel-pod-updates: "0.25"
+spec:
+  replicas: 12
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. During rolling updates, the operator will delete/recycle up to the specified number of pods simultaneously
+2. Using percentage values scales with cluster size (e.g., 25% of a 12-pod cluster = 3 pods in parallel)
+3. The operator waits for recycled pods to become ready before proceeding to the next batch
+
+**Use Cases:**
+- **Large cluster updates:** Speed up updates on clusters with many replicas
+- **Maintenance windows:** Complete updates faster during limited maintenance periods
+- **Development environments:** Faster iteration with less concern for availability
+
+**Note:** Use with caution in production environments. Updating too many pods simultaneously may impact cluster availability and search performance.
+
+##### Unified Transition Stall Timeout
+
+**Annotation:** `operator.splunk.com/unified-transition-stall-timeout`
+
+The `unified-transition-stall-timeout` annotation allows you to configure the maximum time a CPU-aware transition can run before being considered stalled. If a transition exceeds this timeout, the operator will take recovery action.
+
+**Default Value:** `30m` (30 minutes)
+
+**Supported Values:**
+- Any valid Go duration string like `"15m"`, `"30m"`, `"1h"`, `"2h"`, etc.
+- Invalid format uses default (30 minutes)
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs, use the `sts-only.` prefix:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/unified-transition-stall-timeout: "1h"
+```
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Allow transitions up to 1 hour before considering them stalled
+    sts-only.operator.splunk.com/unified-transition-stall-timeout: "1h"
+    sts-only.operator.splunk.com/preserve-total-cpu: "both"
+spec:
+  replicas: 20
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. The operator tracks the start time of CPU-aware transitions
+2. If a transition exceeds the configured timeout without progress, it is marked as stalled
+3. The operator will attempt recovery actions for stalled transitions
+
+**Use Cases:**
+- **Large clusters:** Increase timeout for clusters with many replicas that take longer to transition
+- **Slow environments:** Accommodate environments where pods take longer to become ready
+- **Debugging:** Set shorter timeouts to quickly detect issues during testing
 
 ## Examples of Guaranteed and Burstable QoS
 

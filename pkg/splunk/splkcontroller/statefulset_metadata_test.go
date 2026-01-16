@@ -63,7 +63,7 @@ func TestApplyStatefulSet_STSOnlyAnnotationNotPersisted(t *testing.T) {
 		revised.Annotations["amadeus.com/aaa"])
 
 	// Apply the StatefulSet
-	phase, err := ApplyStatefulSet(ctx, c, revised)
+	phase, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err != nil {
 		t.Fatalf("ApplyStatefulSet failed: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestApplyStatefulSet_MetadataOnlyChangeNoUpdate(t *testing.T) {
 	}
 
 	// Apply the StatefulSet
-	phase, err := ApplyStatefulSet(ctx, c, revised)
+	phase, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err != nil {
 		t.Fatalf("ApplyStatefulSet failed: %v", err)
 	}

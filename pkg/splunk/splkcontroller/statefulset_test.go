@@ -107,7 +107,7 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet))
+		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet), nil)
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
@@ -122,7 +122,7 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised = current.DeepCopy()
 	revised.Spec.Template.Spec.Containers = []corev1.Container{{Image: "efgh"}}
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
-	_, err := ApplyStatefulSet(ctx, c, revised)
+	_, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -414,7 +414,7 @@ func TestGetStatefulSetByName(t *testing.T) {
 		},
 	}
 
-	_, err := ApplyStatefulSet(ctx, c, &current)
+	_, err := ApplyStatefulSet(ctx, c, &current, nil)
 	if err != nil {
 		return
 	}

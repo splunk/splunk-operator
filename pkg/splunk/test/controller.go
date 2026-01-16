@@ -146,6 +146,8 @@ func coreObjectListCopier(dst, src *client.ObjectList) bool {
 			*dstP.(*corev1.PersistentVolumeClaimList) = *srcP.(*corev1.PersistentVolumeClaimList)
 		case *corev1.SecretList:
 			*dstP.(*corev1.SecretList) = *srcP.(*corev1.SecretList)
+		case *corev1.PodList:
+			*dstP.(*corev1.PodList) = *srcP.(*corev1.PodList)
 		default:
 			return false
 		}
@@ -374,6 +376,28 @@ func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...cli
 		copyMockObjectList(&obj, &srcObj)
 		return nil
 	}
+
+	// Synthesize list from State for PodList when ListObj is not set
+	if podList, ok := obj.(*corev1.PodList); ok {
+		podList.Items = []corev1.Pod{}
+		for _, item := range c.State {
+			if pod, ok := item.(*corev1.Pod); ok {
+				// Apply namespace filter if present
+				namespace := ""
+				for _, opt := range opts {
+					if nsOpt, ok := opt.(client.InNamespace); ok {
+						namespace = string(nsOpt)
+						break
+					}
+				}
+				if namespace == "" || pod.Namespace == namespace {
+					podList.Items = append(podList.Items, *pod)
+				}
+			}
+		}
+		return nil
+	}
+
 	return c.NotFoundError
 }
 
