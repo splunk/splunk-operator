@@ -221,6 +221,12 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
+
+	// Setup centralized validation webhook for all CRDs
+	if err = enterpriseApi.SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create validation webhook")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

@@ -1,0 +1,60 @@
+/*
+Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v4
+
+import (
+	"context"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+var webhooklog = logf.Log.WithName("splunk-webhook")
+
+// SplunkValidator handles validation for all Splunk Enterprise CRDs
+// This is a dummy implementation to test webhook connectivity
+type SplunkValidator struct{}
+
+// SetupWebhookWithManager registers the centralized webhook with the manager
+func SetupWebhookWithManager(mgr ctrl.Manager) error {
+	validator := &SplunkValidator{}
+
+	mgr.GetWebhookServer().Register("/validate-splunk-enterprise", &admission.Webhook{
+		Handler: validator,
+	})
+
+	return nil
+}
+
+// Handle implements the admission.Handler interface
+// This is a dummy implementation that just logs and allows all requests
+func (v *SplunkValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
+	// Dummy webhook - just log and allow everything
+	webhooklog.Info("WEBHOOK CALLED - Validation webhook is working!",
+		"kind", req.Kind.Kind,
+		"name", req.Name,
+		"namespace", req.Namespace,
+		"operation", req.Operation,
+		"user", req.UserInfo.Username)
+
+	// Always allow - this is just for testing webhook connectivity
+	return admission.Allowed("webhook is working - all requests allowed")
+}
+
+// Ensure SplunkValidator implements admission.Handler
+var _ admission.Handler = &SplunkValidator{}
