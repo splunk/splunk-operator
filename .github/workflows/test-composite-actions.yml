@@ -1,0 +1,109 @@
+name: 'Test Composite Actions'
+
+# This workflow tests the new composite actions on the workflow-fix branch
+on:
+  push:
+    branches:
+      - workflow-fix
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test-setup-operator-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load environment variables
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+
+      - name: Test setup-operator-tools
+        uses: ./.github/actions/setup-operator-tools
+        with:
+          operator-sdk-version: ${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+      - name: Verify installations
+        run: |
+          echo "=== Go Version ==="
+          go version
+          echo ""
+          echo "=== Operator SDK Version ==="
+          operator-sdk version
+          echo ""
+          echo "✅ setup-operator-tools composite action works!"
+
+  test-setup-k8s-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load environment variables
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+
+      - name: Test setup-k8s-tools
+        uses: ./.github/actions/setup-k8s-tools
+        with:
+          kubectl-version: ${{ steps.dotenv.outputs.KUBECTL_VERSION }}
+          helm-version: v3.8.2
+          eksctl-version: ${{ steps.dotenv.outputs.EKSCTL_VERSION }}
+
+      - name: Verify installations
+        run: |
+          echo "=== Kubectl Version ==="
+          kubectl version --client
+          echo ""
+          echo "=== Helm Version ==="
+          helm version
+          echo ""
+          echo "=== eksctl Version ==="
+          eksctl version
+          echo ""
+          echo "✅ setup-k8s-tools composite action works!"
+
+  test-cloud-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test AWS authentication
+        uses: ./.github/actions/configure-cloud-auth
+        with:
+          cloud-provider: aws
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Verify AWS authentication
+        run: |
+          echo "=== AWS Identity ==="
+          aws sts get-caller-identity
+          echo ""
+          echo "✅ configure-cloud-auth composite action works for AWS!"
+
+  summary:
+    needs: [test-setup-operator-tools, test-setup-k8s-tools, test-cloud-auth]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Summary
+        run: |
+          echo "=========================================="
+          echo "✅ All composite actions tested successfully!"
+          echo "=========================================="
+          echo ""
+          echo "Tested actions:"
+          echo "  ✅ setup-operator-tools"
+          echo "  ✅ setup-k8s-tools"
+          echo "  ✅ configure-cloud-auth"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Review the workflow logs above"
+          echo "  2. Verify all tools were installed correctly"
+          echo "  3. Proceed with migrating existing workflows"

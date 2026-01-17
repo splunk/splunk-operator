@@ -1,0 +1,53 @@
+name: 'Configure Cloud Provider Authentication'
+description: 'Setup authentication for AWS, Azure, or GCP'
+
+inputs:
+  cloud-provider:
+    description: 'Cloud provider: aws, azure, or gcp'
+    required: true
+  aws-access-key-id:
+    description: 'AWS Access Key ID'
+    required: false
+  aws-secret-access-key:
+    description: 'AWS Secret Access Key'
+    required: false
+  aws-region:
+    description: 'AWS Region'
+    required: false
+  azure-credentials:
+    description: 'Azure credentials JSON'
+    required: false
+  gcp-service-account-key:
+    description: 'GCP service account key JSON'
+    required: false
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure AWS credentials
+      if: inputs.cloud-provider == 'aws'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      if: inputs.cloud-provider == 'aws'
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Azure Login
+      if: inputs.cloud-provider == 'azure'
+      uses: azure/login@v2
+      with:
+        creds: ${{ inputs.azure-credentials }}
+
+    - name: GCP Authentication
+      if: inputs.cloud-provider == 'gcp'
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ inputs.gcp-service-account-key }}
+
+    - name: Setup gcloud
+      if: inputs.cloud-provider == 'gcp'
+      uses: google-github-actions/setup-gcloud@v2

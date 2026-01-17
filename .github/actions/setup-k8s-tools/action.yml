@@ -1,0 +1,62 @@
+name: 'Setup Kubernetes Tools'
+description: 'Install kubectl, helm, eksctl, and other Kubernetes tools'
+
+inputs:
+  kubectl-version:
+    description: 'Kubectl version'
+    required: true
+  helm-version:
+    description: 'Helm version'
+    required: false
+    default: 'v3.8.2'
+  eksctl-version:
+    description: 'eksctl version'
+    required: false
+  install-metrics-server:
+    description: 'Install metrics server'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Kubectl
+      uses: Azure/setup-kubectl@v4
+      with:
+        version: ${{ inputs.kubectl-version }}
+
+    - name: Install Helm
+      shell: bash
+      run: |
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        DESIRED_VERSION=${{ inputs.helm-version }} bash get_helm.sh
+        helm version
+
+    - name: Install EKS CLI
+      if: inputs.eksctl-version != ''
+      shell: bash
+      run: |
+        curl --silent --insecure --location "https://github.com/weaveworks/eksctl/releases/download/${{ inputs.eksctl-version }}/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+        sudo mv /tmp/eksctl /usr/local/bin
+        eksctl version
+
+    - name: Install Metrics Server
+      if: inputs.install-metrics-server == 'true'
+      shell: bash
+      run: |
+        curl -LO https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+        kubectl replace --force -f components.yaml || kubectl apply -f components.yaml
+
+    - name: Install Kubernetes Dashboard
+      if: inputs.install-metrics-server == 'true'
+      shell: bash
+      run: |
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml
+
+    - name: Setup Kustomize
+      shell: bash
+      run: |
+        sudo snap install kustomize
+        mkdir -p ./bin
+        cp /snap/bin/kustomize ./bin/kustomize

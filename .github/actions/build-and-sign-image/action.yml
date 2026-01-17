@@ -1,0 +1,58 @@
+name: 'Build and Sign Container Image'
+description: 'Build Docker image, push to registry, and sign with Cosign'
+
+inputs:
+  image-name:
+    description: 'Full image name with tag (registry/repo:tag)'
+    required: true
+  dockerfile:
+    description: 'Path to Dockerfile'
+    required: false
+    default: './Dockerfile'
+  context:
+    description: 'Build context path'
+    required: false
+    default: '.'
+  sign-image:
+    description: 'Sign image with cosign'
+    required: false
+    default: 'true'
+  cosign-private-key:
+    description: 'Cosign private key'
+    required: false
+  cosign-password:
+    description: 'Cosign password'
+    required: false
+  build-args:
+    description: 'Additional build arguments'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and Push Image
+      shell: bash
+      run: |
+        make docker-buildx IMG=${{ inputs.image-name }} ${{ inputs.build-args }}
+
+    - name: Set up Cosign
+      if: inputs.sign-image == 'true'
+      uses: sigstore/cosign-installer@main
+
+    - name: Sign Image with Cosign
+      if: inputs.sign-image == 'true'
+      shell: bash
+      run: |
+        cosign sign --yes --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-name }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ inputs.cosign-private-key }}
+        COSIGN_PASSWORD: ${{ inputs.cosign-password }}
+
+outputs:
+  image-digest:
+    description: 'Image digest SHA'
+    value: ${{ steps.build.outputs.digest }}

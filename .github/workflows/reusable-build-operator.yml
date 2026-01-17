@@ -1,0 +1,156 @@
+name: 'Reusable Build Operator Image'
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: 'Image tag (default: github.sha)'
+        required: false
+        type: string
+        default: ''
+      dockerfile:
+        description: 'Dockerfile path'
+        required: false
+        type: string
+        default: './Dockerfile'
+      base-image:
+        description: 'Base image for build'
+        required: false
+        type: string
+        default: ''
+      sign-image:
+        description: 'Sign image with cosign'
+        required: false
+        type: boolean
+        default: true
+      run-vulnerability-scan:
+        description: 'Run Trivy vulnerability scan'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      ECR_REPOSITORY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_DEFAULT_REGION:
+        required: true
+      COSIGN_PRIVATE_KEY:
+        required: false
+      COSIGN_PASSWORD:
+        required: false
+      COSIGN_PUBLIC_KEY:
+        required: false
+    outputs:
+      image-name:
+        description: 'Full image name with tag'
+        value: ${{ jobs.build.outputs.image-name }}
+      image-digest:
+        description: 'Image digest'
+        value: ${{ jobs.build.outputs.image-digest }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image-name: ${{ steps.set-image.outputs.image-name }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    env:
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load environment variables
+        id: dotenv
+        uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
+
+      - name: Setup Operator Tools
+        uses: ./.github/actions/setup-operator-tools
+        with:
+          operator-sdk-version: ${{ steps.dotenv.outputs.OPERATOR_SDK_VERSION }}
+          go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
+
+      - name: Setup Cloud Authentication
+        uses: ./.github/actions/configure-cloud-auth
+        with:
+          cloud-provider: aws
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Set Image Name
+        id: set-image
+        run: |
+          TAG="${{ inputs.image-tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.sha }}"
+          fi
+          IMAGE_NAME="${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${TAG}"
+          echo "image-name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "Building image: ${IMAGE_NAME}"
+
+      - name: Build and Sign Image
+        id: build
+        uses: ./.github/actions/build-and-sign-image
+        with:
+          image-name: ${{ steps.set-image.outputs.image-name }}
+          dockerfile: ${{ inputs.dockerfile }}
+          sign-image: ${{ inputs.sign-image }}
+          cosign-private-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          cosign-password: ${{ secrets.COSIGN_PASSWORD }}
+          build-args: ${{ inputs.base-image != '' && format('BASE_IMAGE={0}', inputs.base-image) || '' }}
+
+  vulnerability-scan:
+    if: inputs.run-vulnerability-scan
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    env:
+      SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
+      IMAGE_TAG: ${{ inputs.image-tag || github.sha }}
+      FULL_IMAGE_NAME: ${{ secrets.ECR_REPOSITORY }}/splunk/splunk-operator:${{ inputs.image-tag || github.sha }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Cloud Authentication
+        uses: ./.github/actions/configure-cloud-auth
+        with:
+          cloud-provider: aws
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+
+      - name: Pull Image
+        run: |
+          echo "Pulling image: ${{ env.FULL_IMAGE_NAME }}"
+          docker pull ${{ env.FULL_IMAGE_NAME }}
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.FULL_IMAGE_NAME }}
+          format: sarif
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          output: trivy-results.sarif
+
+      - name: Upload Trivy Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
