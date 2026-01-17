@@ -94,6 +94,11 @@ const (
 	// The JSON structure includes original/target replicas, CPU per pod, and timestamps.
 	CPUAwareTransitionStateAnnotation = "operator.splunk.com/cpu-aware-transition-state"
 
+	// FSGroupChangePolicyAnnotation is the annotation key for overriding the fsGroupChangePolicy
+	// on the pod security context. Valid values are "Always" or "OnRootMismatch".
+	// When set, this annotation takes precedence over the spec.fsGroupChangePolicy field.
+	FSGroupChangePolicyAnnotation = "operator.splunk.com/fs-group-change-policy"
+
 	// DefaultParallelPodUpdates is the default number of pods to update in parallel when the annotation is not set.
 	DefaultParallelPodUpdates = 1
 )

@@ -15,6 +15,7 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [Metadata Parameters](#metadata-parameters)
   - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
   - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
+    - [FSGroup Change Policy](#fsgroup-change-policy)
   - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
@@ -172,6 +173,54 @@ Enterprise resources, including: `Standalone`, `LicenseManager`,
 | readinessInitialDelaySeconds | readinessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) | Defines `initialDelaySeconds` for Readiness probe |
 | livenessInitialDelaySeconds | livenessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) | Defines `initialDelaySeconds` for the Liveness probe |
 | imagePullSecrets | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources) |
+| fsGroupChangePolicy | string | Controls how Kubernetes handles ownership and permission changes for volumes. Valid values: `Always` or `OnRootMismatch`. Default: `OnRootMismatch` |
+
+### FSGroup Change Policy
+
+The `fsGroupChangePolicy` setting controls how Kubernetes handles ownership and permission changes for volumes before exposing them inside Pods. This can significantly impact startup performance for pods with large persistent volumes.
+
+**Valid Values:**
+- `Always` - Always change permissions and ownership to match fsGroup on volume mount. This ensures consistent permissions but may slow down pod startup for large volumes.
+- `OnRootMismatch` - Only change permissions when the root directory does not match the expected fsGroup. This provides better performance for large volumes.
+
+**Default:** `OnRootMismatch` (optimized for performance)
+
+#### Configuration via Spec Field
+
+Set the policy permanently in your Custom Resource spec:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+spec:
+  fsGroupChangePolicy: OnRootMismatch
+```
+
+#### Configuration via Annotation
+
+Override the policy using an annotation (useful for quick operational changes without modifying the spec):
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  annotations:
+    operator.splunk.com/fs-group-change-policy: "Always"
+spec:
+  # ...
+```
+
+#### Precedence
+
+When both methods are used, the following precedence applies:
+1. **Annotation** (highest priority) - If set with a valid value
+2. **Spec field** - If annotation is not set or invalid
+3. **Default** (`OnRootMismatch`) - If neither is set
+
+> **Note:** Invalid annotation values (anything other than "Always" or "OnRootMismatch") will be logged as warnings and ignored, falling back to the next precedence level.
 
 ## LicenseManager Resource Spec Parameters
 
