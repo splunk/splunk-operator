@@ -1,0 +1,54 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_deletecr_s1
+  description: Deploy standalone and delete the CR (source test/delete_cr/deletecr_test.go)
+  component: deletecr
+  tags: [operator, deletecr, s1, integration]
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: s1
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: delete_standalone
+    action: k8s.resource.delete
+    with:
+      kind: Standalone
+      apiVersion: enterprise.splunk.com/v4
+      name: ${standalone_name}
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_deletecr_c3
+  description: Deploy C3 and delete IndexerCluster, SearchHeadCluster, ClusterManager (source test/delete_cr/deletecr_test.go)
+  component: deletecr
+  tags: [operator, deletecr, c3, integration]
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: delete_indexer_cluster
+    action: k8s.resource.delete
+    with:
+      kind: IndexerCluster
+      apiVersion: enterprise.splunk.com/v4
+      name: ${indexer_cluster_name}
+  - name: delete_search_head_cluster
+    action: k8s.resource.delete
+    with:
+      kind: SearchHeadCluster
+      apiVersion: enterprise.splunk.com/v4
+      name: ${search_head_cluster_name}
+  - name: delete_cluster_manager
+    action: k8s.resource.delete
+    with:
+      kind: ClusterManager
+      apiVersion: enterprise.splunk.com/v4
+      name: ${cluster_manager_name}

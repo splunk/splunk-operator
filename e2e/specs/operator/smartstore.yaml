@@ -1,0 +1,260 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smartstore_s1_multiple_indexes
+  description: SmartStore with multiple indexes on standalone (source test/smartstore/*_smartstore_test.go)
+  component: smartstore
+  tags: [operator, smartstore, s1, integration]
+variants:
+  - name: operator_smartstore_manager_s1_multiple_indexes
+    tags: [manager]
+  - name: operator_smartstore_master_s1_multiple_indexes
+    tags: [master]
+requires:
+  - objectstore
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: s1
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: patch_smartstore
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        smartstore:
+          volumes:
+            - name: ${base_name}-volume
+              endpoint: ${objectstore_endpoint}
+              path: ${objectstore_bucket}
+              secretRef: ${objectstore_secret_name}
+              provider: ${objectstore_app_provider}
+              storageType: ${objectstore_storage_type}
+              region: ${objectstore_region}
+          indexes:
+            - name: ${base_name}-index1
+              remotePath: ${base_name}-index1
+              volumeName: ${base_name}-volume
+            - name: ${base_name}-index2
+              remotePath: ${base_name}-index2
+              volumeName: ${base_name}-volume
+  - name: wait_ready_after_patch
+    action: topology.wait_ready
+  - name: assert_index1_exists
+    action: assert.splunk.index.exists
+    with:
+      index: ${base_name}-index1
+  - name: assert_index2_exists
+    action: assert.splunk.index.exists
+    with:
+      index: ${base_name}-index2
+  - name: generate_data_index1
+    action: data.generate.log
+    with:
+      lines: 2000
+  - name: ingest_index1
+    action: splunk.ingest.oneshot
+    with:
+      index: ${base_name}-index1
+      path: ${last_generated_path}
+  - name: generate_data_index2
+    action: data.generate.log
+    with:
+      lines: 2000
+  - name: ingest_index2
+    action: splunk.ingest.oneshot
+    with:
+      index: ${base_name}-index2
+      path: ${last_generated_path}
+  - name: roll_hot_index1
+    action: splunk.index.roll_hot
+    with:
+      index: ${base_name}-index1
+  - name: roll_hot_index2
+    action: splunk.index.roll_hot
+    with:
+      index: ${base_name}-index2
+  - name: assert_index1_remote
+    action: assert.objectstore.prefix.exists
+    with:
+      bucket: ${objectstore_bucket}
+      prefix: ${base_name}-index1
+  - name: assert_index2_remote
+    action: assert.objectstore.prefix.exists
+    with:
+      bucket: ${objectstore_bucket}
+      prefix: ${base_name}-index2
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smartstore_s1_defaults_cachemanager
+  description: SmartStore defaults and cache manager settings on standalone (source test/smartstore/*_smartstore_test.go)
+  component: smartstore
+  tags: [operator, smartstore, s1, integration]
+variants:
+  - name: operator_smartstore_manager_s1_defaults_cachemanager
+    tags: [manager]
+  - name: operator_smartstore_master_s1_defaults_cachemanager
+    tags: [master]
+requires:
+  - objectstore
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: s1
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: patch_smartstore
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        smartstore:
+          volumes:
+            - name: ${base_name}-volume
+              endpoint: ${objectstore_endpoint}
+              path: ${objectstore_bucket}
+              secretRef: ${objectstore_secret_name}
+              provider: ${objectstore_app_provider}
+              storageType: ${objectstore_storage_type}
+              region: ${objectstore_region}
+          indexes:
+            - name: ${base_name}-index
+              remotePath: ${base_name}-index
+              volumeName: ${base_name}-volume
+          defaults:
+            volumeName: ${base_name}-volume
+            maxGlobalDataSizeMB: 100
+            maxGlobalRawDataSizeMB: 100
+          cacheManager:
+            maxCacheSize: 9900000
+            evictionPadding: 1000
+            maxConcurrentDownloads: 6
+            maxConcurrentUploads: 6
+            evictionPolicy: lru
+  - name: wait_ready_after_patch
+    action: topology.wait_ready
+  - name: assert_index_exists
+    action: assert.splunk.index.exists
+    with:
+      index: ${base_name}-index
+      max_global_data_size_mb: 100
+      max_global_raw_data_size_mb: 100
+  - name: generate_data
+    action: data.generate.log
+    with:
+      lines: 2000
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      index: ${base_name}-index
+      path: ${last_generated_path}
+  - name: roll_hot
+    action: splunk.index.roll_hot
+    with:
+      index: ${base_name}-index
+  - name: assert_index_remote
+    action: assert.objectstore.prefix.exists
+    with:
+      bucket: ${objectstore_bucket}
+      prefix: ${base_name}-index
+  - name: assert_cache_manager_config
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      path: /opt/splunk/etc/apps/splunk-operator/local/server.conf
+      contains:
+        - max_cache_size = 9900000
+        - eviction_padding = 1000
+        - max_concurrent_downloads = 6
+        - max_concurrent_uploads = 6
+        - eviction_policy = lru
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smartstore_m4_multisite
+  description: SmartStore on multisite indexer cluster with SHC (source test/smartstore/*_smartstore_test.go)
+  component: smartstore
+  tags: [operator, smartstore, m4, smoke]
+variants:
+  - name: operator_smartstore_manager_m4_multisite
+    tags: [manager]
+  - name: operator_smartstore_master_m4_multisite
+    tags: [master]
+    step_overrides:
+      - name: deploy
+        with:
+          cluster_manager_kind: master
+      - name: patch_smartstore
+        with:
+          kind: ClusterMaster
+          apiVersion: enterprise.splunk.com/v3
+requires:
+  - objectstore
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: m4
+      site_count: 3
+      with_shc: true
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: patch_smartstore
+    action: k8s.resource.patch
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      spec:
+        smartstore:
+          volumes:
+            - name: ${base_name}-volume
+              endpoint: ${objectstore_endpoint}
+              path: ${objectstore_bucket}
+              secretRef: ${objectstore_secret_name}
+              provider: ${objectstore_app_provider}
+              storageType: ${objectstore_storage_type}
+              region: ${objectstore_region}
+          indexes:
+            - name: ${base_name}-index
+              remotePath: ${base_name}-index
+              volumeName: ${base_name}-volume
+  - name: wait_ready_after_patch
+    action: topology.wait_ready
+  - name: assert_index_exists
+    action: assert.splunk.index.exists
+    with:
+      index: ${base_name}-index
+  - name: generate_data
+    action: data.generate.log
+    with:
+      lines: 2000
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      index: ${base_name}-index
+      path: ${last_generated_path}
+      pod: splunk-${base_name}-site1-indexer-0
+  - name: roll_hot
+    action: splunk.index.roll_hot
+    with:
+      index: ${base_name}-index
+      pod: splunk-${base_name}-site1-indexer-0
+  - name: assert_index_remote
+    action: assert.objectstore.prefix.exists
+    with:
+      bucket: ${objectstore_bucket}
+      prefix: ${base_name}-index

@@ -1,0 +1,204 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_license_manager_s1
+  tags: [operator, licensemanager, smoke, s1]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: ensure_license_configmap
+    action: license.configmap.ensure
+  - name: deploy_license_manager
+    action: splunk.license_manager.deploy
+  - name: wait_license_manager
+    action: splunk.license_manager.wait_ready
+  - name: patch_standalone_license
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: wait_standalone
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      phase: Ready
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: probe_configmap
+    action: assert.k8s.configmap.exists
+    with:
+      name: splunk-${namespace}-probe-configmap
+  - name: probe_scripts
+    action: assert.k8s.pod.files.present
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-${license_manager_name}-license-manager-0
+        - splunk-${monitoring_console_name}-monitoring-console-0
+      files:
+        - livenessProbe.sh
+        - readinessProbe.sh
+      path: /mnt/probes
+  - name: lm_configured
+    action: splunk.license_manager.verify_configured
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-${monitoring_console_name}-monitoring-console-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_license_manager_c3
+  tags: [operator, licensemanager, integration, c3]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: ensure_license_configmap
+    action: license.configmap.ensure
+  - name: deploy_license_manager
+    action: splunk.license_manager.deploy
+  - name: patch_cluster_manager_license
+    action: k8s.resource.patch
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: patch_indexer_cluster_license
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: patch_search_head_license
+    action: k8s.resource.patch
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: wait_license_manager
+    action: splunk.license_manager.wait_ready
+  - name: wait_topology
+    action: topology.wait_ready
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: rf_sf
+    action: assert.cluster.rf_sf
+  - name: lm_configured
+    action: splunk.license_manager.verify_configured
+    with:
+      pods:
+        - splunk-${base_name}-idxc-indexer-0
+        - splunk-${base_name}-idxc-indexer-1
+        - splunk-${base_name}-idxc-indexer-2
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+        - splunk-${monitoring_console_name}-monitoring-console-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_license_manager_m4
+  tags: [operator, licensemanager, integration, m4]
+topology:
+  kind: m4
+  params:
+    indexer_replicas: "1"
+    site_count: "3"
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: ensure_license_configmap
+    action: license.configmap.ensure
+  - name: deploy_license_manager
+    action: splunk.license_manager.deploy
+  - name: patch_cluster_manager_license
+    action: k8s.resource.patch
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: patch_indexer_site1_license
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site1
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: patch_indexer_site2_license
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site2
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: patch_indexer_site3_license
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site3
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: patch_search_head_license
+    action: k8s.resource.patch
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      spec:
+        licenseManagerRef:
+          name: ${license_manager_name}
+  - name: wait_license_manager
+    action: splunk.license_manager.wait_ready
+  - name: wait_topology
+    action: topology.wait_ready
+  - name: multisite_sites
+    action: assert.cluster.multisite_sites
+    with:
+      site_count: 3
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: rf_sf
+    action: assert.cluster.rf_sf
+  - name: lm_configured
+    action: splunk.license_manager.verify_configured
+    with:
+      pods:
+        - splunk-${base_name}-site1-indexer-0
+        - splunk-${base_name}-site2-indexer-0
+        - splunk-${base_name}-site3-indexer-0
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+        - splunk-${monitoring_console_name}-monitoring-console-0

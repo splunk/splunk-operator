@@ -1,0 +1,699 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_longrunning_interop_old_log
+  description: DATF dataset smoke test for longrunning_interop_old_log
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: longrunning_interop_old_log
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: longrunning
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: longrunning_interop_old_log
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=longrunning | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 3403454
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_longrunning_interop_log
+  description: DATF dataset smoke test for longrunning_interop_log
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: longrunning_interop_log
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: longrunning_newer
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: longrunning_interop_log
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=longrunning_newer | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 3403454
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_access_combined_data
+  description: DATF dataset smoke test for access_combined_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: access_combined_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: access_combined
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: access_combined_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=access_combined | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 4999
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_access_combined_1m_events_data
+  description: DATF dataset smoke test for access_combined_1m_events_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: access_combined_1m_events_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: access_combined_1m
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: access_combined_1m_events_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=access_combined_1m | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 1000000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_multi_bucket_access_combined_1m_events_data
+  description: DATF dataset smoke test for multi_bucket_access_combined_1m_events_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: multi_bucket_access_combined_1m_events_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: access_combined_1m
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: multi_bucket_access_combined_1m_events_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=access_combined_1m | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 1000000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_http_status
+  description: DATF dataset smoke test for http_status
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: http_status
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: status
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: http_status
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=status | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 41
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_standard_data
+  description: DATF dataset smoke test for standard_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: standard_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: stdsearch
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: standard_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=stdsearch | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 10000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_small_data
+  description: DATF dataset smoke test for small_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: small_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: small
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: small_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=small | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 100
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_p4changes_data
+  description: DATF dataset smoke test for p4changes_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: p4changes_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: p4changes
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: p4changes_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=p4changes | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 3627
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_knowledge_data
+  description: DATF dataset smoke test for knowledge_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: knowledge_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: knowledge
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: knowledge_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=knowledge | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 37016
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_hp_data
+  description: DATF dataset smoke test for hp_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: hp_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: hp
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: hp_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=hp | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 4512
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_universal_data_1M
+  description: DATF dataset smoke test for universal_data_1M
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: universal_data_1M
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: universal_data_1m
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: universal_data_1M
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=universal_data_1m | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 1000000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_multi_bucket_universal_data_1M
+  description: DATF dataset smoke test for multi_bucket_universal_data_1M
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: multi_bucket_universal_data_1M
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: universal_data_1m
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: multi_bucket_universal_data_1M
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=universal_data_1m | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 1000000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_universal_data_100k
+  description: DATF dataset smoke test for universal_data_100k
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: universal_data_100k
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: universal_data_100k
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: universal_data_100k
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=universal_data_100k | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 100000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_multi_bucket_universal_data_100k
+  description: DATF dataset smoke test for multi_bucket_universal_data_100k
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: multi_bucket_universal_data_100k
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: universal_data_100k
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: multi_bucket_universal_data_100k
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=universal_data_100k | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 100000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_universal_data_10k
+  description: DATF dataset smoke test for universal_data_10k
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: universal_data_10k
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: universal_data_10k
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: universal_data_10k
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=universal_data_10k | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 10000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_universal_data_10k_dms
+  description: DATF dataset smoke test for universal_data_10k_dms
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: universal_data_10k_dms
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: universal_data_10k_dms
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: universal_data_10k_dms
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=universal_data_10k_dms | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 10000
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_access_combined_small
+  description: DATF dataset smoke test for access_combined_small
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: access_combined_small
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: access_combined_small
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: access_combined_small
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=access_combined_small | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 500
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_test_tstats_2byte
+  description: DATF dataset smoke test for test_tstats_2byte
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: test_tstats_2byte
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: test_tstats_2byte
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: test_tstats_2byte
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=test_tstats_2byte | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 7
+requires:
+  - datf-data
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: datf_sendmail_csv_data
+  description: DATF dataset smoke test for sendmail_csv_data
+  tags: [datf, s1, ingest, search]
+topology:
+  kind: s1
+datasets:
+  - name: sendmail_csv_data
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: sendmail
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      dataset: sendmail_csv_data
+  - name: search_count
+    action: splunk.search.sync
+    with:
+      query: "index=sendmail | stats count"
+assertions:
+  - name: count_matches
+    type: search.count
+    with:
+      count: 5521
+requires:
+  - datf-data

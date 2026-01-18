@@ -1,0 +1,124 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_s1
+  description: Smoke: standalone deployment ready and stable (source test/smoke/smoke_test.go)
+  component: smoke
+  tags: [operator, smoke, s1]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_c3
+  description: Smoke: single-site cluster + SHC ready and RF/SF met (source test/smoke/smoke_test.go)
+  component: smoke
+  tags: [operator, smoke, c3]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      indexer_replicas: 3
+      shc_replicas: 3
+      with_shc: true
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: verify_rf_sf
+    action: assert.cluster.rf_sf
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_m4
+  description: Smoke: multisite cluster + SHC ready, multisite configured, RF/SF met (source test/smoke/smoke_test.go)
+  component: smoke
+  tags: [operator, smoke, m4]
+topology:
+  kind: m4
+  params:
+    site_count: "3"
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: m4
+      indexer_replicas: 1
+      shc_replicas: 3
+      site_count: 3
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: verify_multisite
+    action: assert.cluster.multisite_sites
+    with:
+      site_count: 3
+  - name: verify_rf_sf
+    action: assert.cluster.rf_sf
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_m1
+  description: Smoke: multisite indexer cluster ready and RF/SF met (source test/smoke/smoke_test.go)
+  component: smoke
+  tags: [operator, smoke, m1]
+topology:
+  kind: m1
+  params:
+    site_count: "3"
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: m1
+      indexer_replicas: 1
+      site_count: 3
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: verify_multisite
+    action: assert.cluster.multisite_sites
+    with:
+      site_count: 3
+  - name: verify_rf_sf
+    action: assert.cluster.rf_sf
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_s1_service_account
+  description: Smoke: standalone with service account attached (source test/smoke/smoke_test.go)
+  component: smoke
+  tags: [operator, smoke, s1, service-account]
+topology:
+  kind: s1
+  params:
+    service_account: smoke-service-account
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      service_account: smoke-service-account
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: verify_service_account
+    action: assert.k8s.pod.service_account
+    with:
+      name: smoke-service-account

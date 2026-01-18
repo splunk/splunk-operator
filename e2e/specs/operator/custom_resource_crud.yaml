@@ -1,0 +1,491 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_crcrud_s1_update
+  tags: [operator, crcrud, s1, integration]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: cpu_before
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      cpu: "4"
+  - name: update_cpu
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        resources:
+          limits:
+            cpu: "2"
+  - name: phase_updating
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      phase: Updating
+  - name: phase_ready
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      phase: Ready
+  - name: wait_monitoring_console_after
+    action: splunk.monitoring_console.wait_ready
+  - name: cpu_after
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      cpu: "2"
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_crcrud_c3_cpu_update
+  tags: [operator, crcrud, c3, integration, manager]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: rf_sf
+    action: assert.cluster.rf_sf
+  - name: indexer_cpu_before_0
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-idxc-indexer-0
+      cpu: "4"
+  - name: indexer_cpu_before_1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-idxc-indexer-1
+      cpu: "4"
+  - name: indexer_cpu_before_2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-idxc-indexer-2
+      cpu: "4"
+  - name: update_indexer_cpu
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+      spec:
+        resources:
+          limits:
+            cpu: "2"
+  - name: indexer_phase_updating
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+      phase: Updating
+  - name: indexer_phase_ready
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+      phase: Ready
+  - name: indexer_cpu_after_0
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-idxc-indexer-0
+      cpu: "2"
+  - name: indexer_cpu_after_1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-idxc-indexer-1
+      cpu: "2"
+  - name: indexer_cpu_after_2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-idxc-indexer-2
+      cpu: "2"
+  - name: shc_cpu_before_0
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-0
+      cpu: "4"
+  - name: shc_cpu_before_1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-1
+      cpu: "4"
+  - name: shc_cpu_before_2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-2
+      cpu: "4"
+  - name: update_shc_cpu
+    action: k8s.resource.patch
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      spec:
+        resources:
+          limits:
+            cpu: "2"
+  - name: shc_phase_updating
+    action: assert.splunk.phase
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      phase: Updating
+  - name: shc_phase_ready
+    action: assert.splunk.phase
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      phase: Ready
+  - name: wait_monitoring_console_after
+    action: splunk.monitoring_console.wait_ready
+  - name: shc_cpu_after_0
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-0
+      cpu: "2"
+  - name: shc_cpu_after_1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-1
+      cpu: "2"
+  - name: shc_cpu_after_2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-2
+      cpu: "2"
+variants:
+  - name: operator_crcrud_master_c3_cpu_update
+    tags: [master]
+    params:
+      cluster_manager_kind: master
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_crcrud_c3_pvc_delete
+  tags: [operator, crcrud, c3, integration, manager]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: rf_sf
+    action: assert.cluster.rf_sf
+  - name: pvc_shc_search_heads
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${search_head_cluster_name}
+      deployment_type: shc-search-head
+      instances: 3
+      exists: true
+  - name: pvc_shc_deployer
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${search_head_cluster_name}
+      deployment_type: shc-deployer
+      instances: 1
+      exists: true
+  - name: pvc_indexers
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${indexer_cluster_name}
+      deployment_type: idxc-indexer
+      instances: 3
+      exists: true
+  - name: pvc_cluster_manager
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${cluster_manager_name}
+      deployment_type: cluster-manager
+      instances: 1
+      exists: true
+  - name: pvc_monitoring_console
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${monitoring_console_name}
+      deployment_type: monitoring-console
+      instances: 1
+      exists: true
+  - name: delete_shc
+    action: k8s.resource.delete
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+  - name: delete_indexer_cluster
+    action: k8s.resource.delete
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+  - name: delete_cluster_manager
+    action: k8s.resource.delete
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+  - name: delete_monitoring_console
+    action: k8s.resource.delete
+    with:
+      kind: MonitoringConsole
+      name: ${monitoring_console_name}
+  - name: pvc_shc_search_heads_deleted
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${search_head_cluster_name}
+      deployment_type: shc-search-head
+      instances: 3
+      exists: false
+  - name: pvc_shc_deployer_deleted
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${search_head_cluster_name}
+      deployment_type: shc-deployer
+      instances: 1
+      exists: false
+  - name: pvc_indexers_deleted
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${indexer_cluster_name}
+      deployment_type: idxc-indexer
+      instances: 3
+      exists: false
+  - name: pvc_cluster_manager_deleted
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${cluster_manager_name}
+      deployment_type: cluster-manager
+      instances: 1
+      exists: false
+  - name: pvc_monitoring_console_deleted
+    action: assert.k8s.pvc.exists
+    with:
+      base_name: ${monitoring_console_name}
+      deployment_type: monitoring-console
+      instances: 1
+      exists: false
+variants:
+  - name: operator_crcrud_master_c3_pvc_delete
+    tags: [master]
+    params:
+      cluster_manager_kind: master
+    step_overrides:
+      - name: pvc_cluster_manager
+        with:
+          deployment_type: cluster-master
+      - name: delete_cluster_manager
+        with:
+          apiVersion: enterprise.splunk.com/v3
+          kind: ClusterMaster
+      - name: pvc_cluster_manager_deleted
+        with:
+          deployment_type: cluster-master
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_crcrud_c3_shc_deployer_resources
+  tags: [operator, crcrud, c3, integration, manager]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: shc_cpu_before_0
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-0
+      cpu: "4"
+  - name: shc_cpu_before_1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-1
+      cpu: "4"
+  - name: shc_cpu_before_2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-2
+      cpu: "4"
+  - name: deployer_cpu_before
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-deployer-0
+      cpu: "4"
+  - name: update_deployer_resources
+    action: k8s.resource.patch
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      spec:
+        deployerResourceSpec:
+          requests:
+            cpu: "2"
+            memory: 12Gi
+          limits:
+            cpu: "4"
+            memory: 14Gi
+  - name: shc_phase_ready
+    action: assert.splunk.phase
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      phase: Ready
+  - name: shc_cpu_after_0
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-0
+      cpu: "4"
+  - name: shc_cpu_after_1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-1
+      cpu: "4"
+  - name: shc_cpu_after_2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-shc-search-head-2
+      cpu: "4"
+  - name: deployer_resources
+    action: assert.k8s.pod.resources
+    with:
+      pod: splunk-${base_name}-shc-deployer-0
+      limits:
+        cpu: "4"
+        memory: 14Gi
+      requests:
+        cpu: "2"
+        memory: 12Gi
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_crcrud_m4_cpu_update
+  tags: [operator, crcrud, m4, integration, manager]
+topology:
+  kind: m4
+  params:
+    indexer_replicas: "1"
+    site_count: "3"
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: multisite_sites
+    action: assert.cluster.multisite_sites
+    with:
+      site_count: 3
+  - name: deploy_monitoring_console
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_monitoring_console
+    action: splunk.monitoring_console.wait_ready
+  - name: rf_sf
+    action: assert.cluster.rf_sf
+  - name: indexer_cpu_before_site1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-site1-indexer-0
+      cpu: "4"
+  - name: indexer_cpu_before_site2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-site2-indexer-0
+      cpu: "4"
+  - name: indexer_cpu_before_site3
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-site3-indexer-0
+      cpu: "4"
+  - name: update_indexer_site1
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site1
+      spec:
+        resources:
+          limits:
+            cpu: "2"
+  - name: update_indexer_site2
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site2
+      spec:
+        resources:
+          limits:
+            cpu: "2"
+  - name: update_indexer_site3
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site3
+      spec:
+        resources:
+          limits:
+            cpu: "2"
+  - name: indexer_phase_updating
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site1
+      phase: Updating
+  - name: indexer_phase_ready
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-site1
+      phase: Ready
+  - name: wait_monitoring_console_after
+    action: splunk.monitoring_console.wait_ready
+  - name: rf_sf_after
+    action: assert.cluster.rf_sf
+  - name: indexer_cpu_after_site1
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-site1-indexer-0
+      cpu: "2"
+  - name: indexer_cpu_after_site2
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-site2-indexer-0
+      cpu: "2"
+  - name: indexer_cpu_after_site3
+    action: assert.k8s.pod.cpu_limit
+    with:
+      pod: splunk-${base_name}-site3-indexer-0
+      cpu: "2"
+variants:
+  - name: operator_crcrud_master_m4_cpu_update
+    tags: [master]
+    params:
+      cluster_manager_kind: master

@@ -1,0 +1,599 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_s1_local_upgrade
+  description: Standalone app framework local apps install and update (source test/appframework_*/*)
+  component: appframework
+  tags: [operator, appframework, s1, smoke]
+requires:
+  - objectstore
+  - appframework-apps
+steps:
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: s1
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: build_appframework_v1
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v1apps/
+      scope: local
+      app_source_name: appsource
+      poll_interval: 60
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_v1
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_apps_install_v1
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: appsource
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_apps_present_v1
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      path: /opt/splunk/etc/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_apps_enabled_v1
+    action: appframework.apps.assert
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: build_appframework_v2
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v2apps/
+      scope: local
+      app_source_name: appsource
+      poll_interval: 60
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_v2
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_apps_install_v2
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: appsource
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_apps_enabled_v2
+    action: appframework.apps.assert
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_c3_cluster_scope
+  description: Cluster-wide app framework install on CM/SHC with bundle push validation (source test/appframework_*/*)
+  component: appframework
+  tags: [operator, appframework, c3, integration]
+variants:
+  - name: operator_appframework_manager_c3_cluster_scope
+    tags: [manager]
+  - name: operator_appframework_master_c3_cluster_scope
+    tags: [master]
+    step_overrides:
+      - name: deploy
+        with:
+          cluster_manager_kind: master
+      - name: apply_appframework_cm
+        with:
+          target_kind: cluster_master
+      - name: wait_apps_cm_install
+        with:
+          target_kind: cluster_master
+requires:
+  - objectstore
+  - appframework-apps
+steps:
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: capture_bundle_hash
+    action: cluster.bundle.hash.capture
+  - name: build_appframework_cluster
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v1apps/
+      scope: cluster
+      app_source_name: cluster-apps
+      poll_interval: 60
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_cm
+    action: appframework.apply
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: apply_appframework_shc
+    action: appframework.apply
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_apps_cm_install
+    action: appframework.phase.wait
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: wait_apps_shc_install
+    action: appframework.phase.wait
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_bundle_push
+    action: assert.cluster.bundle.push
+    with:
+      replicas: 3
+  - name: assert_indexer_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${indexer_cluster_name}-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_search_head_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${search_head_cluster_name}-search-head-0
+      path: /opt/splunk/etc/shcluster/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_s1_manual_poll_upgrade
+  description: Standalone app framework manual poll upgrade (source test/appframework_*/*)
+  component: appframework
+  tags: [operator, appframework, s1, integration, manualpoll]
+requires:
+  - objectstore
+  - appframework-apps
+steps:
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: s1
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: build_appframework_v1
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v1apps/
+      scope: local
+      app_source_name: appsource
+      poll_interval: 0
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_v1
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_apps_install_v1
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: appsource
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: build_appframework_v2
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v2apps/
+      scope: local
+      app_source_name: appsource
+      poll_interval: 0
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_v2
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: manual_poll
+    action: appframework.manual_poll.trigger
+    with:
+      keys:
+        - Standalone
+      wait_off: true
+  - name: wait_apps_install_v2
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: appsource
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_apps_enabled
+    action: appframework.apps.assert
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_c3_manual_poll_upgrade
+  description: Cluster app framework manual poll upgrade (source test/appframework_*/*)
+  component: appframework
+  tags: [operator, appframework, c3, integration, manualpoll]
+variants:
+  - name: operator_appframework_c3_manual_poll_upgrade
+    tags: [manager]
+  - name: operator_appframework_master_c3_manual_poll_upgrade
+    tags: [master]
+    params:
+      cluster_manager_kind: master
+    step_overrides:
+      - name: apply_appframework_cm_v1
+        with:
+          target_kind: cluster_master
+      - name: wait_apps_cm_install_v1
+        with:
+          target_kind: cluster_master
+      - name: apply_appframework_cm_v2
+        with:
+          target_kind: cluster_master
+      - name: wait_apps_cm_install_v2
+        with:
+          target_kind: cluster_master
+      - name: manual_poll
+        with:
+          keys:
+            - ClusterMaster
+            - SearchHeadCluster
+requires:
+  - objectstore
+  - appframework-apps
+steps:
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: build_appframework_v1
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v1apps/
+      scope: cluster
+      app_source_name: cluster-apps
+      poll_interval: 0
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_cm_v1
+    action: appframework.apply
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: apply_appframework_shc_v1
+    action: appframework.apply
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_apps_cm_install_v1
+    action: appframework.phase.wait
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: wait_apps_shc_install_v1
+    action: appframework.phase.wait
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: capture_bundle_hash
+    action: cluster.bundle.hash.capture
+  - name: build_appframework_v2
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v2apps/
+      scope: cluster
+      app_source_name: cluster-apps
+      poll_interval: 0
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_cm_v2
+    action: appframework.apply
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: apply_appframework_shc_v2
+    action: appframework.apply
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: manual_poll
+    action: appframework.manual_poll.trigger
+    with:
+      keys:
+        - ClusterManager
+        - SearchHeadCluster
+      wait_off: true
+  - name: wait_apps_cm_install_v2
+    action: appframework.phase.wait
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: wait_apps_shc_install_v2
+    action: appframework.phase.wait
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_bundle_push
+    action: assert.cluster.bundle.push
+    with:
+      replicas: 3
+  - name: assert_indexer_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${indexer_cluster_name}-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_search_head_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${search_head_cluster_name}-search-head-0
+      path: /opt/splunk/etc/shcluster/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_m4_cluster_scope
+  description: Multisite cluster-wide app framework install on CM/SHC (source test/appframework_*/*)
+  component: appframework
+  tags: [operator, appframework, m4, integration]
+variants:
+  - name: operator_appframework_manager_m4_cluster_scope
+    tags: [manager]
+  - name: operator_appframework_master_m4_cluster_scope
+    tags: [master]
+    step_overrides:
+      - name: deploy
+        with:
+          cluster_manager_kind: master
+      - name: apply_appframework_cm
+        with:
+          target_kind: cluster_master
+      - name: wait_apps_cm_install
+        with:
+          target_kind: cluster_master
+requires:
+  - objectstore
+  - appframework-apps
+steps:
+  - name: ensure_objectstore_secret
+    action: objectstore.secret.ensure
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: m4
+      with_shc: true
+      site_count: 3
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: build_appframework_cluster
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_app_provider}
+      bucket: ${E2E_APP_BUCKET}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v1apps/
+      scope: cluster
+      app_source_name: cluster-apps
+      poll_interval: 60
+      secret_ref: ${objectstore_secret_name}
+  - name: apply_appframework_cm
+    action: appframework.apply
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: apply_appframework_shc
+    action: appframework.apply
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_apps_cm_install
+    action: appframework.phase.wait
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: wait_apps_shc_install
+    action: appframework.phase.wait
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      app_source: cluster-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_indexer_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${base_name}-site1-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_search_head_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${search_head_cluster_name}-search-head-0
+      path: /opt/splunk/etc/shcluster/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
