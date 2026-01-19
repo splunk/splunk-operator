@@ -26,6 +26,8 @@ webhooks:
     - indexerclusters
     - searchheadclusters
     - clustermanagers
+    - clustermasters
     - licensemanagers
+    - licensemasters
     - monitoringconsoles
   sideEffects: None

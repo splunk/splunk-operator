@@ -223,10 +223,7 @@ func main() {
 	}
 
 	// Setup centralized validation webhook for all CRDs
-	if err = enterpriseApi.SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create validation webhook")
-		os.Exit(1)
-	}
+	enterpriseApi.SetupWebhookWithManager(mgr)
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

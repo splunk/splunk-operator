@@ -31,14 +31,14 @@ var webhooklog = logf.Log.WithName("splunk-webhook")
 type SplunkValidator struct{}
 
 // SetupWebhookWithManager registers the centralized webhook with the manager
-func SetupWebhookWithManager(mgr ctrl.Manager) error {
+func SetupWebhookWithManager(mgr ctrl.Manager) {
 	validator := &SplunkValidator{}
 
 	mgr.GetWebhookServer().Register("/validate-splunk-enterprise", &admission.Webhook{
 		Handler: validator,
 	})
 
-	return nil
+	webhooklog.Info("Validation webhook registered", "path", "/validate-splunk-enterprise")
 }
 
 // Handle implements the admission.Handler interface
