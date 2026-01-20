@@ -198,6 +198,116 @@ func handleAssertConfigMapContains(ctx context.Context, exec *Context, step spec
 	return map[string]string{"name": name, "key": key}, nil
 }
 
+func handleAssertConfigMapKeys(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
+	if exec == nil || exec.Kube == nil {
+		return nil, fmt.Errorf("kube client not available")
+	}
+	name := expandVars(strings.TrimSpace(getString(step.With, "name", "")), exec.Vars)
+	if name == "" {
+		return nil, fmt.Errorf("configmap name is required")
+	}
+	namespace := expandVars(strings.TrimSpace(getString(step.With, "namespace", exec.Vars["namespace"])), exec.Vars)
+	if namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	keys, err := getStringList(step.With, "keys")
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		if key := strings.TrimSpace(getString(step.With, "key", "")); key != "" {
+			keys = []string{key}
+		}
+	}
+	keys = expandStringSlice(keys, exec.Vars)
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("keys or key is required")
+	}
+
+	config := &corev1.ConfigMap{}
+	if err := exec.Kube.Client.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, config); err != nil {
+		return nil, err
+	}
+	for _, key := range keys {
+		if _, ok := config.Data[key]; !ok {
+			return nil, fmt.Errorf("configmap %s missing key %s", name, key)
+		}
+	}
+	return map[string]string{"name": name, "keys": strings.Join(keys, ",")}, nil
+}
+
+func handleAssertPodConfigMapMounted(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
+	if exec == nil || exec.Kube == nil {
+		return nil, fmt.Errorf("kube client not available")
+	}
+	namespace := expandVars(strings.TrimSpace(getString(step.With, "namespace", exec.Vars["namespace"])), exec.Vars)
+	if namespace == "" {
+		return nil, fmt.Errorf("namespace is required")
+	}
+	configMapName := expandVars(strings.TrimSpace(getString(step.With, "configmap", "")), exec.Vars)
+	if configMapName == "" {
+		return nil, fmt.Errorf("configmap is required")
+	}
+	mountPath := expandVars(strings.TrimSpace(getString(step.With, "mount_path", "")), exec.Vars)
+	if mountPath == "" {
+		return nil, fmt.Errorf("mount_path is required")
+	}
+	containerName := expandVars(strings.TrimSpace(getString(step.With, "container", "")), exec.Vars)
+
+	pods, err := getStringList(step.With, "pods")
+	if err != nil {
+		return nil, err
+	}
+	if len(pods) == 0 {
+		if pod := strings.TrimSpace(getString(step.With, "pod", "")); pod != "" {
+			pods = []string{pod}
+		}
+	}
+	pods = expandStringSlice(pods, exec.Vars)
+	if len(pods) == 0 {
+		return nil, fmt.Errorf("pod or pods are required")
+	}
+
+	for _, podName := range pods {
+		pod := &corev1.Pod{}
+		if err := exec.Kube.Client.Get(ctx, client.ObjectKey{Name: podName, Namespace: namespace}, pod); err != nil {
+			return nil, err
+		}
+		volumeNames := map[string]bool{}
+		for _, volume := range pod.Spec.Volumes {
+			if volume.ConfigMap != nil && volume.ConfigMap.Name == configMapName {
+				volumeNames[volume.Name] = true
+			}
+		}
+		if len(volumeNames) == 0 {
+			return nil, fmt.Errorf("pod %s does not reference configmap %s", podName, configMapName)
+		}
+		found := false
+		for _, container := range pod.Spec.Containers {
+			if containerName != "" && container.Name != containerName {
+				continue
+			}
+			for _, mount := range container.VolumeMounts {
+				if mount.MountPath != mountPath {
+					continue
+				}
+				if volumeNames[mount.Name] {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("pod %s does not mount configmap %s at %s", podName, configMapName, mountPath)
+		}
+	}
+
+	return map[string]string{"pods": strings.Join(pods, ","), "configmap": configMapName, "mount_path": mountPath}, nil
+}
+
 func handleAssertPodCPULimit(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
 	if exec == nil || exec.Kube == nil {
 		return nil, fmt.Errorf("kube client not available")
@@ -371,23 +481,79 @@ func handleAssertPodFiles(ctx context.Context, exec *Context, step spec.StepSpec
 		return nil, fmt.Errorf("files or paths are required")
 	}
 
-	for _, podName := range pods {
-		for _, fileName := range files {
-			absPath := fileName
-			if basePath != "" {
-				absPath = filepath.Join(basePath, fileName)
+	timeout := time.Duration(0)
+	if raw := getString(step.With, "timeout", ""); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return nil, err
+		}
+		timeout = parsed
+	}
+	interval := 5 * time.Second
+	if raw := getString(step.With, "interval", ""); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return nil, err
+		}
+		interval = parsed
+	}
+
+	execTimeout := 30 * time.Second
+	if raw := getString(step.With, "exec_timeout", ""); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return nil, err
+		}
+		execTimeout = parsed
+	}
+	if timeout > 0 && execTimeout > timeout {
+		execTimeout = timeout
+	}
+
+	check := func() error {
+		for _, podName := range pods {
+			for _, fileName := range files {
+				absPath := fileName
+				if basePath != "" {
+					absPath = filepath.Join(basePath, fileName)
+				}
+				if err := assertPodPath(ctx, exec, namespace, podName, absPath, expected, execTimeout); err != nil {
+					return err
+				}
 			}
-			if err := assertPodPath(ctx, exec, namespace, podName, absPath, expected); err != nil {
-				return nil, err
+			for _, path := range paths {
+				if err := assertPodPath(ctx, exec, namespace, podName, path, expected, execTimeout); err != nil {
+					return err
+				}
 			}
 		}
-		for _, path := range paths {
-			if err := assertPodPath(ctx, exec, namespace, podName, path, expected); err != nil {
-				return nil, err
-			}
+		return nil
+	}
+
+	if timeout <= 0 {
+		if err := check(); err != nil {
+			return nil, err
+		}
+		return map[string]string{"pods": strings.Join(pods, ","), "expected": fmt.Sprintf("%t", expected)}, nil
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		if err := check(); err == nil {
+			return map[string]string{"pods": strings.Join(pods, ","), "expected": fmt.Sprintf("%t", expected)}, nil
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("pod file check did not reach expected state within %s: %w", timeout, lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
 		}
 	}
-	return map[string]string{"pods": strings.Join(pods, ","), "expected": fmt.Sprintf("%t", expected)}, nil
 }
 
 func handleAssertPodFileContains(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
@@ -636,14 +802,25 @@ func compareResourceList(actual corev1.ResourceList, expected map[string]interfa
 	return nil
 }
 
-func assertPodPath(ctx context.Context, exec *Context, namespace, podName, path string, expected bool) error {
+func assertPodPath(ctx context.Context, exec *Context, namespace, podName, path string, expected bool, execTimeout time.Duration) error {
 	if path == "" {
 		return fmt.Errorf("path is required")
 	}
-	stdout, stderr, err := exec.Kube.Exec(ctx, namespace, podName, "", []string{"ls", path}, "", false)
+	execCtx := ctx
+	cancel := func() {}
+	if execTimeout > 0 {
+		execCtx, cancel = context.WithTimeout(ctx, execTimeout)
+	}
+	defer cancel()
+
+	stdout, stderr, err := exec.Kube.Exec(execCtx, namespace, podName, "", []string{"ls", path}, "", false)
 	found := err == nil
 	if found != expected {
-		return fmt.Errorf("path check failed pod=%s path=%s expected=%t stdout=%s stderr=%s", podName, path, expected, strings.TrimSpace(stdout), strings.TrimSpace(stderr))
+		msg := fmt.Sprintf("path check failed pod=%s path=%s expected=%t stdout=%s stderr=%s", podName, path, expected, strings.TrimSpace(stdout), strings.TrimSpace(stderr))
+		if err != nil {
+			return fmt.Errorf("%s err=%v", msg, err)
+		}
+		return fmt.Errorf("%s", msg)
 	}
 	return nil
 }

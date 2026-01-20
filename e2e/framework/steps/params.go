@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 func getString(params map[string]interface{}, key string, fallback string) string {
@@ -49,6 +50,34 @@ func getInt(params map[string]interface{}, key string, fallback int) int {
 			return fallback
 		}
 		return parsed
+	default:
+		return fallback
+	}
+}
+
+func getDuration(params map[string]interface{}, key string, fallback time.Duration) time.Duration {
+	if params == nil {
+		return fallback
+	}
+	value, ok := params[key]
+	if !ok || value == nil {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case time.Duration:
+		return typed
+	case string:
+		parsed, err := time.ParseDuration(typed)
+		if err != nil {
+			return fallback
+		}
+		return parsed
+	case int:
+		return time.Duration(typed) * time.Second
+	case int64:
+		return time.Duration(typed) * time.Second
+	case float64:
+		return time.Duration(typed * float64(time.Second))
 	default:
 		return fallback
 	}

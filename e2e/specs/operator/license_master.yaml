@@ -2,7 +2,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_license_master_s1
-  tags: [operator, licensemaster, smoke, s1]
+  tags: [operator, licensemaster, integration, s1]
 topology:
   kind: s1
 steps:
@@ -10,6 +10,8 @@ steps:
     action: topology.deploy
   - name: ensure_license_configmap
     action: license.configmap.ensure
+    with:
+      path: ./splunk.lic
   - name: deploy_license_master
     action: splunk.license_master.deploy
   - name: wait_license_master
@@ -38,17 +40,22 @@ steps:
     action: assert.k8s.configmap.exists
     with:
       name: splunk-${namespace}-probe-configmap
-  - name: probe_scripts
-    action: assert.k8s.pod.files.present
+  - name: probe_configmap_keys
+    action: assert.k8s.configmap.keys
     with:
+      name: splunk-${namespace}-probe-configmap
+      keys:
+        - livenessProbe.sh
+        - readinessProbe.sh
+  - name: probe_scripts
+    action: assert.k8s.pod.configmap.mounted
+    with:
+      configmap: splunk-${namespace}-probe-configmap
       pods:
         - splunk-${standalone_name}-standalone-0
         - splunk-${license_master_name}-license-master-0
         - splunk-${monitoring_console_name}-monitoring-console-0
-      files:
-        - livenessProbe.sh
-        - readinessProbe.sh
-      path: /mnt/probes
+      mount_path: /mnt/probes
   - name: lm_configured
     action: splunk.license_manager.verify_configured
     with:
@@ -71,6 +78,8 @@ steps:
     action: topology.deploy
   - name: ensure_license_configmap
     action: license.configmap.ensure
+    with:
+      path: ./splunk.lic
   - name: deploy_license_master
     action: splunk.license_master.deploy
   - name: patch_cluster_master_license
@@ -139,6 +148,8 @@ steps:
     action: topology.deploy
   - name: ensure_license_configmap
     action: license.configmap.ensure
+    with:
+      path: ./splunk.lic
   - name: deploy_license_master
     action: splunk.license_master.deploy
   - name: patch_cluster_master_license

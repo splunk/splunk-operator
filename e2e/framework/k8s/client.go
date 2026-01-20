@@ -112,7 +112,7 @@ func (c *Client) Exec(ctx context.Context, namespace, podName, container string,
 		stdinReader = strings.NewReader(stdin)
 	}
 
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdinReader,
 		Stdout: stdout,
 		Stderr: stderr,

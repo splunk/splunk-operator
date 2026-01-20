@@ -36,6 +36,7 @@ type Runner struct {
 	logMu         sync.Mutex
 	logCollected  map[string]string
 	telemetry     *telemetry.Telemetry
+	specs         []spec.TestSpec // Store specs for PlantUML generation
 }
 
 // NewRunner constructs a Runner.
@@ -67,6 +68,7 @@ func NewRunner(cfg *config.Config, logger *zap.Logger, registry *steps.Registry,
 
 // RunAll executes all specs and returns a run result.
 func (r *Runner) RunAll(ctx context.Context, specs []spec.TestSpec) (*results.RunResult, error) {
+	r.specs = specs // Store specs for PlantUML generation
 	runCtx, runSpan := r.startRunSpan(ctx, specs)
 	var result *results.RunResult
 	var err error
@@ -152,6 +154,14 @@ func (r *Runner) runSpecWithExec(ctx context.Context, testSpec spec.TestSpec, ex
 			"kubelet_version":   r.cluster.KubeletVersion,
 		},
 	}
+	if r.logger != nil {
+		r.logger.Info("test start", zap.String("test", testSpec.Metadata.Name), zap.String("topology", resolveTopology(testSpec, exec)))
+	}
+	defer func() {
+		if r.logger != nil {
+			r.logger.Info("test complete", zap.String("test", testSpec.Metadata.Name), zap.String("status", string(result.Status)), zap.Duration("duration", result.Duration))
+		}
+	}()
 
 	timeout := r.cfg.DefaultTimeout
 	if testSpec.Timeout != "" {
@@ -215,6 +225,9 @@ func (r *Runner) runSpecWithExec(ctx context.Context, testSpec spec.TestSpec, ex
 
 func (r *Runner) runStep(ctx context.Context, exec *steps.Context, step spec.StepSpec) results.StepResult {
 	start := time.Now().UTC()
+	if r.logger != nil {
+		r.logger.Info("step start", zap.String("test", exec.TestName), zap.String("step", step.Name), zap.String("action", step.Action))
+	}
 	stepCtx, span := r.startStepSpan(ctx, exec, step)
 	metadata, err := r.registry.Execute(stepCtx, exec, step)
 	end := time.Now().UTC()
@@ -230,8 +243,19 @@ func (r *Runner) runStep(ctx context.Context, exec *steps.Context, step spec.Ste
 	if err != nil {
 		stepResult.Status = results.StatusFailed
 		stepResult.Error = err.Error()
+		if r.logger != nil {
+			r.logger.Warn("step failed", zap.String("test", exec.TestName), zap.String("step", step.Name), zap.String("action", step.Action), zap.Duration("duration", stepResult.Duration), zap.Error(err))
+		}
 	} else {
 		stepResult.Status = results.StatusPassed
+		if r.logger != nil {
+			// Warn if step took longer than 2 minutes
+			if stepResult.Duration > 2*time.Minute {
+				r.logger.Warn("step completed but took longer than 2 minutes", zap.String("test", exec.TestName), zap.String("step", step.Name), zap.String("action", step.Action), zap.Duration("duration", stepResult.Duration))
+			} else {
+				r.logger.Info("step complete", zap.String("test", exec.TestName), zap.String("step", step.Name), zap.String("action", step.Action), zap.Duration("duration", stepResult.Duration))
+			}
+		}
 	}
 
 	r.finishStepSpan(span, exec, step, stepResult, err)
@@ -291,7 +315,18 @@ func (r *Runner) addGraphForTest(spec spec.TestSpec, result results.TestResult) 
 	runID := "run:" + r.cfg.RunID
 	testID := "test:" + spec.Metadata.Name
 	r.graph.AddNode(graph.Node{ID: runID, Type: "run", Label: r.cfg.RunID})
-	r.graph.AddNode(graph.Node{ID: testID, Type: "test", Label: spec.Metadata.Name, Attributes: map[string]interface{}{"status": result.Status}})
+
+	// Add test node with comprehensive metadata
+	testAttrs := map[string]interface{}{
+		"status":      result.Status,
+		"topology":    spec.Topology.Kind,
+		"description": spec.Metadata.Description,
+		"duration":    result.Duration.Seconds(),
+	}
+	if len(spec.Metadata.Tags) > 0 {
+		testAttrs["tags"] = strings.Join(spec.Metadata.Tags, ",")
+	}
+	r.graph.AddNode(graph.Node{ID: testID, Type: "test", Label: spec.Metadata.Name, Attributes: testAttrs})
 	r.graph.AddEdge(graph.Edge{From: runID, To: testID, Type: "HAS_TEST"})
 
 	for _, dataset := range spec.Datasets {
@@ -312,16 +347,40 @@ func (r *Runner) addGraphForTest(spec spec.TestSpec, result results.TestResult) 
 		r.graph.AddEdge(graph.Edge{From: testID, To: assertID, Type: "HAS_ASSERTION"})
 	}
 
+	// Add topology node
+	if spec.Topology.Kind != "" {
+		topologyID := "topology:" + spec.Topology.Kind
+		topologyAttrs := map[string]interface{}{
+			"kind": spec.Topology.Kind,
+		}
+		// Add topology params if present
+		for key, value := range spec.Topology.Params {
+			topologyAttrs[key] = value
+		}
+		r.graph.AddNode(graph.Node{ID: topologyID, Type: "topology", Label: spec.Topology.Kind, Attributes: topologyAttrs})
+		r.graph.AddEdge(graph.Edge{From: testID, To: topologyID, Type: "USES_TOPOLOGY"})
+	}
+
+	// Add version and environment nodes with metadata
 	imageID := "image:splunk:" + r.cfg.SplunkImage
 	operatorID := "image:operator:" + r.operatorImage
 	clusterID := "cluster:" + r.cfg.ClusterProvider
 	k8sID := "k8s:" + r.cluster.KubernetesVersion
 
-	r.graph.AddNode(graph.Node{ID: imageID, Type: "image", Label: r.cfg.SplunkImage})
-	r.graph.AddNode(graph.Node{ID: operatorID, Type: "image", Label: r.operatorImage})
-	r.graph.AddNode(graph.Node{ID: clusterID, Type: "cluster", Label: r.cfg.ClusterProvider})
+	r.graph.AddNode(graph.Node{ID: imageID, Type: "image", Label: r.cfg.SplunkImage, Attributes: map[string]interface{}{"type": "splunk", "version": r.cfg.SplunkImage}})
+	r.graph.AddNode(graph.Node{ID: operatorID, Type: "image", Label: r.operatorImage, Attributes: map[string]interface{}{"type": "operator", "version": r.operatorImage}})
+	clusterAttrs := map[string]interface{}{
+		"provider": r.cfg.ClusterProvider,
+	}
+	if r.cluster.NodeOSImage != "" {
+		clusterAttrs["node_os"] = r.cluster.NodeOSImage
+	}
+	if r.cluster.ContainerRuntime != "" {
+		clusterAttrs["container_runtime"] = r.cluster.ContainerRuntime
+	}
+	r.graph.AddNode(graph.Node{ID: clusterID, Type: "cluster", Label: r.cfg.ClusterProvider, Attributes: clusterAttrs})
 	if r.cluster.KubernetesVersion != "" {
-		r.graph.AddNode(graph.Node{ID: k8sID, Type: "k8s", Label: r.cluster.KubernetesVersion})
+		r.graph.AddNode(graph.Node{ID: k8sID, Type: "k8s", Label: r.cluster.KubernetesVersion, Attributes: map[string]interface{}{"version": r.cluster.KubernetesVersion}})
 	}
 
 	r.graph.AddEdge(graph.Edge{From: testID, To: imageID, Type: "USES_SPLUNK_IMAGE"})
@@ -350,6 +409,17 @@ func (r *Runner) addGraphForTest(spec spec.TestSpec, result results.TestResult) 
 			r.graph.AddEdge(graph.Edge{From: testID, To: logID, Type: "PRODUCED"})
 		}
 	}
+
+	// Incrementally export to Neo4j after each test if enabled
+	if r.cfg.Neo4jEnabled && r.cfg.Neo4jURI != "" {
+		exportCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := r.exportGraphToNeo4j(exportCtx); err != nil {
+			if r.logger != nil {
+				r.logger.Warn("incremental neo4j export failed", zap.String("test", spec.Metadata.Name), zap.Error(err))
+			}
+		}
+	}
 }
 
 // FlushArtifacts writes metrics and graph to disk.
@@ -371,14 +441,72 @@ func (r *Runner) FlushArtifacts(run *results.RunResult) error {
 			return err
 		}
 	}
-	if r.cfg.Neo4jEnabled {
-		exportCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		if err := r.exportGraphToNeo4j(exportCtx); err != nil {
-			return err
+	// Neo4j export removed - now happens incrementally after each test in addGraphForTest()
+
+	// Generate PlantUML diagrams
+	if r.cfg.GraphEnabled && r.graph != nil {
+		generator := graph.NewPlantUMLGenerator(r.graph, r.specs, run)
+
+		// Generate topology diagram
+		topologyDiagram := generator.GenerateTopologyDiagram()
+		if _, err := r.artifacts.WriteText("topology.plantuml", topologyDiagram); err != nil {
+			if r.logger != nil {
+				r.logger.Warn("failed to write topology diagram", zap.Error(err))
+			}
+		}
+
+		// Generate run summary diagram
+		summaryDiagram := generator.GenerateRunSummaryDiagram()
+		if _, err := r.artifacts.WriteText("run-summary.plantuml", summaryDiagram); err != nil {
+			if r.logger != nil {
+				r.logger.Warn("failed to write run summary diagram", zap.Error(err))
+			}
+		}
+
+		// Generate failure analysis diagram
+		failureDiagram := generator.GenerateFailureAnalysisDiagram()
+		if _, err := r.artifacts.WriteText("failure-analysis.plantuml", failureDiagram); err != nil {
+			if r.logger != nil {
+				r.logger.Warn("failed to write failure analysis diagram", zap.Error(err))
+			}
+		}
+
+		// Generate sequence diagrams for each test (limit to first 10 to avoid too many files)
+		testCount := len(run.Tests)
+		if testCount > 10 {
+			testCount = 10
+		}
+		for i := 0; i < testCount; i++ {
+			test := run.Tests[i]
+			seqDiagram := generator.GenerateTestSequenceDiagram(test.Name)
+			filename := fmt.Sprintf("test-sequence-%s.plantuml", sanitizeFilename(test.Name))
+			if _, err := r.artifacts.WriteText(filename, seqDiagram); err != nil {
+				if r.logger != nil {
+					r.logger.Warn("failed to write test sequence diagram", zap.String("test", test.Name), zap.Error(err))
+				}
+			}
+		}
+
+		if r.logger != nil {
+			r.logger.Info("PlantUML diagrams generated", zap.Int("topology_diagrams", 1), zap.Int("summary_diagrams", 1), zap.Int("test_sequences", testCount))
 		}
 	}
+
 	return nil
+}
+
+// sanitizeFilename removes invalid characters from filenames
+func sanitizeFilename(name string) string {
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, ":", "-")
+	name = strings.ReplaceAll(name, "*", "-")
+	name = strings.ReplaceAll(name, "?", "-")
+	name = strings.ReplaceAll(name, "\"", "-")
+	name = strings.ReplaceAll(name, "<", "-")
+	name = strings.ReplaceAll(name, ">", "-")
+	name = strings.ReplaceAll(name, "|", "-")
+	return name
 }
 
 func (r *Runner) observeTestMetrics(spec spec.TestSpec, result results.TestResult) {

@@ -14,11 +14,20 @@ import (
 const neo4jBatchSize = 200
 
 func (r *Runner) exportGraphToNeo4j(ctx context.Context) error {
+	if r.logger != nil {
+		r.logger.Info("neo4j export starting", zap.String("uri", r.cfg.Neo4jURI), zap.Bool("graph_nil", r.graph == nil))
+	}
 	if r.cfg.Neo4jURI == "" {
 		return fmt.Errorf("neo4j uri is required")
 	}
 	if r.graph == nil {
+		if r.logger != nil {
+			r.logger.Warn("neo4j export skipped: graph is nil")
+		}
 		return nil
+	}
+	if r.logger != nil {
+		r.logger.Info("neo4j export graph stats", zap.Int("nodes", len(r.graph.Nodes)), zap.Int("edges", len(r.graph.Edges)))
 	}
 
 	auth := neo4j.NoAuth()

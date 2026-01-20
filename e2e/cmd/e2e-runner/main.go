@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-logr/zapr"
 	"github.com/splunk/splunk-operator/e2e/framework/config"
 	"github.com/splunk/splunk-operator/e2e/framework/data"
 	"github.com/splunk/splunk-operator/e2e/framework/k8s"
@@ -16,6 +17,7 @@ import (
 	"github.com/splunk/splunk-operator/e2e/framework/steps"
 	"github.com/splunk/splunk-operator/e2e/framework/telemetry"
 	"go.uber.org/zap"
+	ctrlLog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func main() {
@@ -26,6 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer logger.Sync()
+	ctrlLog.SetLogger(zapr.NewLogger(logger))
 
 	telemetryClient, shutdownTelemetry, err := telemetry.Init(context.Background(), cfg, logger)
 	if err != nil {

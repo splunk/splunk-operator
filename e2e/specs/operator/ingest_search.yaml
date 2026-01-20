@@ -2,7 +2,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_ingest_search_internal
-  description: Ingest/search: internal log searches (source test/ingest_search/ingest_search_test.go)
+  description: "Ingest/search: internal log searches (source test/ingest_search/ingest_search_test.go)"
   component: ingest-search
   tags: [operator, ingest, search, s1]
 topology:
@@ -36,7 +36,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_ingest_search_custom_data
-  description: Ingest/search: custom data to new index (source test/ingest_search/ingest_search_test.go)
+  description: "Ingest/search: custom data to new index (source test/ingest_search/ingest_search_test.go)"
   component: ingest-search
   tags: [operator, ingest, search, s1]
 topology:

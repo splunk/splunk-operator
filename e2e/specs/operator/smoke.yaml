@@ -2,7 +2,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_smoke_s1
-  description: Smoke: standalone deployment ready and stable (source test/smoke/smoke_test.go)
+  description: "Smoke: standalone deployment ready and stable (source test/smoke/smoke_test.go)"
   component: smoke
   tags: [operator, smoke, s1]
 topology:
@@ -19,7 +19,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_smoke_c3
-  description: Smoke: single-site cluster + SHC ready and RF/SF met (source test/smoke/smoke_test.go)
+  description: "Smoke: single-site cluster + SHC ready and RF/SF met (source test/smoke/smoke_test.go)"
   component: smoke
   tags: [operator, smoke, c3]
 topology:
@@ -43,7 +43,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_smoke_m4
-  description: Smoke: multisite cluster + SHC ready, multisite configured, RF/SF met (source test/smoke/smoke_test.go)
+  description: "Smoke: multisite cluster + SHC ready, multisite configured, RF/SF met (source test/smoke/smoke_test.go)"
   component: smoke
   tags: [operator, smoke, m4]
 topology:
@@ -73,7 +73,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_smoke_m1
-  description: Smoke: multisite indexer cluster ready and RF/SF met (source test/smoke/smoke_test.go)
+  description: "Smoke: multisite indexer cluster ready and RF/SF met (source test/smoke/smoke_test.go)"
   component: smoke
   tags: [operator, smoke, m1]
 topology:
@@ -102,7 +102,7 @@ apiVersion: e2e.splunk.com/v1
 kind: Test
 metadata:
   name: operator_smoke_s1_service_account
-  description: Smoke: standalone with service account attached (source test/smoke/smoke_test.go)
+  description: "Smoke: standalone with service account attached (source test/smoke/smoke_test.go)"
   component: smoke
   tags: [operator, smoke, s1, service-account]
 topology:

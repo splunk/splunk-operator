@@ -28,6 +28,8 @@ func RegisterK8sHandlers(reg *Registry) {
 	reg.Register("k8s.configmap.update", handleConfigMapUpdate)
 	reg.Register("assert.k8s.configmap.exists", handleAssertConfigMapExists)
 	reg.Register("assert.k8s.configmap.contains", handleAssertConfigMapContains)
+	reg.Register("assert.k8s.configmap.keys", handleAssertConfigMapKeys)
+	reg.Register("assert.k8s.pod.configmap.mounted", handleAssertPodConfigMapMounted)
 	reg.Register("assert.k8s.pod.cpu_limit", handleAssertPodCPULimit)
 	reg.Register("assert.k8s.pod.resources", handleAssertPodResources)
 	reg.Register("assert.k8s.pod.files.present", handleAssertPodFilesPresent)

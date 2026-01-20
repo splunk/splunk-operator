@@ -1,0 +1,61 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_fast_s1
+  description: "Fast Smoke: standalone deployment ready and stable (< 2 min)"
+  component: smoke
+  tags: [operator, smoke, fast, s1]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_fast_c3
+  description: "Fast Smoke: C3 cluster deployment ready (< 5 min)"
+  component: smoke
+  tags: [operator, smoke, fast, c3]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: verify_rf_sf
+    action: assert.cluster.rf_sf
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_smoke_fast_search
+  description: "Fast Smoke: Search functionality works"
+  component: smoke
+  tags: [operator, smoke, fast, s1, search]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: search_internal_stats
+    action: splunk.search.sync
+    with:
+      query: "search index=_internal | stats count"
+  - name: verify_host_field
+    action: assert.search.field
+    with:
+      field: host
+      exists: true

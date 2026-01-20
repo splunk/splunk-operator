@@ -129,16 +129,18 @@ func (r *Runner) runTopologyGroup(ctx context.Context, group topologyGroup) []re
 	if namespace == "" {
 		namespace = fmt.Sprintf("%s-%s", r.cfg.NamespacePrefix, topology.RandomDNSName(5))
 	}
-	if err := r.kube.EnsureNamespace(ctx, namespace); err != nil {
-		return r.failTopologyGroup(group, err, namespace)
-	}
-
 	baseName := strings.TrimSpace(group.params["name"])
 	if baseName != "" {
 		baseName = os.ExpandEnv(baseName)
 	}
 	if baseName == "" {
 		baseName = namespace
+	}
+	if r.logger != nil {
+		r.logger.Info("topology group start", zap.String("kind", group.kind), zap.String("namespace", namespace), zap.String("base_name", baseName), zap.Int("tests", len(group.specs)))
+	}
+	if err := r.kube.EnsureNamespace(ctx, namespace); err != nil {
+		return r.failTopologyGroup(group, err, namespace)
 	}
 
 	opts := topology.Options{
@@ -160,9 +162,15 @@ func (r *Runner) runTopologyGroup(ctx context.Context, group topologyGroup) []re
 		opts.SiteCount = intParam(group.params, "sites", opts.SiteCount)
 	}
 
+	if r.logger != nil {
+		r.logger.Info("topology deploy", zap.String("kind", opts.Kind), zap.String("namespace", opts.Namespace), zap.String("base_name", opts.BaseName))
+	}
 	session, err := topology.Deploy(ctx, r.kube, opts)
 	if err != nil {
 		return r.failTopologyGroup(group, err, namespace)
+	}
+	if r.logger != nil {
+		r.logger.Info("topology deploy complete", zap.String("kind", opts.Kind), zap.String("namespace", opts.Namespace), zap.String("base_name", opts.BaseName))
 	}
 
 	timeout := r.cfg.DefaultTimeout
@@ -171,8 +179,14 @@ func (r *Runner) runTopologyGroup(ctx context.Context, group topologyGroup) []re
 			timeout = parsed
 		}
 	}
+	if r.logger != nil {
+		r.logger.Info("topology wait ready", zap.String("kind", opts.Kind), zap.String("namespace", opts.Namespace), zap.Duration("timeout", timeout))
+	}
 	if err := topology.WaitReady(ctx, r.kube, session, timeout); err != nil {
 		return r.failTopologyGroup(group, err, namespace)
+	}
+	if r.logger != nil {
+		r.logger.Info("topology ready", zap.String("kind", opts.Kind), zap.String("namespace", opts.Namespace))
 	}
 
 	out := make([]results.TestResult, 0, len(group.specs))
@@ -206,6 +220,9 @@ func (r *Runner) runTopologyGroup(ctx context.Context, group topologyGroup) []re
 }
 
 func (r *Runner) failTopologyGroup(group topologyGroup, err error, namespace string) []results.TestResult {
+	if r.logger != nil {
+		r.logger.Error("topology group failed", zap.String("kind", group.kind), zap.String("namespace", namespace), zap.Error(err))
+	}
 	out := make([]results.TestResult, 0, len(group.specs))
 	for _, testSpec := range group.specs {
 		now := time.Now().UTC()

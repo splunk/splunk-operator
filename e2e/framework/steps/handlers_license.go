@@ -55,7 +55,11 @@ func handleLicenseConfigMapEnsure(ctx context.Context, exec *Context, step spec.
 	if err != nil {
 		return nil, err
 	}
-	key := filepath.Base(path)
+	key := strings.TrimSpace(getString(step.With, "key", ""))
+	if key == "" {
+		key = filepath.Base(path)
+	}
+	aliasKey := "enterprise.lic"
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -64,6 +68,9 @@ func handleLicenseConfigMapEnsure(ctx context.Context, exec *Context, step spec.
 		Data: map[string]string{
 			key: string(data),
 		},
+	}
+	if key != aliasKey {
+		cm.Data[aliasKey] = string(data)
 	}
 
 	if err := exec.Kube.Client.Create(ctx, cm); err != nil {
@@ -80,6 +87,10 @@ func handleLicenseConfigMapEnsure(ctx context.Context, exec *Context, step spec.
 		}
 	}
 	exec.Vars["license_configmap"] = name
+	exec.Vars["license_key"] = aliasKey
+	if key == aliasKey {
+		exec.Vars["license_key"] = key
+	}
 	return map[string]string{"name": name, "namespace": namespace, "key": key}, nil
 }
 
@@ -244,14 +255,38 @@ func handleLicenseManagerVerifyConfigured(ctx context.Context, exec *Context, st
 	if expected == "" {
 		return nil, fmt.Errorf("expected_contains is required")
 	}
+
+	// Get retry configuration
+	retries := getInt(step.With, "retries", 30)
+	retryInterval := getDuration(step.With, "retry_interval", 2*time.Second)
+
+	// Retry logic: license configuration may take time to propagate
 	for _, pod := range pods {
 		client := exec.Splunkd.WithPod(pod)
-		payload, err := client.ManagementRequest(ctx, "GET", "/services/licenser/localslave", url.Values{"output_mode": []string{"json"}}, nil)
-		if err != nil {
-			return nil, err
+		var lastErr error
+		for attempt := 0; attempt <= retries; attempt++ {
+			payload, err := client.ManagementRequest(ctx, "GET", "/services/licenser/localslave", url.Values{"output_mode": []string{"json"}}, nil)
+			if err != nil {
+				lastErr = err
+				if attempt < retries {
+					time.Sleep(retryInterval)
+					continue
+				}
+				return nil, fmt.Errorf("failed to check license on pod %s after %d retries: %w", pod, retries, err)
+			}
+			if strings.Contains(string(payload), expected) {
+				// Success
+				lastErr = nil
+				break
+			}
+			lastErr = fmt.Errorf("license manager not configured on pod %s (expected: %s)", pod, expected)
+			if attempt < retries {
+				time.Sleep(retryInterval)
+				continue
+			}
 		}
-		if !strings.Contains(string(payload), expected) {
-			return nil, fmt.Errorf("license manager not configured on pod %s", pod)
+		if lastErr != nil {
+			return nil, lastErr
 		}
 	}
 	return map[string]string{"pods": strings.Join(pods, ","), "expected": expected}, nil
