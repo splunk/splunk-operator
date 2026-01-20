@@ -1840,6 +1840,7 @@ func GetSmartstoreVolumesConfig(ctx context.Context, client splcommon.Controller
 			volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
+use_sdk = true
 path = s3://%s
 remote.s3.access_key = %s
 remote.s3.secret_key = %s
@@ -1851,6 +1852,7 @@ remote.s3.auth_region = %s
 			volumesConf = fmt.Sprintf(`%s
 [volume:%s]
 storageType = remote
+use_sdk = true
 path = s3://%s
 remote.s3.endpoint = %s
 remote.s3.auth_region = %s
