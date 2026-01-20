@@ -208,6 +208,14 @@ access = read : [ * ], write : [ admin ]
 
 	// Command to reload app configuration
 	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+
+	// Name of the telemetry configmap: <namePrefix>-manager-telemetry
+	telConfigMapTemplateStr = "%smanager-telemetry"
+
+	// Name of the telemetry app: app_tel_for_sok8s
+	telAppNameStr     = "app_tel_for_sok8s"
+	telSOKVersionKey  = "version"
+	telLicenseInfoKey = "license_info"
 )
 
 const (
@@ -362,4 +370,9 @@ func GetLivenessDriverFileDir() string {
 // GetStartupScriptName returns the name of startup probe script on pod
 func GetStartupScriptName() string {
 	return startupScriptName
+}
+
+// GetTelemetryConfigMapName returns the name of telemetry configmap
+func GetTelemetryConfigMapName(namePrefix string) string {
+	return fmt.Sprintf(telConfigMapTemplateStr, namePrefix)
 }
