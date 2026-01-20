@@ -2504,8 +2504,7 @@ func ApplyKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr splc
 		"name", cr.GetName(),
 		"namespace", cr.GetNamespace())
 
-	// Use namespace-scoped KVService name
-	kvServiceName := GetKVServiceName(cr.GetNamespace())
+	kvServiceName := GetKVServiceName()
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      kvServiceName,
@@ -2574,8 +2573,7 @@ func DeleteKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr spl
 		"name", cr.GetName(),
 		"namespace", cr.GetNamespace())
 
-	// Use namespace-scoped KVService name
-	kvServiceName := GetKVServiceName(cr.GetNamespace())
+	kvServiceName := GetKVServiceName()
 	namespacedName := types.NamespacedName{
 		Namespace: cr.GetNamespace(),
 		Name:      kvServiceName,
@@ -2620,9 +2618,9 @@ func DeleteKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr spl
 	return nil
 }
 
-// GetKVServiceName returns the KVService CR name for a namespace
-func GetKVServiceName(namespace string) string {
-	return fmt.Sprintf("splunk-%s-kvservice", namespace)
+// GetKVServiceName returns the fixed KVService CR name
+func GetKVServiceName() string {
+	return splcommon.KVServiceCrName
 }
 
 // hasOwnerReference checks if the given CR is already an owner

@@ -3310,7 +3310,7 @@ func TestApplyKVServiceCR(t *testing.T) {
 
 		// Verify KVService was created
 		var kvService enterpriseApi.KVService
-		kvServiceName := GetKVServiceName(standalone.GetNamespace())
+		kvServiceName := GetKVServiceName()
 		err = client.Get(ctx, types.NamespacedName{Name: kvServiceName, Namespace: standalone.GetNamespace()}, &kvService)
 		if err != nil {
 			t.Errorf("KVService should exist: %v", err)
@@ -3340,7 +3340,7 @@ func TestApplyKVServiceCR(t *testing.T) {
 		}
 
 		// Pre-create KVService with first owner
-		kvServiceName := GetKVServiceName(standalone.GetNamespace())
+		kvServiceName := GetKVServiceName()
 		existingKVService := &enterpriseApi.KVService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kvServiceName,
@@ -3376,7 +3376,7 @@ func TestApplyKVServiceCR(t *testing.T) {
 
 	t.Run("does not duplicate owner reference", func(t *testing.T) {
 		// Pre-create KVService with owner already set
-		kvServiceName := GetKVServiceName(standalone.GetNamespace())
+		kvServiceName := GetKVServiceName()
 		existingKVService := &enterpriseApi.KVService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kvServiceName,
@@ -3444,7 +3444,7 @@ func TestDeleteKVServiceCR(t *testing.T) {
 	}
 
 	t.Run("removes owner reference when multiple owners exist", func(t *testing.T) {
-		kvServiceName := GetKVServiceName(standalone.GetNamespace())
+		kvServiceName := GetKVServiceName()
 		existingKVService := &enterpriseApi.KVService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kvServiceName,
@@ -3488,7 +3488,7 @@ func TestDeleteKVServiceCR(t *testing.T) {
 	})
 
 	t.Run("deletes KVService when last owner is removed", func(t *testing.T) {
-		kvServiceName := GetKVServiceName(standalone.GetNamespace())
+		kvServiceName := GetKVServiceName()
 		existingKVService := &enterpriseApi.KVService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kvServiceName,
@@ -3530,8 +3530,8 @@ func TestDeleteKVServiceCR(t *testing.T) {
 }
 
 func TestGetKVServiceName(t *testing.T) {
-	name := GetKVServiceName("test-namespace")
-	expected := "splunk-test-namespace-kvservice"
+	name := GetKVServiceName()
+	expected := "splunk-kvservice"
 	if name != expected {
 		t.Errorf("GetKVServiceName returned %s, expected %s", name, expected)
 	}
