@@ -265,10 +265,18 @@ func (c *Client) doRequest(ctx context.Context, port int, method, path string, q
 		req.Header.Set(key, value)
 	}
 
+	// Note: InsecureSkipVerify is required for E2E testing because:
+	// 1. Splunk pods use self-signed certificates by default
+	// 2. This client connects via port-forward to localhost (127.0.0.1)
+	// 3. Certificate hostname verification would fail for localhost connections
+	// 4. This is test framework code, not production code
+	// #nosec G402 -- This is intentional for E2E test framework connecting to self-signed Splunk certs
 	client := &http.Client{
 		Timeout: 60 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec // Required for self-signed Splunk certs in E2E tests
+			},
 		},
 	}
 	resp, err := client.Do(req)

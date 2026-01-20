@@ -153,8 +153,8 @@ func (r *Runner) runTopologyGroup(ctx context.Context, group topologyGroup) []re
 		LicenseMasterRef:     strings.TrimSpace(group.params["license_master_ref"]),
 		MonitoringConsoleRef: strings.TrimSpace(group.params["monitoring_console_ref"]),
 		ClusterManagerKind:   strings.TrimSpace(group.params["cluster_manager_kind"]),
-		IndexerReplicas:      int32(intParam(group.params, "indexer_replicas", defaultIndexerReplicas(group.kind))),
-		SHCReplicas:          int32(intParam(group.params, "shc_replicas", defaultSHCReplicas(group.kind))),
+		IndexerReplicas:      int32Param(group.params, "indexer_replicas", int32(defaultIndexerReplicas(group.kind))),
+		SHCReplicas:          int32Param(group.params, "shc_replicas", int32(defaultSHCReplicas(group.kind))),
 		WithSHC:              boolParam(group.params, "with_shc", true),
 		SiteCount:            intParam(group.params, "site_count", defaultSiteCount(group.kind)),
 	}
@@ -304,6 +304,20 @@ func intParam(params map[string]string, key string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+// int32Param safely parses a parameter as int32 with bounds checking.
+// Returns fallback if the value is empty, invalid, or out of int32 range.
+func int32Param(params map[string]string, key string, fallback int32) int32 {
+	raw := strings.TrimSpace(params[key])
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil {
+		return fallback
+	}
+	return int32(value)
 }
 
 func boolParam(params map[string]string, key string, fallback bool) bool {
