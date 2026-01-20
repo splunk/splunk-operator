@@ -79,7 +79,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
 
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
-		{MetaName: "*v4.KVService-test-splunk-test-kvservice"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -111,7 +111,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
 
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
-		{MetaName: "*v4.KVService-test-splunk-test-kvservice"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
