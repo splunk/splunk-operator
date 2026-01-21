@@ -1676,15 +1676,60 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		return false, err
 	}
 
+	// NOTE: In some environments (notably Splunk in FIPS mode), the Splunk CLI emits a banner
+	// like:
+	//   "FIPS provider enabled. ..."
+	// and sometimes a CLI TLS warning, before the actual bundle push status line is written.
+	//
+	// The operator runs `apply shcluster-bundle ... &> status_file &` asynchronously and then
+	// polls the status file. If we treat "banner-only" output as an error, we can prematurely
+	// reset state to Pending and re-trigger bundle push, causing collisions like:
+	//   ConfDeploymentException: Can't start deployment job as one is already running!
+	//
+	// So we normalize banner-only / known benign warning lines away and only treat remaining
+	// output as an error if it isn't the known success string.
+	normalizedOut := normalizeSHCBundlePushStatusOutput(stdOut)
+
 	// Check if we did not get the desired output in the status file. There can be 2 scenarios -
 	// 1. stdOut is empty, which means bundle push is still in progress
 	// 2. stdOut has some other string other than the bundle push success message
-	if stdOut == "" {
+	if normalizedOut == "" {
 		scopedLog.Info("SHC Bundle Push is still in progress")
 		return false, nil
-	} else if !strings.Contains(stdOut, shcBundlePushCompleteStr) {
+	}
+
+	// The completion constant includes a trailing newline, but we strip whitespace in normalizeSHCBundlePushStatusOutput,
+	// so check for the trimmed message.
+	completeStr := strings.TrimSpace(shcBundlePushCompleteStr)
+
+	// Happy path: bundle push complete.
+	if strings.Contains(normalizedOut, completeStr) {
+		// now that bundle push is complete, remove the status file
+		err = shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
+		if err != nil {
+			scopedLog.Error(err, "removing SHC Bundle Push status file failed, will retry again.")
+
+			// reset the state to BundlePushInProgress so that we can check the status of file again.
+			setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
+
+			// don't return error from here, so that we can retry cleaning the file in next run
+			return false, nil
+		}
+
+		return true, nil
+	}
+
+	// If Splunk reports that a deployment job is already running, treat this as "still in progress"
+	// (don't reset to Pending / retrigger bundle push, which can create a retry storm).
+	if strings.Contains(normalizedOut, "ConfDeploymentException: Can't start deployment job as one is already running!") {
+		scopedLog.Info("SHC Bundle Push appears to already be running; will recheck status", "statusFileOutput", normalizedOut)
+		return false, nil
+	}
+
+	// Any other non-empty output that isn't the known success string is treated as an error.
+	if !strings.Contains(normalizedOut, completeStr) {
 		// this means there was an error in bundle push command
-		err = fmt.Errorf("there was an error in applying SHC Bundle, err=\"%v\"", stdOut)
+		err = fmt.Errorf("there was an error in applying SHC Bundle, err=\"%v\"", normalizedOut)
 		scopedLog.Error(err, "SHC Bundle push status file reported an error while applying bundle")
 
 		// reset the bundle push state to Pending, so that we retry again.
@@ -1698,19 +1743,41 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		return false, err
 	}
 
-	// now that bundle push is complete, remove the status file
-	err = shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
-	if err != nil {
-		scopedLog.Error(err, "removing SHC Bundle Push status file failed, will retry again.")
+	// Defensive fallback: treat as still in progress.
+	return false, nil
+}
 
-		// reset the state to BundlePushInProgress so that we can check the status of file again.
-		setBundlePushState(ctx, shcPlaybookContext.afwPipeline, enterpriseApi.BundlePushInProgress)
-
-		// don't return error from here, so that we can retry cleaning the file in next run
-		return false, nil
+// normalizeSHCBundlePushStatusOutput strips known benign Splunk CLI banner/warning lines
+// from the SHC bundle push status file output. This allows the operator to treat
+// "banner-only" output as still-in-progress rather than as an error.
+func normalizeSHCBundlePushStatusOutput(stdOut string) string {
+	out := strings.TrimSpace(stdOut)
+	if out == "" {
+		return ""
 	}
 
-	return true, nil
+	lines := strings.Split(out, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+
+		// FIPS banner emitted by Splunk CLI in FIPS-enabled environments
+		if strings.HasPrefix(line, "FIPS provider enabled.") {
+			continue
+		}
+
+		// Common benign CLI warning (often appears right after the FIPS banner)
+		if strings.HasPrefix(line, "WARNING: Server Certificate Hostname Validation is disabled.") {
+			continue
+		}
+
+		kept = append(kept, line)
+	}
+
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 // triggerBundlePush triggers the bundle push operation for SHC
