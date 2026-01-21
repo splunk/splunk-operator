@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,8 +109,6 @@ func parseLevel(s string) slog.Level {
 	switch strings.ToLower(s) {
 	case "debug":
 		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
 	case "warn", "warning":
 		return slog.LevelWarn
 	case "error":
@@ -209,8 +207,6 @@ func LevelToString(level slog.Level) string {
 	switch level {
 	case slog.LevelDebug:
 		return "debug"
-	case slog.LevelInfo:
-		return "info"
 	case slog.LevelWarn:
 		return "warn"
 	case slog.LevelError:

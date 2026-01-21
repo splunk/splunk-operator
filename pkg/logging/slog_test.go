@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 Splunk Inc. All rights reserved.
+// Copyright (c) 2018-2026 Splunk Inc. All rights reserved.
 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -239,25 +241,19 @@ func TestNewHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := NewHandler(tt.config)
-			if handler == nil {
-				t.Error("NewHandler returned nil")
-			}
+			assert.NotNil(t, handler, "NewHandler returned nil")
 		})
 	}
 }
 
 func TestNewProductionHandler(t *testing.T) {
 	handler := NewProductionHandler()
-	if handler == nil {
-		t.Error("NewProductionHandler returned nil")
-	}
+	assert.NotNil(t, handler, "NewProductionHandler returned nil")
 }
 
 func TestNewDevelopmentHandler(t *testing.T) {
 	handler := NewDevelopmentHandler()
-	if handler == nil {
-		t.Error("NewDevelopmentHandler returned nil")
-	}
+	assert.NotNil(t, handler, "NewDevelopmentHandler returned nil")
 }
 
 func TestSetupLogger(t *testing.T) {
@@ -268,14 +264,10 @@ func TestSetupLogger(t *testing.T) {
 	}
 
 	logger := SetupLogger(cfg)
-	if logger == nil {
-		t.Error("SetupLogger returned nil")
-	}
+	assert.NotNil(t, logger, "SetupLogger returned nil")
 
 	// Verify it's set as default
-	if slog.Default() != logger {
-		t.Error("Logger was not set as default")
-	}
+	assert.Equal(t, logger, slog.Default(), "Logger was not set as default")
 }
 
 func TestSetupLoggerWithAttrs(t *testing.T) {
@@ -286,9 +278,7 @@ func TestSetupLoggerWithAttrs(t *testing.T) {
 	}
 
 	logger := SetupLoggerWithAttrs(cfg, "splunk-operator", "1.0.0", "abc123")
-	if logger == nil {
-		t.Error("SetupLoggerWithAttrs returned nil")
-	}
+	assert.NotNil(t, logger, "SetupLoggerWithAttrs returned nil")
 }
 
 func TestLevelConversions(t *testing.T) {
@@ -409,10 +399,6 @@ func TestSensitiveDataRedactionInLogs(t *testing.T) {
 		t.Error("Non-sensitive data (username) was incorrectly redacted")
 	}
 }
-
-// ============================================================================
-// FAILURE AND EDGE CASE TESTS
-// ============================================================================
 
 func TestLoadConfig_InvalidEnvironmentValues(t *testing.T) {
 	tests := []struct {
@@ -757,9 +743,7 @@ func TestNewHandler_InvalidFormat(t *testing.T) {
 	}
 
 	handler := NewHandler(cfg)
-	if handler == nil {
-		t.Fatal("NewHandler returned nil for invalid format")
-	}
+	assert.NotNil(t, handler, "NewHandler returned nil for invalid format")
 
 	// Verify it creates a JSON handler (default) by checking output format
 	var buf bytes.Buffer
@@ -818,9 +802,7 @@ func TestSetupLoggerWithAttrs_EmptyValues(t *testing.T) {
 
 	// Test with empty strings
 	logger := SetupLoggerWithAttrs(cfg, "", "", "")
-	if logger == nil {
-		t.Error("SetupLoggerWithAttrs returned nil for empty values")
-	}
+	assert.NotNil(t, logger, "SetupLoggerWithAttrs returned nil for empty values")
 
 	// Test logging still works
 	var buf bytes.Buffer
