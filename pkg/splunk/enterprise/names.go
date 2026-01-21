@@ -363,3 +363,8 @@ func GetLivenessDriverFileDir() string {
 func GetStartupScriptName() string {
 	return startupScriptName
 }
+
+// GetKVServiceName returns the fixed KVService CR name
+func GetKVServiceName() string {
+	return splcommon.KVServiceCrName
+}

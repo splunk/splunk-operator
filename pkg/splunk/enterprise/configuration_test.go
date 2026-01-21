@@ -1816,3 +1816,19 @@ func TestValidateLivenessProbe(t *testing.T) {
 		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
 }
+
+func TestGetKVServiceConnectionString(t *testing.T) {
+	ctx := context.TODO()
+	client := spltest.NewMockClient()
+	namespace := "test-namespace"
+
+	// Test that the connection string is correctly formatted
+	result := getKVServiceConnectionString(ctx, client, namespace)
+
+	// Expected format: splunk-kvservice.test-namespace.svc.cluster.local:443
+	expected := fmt.Sprintf("%s.%s.svc.cluster.local:%d", splcommon.KVServiceCrName, namespace, 443)
+
+	if result != expected {
+		t.Errorf("getKVServiceConnectionString() = %s; want %s", result, expected)
+	}
+}

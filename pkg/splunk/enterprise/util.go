@@ -2618,11 +2618,6 @@ func DeleteKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr spl
 	return nil
 }
 
-// GetKVServiceName returns the fixed KVService CR name
-func GetKVServiceName() string {
-	return splcommon.KVServiceCrName
-}
-
 // hasOwnerReference checks if the given CR is already an owner
 func hasOwnerReference(ownerRefs []metav1.OwnerReference, cr splcommon.MetaObject) bool {
 	for _, ref := range ownerRefs {
