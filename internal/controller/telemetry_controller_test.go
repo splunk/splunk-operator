@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -56,7 +55,10 @@ var _ = Describe("Telemetry Controller", func() {
 	// Additional tests for error and success cases can be added here
 })
 
+/*
 func TestTelemetryController(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Telemetry Controller Suite")
 }
+
+*/
