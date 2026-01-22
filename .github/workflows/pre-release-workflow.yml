@@ -27,6 +27,8 @@ on:
       new_enterprise_version:
         description: 'NEW ENTERPRISE IMAGE VERSION'
         required: true
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   automated-release:
     name: Automated Pre Release
@@ -41,8 +43,9 @@ jobs:
         ', github.ref)
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
-
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Deep Fetch
       run: |
         git fetch --prune --unshallow

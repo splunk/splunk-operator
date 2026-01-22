@@ -10,6 +10,8 @@ on:
       - develop
       - main
       - feature**
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
@@ -19,7 +21,9 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
@@ -96,7 +100,9 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Checkcout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
       - name: Set Test Cluster Name
         id: set-cluster-name
         uses: ./.github/actions/set-cluster-name

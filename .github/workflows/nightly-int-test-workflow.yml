@@ -16,7 +16,7 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
       with:
         ref: develop
     - name: Dotenv Action
@@ -93,7 +93,7 @@ jobs:
             echo "CLUSTER_WORKERS=5" >> $GITHUB_ENV
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
         with:
           ref: develop
       - name: Set Test Cluster Name
@@ -217,7 +217,7 @@ jobs:
     steps:
     - name: Set up cosign
       uses: sigstore/cosign-installer@main
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
       with:
           ref: develop
     - name: Dotenv Action
@@ -253,9 +253,8 @@ jobs:
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-    - name: Verify Signed Splunk Operator image 
+    - name: Verify Signed Splunk Operator image
       run: |
         cosign verify --key env://COSIGN_PUBLIC_KEY  ${{ secrets.ECR_REPOSITORY }}/${{ env.SPLUNK_OPERATOR_IMAGE_NAME }}:${{ github.sha }}
       env:
         COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
- 

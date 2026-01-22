@@ -52,7 +52,7 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           ref: develop
       - name: Set Test Cluster Name

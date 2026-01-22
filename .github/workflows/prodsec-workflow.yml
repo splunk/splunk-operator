@@ -4,13 +4,33 @@ permissions:
   packages: write
   pull-requests: write
 on:
-  pull_request: {}
+  # See .github/README.md for PR testing strategy documentation
+  pull_request_target:
+    branches:
+      - 'develop'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    # Commented to enable PR testing before merging to main
+    # TODO: Uncomment after merge
+    # branches-ignore:
+    #   - 'develop'
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   push:
     branches:
-    - main
-    - develop
+      - main
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 jobs:
+  approval-gate:
+    uses: ./.github/workflows/approval-gate.yml
   semgrep:
+    needs: approval-gate
     name: Semgrep Scanner
     runs-on: ubuntu-24.04
     env:
@@ -18,9 +38,12 @@ jobs:
     container:
       image: returntocorp/semgrep
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - run: semgrep ci
   FOSSA-scanner:
+    needs: approval-gate
     runs-on: ubuntu-latest
     env:
       SPLUNK_ENTERPRISE_IMAGE: ${{ secrets.SPLUNK_ENTERPRISE_IMAGE }}
@@ -28,11 +51,13 @@ jobs:
       ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
       S3_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.approval-gate.outputs.commit-sha }}
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359
-    - name: Run FOSSA Test 
+    - name: Run FOSSA Test
       uses: fossas/fossa-action@main
       with:
         api-key: ${{secrets.FOSSA_API_TOKEN}}

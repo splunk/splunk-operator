@@ -4,12 +4,16 @@ permissions:
   packages: write
   pull-requests: write
 on: [push]
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   biased_lang:
     runs-on: ubuntu-latest
     name: Detecting Biased Language
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
       - id: biased-lang-linter
         uses: splunk/biased-lang-linter@main
         continue-on-error: false

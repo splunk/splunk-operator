@@ -11,6 +11,8 @@ on:
         description: 'Run Operator in Cluster Wide Mode. Type false to run cluster in namespace mode'
         required: false
         default: "true"
+env:
+  CHECKOUT_REF: ${{ github.ref }}
 jobs:
   int-tests:
     strategy:
@@ -57,7 +59,9 @@ jobs:
             echo "CLUSTER_NODES=2" >> $GITHUB_ENV
           fi
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
       - name: Set Test Cluster Name
         id: set-cluster-name
         uses: ./.github/actions/set-cluster-name
@@ -179,7 +183,9 @@ jobs:
       SPLUNK_OPERATOR_IMAGE_NAME: splunk/splunk-operator
       TAG: int
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ env.CHECKOUT_REF }}
     - name: Dotenv Action
       id: dotenv
       uses: falti/dotenv-action@d4d12eaa0e1dd06d5bdc3d7af3bf4c8c93cb5359

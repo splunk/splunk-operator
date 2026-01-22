@@ -1,0 +1,67 @@
+name: Approval Gate
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        description: 'Environment name for approval'
+        required: false
+        type: string
+        default: 'external-contributor-approval'
+    outputs:
+      commit-sha:
+        description: 'The commit SHA (PR head for PRs, pushed commit for push events)'
+        value: ${{ jobs.get-commit-info.outputs.commit-sha }}
+      commit-message:
+        description: 'The commit message'
+        value: ${{ jobs.get-commit-info.outputs.commit-message }}
+
+jobs:
+  # Get commit info from the PR head (not the base branch).
+  # This is necessary because with 'pull_request_target', GITHUB_SHA and the default
+  # checkout point to the BASE branch, not the PR's code. We explicitly use
+  # 'github.event.pull_request.head.sha' to get the actual PR commit info.
+  # For 'push' events, we fall back to 'github.sha' (the pushed commit).
+  get-commit-info:
+    runs-on: ubuntu-latest
+    outputs:
+      commit-sha: ${{ steps.get-sha.outputs.commit_sha }}
+      commit-message: ${{ steps.get-message.outputs.commit_message }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Get commit SHA
+        id: get-sha
+        run: |
+          COMMIT_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "Commit SHA: ${COMMIT_SHA}"
+      - name: Get commit message
+        id: get-message
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Commit message:"
+          echo "$COMMIT_MSG"
+  approval-gate:
+    needs: get-commit-info
+    runs-on: ubuntu-latest
+    environment: ${{
+            (github.event_name == 'pull_request_target' &&
+            !contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association))
+            && inputs.environment-name
+            || ''
+        }}
+    steps:
+      - name: Approval status
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Author association: ${{ github.event.pull_request.author_association }}"
+          echo "Approval granted or not required"
+
