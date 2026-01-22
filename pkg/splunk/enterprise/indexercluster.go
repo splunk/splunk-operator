@@ -127,6 +127,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// check if deletion has been requested
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		// Remove owner reference from KVService CR (delete if last owner)
+		err = DeleteKVServiceCR(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "DeleteKVServiceCR", fmt.Sprintf("remove KVService owner reference failed %s", err.Error()))
+			return result, err
+		}
+
 		DeleteOwnerReferencesForResources(ctx, client, cr, SplunkIndexer)
 
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
@@ -152,6 +159,13 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkIndexer, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create/update service for indexer cluster failed %s", err.Error()))
+		return result, err
+	}
+
+	// create or update KVService CR with owner reference
+	err = ApplyKVServiceCR(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
 		return result, err
 	}
 

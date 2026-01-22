@@ -20,6 +20,9 @@ import "fmt"
 type contextKey string
 
 const (
+	// KVServiceCrName is the fixed name for the KVService CR
+	KVServiceCrName = "splunk-kvservice"
+
 	// namespace scoped secret name
 	namespaceScopedSecretNameTemplateStr = "splunk-%s-secret"
 

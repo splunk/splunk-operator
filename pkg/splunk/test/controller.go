@@ -71,6 +71,8 @@ func enterpriseObjCopier(dst, src *client.Object) bool {
 		*dstP.(*enterpriseApi.SearchHeadCluster) = *srcP.(*enterpriseApi.SearchHeadCluster)
 	case *enterpriseApi.MonitoringConsole:
 		*dstP.(*enterpriseApi.MonitoringConsole) = *srcP.(*enterpriseApi.MonitoringConsole)
+	case *enterpriseApi.KVService:
+		*dstP.(*enterpriseApi.KVService) = *srcP.(*enterpriseApi.KVService)
 	default:
 		return false
 	}

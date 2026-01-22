@@ -79,6 +79,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
 
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -110,6 +111,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		{MetaName: "*v1.Service-test-splunk-stack1-search-head-service"},
 
 		{MetaName: "*v1.Service-test-splunk-stack1-deployer-service"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-deployer"},
 
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -142,8 +144,8 @@ func TestApplySearchHeadCluster(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[7], funcCalls[11], funcCalls[13], funcCalls[14], funcCalls[18], funcCalls[20]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[7], createFuncCalls[19]}, "List": {listmockCall[0], listmockCall[0]}}
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",

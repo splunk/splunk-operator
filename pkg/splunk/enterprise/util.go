@@ -2494,6 +2494,156 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	return err
 }
 
+// ApplyKVServiceCR ensures the KVService CR exists with the current CR as an owner.
+// - If KVService doesn't exist, create it with the current CR as owner
+// - If KVService exists but current CR is not an owner, add owner reference
+func ApplyKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("ApplyKVServiceCR").WithValues(
+		"kind", cr.GetObjectKind().GroupVersionKind().Kind,
+		"name", cr.GetName(),
+		"namespace", cr.GetNamespace())
+
+	kvServiceName := GetKVServiceName()
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      kvServiceName,
+	}
+
+	var existingKVService enterpriseApi.KVService
+	if err := c.Get(ctx, namespacedName, &existingKVService); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Failed to get KVService CR")
+			return err
+		}
+
+		// KVService doesn't exist, create it
+		scopedLog.Info("Creating KVService CR")
+		kvService := &enterpriseApi.KVService{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: enterpriseApi.GroupVersion.String(),
+				Kind:       "KVService",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kvServiceName,
+				Namespace: cr.GetNamespace(),
+				OwnerReferences: []metav1.OwnerReference{
+					splcommon.AsOwner(cr, false), // Not controller, just owner
+				},
+			},
+			Spec: enterpriseApi.KVServiceSpec{},
+		}
+
+		err = splutil.CreateResource(ctx, c, kvService)
+		if err != nil {
+			scopedLog.Error(err, "Failed to create KVService CR")
+			return err
+		}
+		scopedLog.Info("Successfully created KVService CR")
+		return nil
+	}
+
+	// KVService exists, check if current CR is already an owner
+	if hasOwnerReference(existingKVService.GetOwnerReferences(), cr) {
+		scopedLog.Info("KVService CR already has owner reference for this CR")
+		return nil
+	}
+
+	// Add owner reference for this CR
+	scopedLog.Info("Adding owner reference to existing KVService CR")
+	ownerRefs := existingKVService.GetOwnerReferences()
+	ownerRefs = append(ownerRefs, splcommon.AsOwner(cr, false))
+	existingKVService.SetOwnerReferences(ownerRefs)
+
+	err := c.Update(ctx, &existingKVService)
+	if err != nil {
+		scopedLog.Error(err, "Failed to add owner reference to KVService CR")
+		return err
+	}
+	scopedLog.Info("Successfully added owner reference to KVService CR")
+	return nil
+}
+
+// DeleteKVServiceCR removes the owner reference for the current CR from KVService.
+// If this is the last owner, the KVService CR is deleted.
+func DeleteKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("DeleteKVServiceCR").WithValues(
+		"kind", cr.GetObjectKind().GroupVersionKind().Kind,
+		"name", cr.GetName(),
+		"namespace", cr.GetNamespace())
+
+	kvServiceName := GetKVServiceName()
+	namespacedName := types.NamespacedName{
+		Namespace: cr.GetNamespace(),
+		Name:      kvServiceName,
+	}
+
+	var existingKVService enterpriseApi.KVService
+	err := c.Get(ctx, namespacedName, &existingKVService)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// KVService doesn't exist, nothing to do
+			scopedLog.Info("KVService CR not found, nothing to clean up")
+			return nil
+		}
+		scopedLog.Error(err, "Failed to get KVService CR for deletion cleanup")
+		return err
+	}
+
+	// Remove owner reference for this CR
+	ownerRefs := existingKVService.GetOwnerReferences()
+	newOwnerRefs := removeOwnerReference(ownerRefs, cr)
+
+	if len(newOwnerRefs) == 0 {
+		// This was the last owner, delete the KVService CR
+		scopedLog.Info("Deleting KVService CR as this is the last owner")
+		err = c.Delete(ctx, &existingKVService)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Failed to delete KVService CR")
+			return err
+		}
+		scopedLog.Info("Successfully deleted KVService CR")
+		return nil
+	}
+
+	// Update with remaining owner references
+	existingKVService.SetOwnerReferences(newOwnerRefs)
+	err = c.Update(ctx, &existingKVService)
+	if err != nil {
+		scopedLog.Error(err, "Failed to update KVService CR owner references")
+		return err
+	}
+	scopedLog.Info("Removed owner reference from KVService CR")
+	return nil
+}
+
+// GetKVServiceName returns the fixed KVService CR name
+func GetKVServiceName() string {
+	return splcommon.KVServiceCrName
+}
+
+// hasOwnerReference checks if the given CR is already an owner
+func hasOwnerReference(ownerRefs []metav1.OwnerReference, cr splcommon.MetaObject) bool {
+	for _, ref := range ownerRefs {
+		if ref.UID == cr.GetUID() {
+			return true
+		}
+	}
+	return false
+}
+
+// removeOwnerReference removes the owner reference for the given CR and returns the updated list
+func removeOwnerReference(ownerRefs []metav1.OwnerReference, cr splcommon.MetaObject) []metav1.OwnerReference {
+	newRefs := make([]metav1.OwnerReference, 0, len(ownerRefs))
+	for _, ref := range ownerRefs {
+		if ref.UID != cr.GetUID() {
+			newRefs = append(newRefs, ref)
+		}
+	}
+	return newRefs
+}
+
 // loadFixture loads a JSON fixture file from the testdata/fixtures directory
 // and returns it as compact JSON (minified, single-line)
 func loadFixture(t *testing.T, filename string) string {

@@ -68,6 +68,7 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -87,6 +88,7 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -95,7 +97,6 @@ func TestApplyStandalone(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-stack1-standalone-smartstore"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
-		//{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 	}
 	deltaCalls := []spltest.MockFuncCall{
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
@@ -115,8 +116,8 @@ func TestApplyStandalone(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[11], funcCalls[14]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[14]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[12], funcCalls[15]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[15]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -213,6 +214,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
@@ -237,6 +239,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		{MetaName: "*v1.ConfigMap-test-splunk-standalone-stack1-configmap"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-headless"},
 		{MetaName: "*v1.Service-test-splunk-stack1-standalone-service"},
+		{MetaName: "*v4.KVService-test-splunk-kvservice"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-standalone"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
 		{MetaName: "*v1.ConfigMap-test-splunk-test-probe-configmap"},
@@ -262,8 +265,8 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 	listmockCall := []spltest.MockFuncCall{
 		{ListOpts: listOpts}}
 
-	createCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[10], funcCalls[12], funcCalls[15]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	createCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[11], funcCalls[13], funcCalls[16]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
+	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[10]}, "List": {listmockCall[0]}}
 
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{

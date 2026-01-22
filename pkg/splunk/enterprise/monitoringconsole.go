@@ -112,6 +112,13 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 			}
 		}
 
+		// Remove owner reference from KVService CR (delete if last owner)
+		err = DeleteKVServiceCR(ctx, client, cr)
+		if err != nil {
+			eventPublisher.Warning(ctx, "DeleteKVServiceCR", fmt.Sprintf("remove KVService owner reference failed %s", err.Error()))
+			return result, err
+		}
+
 		terminating, err := splctrl.CheckForDeletion(ctx, cr, client)
 		if terminating && err != nil { // don't bother if no error, since it will just be removed immmediately after
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
@@ -132,6 +139,13 @@ func ApplyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkMonitoringConsole, false))
 	if err != nil {
 		eventPublisher.Warning(ctx, "ApplyService", fmt.Sprintf("create or update regular service failed %s", err.Error()))
+		return result, err
+	}
+
+	// create or update KVService CR with owner reference
+	err = ApplyKVServiceCR(ctx, client, cr)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
 		return result, err
 	}
 

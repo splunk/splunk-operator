@@ -3278,3 +3278,261 @@ func TestGetCurrentImage(t *testing.T) {
 	}
 
 }
+
+func TestApplyKVServiceCR(t *testing.T) {
+	ctx := context.TODO()
+
+	// Setup scheme
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	// Create a Standalone CR to use as owner
+	standalone := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Standalone",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-standalone",
+			Namespace: "test",
+			UID:       "test-uid-1",
+		},
+	}
+
+	t.Run("creates KVService when it doesn't exist", func(t *testing.T) {
+		client := fake.NewClientBuilder().WithScheme(sch).Build()
+
+		err := ApplyKVServiceCR(ctx, client, standalone)
+		if err != nil {
+			t.Errorf("ApplyKVServiceCR should not return error: %v", err)
+		}
+
+		// Verify KVService was created
+		var kvService enterpriseApi.KVService
+		kvServiceName := GetKVServiceName()
+		err = client.Get(ctx, types.NamespacedName{Name: kvServiceName, Namespace: standalone.GetNamespace()}, &kvService)
+		if err != nil {
+			t.Errorf("KVService should exist: %v", err)
+		}
+
+		// Verify owner reference
+		if len(kvService.GetOwnerReferences()) != 1 {
+			t.Errorf("KVService should have 1 owner reference, got %d", len(kvService.GetOwnerReferences()))
+		}
+		if kvService.GetOwnerReferences()[0].UID != standalone.GetUID() {
+			t.Errorf("Owner reference UID mismatch")
+		}
+	})
+
+	t.Run("adds owner reference when KVService exists", func(t *testing.T) {
+		// Create another CR
+		standalone2 := &enterpriseApi.Standalone{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Standalone",
+				APIVersion: "enterprise.splunk.com/v4",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-standalone-2",
+				Namespace: "test",
+				UID:       "test-uid-2",
+			},
+		}
+
+		// Pre-create KVService with first owner
+		kvServiceName := GetKVServiceName()
+		existingKVService := &enterpriseApi.KVService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kvServiceName,
+				Namespace: standalone.GetNamespace(),
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "enterprise.splunk.com/v4",
+						Kind:       "Standalone",
+						Name:       standalone.GetName(),
+						UID:        standalone.GetUID(),
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(existingKVService).Build()
+
+		// Add second owner
+		err := ApplyKVServiceCR(ctx, client, standalone2)
+		if err != nil {
+			t.Errorf("ApplyKVServiceCR should not return error: %v", err)
+		}
+
+		// Verify both owner references exist
+		var kvService enterpriseApi.KVService
+		err = client.Get(ctx, types.NamespacedName{Name: kvServiceName, Namespace: standalone.GetNamespace()}, &kvService)
+		if err != nil {
+			t.Errorf("KVService should exist: %v", err)
+		}
+		if len(kvService.GetOwnerReferences()) != 2 {
+			t.Errorf("KVService should have 2 owner references, got %d", len(kvService.GetOwnerReferences()))
+		}
+	})
+
+	t.Run("does not duplicate owner reference", func(t *testing.T) {
+		// Pre-create KVService with owner already set
+		kvServiceName := GetKVServiceName()
+		existingKVService := &enterpriseApi.KVService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kvServiceName,
+				Namespace: standalone.GetNamespace(),
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "enterprise.splunk.com/v4",
+						Kind:       "Standalone",
+						Name:       standalone.GetName(),
+						UID:        standalone.GetUID(),
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(existingKVService).Build()
+
+		// Call again with same owner
+		err := ApplyKVServiceCR(ctx, client, standalone)
+		if err != nil {
+			t.Errorf("ApplyKVServiceCR should not return error: %v", err)
+		}
+
+		// Verify still only 1 owner reference
+		var kvService enterpriseApi.KVService
+		err = client.Get(ctx, types.NamespacedName{Name: kvServiceName, Namespace: standalone.GetNamespace()}, &kvService)
+		if err != nil {
+			t.Errorf("KVService should exist: %v", err)
+		}
+		if len(kvService.GetOwnerReferences()) != 1 {
+			t.Errorf("KVService should still have 1 owner reference, got %d", len(kvService.GetOwnerReferences()))
+		}
+	})
+}
+
+func TestDeleteKVServiceCR(t *testing.T) {
+	ctx := context.TODO()
+
+	// Setup scheme
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	standalone := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Standalone",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-standalone",
+			Namespace: "test",
+			UID:       "test-uid-1",
+		},
+	}
+
+	standalone2 := &enterpriseApi.Standalone{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Standalone",
+			APIVersion: "enterprise.splunk.com/v4",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-standalone-2",
+			Namespace: "test",
+			UID:       "test-uid-2",
+		},
+	}
+
+	t.Run("removes owner reference when multiple owners exist", func(t *testing.T) {
+		kvServiceName := GetKVServiceName()
+		existingKVService := &enterpriseApi.KVService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kvServiceName,
+				Namespace: standalone.GetNamespace(),
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "enterprise.splunk.com/v4",
+						Kind:       "Standalone",
+						Name:       standalone.GetName(),
+						UID:        standalone.GetUID(),
+					},
+					{
+						APIVersion: "enterprise.splunk.com/v4",
+						Kind:       "Standalone",
+						Name:       standalone2.GetName(),
+						UID:        standalone2.GetUID(),
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(existingKVService).Build()
+
+		// Remove first owner
+		err := DeleteKVServiceCR(ctx, client, standalone)
+		if err != nil {
+			t.Errorf("DeleteKVServiceCR should not return error: %v", err)
+		}
+
+		// Verify KVService still exists with 1 owner
+		var kvService enterpriseApi.KVService
+		err = client.Get(ctx, types.NamespacedName{Name: kvServiceName, Namespace: standalone.GetNamespace()}, &kvService)
+		if err != nil {
+			t.Errorf("KVService should still exist: %v", err)
+		}
+		if len(kvService.GetOwnerReferences()) != 1 {
+			t.Errorf("KVService should have 1 owner reference, got %d", len(kvService.GetOwnerReferences()))
+		}
+		if kvService.GetOwnerReferences()[0].UID != standalone2.GetUID() {
+			t.Errorf("Remaining owner should be standalone2")
+		}
+	})
+
+	t.Run("deletes KVService when last owner is removed", func(t *testing.T) {
+		kvServiceName := GetKVServiceName()
+		existingKVService := &enterpriseApi.KVService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kvServiceName,
+				Namespace: standalone.GetNamespace(),
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "enterprise.splunk.com/v4",
+						Kind:       "Standalone",
+						Name:       standalone.GetName(),
+						UID:        standalone.GetUID(),
+					},
+				},
+			},
+		}
+		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(existingKVService).Build()
+
+		// Remove last owner
+		err := DeleteKVServiceCR(ctx, client, standalone)
+		if err != nil {
+			t.Errorf("DeleteKVServiceCR should not return error: %v", err)
+		}
+
+		// Verify KVService was deleted
+		var kvService enterpriseApi.KVService
+		err = client.Get(ctx, types.NamespacedName{Name: kvServiceName, Namespace: standalone.GetNamespace()}, &kvService)
+		if err == nil {
+			t.Errorf("KVService should be deleted")
+		}
+	})
+
+	t.Run("no error when KVService doesn't exist", func(t *testing.T) {
+		client := fake.NewClientBuilder().WithScheme(sch).Build()
+
+		err := DeleteKVServiceCR(ctx, client, standalone)
+		if err != nil {
+			t.Errorf("DeleteKVServiceCR should not return error when KVService doesn't exist: %v", err)
+		}
+	})
+}
+
+func TestGetKVServiceName(t *testing.T) {
+	name := GetKVServiceName()
+	expected := "splunk-kvservice"
+	if name != expected {
+		t.Errorf("GetKVServiceName returned %s, expected %s", name, expected)
+	}
+}
