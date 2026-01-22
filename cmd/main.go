@@ -77,13 +77,11 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var pprofActive bool
-	var logEncoder string
-	var logLevel int
 
-	// slog logging flags
-	var slogLevel string
-	var slogFormat string
-	var slogAddSource bool
+	// Structured logging flags
+	var logLevel string
+	var logFormat string
+	var logAddSource bool
 
 	var leaseDuration time.Duration
 	var renewDeadline time.Duration
@@ -92,18 +90,16 @@ func main() {
 
 	var tlsOpts []func(*tls.Config)
 
-	flag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
-	flag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
 
-	// slog logging flags (can also be set via LOG_LEVEL, LOG_FORMAT, LOG_ADD_SOURCE env vars)
-	flag.StringVar(&slogLevel, "slog-level", "", "slog log level: debug, info, warn, error (overrides LOG_LEVEL env var)")
-	flag.StringVar(&slogFormat, "slog-format", "", "slog output format: json, text (overrides LOG_FORMAT env var)")
-	flag.BoolVar(&slogAddSource, "slog-add-source", false, "add source file:line to slog output (overrides LOG_ADD_SOURCE env var)")
+	// Structured logging flags (can also be set via LOG_LEVEL, LOG_FORMAT, LOG_ADD_SOURCE env vars)
+	flag.StringVar(&logLevel, "log-level", "", "log level: debug, info, warn, error (overrides LOG_LEVEL env var)")
+	flag.StringVar(&logFormat, "log-format", "", "log output format: json, text (overrides LOG_FORMAT env var)")
+	flag.BoolVar(&logAddSource, "log-add-source", false, "add source file:line to log output (overrides LOG_ADD_SOURCE env var)")
 	flag.IntVar(&leaseDurationSecond, "lease-duration", int(leaseDurationSecond), "manager lease duration in seconds")
 	flag.IntVar(&renewDeadlineSecond, "renew-duration", int(renewDeadlineSecond), "manager renew duration in seconds")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
@@ -157,14 +153,17 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	// Initialize slog logging infrastructure
+	// Initialize structured logging infrastructure
 	// Flags take precedence over environment variables
-	var slogAddSourcePtr *bool
-	if slogAddSource {
-		slogAddSourcePtr = &slogAddSource
+	var addSourcePtr *bool
+	if logAddSource {
+		addSourcePtr = &logAddSource
 	}
-	logCfg := logging.LoadConfigWithFlags(slogLevel, slogFormat, slogAddSourcePtr)
-	logger := logging.SetupLoggerWithAttrs(logCfg, "splunk-operator", version, gitCommit)
+	logCfg := logging.LoadConfigWithFlags(logLevel, logFormat, addSourcePtr)
+	logger := logging.SetupLogger(logCfg,
+		slog.String("component", "splunk-operator"),
+		slog.String("version", version),
+		slog.String("build", gitCommit))
 
 	// Log startup information using slog
 	slog.Info("Splunk Operator starting",

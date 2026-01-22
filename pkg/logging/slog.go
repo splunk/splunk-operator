@@ -16,6 +16,7 @@
 package logging
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -62,7 +63,7 @@ func LoadConfig() Config {
 	}
 
 	if level := os.Getenv(EnvLogLevel); level != "" {
-		cfg.Level = parseLevel(level)
+		cfg.Level = LevelFromString(level)
 	}
 
 	if format := os.Getenv(EnvLogFormat); format != "" {
@@ -86,7 +87,7 @@ func LoadConfigWithFlags(levelFlag, formatFlag string, addSourceFlag *bool) Conf
 	cfg := LoadConfig()
 
 	if levelFlag != "" {
-		cfg.Level = parseLevel(levelFlag)
+		cfg.Level = LevelFromString(levelFlag)
 	}
 
 	if formatFlag != "" {
@@ -104,22 +105,13 @@ func LoadConfigWithFlags(levelFlag, formatFlag string, addSourceFlag *bool) Conf
 	return cfg
 }
 
-// parseLevel converts a string to slog.Level
-func parseLevel(s string) slog.Level {
-	switch strings.ToLower(s) {
-	case "debug":
-		return slog.LevelDebug
-	case "warn", "warning":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
-}
-
 // NewHandler creates a new slog.Handler based on the configuration
 func NewHandler(cfg Config) slog.Handler {
+	return NewHandlerWithWriter(cfg, os.Stdout)
+}
+
+// NewHandlerWithWriter creates a new slog.Handler that writes to the specified writer
+func NewHandlerWithWriter(cfg Config, w io.Writer) slog.Handler {
 	opts := &slog.HandlerOptions{
 		Level:       cfg.Level,
 		AddSource:   cfg.AddSource,
@@ -127,34 +119,10 @@ func NewHandler(cfg Config) slog.Handler {
 	}
 
 	if cfg.Format == FormatText {
-		return slog.NewTextHandler(os.Stdout, opts)
+		return slog.NewTextHandler(w, opts)
 	}
 
-	return slog.NewJSONHandler(os.Stdout, opts)
-}
-
-// NewProductionHandler creates a handler optimized for production
-// JSON format, INFO level, no source location, sensitive data redaction
-func NewProductionHandler() slog.Handler {
-	opts := &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
-		AddSource:   false,
-		ReplaceAttr: redactSensitiveData,
-	}
-
-	return slog.NewJSONHandler(os.Stdout, opts)
-}
-
-// NewDevelopmentHandler creates a handler optimized for development
-// Text format, DEBUG level, source location enabled
-func NewDevelopmentHandler() slog.Handler {
-	opts := &slog.HandlerOptions{
-		Level:       slog.LevelDebug,
-		AddSource:   true,
-		ReplaceAttr: redactSensitiveData,
-	}
-
-	return slog.NewTextHandler(os.Stdout, opts)
+	return slog.NewJSONHandler(w, opts)
 }
 
 // redactSensitiveData replaces sensitive field values with [REDACTED]
@@ -176,30 +144,29 @@ func redactSensitiveData(groups []string, a slog.Attr) slog.Attr {
 }
 
 // SetupLogger initializes the global slog logger with the given configuration
-// and returns the configured logger
-func SetupLogger(cfg Config) *slog.Logger {
+// and optional attributes, then returns the configured logger
+func SetupLogger(cfg Config, attrs ...slog.Attr) *slog.Logger {
 	handler := NewHandler(cfg)
 	logger := slog.New(handler)
+	for _, attr := range attrs {
+		logger = logger.With(attr)
+	}
 	slog.SetDefault(logger)
 	return logger
 }
 
-// SetupLoggerWithAttrs initializes the global slog logger with common attributes
-func SetupLoggerWithAttrs(cfg Config, component, version, build string) *slog.Logger {
-	handler := NewHandler(cfg)
-	logger := slog.New(handler)
-	logger = logger.With(
-		slog.String("component", component),
-		slog.String("version", version),
-		slog.String("build", build),
-	)
-	slog.SetDefault(logger)
-	return logger
-}
-
-// LevelFromString converts a string to slog.Level (exported for use in flags)
+// LevelFromString converts a string to slog.Level
 func LevelFromString(s string) slog.Level {
-	return parseLevel(s)
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // LevelToString converts slog.Level to string

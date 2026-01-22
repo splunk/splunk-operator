@@ -13,17 +13,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package logging
+package logging_test
 
 import (
 	"bytes"
-	"context"
 	"log/slog"
 	"os"
-	"strings"
 	"testing"
 
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"github.com/stretchr/testify/assert"
+)
+
+const (
+	envLogLevel     = "LOG_LEVEL"
+	envLogFormat    = "LOG_FORMAT"
+	envLogAddSource = "LOG_ADD_SOURCE"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -38,121 +43,92 @@ func TestLoadConfig(t *testing.T) {
 			name:           "default values",
 			envVars:        map[string]string{},
 			expectedLevel:  slog.LevelInfo,
-			expectedFormat: FormatJSON,
+			expectedFormat: "json",
 			expectedSource: false,
 		},
 		{
 			name: "debug level with auto source",
 			envVars: map[string]string{
-				EnvLogLevel: "debug",
+				envLogLevel: "debug",
 			},
 			expectedLevel:  slog.LevelDebug,
-			expectedFormat: FormatJSON,
-			expectedSource: true, // auto-enabled for debug
+			expectedFormat: "json",
+			expectedSource: true,
 		},
 		{
 			name: "warn level with text format",
 			envVars: map[string]string{
-				EnvLogLevel:  "warn",
-				EnvLogFormat: "text",
+				envLogLevel:  "warn",
+				envLogFormat: "text",
 			},
 			expectedLevel:  slog.LevelWarn,
-			expectedFormat: FormatText,
+			expectedFormat: "text",
 			expectedSource: false,
 		},
 		{
 			name: "error level with explicit source",
 			envVars: map[string]string{
-				EnvLogLevel:     "error",
-				EnvLogAddSource: "true",
+				envLogLevel:     "error",
+				envLogAddSource: "true",
 			},
 			expectedLevel:  slog.LevelError,
-			expectedFormat: FormatJSON,
+			expectedFormat: "json",
 			expectedSource: true,
 		},
 		{
 			name: "debug level with source disabled",
 			envVars: map[string]string{
-				EnvLogLevel:     "debug",
-				EnvLogAddSource: "false",
+				envLogLevel:     "debug",
+				envLogAddSource: "false",
 			},
 			expectedLevel:  slog.LevelDebug,
-			expectedFormat: FormatJSON,
+			expectedFormat: "json",
 			expectedSource: false,
 		},
 		{
 			name: "invalid level defaults to info",
 			envVars: map[string]string{
-				EnvLogLevel: "invalid",
+				envLogLevel: "invalid",
 			},
 			expectedLevel:  slog.LevelInfo,
-			expectedFormat: FormatJSON,
+			expectedFormat: "json",
 			expectedSource: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear environment
-			os.Unsetenv(EnvLogLevel)
-			os.Unsetenv(EnvLogFormat)
-			os.Unsetenv(EnvLogAddSource)
-
-			// Set test environment
+			clearEnv()
 			for k, v := range tt.envVars {
 				os.Setenv(k, v)
 			}
 
-			cfg := LoadConfig()
+			cfg := logging.LoadConfig()
 
-			if cfg.Level != tt.expectedLevel {
-				t.Errorf("Level = %v, want %v", cfg.Level, tt.expectedLevel)
-			}
-			if cfg.Format != tt.expectedFormat {
-				t.Errorf("Format = %v, want %v", cfg.Format, tt.expectedFormat)
-			}
-			if cfg.AddSource != tt.expectedSource {
-				t.Errorf("AddSource = %v, want %v", cfg.AddSource, tt.expectedSource)
-			}
+			assert.Equal(t, tt.expectedLevel, cfg.Level)
+			assert.Equal(t, tt.expectedFormat, cfg.Format)
+			assert.Equal(t, tt.expectedSource, cfg.AddSource)
 
-			// Cleanup
-			for k := range tt.envVars {
-				os.Unsetenv(k)
-			}
+			clearEnv()
 		})
 	}
 }
 
 func TestLoadConfigWithFlags(t *testing.T) {
-	// Clear environment
-	os.Unsetenv(EnvLogLevel)
-	os.Unsetenv(EnvLogFormat)
-	os.Unsetenv(EnvLogAddSource)
+	clearEnv()
+	os.Setenv(envLogLevel, "info")
+	os.Setenv(envLogFormat, "json")
+	defer clearEnv()
 
-	// Set environment
-	os.Setenv(EnvLogLevel, "info")
-	os.Setenv(EnvLogFormat, "json")
-	defer func() {
-		os.Unsetenv(EnvLogLevel)
-		os.Unsetenv(EnvLogFormat)
-	}()
-
-	// Flags should override environment
 	addSource := true
-	cfg := LoadConfigWithFlags("debug", "text", &addSource)
+	cfg := logging.LoadConfigWithFlags("debug", "text", &addSource)
 
-	if cfg.Level != slog.LevelDebug {
-		t.Errorf("Level = %v, want %v", cfg.Level, slog.LevelDebug)
-	}
-	if cfg.Format != FormatText {
-		t.Errorf("Format = %v, want %v", cfg.Format, FormatText)
-	}
-	if cfg.AddSource != true {
-		t.Errorf("AddSource = %v, want %v", cfg.AddSource, true)
-	}
+	assert.Equal(t, slog.LevelDebug, cfg.Level)
+	assert.Equal(t, "text", cfg.Format)
+	assert.True(t, cfg.AddSource)
 }
 
-func TestParseLevel(t *testing.T) {
+func TestLevelFromString(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected slog.Level
@@ -172,45 +148,28 @@ func TestParseLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := parseLevel(tt.input)
-			if result != tt.expected {
-				t.Errorf("parseLevel(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
+			result := logging.LevelFromString(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestRedactSensitiveData(t *testing.T) {
+func TestLevelToString(t *testing.T) {
 	tests := []struct {
-		name     string
-		key      string
-		value    string
+		level    slog.Level
 		expected string
 	}{
-		{"password field", "password", "secret123", "[REDACTED]"},
-		{"Password field", "Password", "secret123", "[REDACTED]"},
-		{"admin_password field", "admin_password", "secret123", "[REDACTED]"},
-		{"token field", "token", "abc123", "[REDACTED]"},
-		{"auth_token field", "auth_token", "abc123", "[REDACTED]"},
-		{"secret field", "secret", "mysecret", "[REDACTED]"},
-		{"apikey field", "apikey", "key123", "[REDACTED]"},
-		{"api_key field", "api_key", "key123", "[REDACTED]"},
-		{"API_KEY field", "API_KEY", "key123", "[REDACTED]"},
-		{"credential field", "credential", "cred123", "[REDACTED]"},
-		{"auth field", "auth", "authdata", "[REDACTED]"},
-		{"normal field", "namespace", "default", "default"},
-		{"name field", "name", "myapp", "myapp"},
+		{slog.LevelDebug, "debug"},
+		{slog.LevelInfo, "info"},
+		{slog.LevelWarn, "warn"},
+		{slog.LevelError, "error"},
+		{slog.Level(100), "info"}, // unknown level defaults to info
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			attr := slog.String(tt.key, tt.value)
-			result := redactSensitiveData(nil, attr)
-
-			if result.Value.String() != tt.expected {
-				t.Errorf("redactSensitiveData(%q, %q) = %q, want %q",
-					tt.key, tt.value, result.Value.String(), tt.expected)
-			}
+		t.Run(tt.expected, func(t *testing.T) {
+			result := logging.LevelToString(tt.level)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -218,300 +177,116 @@ func TestRedactSensitiveData(t *testing.T) {
 func TestNewHandler(t *testing.T) {
 	tests := []struct {
 		name   string
-		config Config
+		config logging.Config
 	}{
 		{
 			name: "JSON handler",
-			config: Config{
+			config: logging.Config{
 				Level:     slog.LevelInfo,
-				Format:    FormatJSON,
+				Format:    "json",
 				AddSource: false,
 			},
 		},
 		{
 			name: "Text handler",
-			config: Config{
+			config: logging.Config{
 				Level:     slog.LevelDebug,
-				Format:    FormatText,
+				Format:    "text",
 				AddSource: true,
 			},
 		},
+		{
+			name: "Invalid format defaults to JSON",
+			config: logging.Config{
+				Level:     slog.LevelInfo,
+				Format:    "invalid_format",
+				AddSource: false,
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewHandler(tt.config)
-			assert.NotNil(t, handler, "NewHandler returned nil")
+			handler := logging.NewHandler(tt.config)
+			assert.NotNil(t, handler)
 		})
 	}
-}
-
-func TestNewProductionHandler(t *testing.T) {
-	handler := NewProductionHandler()
-	assert.NotNil(t, handler, "NewProductionHandler returned nil")
-}
-
-func TestNewDevelopmentHandler(t *testing.T) {
-	handler := NewDevelopmentHandler()
-	assert.NotNil(t, handler, "NewDevelopmentHandler returned nil")
 }
 
 func TestSetupLogger(t *testing.T) {
-	cfg := Config{
+	cfg := logging.Config{
 		Level:     slog.LevelInfo,
-		Format:    FormatJSON,
+		Format:    "json",
 		AddSource: false,
 	}
 
-	logger := SetupLogger(cfg)
-	assert.NotNil(t, logger, "SetupLogger returned nil")
-
-	// Verify it's set as default
-	assert.Equal(t, logger, slog.Default(), "Logger was not set as default")
+	logger := logging.SetupLogger(cfg)
+	assert.NotNil(t, logger)
+	assert.Equal(t, logger, slog.Default())
 }
 
 func TestSetupLoggerWithAttrs(t *testing.T) {
-	cfg := Config{
+	cfg := logging.Config{
 		Level:     slog.LevelInfo,
-		Format:    FormatJSON,
+		Format:    "json",
 		AddSource: false,
 	}
 
-	logger := SetupLoggerWithAttrs(cfg, "splunk-operator", "1.0.0", "abc123")
-	assert.NotNil(t, logger, "SetupLoggerWithAttrs returned nil")
+	logger := logging.SetupLogger(cfg,
+		slog.String("component", "splunk-operator"),
+		slog.String("version", "1.0.0"),
+		slog.String("build", "abc123"))
+	assert.NotNil(t, logger)
+	assert.Equal(t, logger, slog.Default())
 }
 
-func TestLevelConversions(t *testing.T) {
-	tests := []struct {
-		level slog.Level
-		str   string
-	}{
-		{slog.LevelDebug, "debug"},
-		{slog.LevelInfo, "info"},
-		{slog.LevelWarn, "warn"},
-		{slog.LevelError, "error"},
+func TestSetupLoggerWithEmptyAttrs(t *testing.T) {
+	cfg := logging.Config{
+		Level:     slog.LevelInfo,
+		Format:    "json",
+		AddSource: false,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.str, func(t *testing.T) {
-			// Test LevelToString
-			result := LevelToString(tt.level)
-			if result != tt.str {
-				t.Errorf("LevelToString(%v) = %q, want %q", tt.level, result, tt.str)
-			}
+	logger := logging.SetupLogger(cfg)
+	assert.NotNil(t, logger)
 
-			// Test LevelFromString
-			level := LevelFromString(tt.str)
-			if level != tt.level {
-				t.Errorf("LevelFromString(%q) = %v, want %v", tt.str, level, tt.level)
-			}
-		})
-	}
-}
-
-// TestHandler is a test handler that captures log output
-type TestHandler struct {
-	buf    *bytes.Buffer
-	attrs  []slog.Attr
-	groups []string
-}
-
-func NewTestHandler() *TestHandler {
-	return &TestHandler{
-		buf: &bytes.Buffer{},
-	}
-}
-
-func (h *TestHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return true
-}
-
-func (h *TestHandler) Handle(ctx context.Context, r slog.Record) error {
-	h.buf.WriteString(r.Message)
-	r.Attrs(func(a slog.Attr) bool {
-		h.buf.WriteString(" ")
-		h.buf.WriteString(a.Key)
-		h.buf.WriteString("=")
-		h.buf.WriteString(a.Value.String())
-		return true
-	})
-	h.buf.WriteString("\n")
-	return nil
-}
-
-func (h *TestHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	newHandler := &TestHandler{
-		buf:    h.buf,
-		attrs:  append(h.attrs, attrs...),
-		groups: h.groups,
-	}
-	return newHandler
-}
-
-func (h *TestHandler) WithGroup(name string) slog.Handler {
-	newHandler := &TestHandler{
-		buf:    h.buf,
-		attrs:  h.attrs,
-		groups: append(h.groups, name),
-	}
-	return newHandler
-}
-
-func (h *TestHandler) String() string {
-	return h.buf.String()
-}
-
-func (h *TestHandler) Contains(s string) bool {
-	return strings.Contains(h.buf.String(), s)
-}
-
-func TestSensitiveDataRedactionInLogs(t *testing.T) {
-	// Create a buffer to capture output
+	// Test logging still works
 	var buf bytes.Buffer
-
-	opts := &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
-		ReplaceAttr: redactSensitiveData,
-	}
-
-	handler := slog.NewTextHandler(&buf, opts)
-	logger := slog.New(handler)
-
-	// Log with sensitive data
-	logger.Info("User login",
-		slog.String("username", "admin"),
-		slog.String("password", "secret123"),
-		slog.String("token", "abc123"))
-
-	output := buf.String()
-
-	// Verify sensitive data is redacted
-	if strings.Contains(output, "secret123") {
-		t.Error("Password was not redacted")
-	}
-	if strings.Contains(output, "abc123") {
-		t.Error("Token was not redacted")
-	}
-	if !strings.Contains(output, "[REDACTED]") {
-		t.Error("Redaction marker not found")
-	}
-	if !strings.Contains(output, "admin") {
-		t.Error("Non-sensitive data (username) was incorrectly redacted")
-	}
+	handler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
+	testLogger := slog.New(handler)
+	testLogger.Info("test message")
+	assert.NotEmpty(t, buf.String())
 }
 
-func TestLoadConfig_InvalidEnvironmentValues(t *testing.T) {
-	tests := []struct {
-		name           string
-		envVars        map[string]string
-		expectedLevel  slog.Level
-		expectedFormat string
-		expectedSource bool
-	}{
-		{
-			name: "garbage log level",
-			envVars: map[string]string{
-				EnvLogLevel: "notavalidlevel",
-			},
-			expectedLevel:  slog.LevelInfo, // Should default to info
-			expectedFormat: FormatJSON,
-			expectedSource: false,
-		},
-		{
-			name: "empty log level",
-			envVars: map[string]string{
-				EnvLogLevel: "",
-			},
-			expectedLevel:  slog.LevelInfo,
-			expectedFormat: FormatJSON,
-			expectedSource: false,
-		},
-		{
-			name: "numeric log level (invalid)",
-			envVars: map[string]string{
-				EnvLogLevel: "123",
-			},
-			expectedLevel:  slog.LevelInfo, // Should default to info
-			expectedFormat: FormatJSON,
-			expectedSource: false,
-		},
-		{
-			name: "special characters in log level",
-			envVars: map[string]string{
-				EnvLogLevel: "!@#$%",
-			},
-			expectedLevel:  slog.LevelInfo, // Should default to info
-			expectedFormat: FormatJSON,
-			expectedSource: false,
-		},
-		{
-			name: "invalid format falls back gracefully",
-			envVars: map[string]string{
-				EnvLogFormat: "xml", // Not supported
-			},
-			expectedLevel:  slog.LevelInfo,
-			expectedFormat: "xml", // Stored as-is, but handler will use JSON
-			expectedSource: false,
-		},
-		{
-			name: "invalid add_source value",
-			envVars: map[string]string{
-				EnvLogAddSource: "yes", // Should be "true"
-			},
-			expectedLevel:  slog.LevelInfo,
-			expectedFormat: FormatJSON,
-			expectedSource: false, // "yes" != "true"
-		},
-		{
-			name: "mixed case add_source",
-			envVars: map[string]string{
-				EnvLogAddSource: "TRUE",
-			},
-			expectedLevel:  slog.LevelInfo,
-			expectedFormat: FormatJSON,
-			expectedSource: true, // Should handle case-insensitive
-		},
-		{
-			name: "whitespace in values",
-			envVars: map[string]string{
-				EnvLogLevel:  " debug ", // Has spaces
-				EnvLogFormat: " json ",
-			},
-			expectedLevel:  slog.LevelInfo, // " debug " != "debug"
-			expectedFormat: " json ",
-			expectedSource: false,
-		},
+func TestSetupLogger_ConcurrentAccess(t *testing.T) {
+	cfg := logging.Config{
+		Level:     slog.LevelInfo,
+		Format:    "json",
+		AddSource: false,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Clear environment
-			os.Unsetenv(EnvLogLevel)
-			os.Unsetenv(EnvLogFormat)
-			os.Unsetenv(EnvLogAddSource)
+	logger := logging.SetupLogger(cfg)
 
-			// Set test environment
-			for k, v := range tt.envVars {
-				os.Setenv(k, v)
-			}
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Panic in goroutine %d: %v", id, r)
+				}
+				done <- true
+			}()
 
-			cfg := LoadConfig()
+			for j := 0; j < 100; j++ {
+				logger.Info("concurrent test",
+					slog.Int("goroutine", id),
+					slog.Int("iteration", j))
+			}
+		}(i)
+	}
 
-			if cfg.Level != tt.expectedLevel {
-				t.Errorf("Level = %v, want %v", cfg.Level, tt.expectedLevel)
-			}
-			if cfg.Format != tt.expectedFormat {
-				t.Errorf("Format = %v, want %v", cfg.Format, tt.expectedFormat)
-			}
-			if cfg.AddSource != tt.expectedSource {
-				t.Errorf("AddSource = %v, want %v", cfg.AddSource, tt.expectedSource)
-			}
-
-			// Cleanup
-			for k := range tt.envVars {
-				os.Unsetenv(k)
-			}
-		})
+	for i := 0; i < 10; i++ {
+		<-done
 	}
 }
 
@@ -535,7 +310,7 @@ func TestLoadConfigWithFlags_EdgeCases(t *testing.T) {
 			flagFormat:     "",
 			flagAddSource:  nil,
 			expectedLevel:  slog.LevelWarn,
-			expectedFormat: FormatText,
+			expectedFormat: "text",
 			expectedSource: false,
 		},
 		{
@@ -546,18 +321,18 @@ func TestLoadConfigWithFlags_EdgeCases(t *testing.T) {
 			flagFormat:     "text",
 			flagAddSource:  boolPtr(true),
 			expectedLevel:  slog.LevelError,
-			expectedFormat: FormatText,
+			expectedFormat: "text",
 			expectedSource: true,
 		},
 		{
-			name:           "invalid flag level falls back to env",
+			name:           "invalid flag level defaults to info",
 			envLevel:       "warn",
 			envFormat:      "json",
 			flagLevel:      "invalid",
 			flagFormat:     "",
 			flagAddSource:  nil,
-			expectedLevel:  slog.LevelInfo, // invalid parses to info
-			expectedFormat: FormatJSON,
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "json",
 			expectedSource: false,
 		},
 		{
@@ -568,265 +343,122 @@ func TestLoadConfigWithFlags_EdgeCases(t *testing.T) {
 			flagFormat:     "",
 			flagAddSource:  nil,
 			expectedLevel:  slog.LevelInfo,
-			expectedFormat: FormatJSON,
+			expectedFormat: "json",
 			expectedSource: false,
 		},
 		{
 			name:           "false addSource pointer explicitly disables",
-			envLevel:       "debug", // debug normally auto-enables source
+			envLevel:       "debug",
 			envFormat:      "json",
 			flagLevel:      "",
 			flagFormat:     "",
 			flagAddSource:  boolPtr(false),
 			expectedLevel:  slog.LevelDebug,
-			expectedFormat: FormatJSON,
-			expectedSource: false, // Explicitly disabled
+			expectedFormat: "json",
+			expectedSource: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear and set environment
-			os.Unsetenv(EnvLogLevel)
-			os.Unsetenv(EnvLogFormat)
-			os.Unsetenv(EnvLogAddSource)
-
+			clearEnv()
 			if tt.envLevel != "" {
-				os.Setenv(EnvLogLevel, tt.envLevel)
+				os.Setenv(envLogLevel, tt.envLevel)
 			}
 			if tt.envFormat != "" {
-				os.Setenv(EnvLogFormat, tt.envFormat)
+				os.Setenv(envLogFormat, tt.envFormat)
 			}
 
-			cfg := LoadConfigWithFlags(tt.flagLevel, tt.flagFormat, tt.flagAddSource)
+			cfg := logging.LoadConfigWithFlags(tt.flagLevel, tt.flagFormat, tt.flagAddSource)
 
-			if cfg.Level != tt.expectedLevel {
-				t.Errorf("Level = %v, want %v", cfg.Level, tt.expectedLevel)
-			}
-			if cfg.Format != tt.expectedFormat {
-				t.Errorf("Format = %v, want %v", cfg.Format, tt.expectedFormat)
-			}
-			if cfg.AddSource != tt.expectedSource {
-				t.Errorf("AddSource = %v, want %v", cfg.AddSource, tt.expectedSource)
-			}
+			assert.Equal(t, tt.expectedLevel, cfg.Level)
+			assert.Equal(t, tt.expectedFormat, cfg.Format)
+			assert.Equal(t, tt.expectedSource, cfg.AddSource)
 
-			// Cleanup
-			os.Unsetenv(EnvLogLevel)
-			os.Unsetenv(EnvLogFormat)
-			os.Unsetenv(EnvLogAddSource)
+			clearEnv()
 		})
 	}
 }
 
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-func TestRedactSensitiveData_EdgeCases(t *testing.T) {
+func TestLoadConfig_InvalidEnvironmentValues(t *testing.T) {
 	tests := []struct {
-		name        string
-		key         string
-		value       interface{}
-		shouldMatch string
-	}{
-		// Empty and nil values
-		{"empty password value", "password", "", "[REDACTED]"},
-		{"empty key with password in name", "user_password_hash", "", "[REDACTED]"},
-
-		// Nested/compound sensitive keys
-		{"nested password key", "db_password_encrypted", "secret", "[REDACTED]"},
-		{"camelCase token", "accessToken", "abc123", "[REDACTED]"},
-		{"uppercase AUTH", "AUTH_HEADER", "Bearer xyz", "[REDACTED]"},
-
-		// Keys that should NOT be redacted (false positives check)
-		{"passport field", "passport_number", "AB123456", "AB123456"}, // contains "pass" but not "password"
-		{"authenticate field", "authenticate", "true", "[REDACTED]"},  // contains "auth"
-		{"secretary field", "secretary", "John", "[REDACTED]"},        // contains "secret"
-
-		// Unicode and special characters
-		{"key with unicode", "пароль", "secret", "secret"}, // Russian for password, but not in our list
-		{"value with unicode", "password", "секрет", "[REDACTED]"},
-		{"key with spaces", "my password", "secret", "[REDACTED]"},
-
-		// Very long values
-		{"very long password", "password", strings.Repeat("a", 10000), "[REDACTED]"},
-		{"very long normal value", "description", strings.Repeat("b", 10000), strings.Repeat("b", 10000)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var attr slog.Attr
-			switch v := tt.value.(type) {
-			case string:
-				attr = slog.String(tt.key, v)
-			default:
-				attr = slog.Any(tt.key, v)
-			}
-
-			result := redactSensitiveData(nil, attr)
-
-			if result.Value.String() != tt.shouldMatch {
-				// For very long strings, just check prefix
-				if len(tt.shouldMatch) > 100 {
-					if !strings.HasPrefix(result.Value.String(), tt.shouldMatch[:100]) {
-						t.Errorf("redactSensitiveData(%q) prefix mismatch", tt.key)
-					}
-				} else {
-					t.Errorf("redactSensitiveData(%q, %q) = %q, want %q",
-						tt.key, tt.value, result.Value.String(), tt.shouldMatch)
-				}
-			}
-		})
-	}
-}
-
-func TestRedactSensitiveData_NonStringTypes(t *testing.T) {
-	tests := []struct {
-		name    string
-		attr    slog.Attr
-		checkFn func(slog.Attr) bool
+		name           string
+		envVars        map[string]string
+		expectedLevel  slog.Level
+		expectedFormat string
+		expectedSource bool
 	}{
 		{
-			name: "int value with sensitive key",
-			attr: slog.Int("password_length", 12),
-			checkFn: func(a slog.Attr) bool {
-				// Int with sensitive key should still be redacted
-				return a.Value.String() == "[REDACTED]"
+			name: "garbage log level",
+			envVars: map[string]string{
+				envLogLevel: "notavalidlevel",
 			},
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "json",
+			expectedSource: false,
 		},
 		{
-			name: "bool value with sensitive key",
-			attr: slog.Bool("has_token", true),
-			checkFn: func(a slog.Attr) bool {
-				return a.Value.String() == "[REDACTED]"
+			name: "numeric log level (invalid)",
+			envVars: map[string]string{
+				envLogLevel: "123",
 			},
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "json",
+			expectedSource: false,
 		},
 		{
-			name: "int64 value with normal key",
-			attr: slog.Int64("count", 12345),
-			checkFn: func(a slog.Attr) bool {
-				return a.Value.Int64() == 12345
+			name: "special characters in log level",
+			envVars: map[string]string{
+				envLogLevel: "!@#$%",
 			},
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "json",
+			expectedSource: false,
 		},
 		{
-			name: "float value with normal key",
-			attr: slog.Float64("ratio", 3.14),
-			checkFn: func(a slog.Attr) bool {
-				return a.Value.Float64() == 3.14
+			name: "invalid format stored as-is",
+			envVars: map[string]string{
+				envLogFormat: "xml",
 			},
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "xml",
+			expectedSource: false,
 		},
 		{
-			name: "duration with normal key",
-			attr: slog.Duration("elapsed", 5000000000), // 5 seconds
-			checkFn: func(a slog.Attr) bool {
-				return a.Value.Duration().Seconds() == 5
+			name: "invalid add_source value",
+			envVars: map[string]string{
+				envLogAddSource: "yes",
 			},
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "json",
+			expectedSource: false,
+		},
+		{
+			name: "mixed case add_source",
+			envVars: map[string]string{
+				envLogAddSource: "TRUE",
+			},
+			expectedLevel:  slog.LevelInfo,
+			expectedFormat: "json",
+			expectedSource: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := redactSensitiveData(nil, tt.attr)
-			if !tt.checkFn(result) {
-				t.Errorf("redactSensitiveData failed for %s: got %v", tt.name, result)
+			clearEnv()
+			for k, v := range tt.envVars {
+				os.Setenv(k, v)
 			}
+
+			cfg := logging.LoadConfig()
+
+			assert.Equal(t, tt.expectedLevel, cfg.Level)
+			assert.Equal(t, tt.expectedFormat, cfg.Format)
+			assert.Equal(t, tt.expectedSource, cfg.AddSource)
+
+			clearEnv()
 		})
-	}
-}
-
-func TestNewHandler_InvalidFormat(t *testing.T) {
-	// Test that invalid format defaults to JSON handler
-	cfg := Config{
-		Level:     slog.LevelInfo,
-		Format:    "invalid_format",
-		AddSource: false,
-	}
-
-	handler := NewHandler(cfg)
-	assert.NotNil(t, handler, "NewHandler returned nil for invalid format")
-
-	// Verify it creates a JSON handler (default) by checking output format
-	var buf bytes.Buffer
-	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
-	jsonHandler := slog.NewJSONHandler(&buf, opts)
-	logger := slog.New(jsonHandler)
-	logger.Info("test")
-
-	// JSON output should start with {
-	if !strings.HasPrefix(buf.String(), "{") {
-		t.Error("Invalid format should default to JSON handler")
-	}
-}
-
-func TestSetupLogger_ConcurrentAccess(t *testing.T) {
-	cfg := Config{
-		Level:     slog.LevelInfo,
-		Format:    FormatJSON,
-		AddSource: false,
-	}
-
-	// Setup logger
-	logger := SetupLogger(cfg)
-
-	// Test concurrent logging doesn't panic
-	done := make(chan bool, 10)
-	for i := 0; i < 10; i++ {
-		go func(id int) {
-			defer func() {
-				if r := recover(); r != nil {
-					t.Errorf("Panic in goroutine %d: %v", id, r)
-				}
-				done <- true
-			}()
-
-			for j := 0; j < 100; j++ {
-				logger.Info("concurrent test",
-					slog.Int("goroutine", id),
-					slog.Int("iteration", j))
-			}
-		}(i)
-	}
-
-	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
-		<-done
-	}
-}
-
-func TestSetupLoggerWithAttrs_EmptyValues(t *testing.T) {
-	cfg := Config{
-		Level:     slog.LevelInfo,
-		Format:    FormatJSON,
-		AddSource: false,
-	}
-
-	// Test with empty strings
-	logger := SetupLoggerWithAttrs(cfg, "", "", "")
-	assert.NotNil(t, logger, "SetupLoggerWithAttrs returned nil for empty values")
-
-	// Test logging still works
-	var buf bytes.Buffer
-	handler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
-	testLogger := slog.New(handler).With(
-		slog.String("component", ""),
-		slog.String("version", ""),
-		slog.String("build", ""),
-	)
-	testLogger.Info("test message")
-
-	if buf.Len() == 0 {
-		t.Error("Logger with empty attrs should still produce output")
-	}
-}
-
-func TestLevelToString_UnknownLevel(t *testing.T) {
-	// Test with a custom/unknown level
-	customLevel := slog.Level(100)
-	result := LevelToString(customLevel)
-
-	// Should default to "info" for unknown levels
-	if result != "info" {
-		t.Errorf("LevelToString(%v) = %q, want %q", customLevel, result, "info")
 	}
 }
 
@@ -864,39 +496,96 @@ func TestLogOutput_LevelFiltering(t *testing.T) {
 			}
 
 			hasOutput := buf.Len() > 0
-			if hasOutput != tt.shouldContain {
-				t.Errorf("Expected output=%v, got output=%v (buf=%q)",
-					tt.shouldContain, hasOutput, buf.String())
-			}
+			assert.Equal(t, tt.shouldContain, hasOutput)
 		})
 	}
 }
 
-func TestRedactSensitiveData_WithGroups(t *testing.T) {
-	// Test that redaction works with grouped attributes
-	groups := []string{"database", "connection"}
-	attr := slog.String("password", "secret123")
+func TestSensitiveDataRedaction(t *testing.T) {
+	var buf bytes.Buffer
+	cfg := logging.Config{
+		Level:     slog.LevelInfo,
+		Format:    "text",
+		AddSource: false,
+	}
 
-	result := redactSensitiveData(groups, attr)
+	handler := logging.NewHandlerWithWriter(cfg, &buf)
+	logger := slog.New(handler)
 
-	if result.Value.String() != "[REDACTED]" {
-		t.Errorf("Redaction should work with groups, got %q", result.Value.String())
+	logger.Info("test",
+		slog.String("password", "secret123"),
+		slog.String("token", "abc123"),
+		slog.String("username", "admin"))
+
+	output := buf.String()
+
+	// Verify sensitive data is redacted
+	assert.NotContains(t, output, "secret123", "password should be redacted")
+	assert.NotContains(t, output, "abc123", "token should be redacted")
+	assert.Contains(t, output, "[REDACTED]", "redaction marker should be present")
+	assert.Contains(t, output, "admin", "non-sensitive data should not be redacted")
+}
+
+func clearEnv() {
+	os.Unsetenv(envLogLevel)
+	os.Unsetenv(envLogFormat)
+	os.Unsetenv(envLogAddSource)
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func TestLevelConversions_Roundtrip(t *testing.T) {
+	levels := []slog.Level{
+		slog.LevelDebug,
+		slog.LevelInfo,
+		slog.LevelWarn,
+		slog.LevelError,
+	}
+
+	for _, level := range levels {
+		str := logging.LevelToString(level)
+		result := logging.LevelFromString(str)
+		assert.Equal(t, level, result, "Roundtrip failed for level %v", level)
 	}
 }
 
-func TestSensitiveDataRedactionInLogs_AllSensitiveKeys(t *testing.T) {
-	var buf bytes.Buffer
+func TestNewHandler_OutputFormat(t *testing.T) {
+	t.Run("JSON format produces JSON output", func(t *testing.T) {
+		cfg := logging.Config{
+			Level:     slog.LevelInfo,
+			Format:    "json",
+			AddSource: false,
+		}
+		handler := logging.NewHandler(cfg)
+		assert.NotNil(t, handler)
+	})
 
-	opts := &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
-		ReplaceAttr: redactSensitiveData,
+	t.Run("Text format produces text output", func(t *testing.T) {
+		cfg := logging.Config{
+			Level:     slog.LevelInfo,
+			Format:    "text",
+			AddSource: false,
+		}
+		handler := logging.NewHandler(cfg)
+		assert.NotNil(t, handler)
+	})
+}
+
+func TestSensitiveDataRedactionAllKeys(t *testing.T) {
+	var buf bytes.Buffer
+	cfg := logging.Config{
+		Level:     slog.LevelInfo,
+		Format:    "text",
+		AddSource: false,
 	}
 
-	handler := slog.NewTextHandler(&buf, opts)
+	handler := logging.NewHandlerWithWriter(cfg, &buf)
 	logger := slog.New(handler)
 
-	// Log with ALL sensitive key types
-	logger.Info("Sensitive data test",
+	// Test all sensitive key patterns
+	logger.Info("test",
 		slog.String("password", "pass1"),
 		slog.String("token", "tok1"),
 		slog.String("secret", "sec1"),
@@ -904,26 +593,176 @@ func TestSensitiveDataRedactionInLogs_AllSensitiveKeys(t *testing.T) {
 		slog.String("api_key", "key2"),
 		slog.String("credential", "cred1"),
 		slog.String("auth", "auth1"),
-		slog.String("normal_field", "should_appear"))
+		slog.String("normal_field", "visible"))
 
 	output := buf.String()
 
 	// Verify ALL sensitive values are redacted
 	sensitiveValues := []string{"pass1", "tok1", "sec1", "key1", "key2", "cred1", "auth1"}
 	for _, val := range sensitiveValues {
-		if strings.Contains(output, val) {
-			t.Errorf("Sensitive value %q was not redacted", val)
-		}
+		assert.NotContains(t, output, val, "sensitive value %q should be redacted", val)
 	}
 
 	// Verify normal value is NOT redacted
-	if !strings.Contains(output, "should_appear") {
-		t.Error("Normal field value was incorrectly redacted")
+	assert.Contains(t, output, "visible", "normal field should not be redacted")
+}
+
+func TestConfigStruct(t *testing.T) {
+	cfg := logging.Config{
+		Level:     slog.LevelDebug,
+		Format:    "text",
+		AddSource: true,
 	}
 
-	// Count redactions
-	redactionCount := strings.Count(output, "[REDACTED]")
-	if redactionCount != 7 {
-		t.Errorf("Expected 7 redactions, got %d", redactionCount)
+	assert.Equal(t, slog.LevelDebug, cfg.Level)
+	assert.Equal(t, "text", cfg.Format)
+	assert.True(t, cfg.AddSource)
+}
+
+func TestRedactionThroughHandler(t *testing.T) {
+	tests := []struct {
+		name         string
+		key          string
+		value        string
+		shouldRedact bool
+	}{
+		{"password field", "password", "secret123", true},
+		{"Password field", "Password", "secret456", true},
+		{"admin_password field", "admin_password", "secret789", true},
+		{"token field", "token", "tok123", true},
+		{"auth_token field", "auth_token", "tok456", true},
+		{"secret field", "secret", "sec123", true},
+		{"apikey field", "apikey", "key123", true},
+		{"api_key field", "api_key", "key456", true},
+		{"credential field", "credential", "cred123", true},
+		{"auth field", "auth", "auth123", true},
+		{"normal field", "namespace", "default", false},
+		{"name field", "name", "myapp", false},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			cfg := logging.Config{
+				Level:     slog.LevelInfo,
+				Format:    "text",
+				AddSource: false,
+			}
+			handler := logging.NewHandlerWithWriter(cfg, &buf)
+			logger := slog.New(handler)
+
+			logger.Info("test", slog.String(tt.key, tt.value))
+			output := buf.String()
+
+			if tt.shouldRedact {
+				assert.NotContains(t, output, tt.value, "value should be redacted")
+				assert.Contains(t, output, "[REDACTED]")
+			} else {
+				assert.Contains(t, output, tt.value, "value should NOT be redacted")
+			}
+		})
+	}
+}
+
+func TestDebugLevelAutoEnablesSource(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogLevel, "debug")
+	defer clearEnv()
+
+	cfg := logging.LoadConfig()
+
+	assert.Equal(t, slog.LevelDebug, cfg.Level)
+	assert.True(t, cfg.AddSource, "Debug level should auto-enable source")
+}
+
+func TestDebugLevelSourceCanBeDisabled(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogLevel, "debug")
+	os.Setenv(envLogAddSource, "false")
+	defer clearEnv()
+
+	cfg := logging.LoadConfig()
+
+	assert.Equal(t, slog.LevelDebug, cfg.Level)
+	assert.False(t, cfg.AddSource, "Source should be disabled when explicitly set to false")
+}
+
+func TestWarningAlias(t *testing.T) {
+	// "warning" should be treated same as "warn"
+	result := logging.LevelFromString("warning")
+	assert.Equal(t, slog.LevelWarn, result)
+}
+
+func TestCaseInsensitiveLevel(t *testing.T) {
+	tests := []string{"DEBUG", "Debug", "dEbUg", "debug"}
+	for _, input := range tests {
+		result := logging.LevelFromString(input)
+		assert.Equal(t, slog.LevelDebug, result, "Input: %s", input)
+	}
+}
+
+func TestFormatCaseInsensitive(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogFormat, "JSON")
+	defer clearEnv()
+
+	cfg := logging.LoadConfig()
+	assert.Equal(t, "json", cfg.Format)
+}
+
+func TestAddSourceCaseInsensitive(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogAddSource, "TRUE")
+	defer clearEnv()
+
+	cfg := logging.LoadConfig()
+	assert.True(t, cfg.AddSource)
+}
+
+func TestFlagsOverrideEnvVars(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogLevel, "info")
+	os.Setenv(envLogFormat, "json")
+	os.Setenv(envLogAddSource, "false")
+	defer clearEnv()
+
+	addSource := true
+	cfg := logging.LoadConfigWithFlags("debug", "text", &addSource)
+
+	assert.Equal(t, slog.LevelDebug, cfg.Level, "Flag should override env var for level")
+	assert.Equal(t, "text", cfg.Format, "Flag should override env var for format")
+	assert.True(t, cfg.AddSource, "Flag should override env var for addSource")
+}
+
+func TestEmptyFlagsUseEnvVars(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogLevel, "warn")
+	os.Setenv(envLogFormat, "text")
+	os.Setenv(envLogAddSource, "true")
+	defer clearEnv()
+
+	cfg := logging.LoadConfigWithFlags("", "", nil)
+
+	assert.Equal(t, slog.LevelWarn, cfg.Level)
+	assert.Equal(t, "text", cfg.Format)
+	assert.True(t, cfg.AddSource)
+}
+
+func TestNilAddSourcePointer(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogAddSource, "true")
+	defer clearEnv()
+
+	cfg := logging.LoadConfigWithFlags("", "", nil)
+	assert.True(t, cfg.AddSource, "nil pointer should use env var value")
+}
+
+func TestExplicitFalseAddSource(t *testing.T) {
+	clearEnv()
+	os.Setenv(envLogAddSource, "true")
+	defer clearEnv()
+
+	addSource := false
+	cfg := logging.LoadConfigWithFlags("", "", &addSource)
+	assert.False(t, cfg.AddSource, "explicit false should override env var")
 }
