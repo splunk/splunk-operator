@@ -788,7 +788,7 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 	return err
 }
 
-// GetMonitoringconsoleServerRoles to retrive server roles of the local host or SplunkMonitoringConsole
+// GetMonitoringconsoleServerRoles to retrieve server roles of the local host or SplunkMonitoringConsole
 func (c *SplunkClient) GetMonitoringconsoleServerRoles() (*MCServerRolesInfo, error) {
 	apiResponseServerRoles := struct {
 		Entry []struct {

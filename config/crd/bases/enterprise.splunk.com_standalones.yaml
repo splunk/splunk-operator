@@ -1022,7 +1022,7 @@ spec:
                               type: object
                             type:
                               description: 'Type: enterpriseSecurity for now, can
-                                accomodate itsi etc.. later'
+                                accommodate itsi etc.. later'
                               type: string
                           type: object
                         scope:
@@ -1071,7 +1071,7 @@ spec:
                                 type: string
                             type: object
                           type:
-                            description: 'Type: enterpriseSecurity for now, can accomodate
+                            description: 'Type: enterpriseSecurity for now, can accommodate
                               itsi etc.. later'
                             type: string
                         type: object
@@ -4400,7 +4400,7 @@ spec:
                                   type: object
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
-                                    can accomodate itsi etc.. later'
+                                    can accommodate itsi etc.. later'
                                   type: string
                               type: object
                             scope:
@@ -4451,7 +4451,7 @@ spec:
                                 type: object
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
-                                  accomodate itsi etc.. later'
+                                  accommodate itsi etc.. later'
                                 type: string
                             type: object
                           scope:
@@ -4803,7 +4803,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxillary message describing CR status
+    - description: Auxiliary message describing CR status
       jsonPath: .status.message
       name: Message
       type: string
@@ -5796,7 +5796,7 @@ spec:
                               type: object
                             type:
                               description: 'Type: enterpriseSecurity for now, can
-                                accomodate itsi etc.. later'
+                                accommodate itsi etc.. later'
                               type: string
                           type: object
                         scope:
@@ -5845,7 +5845,7 @@ spec:
                                 type: string
                             type: object
                           type:
-                            description: 'Type: enterpriseSecurity for now, can accomodate
+                            description: 'Type: enterpriseSecurity for now, can accommodate
                               itsi etc.. later'
                             type: string
                         type: object
@@ -9174,7 +9174,7 @@ spec:
                                   type: object
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
-                                    can accomodate itsi etc.. later'
+                                    can accommodate itsi etc.. later'
                                   type: string
                               type: object
                             scope:
@@ -9225,7 +9225,7 @@ spec:
                                 type: object
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
-                                  accomodate itsi etc.. later'
+                                  accommodate itsi etc.. later'
                                 type: string
                             type: object
                           scope:
@@ -9404,7 +9404,7 @@ spec:
                     type: integer
                 type: object
               message:
-                description: Auxillary message describing CR status
+                description: Auxiliary message describing CR status
                 type: string
               phase:
                 description: current phase of the standalone instances
