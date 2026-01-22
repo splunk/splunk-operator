@@ -3279,7 +3279,7 @@ func TestGetCurrentImage(t *testing.T) {
 
 }
 
-func TestcreateKVServiceCR(t *testing.T) {
+func TestCreateKVServiceCR(t *testing.T) {
 	ctx := context.TODO()
 
 	// Setup scheme
