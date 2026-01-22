@@ -4223,7 +4223,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Auxillary message describing CR status
+    - description: Auxiliary message describing CR status
       jsonPath: .status.message
       name: Message
       type: string
@@ -8315,7 +8315,7 @@ spec:
                 description: Indicates if the cluster is in maintenance mode.
                 type: boolean
               message:
-                description: Auxillary message describing CR status
+                description: Auxiliary message describing CR status
                 type: string
               namespace_scoped_secret_resource_version:
                 description: Indicates resource version of namespace scoped secret

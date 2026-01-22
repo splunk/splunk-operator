@@ -165,7 +165,7 @@ func RemoveSecretOwnerRef(ctx context.Context, client splcommon.ControllerClient
 	return refCount, nil
 }
 
-// RemoveUnwantedSecrets deletes all secrets whose version preceeds (latestVersion - MinimumVersionedSecrets)
+// RemoveUnwantedSecrets deletes all secrets whose version precedes (latestVersion - MinimumVersionedSecrets)
 func RemoveUnwantedSecrets(ctx context.Context, c splcommon.ControllerClient, versionedSecretIdentifier, namespace string) error {
 	// retrieve the list of versioned namespace scoped secrets
 	_, latestVersion, list := GetExistingLatestVersionedSecret(ctx, c, namespace, versionedSecretIdentifier, true)

@@ -74,7 +74,7 @@ type StandaloneStatus struct {
 	// Telemetry App installation flag
 	TelAppInstalled bool `json:"telAppInstalled"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 }
 
@@ -89,7 +89,7 @@ type StandaloneStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Number of desired standalone instances"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready standalone instances"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of standalone resource"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type Standalone struct {
 	metav1.TypeMeta   `json:",inline"`

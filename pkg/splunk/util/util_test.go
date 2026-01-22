@@ -52,9 +52,7 @@ var fakePodExecRESTClientForGVK = func(gvk schema.GroupVersionKind, isUnstructur
 	return &fakeRestInterface{}, errors.New("fakeerror")
 }
 
-type fakeRestInterface struct {
-	name string
-}
+type fakeRestInterface struct{}
 
 func (fri fakeRestInterface) GetRateLimiter() flowcontrol.RateLimiter {
 	return flowcontrol.NewFakeAlwaysRateLimiter()

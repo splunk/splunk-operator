@@ -114,7 +114,7 @@ func initStorageTracker() error {
 
 // updateStorageTracker updates the storage tracker with the latest disk info
 func updateStorageTracker(ctx context.Context) error {
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		return fmt.Errorf("operator resource tracker not initialized")
 
 	}
@@ -1123,7 +1123,7 @@ func removeStaleEntriesFromAuxPhaseInfo(ctx context.Context, desiredReplicas int
 }
 
 // changeAppSrcDeployInfoStatus sets the new status to all the apps in an AppSrc if the given repo state and deploy status matches
-// primarly used in Phase-3
+// primarily used in Phase-3
 func changeAppSrcDeployInfoStatus(ctx context.Context, appSrc string, appSrcDeployStatus map[string]enterpriseApi.AppSrcDeployInfo, repoState enterpriseApi.AppRepoState, oldDeployStatus enterpriseApi.AppDeploymentStatus, newDeployStatus enterpriseApi.AppDeploymentStatus) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("changeAppSrcDeployInfoStatus").WithValues("Called for AppSource: ", appSrc, "repoState", repoState, "oldDeployStatus", oldDeployStatus, "newDeployStatus", newDeployStatus)
@@ -1240,8 +1240,8 @@ func handleAppRepoChanges(ctx context.Context, client splcommon.ControllerClient
 	return appsModified, err
 }
 
-// isAppExtentionValid checks if an app extention is supported or not
-func isAppExtentionValid(receivedKey string) bool {
+// isAppExtensionValid checks if an app extension is supported or not
+func isAppExtensionValid(receivedKey string) bool {
 	validExtensions := []string{".spl", ".tgz", ".tar.gz"}
 
 	for _, ext := range validExtensions {
@@ -1265,7 +1265,7 @@ func AddOrUpdateAppSrcDeploymentInfoList(ctx context.Context, appSrcDeploymentIn
 
 	for _, remoteObj := range remoteS3ObjList {
 		receivedKey := *remoteObj.Key
-		if !isAppExtentionValid(receivedKey) {
+		if !isAppExtensionValid(receivedKey) {
 			scopedLog.Error(nil, "App name Parsing: Ignoring the key with invalid extension", "receivedKey", receivedKey)
 			continue
 		}
@@ -2010,14 +2010,14 @@ func setInstallStateForClusterScopedApps(ctx context.Context, appDeployContext *
 	}
 }
 
-// isPersistantVolConfigured confirms if the Operator Pod is configured with storage
-func isPersistantVolConfigured() bool {
+// isPersistentVolConfigured confirms if the Operator Pod is configured with storage
+func isPersistentVolConfigured() bool {
 	return operatorResourceTracker != nil && operatorResourceTracker.storage != nil
 }
 
 // reserveStorage tries to reserve the amount of requested storage
 func reserveStorage(allocSize uint64) error {
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		return fmt.Errorf("storageTracker was not initialized")
 	}
 
@@ -2036,7 +2036,7 @@ func reserveStorage(allocSize uint64) error {
 
 // releaseStorage releases the reserved storage
 func releaseStorage(releaseSize uint64) error {
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		return fmt.Errorf("storageTracker was not initialized")
 	}
 
