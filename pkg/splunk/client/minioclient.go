@@ -196,7 +196,10 @@ func (client *MinioClient) DownloadApp(ctx context.Context, downloadRequest Remo
 
 	options := minio.GetObjectOptions{}
 	// set the option to match the specified etag on remote storage
-	options.SetMatchETag(downloadRequest.Etag)
+	if err = options.SetMatchETag(downloadRequest.Etag); err != nil {
+		scopedLog.Error(err, "Unable to set match etag")
+		return false, err
+	}
 
 	err = s3Client.FGetObject(ctx, client.BucketName, downloadRequest.RemoteFile, downloadRequest.LocalFile, options)
 	if err != nil {

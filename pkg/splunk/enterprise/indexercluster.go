@@ -42,7 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// NewSplunkClientFunc funciton pointer type
+// NewSplunkClientFunc function pointer type
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
 // ApplyIndexerClusterManager reconciles the state of a Splunk Enterprise indexer cluster.
@@ -245,7 +245,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster manager spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster manager spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -276,7 +276,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -501,7 +501,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		//Retrieve monitoring  console ref from CM Spec
 		cmMonitoringConsoleConfigRef, err := RetrieveCMSpec(ctx, client, cr)
 		if err != nil {
-			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrive cluster master spec failed %s", err.Error()))
+			eventPublisher.Warning(ctx, "RetrieveCMSpec", fmt.Sprintf("retrieve cluster master spec failed %s", err.Error()))
 			return result, err
 		}
 		if cmMonitoringConsoleConfigRef != "" {
@@ -532,7 +532,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			// Disable maintenance mode
 			err = SetClusterMaintenanceMode(ctx, client, cr, false, cmPodName, podExecClient)
 			if err != nil {
-				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintainance mode failed %s", err.Error()))
+				eventPublisher.Warning(ctx, "SetClusterMaintenanceMode", fmt.Sprintf("set cluster maintenance mode failed %s", err.Error()))
 				return result, err
 			}
 		}
@@ -1099,23 +1099,19 @@ func getIndexerClusterList(ctx context.Context, c splcommon.ControllerClient, cr
 
 // RetrieveCMSpec finds monitoringConsole ref from cm spec
 func RetrieveCMSpec(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (string, error) {
-	var monitoringConsoleRef string = ""
-
 	if len(cr.Spec.ClusterMasterRef.Name) > 0 && len(cr.Spec.ClusterManagerRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterMasterRef.Name}
 		var cmCR enterpriseApiV3.ClusterMaster
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	} else if len(cr.Spec.ClusterManagerRef.Name) > 0 && len(cr.Spec.ClusterMasterRef.Name) == 0 {
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: cr.Spec.ClusterManagerRef.Name}
 		var cmCR enterpriseApi.ClusterManager
 		err := client.Get(ctx, namespacedName, &cmCR)
 		if err == nil {
-			monitoringConsoleRef = cmCR.Spec.MonitoringConsoleRef.Name
-			return monitoringConsoleRef, err
+			return cmCR.Spec.MonitoringConsoleRef.Name, nil
 		}
 	}
 

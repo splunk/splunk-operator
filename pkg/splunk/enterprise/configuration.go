@@ -257,7 +257,7 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 	for _, v := range spec.Volumes {
 		if v.Secret != nil {
 			if v.Secret.DefaultMode == nil {
-				perm := int32(corev1.SecretVolumeSourceDefaultMode)
+				perm := corev1.SecretVolumeSourceDefaultMode
 				v.Secret.DefaultMode = &perm
 			}
 			continue
@@ -265,7 +265,7 @@ func setVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
 
 		if v.ConfigMap != nil {
 			if v.ConfigMap.DefaultMode == nil {
-				perm := int32(corev1.ConfigMapVolumeSourceDefaultMode)
+				perm := corev1.ConfigMapVolumeSourceDefaultMode
 				v.ConfigMap.DefaultMode = &perm
 			}
 			continue
@@ -391,11 +391,11 @@ func validateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 	}
 
 	if spec.LivenessInitialDelaySeconds < 0 {
-		return fmt.Errorf("negative value (%d) is not allowed for Liveness probe intial delay", spec.LivenessInitialDelaySeconds)
+		return fmt.Errorf("negative value (%d) is not allowed for Liveness probe initial delay", spec.LivenessInitialDelaySeconds)
 	}
 
 	if spec.ReadinessInitialDelaySeconds < 0 {
-		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe intial delay", spec.ReadinessInitialDelaySeconds)
+		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe initial delay", spec.ReadinessInitialDelaySeconds)
 	}
 
 	err = validateSplunkGeneralTerms()
@@ -833,7 +833,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
-	secretVolDefaultMode := int32(corev1.SecretVolumeSourceDefaultMode)
+	secretVolDefaultMode := corev1.SecretVolumeSourceDefaultMode
 	addSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
 		Secret: &corev1.SecretVolumeSource{
 			SecretName:  secretToMount,
@@ -842,7 +842,7 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	})
 
 	// Explicitly set the default value here so we can compare for changes correctly with current statefulset.
-	configMapVolDefaultMode := int32(corev1.ConfigMapVolumeSourceDefaultMode)
+	configMapVolDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
 
 	// add inline defaults to all splunk containers other than MC(where CR spec defaults are not needed)
 	if spec.Defaults != "" {
@@ -926,10 +926,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	role := instanceType.ToRole()
 	if instanceType == SplunkStandalone && (len(spec.ClusterMasterRef.Name) > 0 || len(spec.ClusterManagerRef.Name) > 0) {
 		role = SplunkSearchHead.ToRole()
-	}
-	domainName := os.Getenv("CLUSTER_DOMAIN")
-	if domainName == "" {
-		domainName = "cluster.local"
 	}
 	env := []corev1.EnvVar{
 		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
@@ -1901,7 +1897,7 @@ maxGlobalDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalDataSizeMB)
 maxGlobalRawDataSizeMB = %d`, indexesConf, indexes[i].MaxGlobalRawDataSizeMB)
 		}
 
-		// Add a new line in betwen index stanzas
+		// Add a new line in between index stanzas
 		// Do not add config beyond here
 		indexesConf = fmt.Sprintf(`%s
 `, indexesConf)

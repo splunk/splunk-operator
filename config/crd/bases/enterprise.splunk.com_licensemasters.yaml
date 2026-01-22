@@ -1014,7 +1014,7 @@ spec:
                               type: object
                             type:
                               description: 'Type: enterpriseSecurity for now, can
-                                accomodate itsi etc.. later'
+                                accommodate itsi etc.. later'
                               type: string
                           type: object
                         scope:
@@ -1063,7 +1063,7 @@ spec:
                                 type: string
                             type: object
                           type:
-                            description: 'Type: enterpriseSecurity for now, can accomodate
+                            description: 'Type: enterpriseSecurity for now, can accommodate
                               itsi etc.. later'
                             type: string
                         type: object
@@ -4271,7 +4271,7 @@ spec:
                                   type: object
                                 type:
                                   description: 'Type: enterpriseSecurity for now,
-                                    can accomodate itsi etc.. later'
+                                    can accommodate itsi etc.. later'
                                   type: string
                               type: object
                             scope:
@@ -4322,7 +4322,7 @@ spec:
                                 type: object
                               type:
                                 description: 'Type: enterpriseSecurity for now, can
-                                  accomodate itsi etc.. later'
+                                  accommodate itsi etc.. later'
                                 type: string
                             type: object
                           scope:
