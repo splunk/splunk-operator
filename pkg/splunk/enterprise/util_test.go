@@ -3279,7 +3279,7 @@ func TestGetCurrentImage(t *testing.T) {
 
 }
 
-func TestApplyKVServiceCR(t *testing.T) {
+func TestcreateKVServiceCR(t *testing.T) {
 	ctx := context.TODO()
 
 	// Setup scheme
@@ -3303,9 +3303,9 @@ func TestApplyKVServiceCR(t *testing.T) {
 	t.Run("creates KVService when it doesn't exist", func(t *testing.T) {
 		client := fake.NewClientBuilder().WithScheme(sch).Build()
 
-		err := ApplyKVServiceCR(ctx, client, standalone)
+		err := createKVServiceCR(ctx, client, standalone)
 		if err != nil {
-			t.Errorf("ApplyKVServiceCR should not return error: %v", err)
+			t.Errorf("createKVServiceCR should not return error: %v", err)
 		}
 
 		// Verify KVService was created
@@ -3358,9 +3358,9 @@ func TestApplyKVServiceCR(t *testing.T) {
 		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(existingKVService).Build()
 
 		// Add second owner
-		err := ApplyKVServiceCR(ctx, client, standalone2)
+		err := createKVServiceCR(ctx, client, standalone2)
 		if err != nil {
-			t.Errorf("ApplyKVServiceCR should not return error: %v", err)
+			t.Errorf("createKVServiceCR should not return error: %v", err)
 		}
 
 		// Verify both owner references exist
@@ -3394,9 +3394,9 @@ func TestApplyKVServiceCR(t *testing.T) {
 		client := fake.NewClientBuilder().WithScheme(sch).WithObjects(existingKVService).Build()
 
 		// Call again with same owner
-		err := ApplyKVServiceCR(ctx, client, standalone)
+		err := createKVServiceCR(ctx, client, standalone)
 		if err != nil {
-			t.Errorf("ApplyKVServiceCR should not return error: %v", err)
+			t.Errorf("createKVServiceCR should not return error: %v", err)
 		}
 
 		// Verify still only 1 owner reference
