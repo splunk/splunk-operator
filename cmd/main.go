@@ -293,6 +293,9 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
+
+	// Setup centralized validation webhook for all CRDs
+	enterpriseApi.SetupWebhookWithManager(mgr)
 	//+kubebuilder:scaffold:builder
 
 	// Register certificate watchers with the manager
