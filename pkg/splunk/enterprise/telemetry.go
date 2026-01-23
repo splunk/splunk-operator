@@ -11,6 +11,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -257,6 +258,29 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 	}
 }
 
+func isTest(ctx context.Context, client splcommon.ControllerClient, namespace string) bool {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("isTelemetryTest").WithValues(
+		"namespace", namespace)
+	scopedLog.Info("Start")
+
+	cm := &corev1.ConfigMap{}
+	key := types.NamespacedName{
+		Namespace: namespace,
+		Name:      GetManagerConfigMapName("splunk-operator-"),
+	}
+	err := client.Get(ctx, key, cm)
+	if err != nil {
+		return isTestMode
+	}
+	if val, exists := cm.Data[testModeKey]; exists && val == "true" {
+		scopedLog.Info("Test mode is enabled via configmap")
+		return true
+	}
+	scopedLog.Info("Return test mode", "isTestMode", isTestMode)
+	return isTestMode
+}
+
 // SendTelemetry is exported for testing
 func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, data map[string]interface{}) bool {
 	reqLogger := log.FromContext(ctx)
@@ -312,7 +336,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		Component:     "sok",
 		OptInRequired: 2,
 		Data:          data,
-		Test:          true,
+		Test:          isTest(ctx, client, cr.GetNamespace()),
 	}
 
 	path := fmt.Sprintf("/servicesNS/nobody/%s/telemetry-metric", telAppNameStr)

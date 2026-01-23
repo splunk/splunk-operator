@@ -216,6 +216,10 @@ access = read : [ * ], write : [ admin ]
 	telAppNameStr     = "app_tel_for_sok8s"
 	telSOKVersionKey  = "version"
 	telLicenseInfoKey = "license_info"
+
+	managerConfigMapTemplateStr = "%smanager-config"
+	testModeKey                 = "test.mode"
+	isTestMode                  = false
 )
 
 const (
@@ -375,4 +379,9 @@ func GetStartupScriptName() string {
 // GetTelemetryConfigMapName returns the name of telemetry configmap
 func GetTelemetryConfigMapName(namePrefix string) string {
 	return fmt.Sprintf(telConfigMapTemplateStr, namePrefix)
+}
+
+// GetManagerConfigMapName returns the name of manager configmap
+func GetManagerConfigMapName(namePrefix string) string {
+	return fmt.Sprintf(managerConfigMapTemplateStr, namePrefix)
 }
