@@ -26,6 +26,15 @@ func (r *Registry) Register(action string, handler Handler) {
 	r.handlers[strings.ToLower(action)] = handler
 }
 
+// Has reports whether a handler exists for the action.
+func (r *Registry) Has(action string) bool {
+	if r == nil {
+		return false
+	}
+	_, ok := r.handlers[strings.ToLower(strings.TrimSpace(action))]
+	return ok
+}
+
 // Execute runs a handler for the step action.
 func (r *Registry) Execute(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
 	handler, ok := r.handlers[strings.ToLower(step.Action)]

@@ -94,7 +94,8 @@ func handleTopologyDeploy(ctx context.Context, exec *Context, step spec.StepSpec
 }
 
 func handleTopologyWaitReady(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
-	if exec.Vars["topology_waited"] == "true" {
+	force := getBool(step.With, "force", false)
+	if exec.Vars["topology_waited"] == "true" && !force {
 		return map[string]string{"shared": "true"}, nil
 	}
 
@@ -128,6 +129,9 @@ func handleTopologyWaitReady(ctx context.Context, exec *Context, step spec.StepS
 		session.IndexerClusterNames = strings.Split(idxcList, ",")
 	}
 
+	stopProgress := startTopologyProgressLogger(ctx, exec, session, timeout)
+	defer stopProgress()
+
 	if err := topology.WaitReady(ctx, exec.Kube, session, timeout); err != nil {
 		return nil, err
 	}
@@ -136,7 +140,8 @@ func handleTopologyWaitReady(ctx context.Context, exec *Context, step spec.StepS
 }
 
 func handleTopologyWaitStable(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
-	if exec.Vars["topology_stable"] == "true" {
+	force := getBool(step.With, "force", false)
+	if exec.Vars["topology_stable"] == "true" && !force {
 		return map[string]string{"shared": "true"}, nil
 	}
 

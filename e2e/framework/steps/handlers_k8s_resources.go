@@ -611,27 +611,66 @@ func handleAssertPodFileContains(ctx context.Context, exec *Context, step spec.S
 		return nil, fmt.Errorf("contains, value, or contains_from_pods are required")
 	}
 
-	for _, podName := range pods {
-		stdout, stderr, err := exec.Kube.Exec(ctx, namespace, podName, "", []string{"cat", path}, "", false)
-		if err != nil {
-			return nil, fmt.Errorf("read pod file failed pod=%s path=%s stderr=%s: %w", podName, path, strings.TrimSpace(stderr), err)
-		}
-		content := stdout
-		if caseInsensitive {
-			content = strings.ToLower(content)
-		}
-		for _, value := range contains {
-			needle := value
+	timeout := getDuration(step.With, "timeout", 0)
+	interval := getDuration(step.With, "interval", 5*time.Second)
+	execTimeout := getDuration(step.With, "exec_timeout", 0)
+
+	check := func() error {
+		for _, podName := range pods {
+			execCtx := ctx
+			var cancel context.CancelFunc
+			if execTimeout > 0 {
+				execCtx, cancel = context.WithTimeout(ctx, execTimeout)
+			}
+			stdout, stderr, err := exec.Kube.Exec(execCtx, namespace, podName, "", []string{"cat", path}, "", false)
+			if cancel != nil {
+				cancel()
+			}
+			if err != nil {
+				return fmt.Errorf("read pod file failed pod=%s path=%s stderr=%s: %w", podName, path, strings.TrimSpace(stderr), err)
+			}
+			content := stdout
 			if caseInsensitive {
-				needle = strings.ToLower(value)
+				content = strings.ToLower(content)
 			}
-			found := strings.Contains(content, needle)
-			if found != expected {
-				return nil, fmt.Errorf("pod %s path %s contains %q expected=%t", podName, path, value, expected)
+			for _, value := range contains {
+				needle := value
+				if caseInsensitive {
+					needle = strings.ToLower(value)
+				}
+				found := strings.Contains(content, needle)
+				if found != expected {
+					return fmt.Errorf("pod %s path %s contains %q expected=%t", podName, path, value, expected)
+				}
 			}
+		}
+		return nil
+	}
+
+	if timeout <= 0 {
+		if err := check(); err != nil {
+			return nil, err
+		}
+		return map[string]string{"pods": strings.Join(pods, ","), "path": path, "expected": fmt.Sprintf("%t", expected)}, nil
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		if err := check(); err == nil {
+			return map[string]string{"pods": strings.Join(pods, ","), "path": path, "expected": fmt.Sprintf("%t", expected)}, nil
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("pod file contains did not reach expected state within %s: %w", timeout, lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
 		}
 	}
-	return map[string]string{"pods": strings.Join(pods, ","), "path": path, "expected": fmt.Sprintf("%t", expected)}, nil
 }
 
 func handleAssertPodEnvContains(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {

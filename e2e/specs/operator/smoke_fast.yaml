@@ -53,9 +53,9 @@ steps:
   - name: search_internal_stats
     action: splunk.search.sync
     with:
-      query: "search index=_internal | stats count"
+      query: "search index=_internal | stats count by host"
   - name: verify_host_field
     action: assert.search.field
     with:
       field: host
-      exists: true
+      value: "${search_pod}"

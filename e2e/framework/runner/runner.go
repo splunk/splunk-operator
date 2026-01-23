@@ -69,6 +69,9 @@ func NewRunner(cfg *config.Config, logger *zap.Logger, registry *steps.Registry,
 // RunAll executes all specs and returns a run result.
 func (r *Runner) RunAll(ctx context.Context, specs []spec.TestSpec) (*results.RunResult, error) {
 	r.specs = specs // Store specs for PlantUML generation
+	if err := r.validateSpecs(specs); err != nil {
+		return nil, err
+	}
 	runCtx, runSpan := r.startRunSpan(ctx, specs)
 	var result *results.RunResult
 	var err error
@@ -82,6 +85,25 @@ func (r *Runner) RunAll(ctx context.Context, specs []spec.TestSpec) (*results.Ru
 		runSpan.End()
 	}
 	return result, err
+}
+
+func (r *Runner) validateSpecs(specs []spec.TestSpec) error {
+	if r.registry == nil {
+		return nil
+	}
+	var unknown []string
+	for _, testSpec := range specs {
+		for _, step := range testSpec.Steps {
+			if r.registry.Has(step.Action) {
+				continue
+			}
+			unknown = append(unknown, fmt.Sprintf("%s: %s", testSpec.Metadata.Name, step.Action))
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	return fmt.Errorf("unknown step action(s): %s", strings.Join(unknown, ", "))
 }
 
 func (r *Runner) runPerTest(ctx context.Context, specs []spec.TestSpec) (*results.RunResult, error) {

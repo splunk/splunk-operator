@@ -45,6 +45,15 @@ steps:
               volumeName: ${base_name}-volume
   - name: wait_ready_after_patch
     action: topology.wait_ready
+    with:
+      force: true
+      timeout: 30m
+  - name: wait_splunkd
+    action: splunk.status.check
+    with:
+      wait: true
+      timeout: 10m
+      interval: 10s
   - name: assert_index1_exists
     action: assert.splunk.index.exists
     with:
@@ -144,6 +153,15 @@ steps:
             evictionPolicy: lru
   - name: wait_ready_after_patch
     action: topology.wait_ready
+    with:
+      force: true
+      timeout: 30m
+  - name: wait_splunkd
+    action: splunk.status.check
+    with:
+      wait: true
+      timeout: 10m
+      interval: 10s
   - name: assert_index_exists
     action: assert.splunk.index.exists
     with:
@@ -173,6 +191,9 @@ steps:
     with:
       pod: splunk-${standalone_name}-standalone-0
       path: /opt/splunk/etc/apps/splunk-operator/local/server.conf
+      timeout: 10m
+      interval: 15s
+      exec_timeout: 2m
       contains:
         - max_cache_size = 9900000
         - eviction_padding = 1000
@@ -234,6 +255,15 @@ steps:
               volumeName: ${base_name}-volume
   - name: wait_ready_after_patch
     action: topology.wait_ready
+    with:
+      force: true
+      timeout: 45m
+  - name: wait_splunkd
+    action: splunk.status.check
+    with:
+      wait: true
+      timeout: 15m
+      interval: 15s
   - name: assert_index_exists
     action: assert.splunk.index.exists
     with:

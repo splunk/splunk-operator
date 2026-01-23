@@ -27,11 +27,6 @@ topology:
 steps:
   - name: deploy
     action: topology.deploy
-    with:
-      kind: c3
-      indexer_replicas: 3
-      shc_replicas: 3
-      with_shc: true
   - name: wait_ready
     action: topology.wait_ready
   - name: wait_stable
@@ -53,11 +48,6 @@ topology:
 steps:
   - name: deploy
     action: topology.deploy
-    with:
-      kind: m4
-      indexer_replicas: 1
-      shc_replicas: 3
-      site_count: 3
   - name: wait_ready
     action: topology.wait_ready
   - name: wait_stable
@@ -83,10 +73,6 @@ topology:
 steps:
   - name: deploy
     action: topology.deploy
-    with:
-      kind: m1
-      indexer_replicas: 1
-      site_count: 3
   - name: wait_ready
     action: topology.wait_ready
   - name: wait_stable

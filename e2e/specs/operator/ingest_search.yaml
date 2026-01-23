@@ -63,6 +63,10 @@ steps:
     with:
       path: "${last_generated_path}"
       index: myTestIndex
+  - name: wait_for_indexing
+    action: sleep
+    with:
+      duration: 10s
   - name: search_count_by_host
     action: splunk.search.sync
     with:

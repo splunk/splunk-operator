@@ -12,10 +12,12 @@ import (
 
 	"github.com/splunk/splunk-operator/e2e/framework/data"
 	"github.com/splunk/splunk-operator/e2e/framework/spec"
+	"github.com/splunk/splunk-operator/e2e/framework/splunkd"
 )
 
 // RegisterSplunkdHandlers registers Splunkd steps and assertions.
 func RegisterSplunkdHandlers(reg *Registry) {
+	reg.Register("splunkd.target", handleSplunkdTarget)
 	reg.Register("splunk.status.check", handleStatusCheck)
 	reg.Register("splunk.index.create", handleCreateIndex)
 	reg.Register("splunk.index.roll_hot", handleIndexRollHot)
@@ -31,15 +33,241 @@ func RegisterSplunkdHandlers(reg *Registry) {
 	reg.Register("assert.splunk.index.exists", handleAssertIndexExists)
 }
 
+func handleSplunkdTarget(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
+	if exec == nil {
+		return nil, fmt.Errorf("execution context not available")
+	}
+
+	target := strings.ToLower(strings.TrimSpace(getString(step.With, "target", "")))
+	if target != "" && target != "remote" && target != "pod" {
+		return nil, fmt.Errorf("unsupported splunkd target %q (use remote or pod)", target)
+	}
+
+	endpoint := expandVars(strings.TrimSpace(getString(step.With, "endpoint", "")), exec.Vars)
+	if target != "pod" && endpoint == "" && exec.Config != nil {
+		endpoint = strings.TrimSpace(exec.Config.SplunkdEndpoint)
+	}
+	if target == "" {
+		if endpoint != "" {
+			target = "remote"
+		} else {
+			target = "pod"
+		}
+	}
+
+	username := expandVars(strings.TrimSpace(getString(step.With, "username", "")), exec.Vars)
+	password := expandVars(strings.TrimSpace(getString(step.With, "password", "")), exec.Vars)
+	if exec.Config != nil {
+		if username == "" {
+			username = strings.TrimSpace(exec.Config.SplunkdUsername)
+		}
+		if password == "" {
+			password = strings.TrimSpace(exec.Config.SplunkdPassword)
+		}
+	}
+
+	insecure := false
+	if exec.Config != nil {
+		insecure = exec.Config.SplunkdInsecure
+	}
+	if step.With != nil {
+		insecure = getBool(step.With, "insecure", insecure)
+	}
+
+	mgmtPort := 0
+	hecPort := 0
+	if exec.Config != nil {
+		mgmtPort = exec.Config.SplunkdMgmtPort
+		hecPort = exec.Config.SplunkdHECPort
+	}
+	hasMgmtOverride := false
+	hasHECOverride := false
+	if step.With != nil {
+		if _, ok := step.With["mgmt_port"]; ok {
+			hasMgmtOverride = true
+			mgmtPort = getInt(step.With, "mgmt_port", mgmtPort)
+		}
+		if _, ok := step.With["hec_port"]; ok {
+			hasHECOverride = true
+			hecPort = getInt(step.With, "hec_port", hecPort)
+		}
+	}
+
+	metadata := map[string]string{"target": target}
+	switch target {
+	case "remote":
+		if endpoint == "" {
+			return nil, fmt.Errorf("splunkd endpoint is required for remote target")
+		}
+		client, err := splunkd.NewRemoteClient(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(username) != "" {
+			client.Username = username
+		}
+		if strings.TrimSpace(password) != "" {
+			client.Password = password
+		}
+		if hasMgmtOverride && mgmtPort > 0 {
+			client.MgmtPort = mgmtPort
+		} else if !hasMgmtOverride {
+			if parsedPort := parseEndpointPort(endpoint); parsedPort == 0 && mgmtPort > 0 {
+				client.MgmtPort = mgmtPort
+			}
+		}
+		if hasHECOverride && hecPort > 0 {
+			client.HECPort = hecPort
+		} else if !hasHECOverride && hecPort > 0 {
+			client.HECPort = hecPort
+		}
+		client.InsecureSkipVerify = insecure
+		exec.Splunkd = client
+		exec.Vars["splunkd_target"] = "remote"
+		exec.Vars["splunkd_endpoint"] = endpoint
+		if username != "" {
+			exec.Vars["splunkd_username"] = username
+		}
+		metadata["endpoint"] = endpoint
+		if username != "" {
+			metadata["username"] = username
+		}
+	case "pod":
+		if exec.Kube == nil {
+			return nil, fmt.Errorf("kube client not available for pod target")
+		}
+		namespace := expandVars(strings.TrimSpace(getString(step.With, "namespace", exec.Vars["namespace"])), exec.Vars)
+		pod := expandVars(strings.TrimSpace(getString(step.With, "pod", "")), exec.Vars)
+		if pod == "" {
+			pod = strings.TrimSpace(exec.Vars["search_pod"])
+		}
+		if pod == "" {
+			return nil, fmt.Errorf("splunkd pod is required for pod target")
+		}
+		client := splunkd.NewClient(exec.Kube, namespace, pod)
+		if strings.TrimSpace(username) != "" {
+			client.Username = username
+		}
+		if strings.TrimSpace(password) != "" {
+			client.Password = password
+		}
+		if container := expandVars(strings.TrimSpace(getString(step.With, "container", "")), exec.Vars); container != "" {
+			client.Container = container
+			metadata["container"] = container
+		}
+		if secretName := expandVars(strings.TrimSpace(getString(step.With, "secret_name", "")), exec.Vars); secretName != "" {
+			client.SecretName = secretName
+			metadata["secret_name"] = secretName
+		}
+		if mgmtPort > 0 {
+			client.MgmtPort = mgmtPort
+		}
+		if hecPort > 0 {
+			client.HECPort = hecPort
+		}
+		client.InsecureSkipVerify = insecure
+		exec.Splunkd = client
+		exec.Vars["splunkd_target"] = "pod"
+		if namespace != "" {
+			exec.Vars["splunkd_namespace"] = namespace
+		}
+		exec.Vars["splunkd_pod"] = pod
+		if username != "" {
+			exec.Vars["splunkd_username"] = username
+		}
+		if namespace != "" {
+			metadata["namespace"] = namespace
+		}
+		metadata["pod"] = pod
+		if username != "" {
+			metadata["username"] = username
+		}
+	default:
+		return nil, fmt.Errorf("unsupported splunkd target %q", target)
+	}
+
+	if exec.Splunkd != nil {
+		if exec.Splunkd.MgmtPort > 0 {
+			metadata["mgmt_port"] = fmt.Sprintf("%d", exec.Splunkd.MgmtPort)
+		}
+		if exec.Splunkd.HECPort > 0 {
+			metadata["hec_port"] = fmt.Sprintf("%d", exec.Splunkd.HECPort)
+		}
+	}
+	metadata["insecure"] = fmt.Sprintf("%t", insecure)
+
+	return metadata, nil
+}
+
+func parseEndpointPort(endpoint string) int {
+	raw := strings.TrimSpace(endpoint)
+	if raw == "" {
+		return 0
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return 0
+	}
+	if port := parsed.Port(); port != "" {
+		parsedPort := 0
+		if _, err := fmt.Sscanf(port, "%d", &parsedPort); err == nil {
+			return parsedPort
+		}
+	}
+	return 0
+}
+
 func handleStatusCheck(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
 	if exec.Splunkd == nil {
 		return nil, fmt.Errorf("splunkd client not initialized")
 	}
 	ensureSplunkdSecret(exec, step)
-	if err := exec.Splunkd.CheckStatus(ctx); err != nil {
-		return nil, fmt.Errorf("splunk status failed: %w", err)
+	timeoutRaw := strings.TrimSpace(getString(step.With, "timeout", ""))
+	intervalRaw := strings.TrimSpace(getString(step.With, "interval", ""))
+	wait := getBool(step.With, "wait", false)
+	if timeoutRaw == "" && intervalRaw == "" && !wait {
+		if err := exec.Splunkd.CheckStatus(ctx); err != nil {
+			return nil, fmt.Errorf("splunk status failed: %w", err)
+		}
+		return map[string]string{"status": "running"}, nil
 	}
-	return map[string]string{"status": "running"}, nil
+
+	timeout := exec.Config.DefaultTimeout
+	if timeoutRaw != "" {
+		if parsed, err := time.ParseDuration(timeoutRaw); err == nil {
+			timeout = parsed
+		}
+	}
+	interval := 5 * time.Second
+	if intervalRaw != "" {
+		if parsed, err := time.ParseDuration(intervalRaw); err == nil {
+			interval = parsed
+		}
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		if err := exec.Splunkd.CheckStatus(ctx); err == nil {
+			return map[string]string{"status": "running"}, nil
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			if lastErr == nil {
+				lastErr = fmt.Errorf("timeout waiting for splunk status")
+			}
+			return nil, fmt.Errorf("splunk status failed within %s: %w", timeout, lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
+		}
+	}
 }
 
 func handleCreateIndex(ctx context.Context, exec *Context, step spec.StepSpec) (map[string]string, error) {
@@ -161,7 +389,15 @@ func handleAssertIndexExists(ctx context.Context, exec *Context, step spec.StepS
 	for {
 		found, entry, err := getIndexEntry(ctx, exec, indexName)
 		if err != nil {
-			return nil, err
+			if time.Now().After(deadline) {
+				return nil, fmt.Errorf("index %s lookup failed within %s: %w", indexName, timeout, err)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(interval):
+				continue
+			}
 		}
 		match := found == expected
 		if match && expected {
@@ -457,11 +693,18 @@ func extractCountFromSearchResult(payload string) (int, error) {
 func readCountFromMap(decoded map[string]interface{}) (int, error) {
 	result, ok := decoded["result"].(map[string]interface{})
 	if !ok {
-		return 0, fmt.Errorf("missing result object")
+		// Check if this is a metadata-only line (preview, lastrow)
+		if _, hasPreview := decoded["preview"]; hasPreview {
+			if _, hasLastrow := decoded["lastrow"]; hasLastrow {
+				// This is just metadata, no actual result - return 0 as the count
+				return 0, nil
+			}
+		}
+		return 0, fmt.Errorf("missing result object (search may have returned no results)")
 	}
 	countValue, ok := result["count"]
 	if !ok {
-		return 0, fmt.Errorf("missing count")
+		return 0, fmt.Errorf("missing count field in result")
 	}
 	switch typed := countValue.(type) {
 	case string:
@@ -547,6 +790,9 @@ func searchResultsContainRaw(payload, expected string) (bool, error) {
 
 func ensureSplunkdSecret(exec *Context, step spec.StepSpec) {
 	if exec == nil || exec.Splunkd == nil {
+		return
+	}
+	if exec.Splunkd.IsRemote() {
 		return
 	}
 	secretName := strings.TrimSpace(getString(step.With, "secret_name", ""))

@@ -249,7 +249,28 @@ func resolveTopology(spec spec.TestSpec, exec *steps.Context) string {
 	if topology == "" && exec != nil {
 		topology = strings.TrimSpace(exec.Vars["topology_kind"])
 	}
+	if topology == "" {
+		topology = topologyFromSteps(spec.Steps)
+	}
 	return topology
+}
+
+func topologyFromSteps(steps []spec.StepSpec) string {
+	for _, step := range steps {
+		if !strings.EqualFold(step.Action, "topology.deploy") {
+			continue
+		}
+		if step.With == nil {
+			continue
+		}
+		if raw, ok := step.With["kind"]; ok {
+			value := strings.TrimSpace(fmt.Sprintf("%v", raw))
+			if value != "" {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func joinDatasetNames(datasets []spec.DatasetRef) string {

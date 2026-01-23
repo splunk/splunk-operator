@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,12 @@ type Client struct {
 	Container  string
 	SecretName string
 	Username   string
+	Password   string
+
+	RemoteHost         string
+	MgmtPort           int
+	HECPort            int
+	InsecureSkipVerify bool
 
 	passwordMu     sync.Mutex
 	passwordCached bool
@@ -35,11 +43,38 @@ type Client struct {
 // NewClient creates a Splunkd client for a target pod.
 func NewClient(kube *k8s.Client, namespace, podName string) *Client {
 	return &Client{
-		Kube:      kube,
-		Namespace: namespace,
-		PodName:   podName,
-		Username:  "admin",
+		Kube:               kube,
+		Namespace:          namespace,
+		PodName:            podName,
+		Username:           "admin",
+		MgmtPort:           8089,
+		HECPort:            8088,
+		InsecureSkipVerify: true,
 	}
+}
+
+// NewRemoteClient creates a Splunkd client for an external endpoint.
+func NewRemoteClient(endpoint string) (*Client, error) {
+	base, port, err := normalizeEndpoint(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	client := &Client{
+		RemoteHost:         base,
+		Username:           "admin",
+		MgmtPort:           8089,
+		HECPort:            8088,
+		InsecureSkipVerify: true,
+	}
+	if port > 0 {
+		client.MgmtPort = port
+	}
+	return client, nil
+}
+
+// IsRemote returns true when the client targets an external endpoint.
+func (c *Client) IsRemote() bool {
+	return strings.TrimSpace(c.RemoteHost) != ""
 }
 
 // WithContainer sets the target container.
@@ -53,6 +88,11 @@ func (c *Client) WithSecretName(secretName string) *Client {
 	clone := NewClient(c.Kube, c.Namespace, c.PodName)
 	clone.Container = c.Container
 	clone.Username = c.Username
+	clone.Password = c.Password
+	clone.RemoteHost = c.RemoteHost
+	clone.MgmtPort = c.MgmtPort
+	clone.HECPort = c.HECPort
+	clone.InsecureSkipVerify = c.InsecureSkipVerify
 	clone.SecretName = secretName
 	return clone
 }
@@ -62,12 +102,20 @@ func (c *Client) WithPod(podName string) *Client {
 	clone := NewClient(c.Kube, c.Namespace, podName)
 	clone.Container = c.Container
 	clone.Username = c.Username
+	clone.Password = c.Password
+	clone.RemoteHost = c.RemoteHost
+	clone.MgmtPort = c.MgmtPort
+	clone.HECPort = c.HECPort
+	clone.InsecureSkipVerify = c.InsecureSkipVerify
 	clone.SecretName = c.SecretName
 	return clone
 }
 
 // Exec runs a command in the target pod.
 func (c *Client) Exec(ctx context.Context, cmd []string, stdin string) (string, string, error) {
+	if c.IsRemote() {
+		return "", "", fmt.Errorf("exec not supported for remote Splunkd target")
+	}
 	return c.Kube.Exec(ctx, c.Namespace, c.PodName, c.Container, cmd, stdin, false)
 }
 
@@ -86,6 +134,9 @@ func (c *Client) CreateIndex(ctx context.Context, indexName string) error {
 
 // CopyFile copies a local file into the pod.
 func (c *Client) CopyFile(ctx context.Context, srcPath, destPath string) error {
+	if c.IsRemote() {
+		return fmt.Errorf("copy file not supported for remote Splunkd target")
+	}
 	_, stderr, err := c.Kube.CopyFileToPod(ctx, c.Namespace, c.PodName, srcPath, destPath)
 	if err != nil {
 		return fmt.Errorf("copy file failed: %w (stderr=%s)", err, stderr)
@@ -240,16 +291,28 @@ func (c *Client) doRequestWithAuth(ctx context.Context, port int, method, path s
 }
 
 func (c *Client) doRequest(ctx context.Context, port int, method, path string, query url.Values, body io.Reader, headers map[string]string, useAuth bool, username, password string) ([]byte, error) {
-	if c.Kube == nil {
-		return nil, fmt.Errorf("kube client not configured")
+	endpoint := ""
+	if c.IsRemote() {
+		remotePort := port
+		if port == 8089 && c.MgmtPort > 0 {
+			remotePort = c.MgmtPort
+		}
+		if port == 8088 && c.HECPort > 0 {
+			remotePort = c.HECPort
+		}
+		base := strings.TrimRight(c.RemoteHost, "/")
+		endpoint = fmt.Sprintf("%s:%d%s", base, remotePort, path)
+	} else {
+		if c.Kube == nil {
+			return nil, fmt.Errorf("kube client not configured")
+		}
+		forward, err := c.Kube.StartPortForward(ctx, c.Namespace, c.PodName, port)
+		if err != nil {
+			return nil, err
+		}
+		defer forward.Close()
+		endpoint = fmt.Sprintf("https://127.0.0.1:%d%s", forward.LocalPort, path)
 	}
-	forward, err := c.Kube.StartPortForward(ctx, c.Namespace, c.PodName, port)
-	if err != nil {
-		return nil, err
-	}
-	defer forward.Close()
-
-	endpoint := fmt.Sprintf("https://127.0.0.1:%d%s", forward.LocalPort, path)
 	if query != nil && len(query) > 0 {
 		endpoint = endpoint + "?" + query.Encode()
 	}
@@ -275,7 +338,7 @@ func (c *Client) doRequest(ctx context.Context, port int, method, path string, q
 		Timeout: 60 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec // Required for self-signed Splunk certs in E2E tests
+				InsecureSkipVerify: c.InsecureSkipVerify, //nolint:gosec // Required for self-signed Splunk certs in E2E tests
 			},
 		},
 	}
@@ -293,6 +356,34 @@ func (c *Client) doRequest(ctx context.Context, port int, method, path string, q
 		return nil, fmt.Errorf("splunkd request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(payload)))
 	}
 	return payload, nil
+}
+
+func normalizeEndpoint(endpoint string) (string, int, error) {
+	raw := strings.TrimSpace(endpoint)
+	if raw == "" {
+		return "", 0, fmt.Errorf("endpoint is required")
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", 0, err
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return "", 0, fmt.Errorf("invalid endpoint %q", endpoint)
+	}
+	base := fmt.Sprintf("%s://%s", parsed.Scheme, host)
+	port := 0
+	if rawPort := parsed.Port(); rawPort != "" {
+		value, err := strconv.Atoi(rawPort)
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid port %q", rawPort)
+		}
+		port = value
+	}
+	return base, port, nil
 }
 
 func parseBool(value interface{}) bool {
@@ -321,6 +412,21 @@ func (c *Client) passwordForAuth(ctx context.Context) (string, error) {
 	defer c.passwordMu.Unlock()
 	if c.passwordCached {
 		return c.password, c.passwordErr
+	}
+	if strings.TrimSpace(c.Password) != "" {
+		c.password = c.Password
+		c.passwordCached = true
+		return c.password, nil
+	}
+	if env := strings.TrimSpace(os.Getenv("E2E_SPLUNKD_PASSWORD")); env != "" {
+		c.password = env
+		c.passwordCached = true
+		return c.password, nil
+	}
+	if c.IsRemote() {
+		c.passwordErr = fmt.Errorf("splunkd password not set (set E2E_SPLUNKD_PASSWORD or provide password in splunkd.target)")
+		c.passwordCached = true
+		return "", c.passwordErr
 	}
 	if c.Kube == nil {
 		c.passwordErr = fmt.Errorf("kube client not configured")

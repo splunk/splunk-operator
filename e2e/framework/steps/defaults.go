@@ -10,6 +10,7 @@ func RegisterDefaults(reg *Registry) {
 	RegisterLicenseHandlers(reg)
 	RegisterSecretHandlers(reg)
 	RegisterPhaseHandlers(reg)
+	RegisterMiscHandlers(reg)
 	RegisterObjectstoreHandlers(reg)
 	RegisterAppFrameworkHandlers(reg)
 }
