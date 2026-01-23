@@ -45,6 +45,12 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - pods/eviction
+  verbs:
+  - create
+- apiGroups:
   - enterprise.splunk.com
   resources:
   - clustermanagers
@@ -100,3 +106,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
