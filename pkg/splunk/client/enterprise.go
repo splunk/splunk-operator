@@ -1015,3 +1015,62 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 	}
 	return err
 }
+
+// RestartRequiredResponse represents the response from /services/messages/restart_required
+type RestartRequiredResponse struct {
+	Entry []RestartRequiredEntry `json:"entry"`
+}
+
+// RestartRequiredEntry represents a single entry in the restart_required response
+type RestartRequiredEntry struct {
+	Name    string                 `json:"name"`
+	Content RestartRequiredContent `json:"content"`
+}
+
+// RestartRequiredContent represents the content of a restart_required entry
+type RestartRequiredContent struct {
+	RestartRequired bool   `json:"restart_required"`
+	Message         string `json:"message,omitempty"`
+}
+
+// CheckRestartRequired checks if Splunk requires a restart
+// Returns: restart required (bool), reason message (string), error
+func (c *SplunkClient) CheckRestartRequired() (bool, string, error) {
+	url := c.ManagementURI + "/services/messages/restart_required?output_mode=json"
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to create restart_required request: %w", err)
+	}
+
+	response := &RestartRequiredResponse{}
+	err = c.Do(request, []int{200}, response)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to check restart_required: %w", err)
+	}
+
+	if len(response.Entry) > 0 {
+		return response.Entry[0].Content.RestartRequired,
+			response.Entry[0].Content.Message, nil
+	}
+
+	return false, "", nil
+}
+
+// ReloadSplunk reloads Splunk configuration without restarting splunkd
+// Calls POST /services/server/control/restart with mode=reload
+func (c *SplunkClient) ReloadSplunk() error {
+	url := c.ManagementURI + "/services/server/control/restart?mode=reload&output_mode=json"
+
+	request, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create reload request: %w", err)
+	}
+
+	// Reload can take time, so accept 200 (success) or 202 (accepted)
+	err = c.Do(request, []int{200, 202}, nil)
+	if err != nil {
+		return fmt.Errorf("failed to reload splunk: %w", err)
+	}
+
+	return nil
+}
