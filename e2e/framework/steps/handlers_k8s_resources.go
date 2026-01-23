@@ -47,6 +47,7 @@ func handleResourceApply(ctx context.Context, exec *Context, step spec.StepSpec)
 	err = exec.Kube.Client.Get(ctx, client.ObjectKey{Name: obj.GetName(), Namespace: obj.GetNamespace()}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			ensureSplunkDeletePVCFinalizer(obj)
 			if err := exec.Kube.Client.Create(ctx, obj); err != nil {
 				return nil, err
 			}
@@ -55,6 +56,7 @@ func handleResourceApply(ctx context.Context, exec *Context, step spec.StepSpec)
 		return nil, err
 	}
 
+	preserveFinalizers(obj, existing)
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	if err := exec.Kube.Client.Update(ctx, obj); err != nil {
 		return nil, err
@@ -1007,4 +1009,59 @@ func getStringList(params map[string]interface{}, key string) ([]string, error) 
 	default:
 		return nil, fmt.Errorf("field %s must be a list or string", key)
 	}
+}
+
+const splunkDeletePVCFinalizer = "enterprise.splunk.com/delete-pvc"
+
+var splunkFinalizerKinds = map[string]struct{}{
+	"Standalone":       {},
+	"ClusterManager":   {},
+	"ClusterMaster":    {},
+	"IndexerCluster":   {},
+	"SearchHeadCluster": {},
+	"MonitoringConsole": {},
+	"LicenseManager":   {},
+	"LicenseMaster":    {},
+}
+
+func preserveFinalizers(target, existing *unstructured.Unstructured) {
+	if target == nil || existing == nil {
+		return
+	}
+	if len(target.GetFinalizers()) == 0 && len(existing.GetFinalizers()) > 0 {
+		target.SetFinalizers(existing.GetFinalizers())
+	}
+}
+
+func ensureSplunkDeletePVCFinalizer(obj *unstructured.Unstructured) {
+	if obj == nil {
+		return
+	}
+	if !shouldAddSplunkFinalizer(obj) {
+		return
+	}
+	finalizers := obj.GetFinalizers()
+	for _, item := range finalizers {
+		if item == splunkDeletePVCFinalizer {
+			return
+		}
+	}
+	obj.SetFinalizers(append(finalizers, splunkDeletePVCFinalizer))
+}
+
+func shouldAddSplunkFinalizer(obj *unstructured.Unstructured) bool {
+	apiVersion := strings.TrimSpace(obj.GetAPIVersion())
+	if apiVersion == "" {
+		return false
+	}
+	parts := strings.SplitN(apiVersion, "/", 2)
+	if len(parts) < 2 || parts[0] != "enterprise.splunk.com" {
+		return false
+	}
+	kind := strings.TrimSpace(obj.GetKind())
+	if kind == "" {
+		return false
+	}
+	_, ok := splunkFinalizerKinds[kind]
+	return ok
 }
