@@ -1691,8 +1691,8 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 	normalizedOut := normalizeSHCBundlePushStatusOutput(stdOut)
 
 	// Check if we did not get the desired output in the status file. There can be 2 scenarios -
-	// 1. stdOut is empty, which means bundle push is still in progress
-	// 2. stdOut has some other string other than the bundle push success message
+	// 1. normalizedOut is empty, which means bundle push is still in progress (status file has only benign banner/warnings, or nothing yet)
+	// 2. normalizedOut has some other string other than the bundle push success message
 	if normalizedOut == "" {
 		scopedLog.Info("SHC Bundle Push is still in progress")
 		return false, nil
@@ -1756,6 +1756,16 @@ func normalizeSHCBundlePushStatusOutput(stdOut string) string {
 		return ""
 	}
 
+	// NOTE: Keep this list small and intentionally scoped to *known benign* Splunk CLI output
+	// that can precede the actual SHC bundle push status line. Expand as we learn of other
+	// harmless banners/warnings in the field.
+	benignLinePrefixes := []string{
+		// FIPS banner emitted by Splunk CLI in FIPS-enabled environments
+		"FIPS provider enabled.",
+		// Common benign CLI warning (often appears right after the FIPS banner)
+		"WARNING: Server Certificate Hostname Validation is disabled.",
+	}
+
 	lines := strings.Split(out, "\n")
 	kept := make([]string, 0, len(lines))
 	for _, raw := range lines {
@@ -1764,13 +1774,14 @@ func normalizeSHCBundlePushStatusOutput(stdOut string) string {
 			continue
 		}
 
-		// FIPS banner emitted by Splunk CLI in FIPS-enabled environments
-		if strings.HasPrefix(line, "FIPS provider enabled.") {
-			continue
+		skip := false
+		for _, prefix := range benignLinePrefixes {
+			if strings.HasPrefix(line, prefix) {
+				skip = true
+				break
+			}
 		}
-
-		// Common benign CLI warning (often appears right after the FIPS banner)
-		if strings.HasPrefix(line, "WARNING: Server Certificate Hostname Validation is disabled.") {
+		if skip {
 			continue
 		}
 
