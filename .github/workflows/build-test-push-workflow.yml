@@ -23,7 +23,13 @@ jobs:
       with:
         go-version: ${{ steps.dotenv.outputs.GO_VERSION }}
     - name: Check Source formatting
-      run: make fmt && if [[ $? -ne 0 ]]; then false; fi
+      run: |
+        UNFORMATTED=$(gofmt -l .)
+        if [ -n "$UNFORMATTED" ]; then
+          echo "These files are not formatted:"
+          echo "$UNFORMATTED"
+          exit 1
+        fi
     - name: Lint source code
       run: make vet && if [[ $? -ne 0 ]]; then false; fi
   unit-tests:
