@@ -22,7 +22,7 @@ go build -o bin/e2e-runner ./e2e/cmd/e2e-runner
 ./bin/e2e-runner \
   -cluster-provider eks \
   -operator-namespace splunk-operator \
-  e2e/specs/operator/smoke_fast.yaml
+  -spec-dir e2e/specs/operator/smoke_fast.yaml
 ```
 
 ### 3. View Results
@@ -89,20 +89,29 @@ View graph data at: `http://neo4j.example.com:7474`
 
 ## Common Use Cases
 
+### Use a Config File
+
+```bash
+# Start with the example config and override per-run values with flags/env
+./bin/e2e-runner \
+  --config e2e/config.example.yaml \
+  -spec-dir e2e/specs/operator/smoke_fast.yaml
+```
+
 ### Run Specific Tests by Tag
 
 ```bash
 ./bin/e2e-runner \
   -include-tags smoke \
-  e2e/specs/operator/*.yaml
+  -spec-dir e2e/specs/operator
 ```
 
 ### Run Tests in Parallel
 
 ```bash
 ./bin/e2e-runner \
-  -parallelism 3 \
-  e2e/specs/operator/smoke_fast.yaml
+  -parallel 3 \
+  -spec-dir e2e/specs/operator/smoke_fast.yaml
 ```
 
 ### Keep Resources for Debugging
@@ -110,7 +119,7 @@ View graph data at: `http://neo4j.example.com:7474`
 ```bash
 ./bin/e2e-runner \
   -skip-teardown \
-  e2e/specs/operator/my_test.yaml
+  -spec-dir e2e/specs/operator/my_test.yaml
 
 # Then inspect
 export NS=$(cat artifacts/results.json | jq -r '.tests[0].metadata.namespace')
@@ -121,4 +130,3 @@ kubectl get all -n $NS
 
 - Read the full [README.md](./README.md) for detailed documentation
 - Explore test specs in `e2e/specs/operator/`
-
