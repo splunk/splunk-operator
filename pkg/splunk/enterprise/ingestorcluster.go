@@ -30,6 +30,8 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -277,14 +279,16 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				return result, err
 			}
 
-			for i := int32(0); i < cr.Spec.Replicas; i++ {
-				ingClient := mgr.getClient(ctx, i)
-				err = ingClient.RestartSplunk()
-				if err != nil {
-					return result, err
-				}
-				scopedLog.Info("Restarted splunk", "ingestor", i)
-			}
+			// Trigger rolling restart mechanism instead of restarting all pods immediately
+			// This ensures proper rolling restart with PDB respect
+			scopedLog.Info("Queue/ObjectStorage secrets changed, triggering rolling restart")
+			now := metav1.Now()
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhasePending
+			cr.Status.RestartStatus.TotalPods = cr.Spec.Replicas
+			cr.Status.RestartStatus.PodsNeedingRestart = cr.Spec.Replicas
+			cr.Status.RestartStatus.PodsRestarted = 0
+			cr.Status.RestartStatus.LastCheckTime = &now
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Secret change detected, %d pods need restart", cr.Spec.Replicas)
 
 			cr.Status.QueueBucketAccessSecretVersion = version
 		}
@@ -317,6 +321,18 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
+		}
+
+		// Handle rolling restart mechanism
+		// This runs after everything else is ready to check for config changes
+		restartResult, restartErr := handleRollingRestart(ctx, client, cr)
+		if restartErr != nil {
+			scopedLog.Error(restartErr, "Rolling restart handler failed")
+			// Don't return error, just log it - we don't want to block other operations
+		}
+		// If restart handler wants to requeue, honor that
+		if restartResult.Requeue || restartResult.RequeueAfter > 0 {
+			result = restartResult
 		}
 	}
 
@@ -492,4 +508,395 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 	}
 
 	return
+}
+
+// ============================================================================
+// Rolling Restart Mechanism - Helper Functions
+// ============================================================================
+
+// isPodReady checks if a pod has the Ready condition set to True
+func isPodReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldCheckRestartRequired determines if we should check restart_required endpoint
+// Rate limits checks to avoid overwhelming Splunk REST API
+func shouldCheckRestartRequired(cr *enterpriseApi.IngestorCluster) bool {
+	// Don't check if restart is already in progress or failed
+	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseInProgress ||
+		cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseFailed {
+		return false
+	}
+
+	// Check every 5 minutes
+	if cr.Status.RestartStatus.LastCheckTime == nil {
+		return true
+	}
+
+	elapsed := time.Since(cr.Status.RestartStatus.LastCheckTime.Time)
+	checkInterval := 5 * time.Minute
+
+	return elapsed > checkInterval
+}
+
+// checkPodsRestartRequired checks which pods need restart
+// Returns count of pods needing restart, total pods checked, error
+func checkPodsRestartRequired(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.IngestorCluster,
+) (int32, int32, error) {
+	scopedLog := log.FromContext(ctx).WithName("checkPodsRestartRequired")
+
+	var podsNeedingRestart int32
+	totalPods := cr.Spec.Replicas
+
+	// Get Splunk admin credentials
+	secret := &corev1.Secret{}
+	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get splunk secret")
+		return 0, totalPods, fmt.Errorf("failed to get splunk secret: %w", err)
+	}
+	password := string(secret.Data["password"])
+
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
+
+		// Get pod
+		pod := &corev1.Pod{}
+		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			continue // Skip this pod
+		}
+
+		// Check if pod is ready
+		if !isPodReady(pod) {
+			scopedLog.Info("Pod not ready, skipping restart check", "pod", podName)
+			continue
+		}
+
+		// Get pod IP
+		if pod.Status.PodIP == "" {
+			scopedLog.Info("Pod has no IP, skipping", "pod", podName)
+			continue
+		}
+
+		// Create SplunkClient for this pod
+		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+		// Check restart required
+		restartRequired, reason, err := splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+			continue // Don't fail entire check, just skip this pod
+		}
+
+		if restartRequired {
+			scopedLog.Info("Pod needs restart", "pod", podName, "reason", reason)
+			podsNeedingRestart++
+		}
+	}
+
+	return podsNeedingRestart, totalPods, nil
+}
+
+// tryReloadAllPods attempts to reload configuration on all pods sequentially
+// Returns: count of pods still needing restart after reload, error
+func tryReloadAllPods(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.IngestorCluster,
+) (int32, error) {
+	scopedLog := log.FromContext(ctx).WithName("tryReloadAllPods")
+
+	// Get Splunk admin credentials
+	secret := &corev1.Secret{}
+	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get splunk secret")
+		return 0, fmt.Errorf("failed to get splunk secret: %w", err)
+	}
+	password := string(secret.Data["password"])
+
+	var podsStillNeedingRestart int32
+
+	// Iterate pods sequentially (one at a time)
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
+
+		// Get pod
+		pod := &corev1.Pod{}
+		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			continue
+		}
+
+		// Check if pod is ready
+		if !isPodReady(pod) {
+			scopedLog.Info("Pod not ready, skipping reload", "pod", podName)
+			continue
+		}
+
+		// Get pod IP
+		if pod.Status.PodIP == "" {
+			scopedLog.Info("Pod has no IP, skipping", "pod", podName)
+			continue
+		}
+
+		// Create SplunkClient for this pod
+		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+		// Check if restart is required before reload
+		restartRequired, reason, err := splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+			continue
+		}
+
+		if !restartRequired {
+			scopedLog.Info("Pod does not need restart, skipping reload", "pod", podName)
+			continue
+		}
+
+		scopedLog.Info("Pod needs restart, attempting reload", "pod", podName, "reason", reason)
+
+		// Attempt reload
+		err = splunkClient.ReloadSplunk()
+		if err != nil {
+			scopedLog.Error(err, "Failed to reload Splunk", "pod", podName)
+			// Count as still needing restart if reload fails
+			podsStillNeedingRestart++
+			continue
+		}
+
+		scopedLog.Info("Successfully triggered reload on pod", "pod", podName)
+
+		// Wait 5 seconds for reload to settle
+		time.Sleep(5 * time.Second)
+
+		// Check if restart is still required after reload
+		restartRequired, reason, err = splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required after reload", "pod", podName)
+			// Assume still needs restart if check fails
+			podsStillNeedingRestart++
+			continue
+		}
+
+		if restartRequired {
+			scopedLog.Info("Pod still needs restart after reload, will require full restart", "pod", podName, "reason", reason)
+			podsStillNeedingRestart++
+		} else {
+			scopedLog.Info("Reload successful, pod no longer needs restart", "pod", podName)
+		}
+	}
+
+	return podsStillNeedingRestart, nil
+}
+
+// ============================================================================
+// Rolling Restart State Machine
+// ============================================================================
+
+// handleRollingRestart manages the rolling restart state machine
+// Returns: result with requeue info, error
+func handleRollingRestart(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.IngestorCluster,
+) (reconcile.Result, error) {
+	scopedLog := log.FromContext(ctx).WithName("handleRollingRestart")
+	now := metav1.Now()
+
+	// State: None or Completed - Check if restart is needed
+	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseNone ||
+		cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseCompleted {
+
+		// Rate limit: only check every 5 minutes
+		if !shouldCheckRestartRequired(cr) {
+			return reconcile.Result{}, nil
+		}
+
+		scopedLog.Info("Checking if pods need restart")
+		cr.Status.RestartStatus.LastCheckTime = &now
+
+		podsNeedingRestart, totalPods, err := checkPodsRestartRequired(ctx, c, cr)
+		if err != nil {
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Failed to check restart status: %v", err)
+			return reconcile.Result{RequeueAfter: 1 * time.Minute}, err
+		}
+
+		if podsNeedingRestart == 0 {
+			scopedLog.Info("No pods need restart")
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseNone
+			cr.Status.RestartStatus.Message = ""
+			cr.Status.RestartStatus.TotalPods = totalPods
+			cr.Status.RestartStatus.PodsNeedingRestart = 0
+			cr.Status.RestartStatus.PodsRestarted = 0
+			return reconcile.Result{}, nil
+		}
+
+		// Transition to Pending
+		scopedLog.Info("Pods need restart, transitioning to Pending", "podsNeedingRestart", podsNeedingRestart)
+		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhasePending
+		cr.Status.RestartStatus.TotalPods = totalPods
+		cr.Status.RestartStatus.PodsNeedingRestart = podsNeedingRestart
+		cr.Status.RestartStatus.PodsRestarted = 0
+		cr.Status.RestartStatus.Message = fmt.Sprintf("%d/%d pods need restart", podsNeedingRestart, totalPods)
+
+		// Requeue immediately to start reload attempt
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	// State: Pending - Try reload first
+	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhasePending {
+		scopedLog.Info("Attempting sequential reload on all pods")
+		cr.Status.RestartStatus.Message = fmt.Sprintf("Attempting reload on %d pods", cr.Status.RestartStatus.PodsNeedingRestart)
+
+		podsStillNeedingRestart, err := tryReloadAllPods(ctx, c, cr)
+		if err != nil {
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Reload failed: %v", err)
+			return reconcile.Result{RequeueAfter: 1 * time.Minute}, err
+		}
+
+		if podsStillNeedingRestart == 0 {
+			// Success! All pods reloaded successfully
+			scopedLog.Info("All pods reloaded successfully, no restarts needed")
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Configuration reloaded successfully on all %d pods, no restarts needed", cr.Status.RestartStatus.TotalPods)
+			cr.Status.RestartStatus.PodsNeedingRestart = 0
+			return reconcile.Result{}, nil
+		}
+
+		// Some pods still need restart, transition to InProgress
+		scopedLog.Info("Reload helped but some pods still need restart", "podsStillNeedingRestart", podsStillNeedingRestart)
+		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseInProgress
+		cr.Status.RestartStatus.PodsNeedingRestart = podsStillNeedingRestart
+		cr.Status.RestartStatus.PodsRestarted = 0
+		cr.Status.RestartStatus.LastRestartTime = &now
+		cr.Status.RestartStatus.Message = fmt.Sprintf("Reloaded all pods, %d/%d still need restart", podsStillNeedingRestart, cr.Status.RestartStatus.TotalPods)
+
+		// Requeue immediately to start restart
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	// State: InProgress - Perform rolling restart one pod per reconcile
+	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseInProgress {
+		// Timeout check: fail if stuck for more than 2 hours
+		if cr.Status.RestartStatus.LastRestartTime != nil {
+			elapsed := time.Since(cr.Status.RestartStatus.LastRestartTime.Time)
+			if elapsed > 2*time.Hour {
+				scopedLog.Error(nil, "Rolling restart timeout", "elapsed", elapsed)
+				cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
+				cr.Status.RestartStatus.Message = fmt.Sprintf("Restart timeout after %v", elapsed)
+				return reconcile.Result{}, fmt.Errorf("rolling restart timeout")
+			}
+		}
+
+		scopedLog.Info("Rolling restart in progress", "podsRestarted", cr.Status.RestartStatus.PodsRestarted, "podsNeedingRestart", cr.Status.RestartStatus.PodsNeedingRestart)
+
+		// Find next pod that needs restart
+		var podToRestart *corev1.Pod
+		var podIndex int32 = -1
+
+		for i := int32(0); i < cr.Spec.Replicas; i++ {
+			podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
+			pod := &corev1.Pod{}
+			err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+			if err != nil {
+				scopedLog.Error(err, "Failed to get pod", "pod", podName)
+				continue
+			}
+
+			// Check if pod is ready and has IP
+			if !isPodReady(pod) || pod.Status.PodIP == "" {
+				continue
+			}
+
+			// Check if this pod still needs restart
+			secret := &corev1.Secret{}
+			secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+			err = c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+			if err != nil {
+				scopedLog.Error(err, "Failed to get splunk secret")
+				continue
+			}
+			password := string(secret.Data["password"])
+
+			managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+			splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+			restartRequired, reason, err := splunkClient.CheckRestartRequired()
+			if err != nil {
+				scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+				continue
+			}
+
+			if restartRequired {
+				scopedLog.Info("Found pod needing restart", "pod", podName, "reason", reason)
+				podToRestart = pod
+				podIndex = i
+				break
+			}
+		}
+
+		// No pod found needing restart - we're done!
+		if podToRestart == nil {
+			scopedLog.Info("All pods restarted successfully")
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Rolling restart completed successfully for %d pods", cr.Status.RestartStatus.TotalPods)
+			cr.Status.RestartStatus.PodsNeedingRestart = 0
+			return reconcile.Result{}, nil
+		}
+
+		// Restart this pod using eviction API
+		scopedLog.Info("Restarting pod", "pod", podToRestart.Name, "index", podIndex, "progress", fmt.Sprintf("%d/%d", cr.Status.RestartStatus.PodsRestarted+1, cr.Status.RestartStatus.PodsNeedingRestart))
+
+		err := c.Delete(ctx, podToRestart)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			scopedLog.Error(err, "Failed to delete pod", "pod", podToRestart.Name)
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Failed to restart pod %s: %v", podToRestart.Name, err)
+			return reconcile.Result{RequeueAfter: 1 * time.Minute}, err
+		}
+
+		// Update progress
+		cr.Status.RestartStatus.PodsRestarted++
+		cr.Status.RestartStatus.Message = fmt.Sprintf("Restarting pod %d (%d/%d)", podIndex, cr.Status.RestartStatus.PodsRestarted, cr.Status.RestartStatus.PodsNeedingRestart)
+
+		// Requeue after 30 seconds to wait for pod to restart and become ready
+		scopedLog.Info("Pod deleted, waiting for restart", "pod", podToRestart.Name, "requeueAfter", "30s")
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// State: Failed - Wait before retrying
+	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseFailed {
+		scopedLog.Info("Restart operation failed, will retry", "message", cr.Status.RestartStatus.Message)
+		// Reset to None after 5 minutes to allow retry
+		if cr.Status.RestartStatus.LastCheckTime != nil {
+			elapsed := time.Since(cr.Status.RestartStatus.LastCheckTime.Time)
+			if elapsed > 5*time.Minute {
+				scopedLog.Info("Resetting failed restart status for retry")
+				cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseNone
+				cr.Status.RestartStatus.Message = ""
+			}
+		}
+		return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
+	return reconcile.Result{}, nil
 }

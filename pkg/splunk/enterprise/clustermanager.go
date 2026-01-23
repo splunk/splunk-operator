@@ -426,7 +426,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 
 	return splunkClient.BundlePush(true)
 }
-	
+
 // helper function to get the list of ClusterManager types in the current namespace
 func getClusterManagerList(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, listOpts []rclient.ListOption) (int, error) {
 	reqLogger := log.FromContext(ctx)
