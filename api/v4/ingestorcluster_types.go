@@ -78,7 +78,58 @@ type IngestorClusterStatus struct {
 
 	// Queue and bucket access secret version
 	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
+
+	// Rolling restart status
+	RestartStatus RestartStatus `json:"restartStatus,omitempty"`
 }
+
+// RestartStatus tracks the state of rolling restart operations
+type RestartStatus struct {
+	// Phase of restart operation
+	Phase RestartPhase `json:"phase,omitempty"`
+
+	// Human-readable message describing current restart state
+	// Examples:
+	// - "2/3 pods need restart (server.conf modified)"
+	// - "Restarting pod 47 (48/95)"
+	// - "Configuration reloaded successfully on all 100 pods, no restarts needed"
+	Message string `json:"message,omitempty"`
+
+	// Total number of pods in the cluster
+	TotalPods int32 `json:"totalPods,omitempty"`
+
+	// Number of pods that need restart
+	PodsNeedingRestart int32 `json:"podsNeedingRestart,omitempty"`
+
+	// Number of pods successfully restarted in current operation
+	PodsRestarted int32 `json:"podsRestarted,omitempty"`
+
+	// Last time we checked if restart was required
+	LastCheckTime *metav1.Time `json:"lastCheckTime,omitempty"`
+
+	// Last time a restart operation started (used for timeout detection)
+	LastRestartTime *metav1.Time `json:"lastRestartTime,omitempty"`
+}
+
+// RestartPhase represents the phase of a restart operation
+type RestartPhase string
+
+const (
+	// RestartPhaseNone indicates no restart is needed or in progress
+	RestartPhaseNone RestartPhase = ""
+
+	// RestartPhasePending indicates restart is needed but not yet started
+	RestartPhasePending RestartPhase = "Pending"
+
+	// RestartPhaseInProgress indicates restart operation is currently running
+	RestartPhaseInProgress RestartPhase = "InProgress"
+
+	// RestartPhaseCompleted indicates restart operation completed successfully
+	RestartPhaseCompleted RestartPhase = "Completed"
+
+	// RestartPhaseFailed indicates restart operation failed
+	RestartPhaseFailed RestartPhase = "Failed"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
