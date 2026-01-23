@@ -459,8 +459,18 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 				// Value for token not found, generate
 				if tokenType == "hec_token" {
 					current.Data[tokenType] = generateHECToken()
+				} else if tokenType == "password" {
+					// use complexity for password
+					current.Data[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+					if err != nil {
+						return nil, err
+					}
 				} else {
-					current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+					// disable complexity for secrets
+					current.Data[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 0, 0, 0, 0)
+					if err != nil {
+						return nil, err
+					}
 				}
 				updateNeeded = true
 			}
@@ -488,8 +498,17 @@ func ApplyNamespaceScopedSecretObject(ctx context.Context, client splcommon.Cont
 	for _, tokenType := range splcommon.GetSplunkSecretTokenTypes() {
 		if tokenType == "hec_token" {
 			current.Data[tokenType] = generateHECToken()
+		} else if tokenType == "password" {
+			// use complexity for password
+			current.Data[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 1, 1, 1, 1)
+			if err != nil {
+				return nil, err
+			}
 		} else {
-			current.Data[tokenType] = splcommon.GenerateSecret(splcommon.SecretBytes, 24)
+			current.Data[tokenType], err = splcommon.GenerateSecretWithComplexity(24, 0, 0, 0, 0)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
