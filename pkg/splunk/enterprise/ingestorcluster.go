@@ -281,14 +281,17 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 
 			// Trigger rolling restart mechanism instead of restarting all pods immediately
 			// This ensures proper rolling restart with PDB respect
+			// For secret changes, skip reload attempt and go directly to InProgress
+			// because secrets are mounted volumes and require pod restart to pick up changes
 			scopedLog.Info("Queue/ObjectStorage secrets changed, triggering rolling restart")
 			now := metav1.Now()
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhasePending
+			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseInProgress
 			cr.Status.RestartStatus.TotalPods = cr.Spec.Replicas
 			cr.Status.RestartStatus.PodsNeedingRestart = cr.Spec.Replicas
 			cr.Status.RestartStatus.PodsRestarted = 0
 			cr.Status.RestartStatus.LastCheckTime = &now
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Secret change detected, %d pods need restart", cr.Spec.Replicas)
+			cr.Status.RestartStatus.LastRestartTime = &now
+			cr.Status.RestartStatus.Message = fmt.Sprintf("Secret change detected, starting rolling restart of %d pods", cr.Spec.Replicas)
 
 			cr.Status.QueueBucketAccessSecretVersion = version
 		}
@@ -813,44 +816,32 @@ func handleRollingRestart(
 		var podToRestart *corev1.Pod
 		var podIndex int32 = -1
 
-		for i := int32(0); i < cr.Spec.Replicas; i++ {
-			podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
-			pod := &corev1.Pod{}
-			err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
-			if err != nil {
-				scopedLog.Error(err, "Failed to get pod", "pod", podName)
-				continue
-			}
+		// If we still have pods to restart (PodsRestarted < PodsNeedingRestart),
+		// restart the next ready pod in sequence
+		// This handles secret changes where CheckRestartRequired won't detect the change
+		if cr.Status.RestartStatus.PodsRestarted < cr.Status.RestartStatus.PodsNeedingRestart {
+			for i := int32(0); i < cr.Spec.Replicas; i++ {
+				podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
+				pod := &corev1.Pod{}
+				err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+				if err != nil {
+					scopedLog.Error(err, "Failed to get pod", "pod", podName)
+					continue
+				}
 
-			// Check if pod is ready and has IP
-			if !isPodReady(pod) || pod.Status.PodIP == "" {
-				continue
-			}
+				// Check if pod is ready - we only restart ready pods
+				if !isPodReady(pod) || pod.Status.PodIP == "" {
+					continue
+				}
 
-			// Check if this pod still needs restart
-			secret := &corev1.Secret{}
-			secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-			err = c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
-			if err != nil {
-				scopedLog.Error(err, "Failed to get splunk secret")
-				continue
-			}
-			password := string(secret.Data["password"])
-
-			managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
-			splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
-
-			restartRequired, reason, err := splunkClient.CheckRestartRequired()
-			if err != nil {
-				scopedLog.Error(err, "Failed to check restart required", "pod", podName)
-				continue
-			}
-
-			if restartRequired {
-				scopedLog.Info("Found pod needing restart", "pod", podName, "reason", reason)
-				podToRestart = pod
-				podIndex = i
-				break
+				// Restart pods in order: restart pod index = PodsRestarted
+				// This ensures sequential restart
+				if i == cr.Status.RestartStatus.PodsRestarted {
+					scopedLog.Info("Found pod to restart", "pod", podName, "index", i)
+					podToRestart = pod
+					podIndex = i
+					break
+				}
 			}
 		}
 

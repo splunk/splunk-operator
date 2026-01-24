@@ -1043,7 +1043,8 @@ func (c *SplunkClient) CheckRestartRequired() (bool, string, error) {
 	}
 
 	response := &RestartRequiredResponse{}
-	err = c.Do(request, []int{200}, response)
+	// Accept 200 (success) and 404 (endpoint doesn't exist on standalone instances)
+	err = c.Do(request, []int{200, 404}, response)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to check restart_required: %w", err)
 	}
@@ -1053,6 +1054,7 @@ func (c *SplunkClient) CheckRestartRequired() (bool, string, error) {
 			response.Entry[0].Content.Message, nil
 	}
 
+	// No entries or 404 response means no restart required
 	return false, "", nil
 }
 
