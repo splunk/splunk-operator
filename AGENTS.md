@@ -5,7 +5,7 @@ This guide helps AI coding assistants understand the Splunk Operator project str
 ## Project Overview
 
 The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise deployments. It is built using:
-- **Language**: Go 1.25.5
+- **Language**: Go (see GO_VERSION in .env)
 - **Framework**: Kubernetes Operator SDK with controller-runtime
 - **Test Framework**: Ginkgo/Gomega
 - **CRD API Versions**: v1, v1alpha2, v1alpha3, v1beta1, v2, v3, v4
@@ -25,6 +25,7 @@ The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise depl
 ├── docs/                   # User-facing documentation
 ├── helm-chart/            # Helm charts for operator and enterprise
 ├── internal/              # Internal controller logic
+├── kuttl/                 # KUTTL test scenarios
 ├── pkg/                   # Core business logic
 │   ├── splunk/
 │   │   ├── common/       # Common utilities
@@ -34,8 +35,7 @@ The Splunk Operator is a Kubernetes operator that manages Splunk Enterprise depl
 ├── test/                  # Integration tests
 │   ├── testenv/          # Test environment utilities
 │   └── */                # Test suites by feature
-├── tools/                 # Helper scripts and utilities
-└── kuttl/                 # KUTTL test scenarios
+└── tools/                 # Helper scripts and utilities
 ```
 
 ## Common Makefile Commands
@@ -128,7 +128,8 @@ Unit tests are located alongside source files and use Ginkgo/Gomega:
 make test
 
 # Run specific test packages directly
-KUBEBUILDER_ASSETS="$(shell setup-envtest use 1.34.0 -p path)" \
+# (see ENVTEST_K8S_VERSION in Makefile)
+KUBEBUILDER_ASSETS="$(shell setup-envtest use ${ENVTEST_K8S_VERSION} -p path)" \
   ginkgo -v ./pkg/splunk/common
 ```
 
@@ -144,7 +145,7 @@ Test coverage includes:
 **Integration Test Structure:**
 - Each test suite has its own directory under `test/`
 - Suite file: `*_suite_test.go` - Creates TestEnv (namespace)
-- Spec files: `*_test.go` - Contains test cases (It blocks)
+- Spec files: `*_test.go` - Contains test cases (test case Contexts with It blocks)
 - Test utilities: `test/testenv/` - Helper functions for deployments
 
 **Test Categories:**
@@ -197,7 +198,7 @@ WATCH_NAMESPACE=""                                 # Watch all namespaces (clust
 ENVIRONMENT=default                                # Deployment environment
 
 # Splunk configuration
-SPLUNK_ENTERPRISE_IMAGE=docker.io/splunk/splunk:10.0.0   # Splunk Enterprise image
+SPLUNK_ENTERPRISE_IMAGE=(See SPLUNK_ENTERPRISE_RELEASE_IMAGE in .env)   # Splunk Enterprise image
 SPLUNK_GENERAL_TERMS=""                           # SGT acceptance (required)
 
 # Testing
