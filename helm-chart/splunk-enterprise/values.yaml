@@ -396,6 +396,10 @@ searchHeadCluster:
 
   defaultsUrlApps: ""
 
+  deployerNodeAffinity: {}
+
+  deployerResourceSpec: {}
+
   extraEnv: []
   # - name:
   #   value:
