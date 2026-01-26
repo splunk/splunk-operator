@@ -45,8 +45,14 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		mgr.c = c
 	}
 
+	// Get eventPublisher from context
+	var eventPublisher splcommon.K8EventPublisher
+	if ep := ctx.Value(splcommon.EventPublisherKey); ep != nil {
+		eventPublisher = ep.(splcommon.K8EventPublisher)
+	}
+
 	// update statefulset, if necessary
-	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet, eventPublisher)
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
@@ -68,7 +74,33 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+	phase, updateErr := splctrl.UpdateStatefulSetPods(ctx, mgr.c, statefulSet, mgr, desiredReplicas)
+
+	// Check if CPU-aware scaling completed and CR needs update via annotation.
+	// IsCPUPreservingScalingFinished guards the sync to ensure FinishedAt is set,
+	// providing an explicit readability guard even though SyncCRReplicasFromCPUAwareTransition
+	// also enforces this requirement internally.
+	if splctrl.IsCPUPreservingScalingFinished(statefulSet) {
+		if targetReplicas, needsSync := splctrl.SyncCRReplicasFromCPUAwareTransition(statefulSet, mgr.cr.Spec.Replicas); needsSync {
+			scopedLog := log.FromContext(ctx).WithName("searchHeadClusterPodManager.Update")
+			scopedLog.Info("CPU-aware transition complete, updating CR replicas",
+				"from", mgr.cr.Spec.Replicas, "to", targetReplicas)
+
+			mgr.cr.Spec.Replicas = targetReplicas
+			if crUpdateErr := c.Update(ctx, mgr.cr); crUpdateErr != nil {
+				scopedLog.Error(crUpdateErr, "Failed to update CR replicas")
+				return phase, crUpdateErr
+			}
+
+			// CR updated successfully, now clear the annotation
+			if clearErr := splctrl.ClearCPUAwareTransitionAnnotation(ctx, c, statefulSet); clearErr != nil {
+				scopedLog.Error(clearErr, "Failed to clear CPU-aware transition annotation")
+				return phase, clearErr
+			}
+		}
+	}
+
+	return phase, updateErr
 }
 
 // PrepareScaleDown for searchHeadClusterPodManager prepares search head pod to be removed via scale down event; it returns true when ready

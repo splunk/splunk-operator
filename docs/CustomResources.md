@@ -15,17 +15,31 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
   - [Metadata Parameters](#metadata-parameters)
   - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
   - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
+    - [FSGroup Change Policy](#fsgroup-change-policy)
   - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
   - [SearchHeadCluster Resource Spec Parameters](#searchheadcluster-resource-spec-parameters)
+    - [Search Head Deployer Resource](#search-head-deployer-resource)
+      - [Example](#example)
   - [ClusterManager Resource Spec Parameters](#clustermanager-resource-spec-parameters)
   - [IndexerCluster Resource Spec Parameters](#indexercluster-resource-spec-parameters)
   - [MonitoringConsole Resource Spec Parameters](#monitoringconsole-resource-spec-parameters)
+      - [Scaling Behavior Annotations](#scaling-behavior-annotations)
+        - [Scale-Up Ready Wait Timeout](#scale-up-ready-wait-timeout)
+        - [Preserve Total CPU](#preserve-total-cpu)
+        - [Parallel Pod Updates](#parallel-pod-updates)
+        - [Unified Transition Stall Timeout](#unified-transition-stall-timeout)
   - [Examples of Guaranteed and Burstable QoS](#examples-of-guaranteed-and-burstable-qos)
     - [A Guaranteed QoS Class example:](#a-guaranteed-qos-class-example)
     - [A Burstable QoS Class example:](#a-burstable-qos-class-example)
     - [A BestEffort QoS Class example:](#a-besteffort-qos-class-example)
     - [Pod Resources Management](#pod-resources-management)
+    - [Troubleshooting](#troubleshooting)
+      - [CR Status Message](#cr-status-message)
+      - [Pause Annotations](#pause-annotations)
+      - [admin-managed-pv Annotations](#admin-managed-pv-annotations)
+        - [PV label values](#pv-label-values)
+      - [Container Logs](#container-logs)
 
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](Examples.md).
@@ -159,6 +173,54 @@ Enterprise resources, including: `Standalone`, `LicenseManager`,
 | readinessInitialDelaySeconds | readinessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) | Defines `initialDelaySeconds` for Readiness probe |
 | livenessInitialDelaySeconds | livenessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) | Defines `initialDelaySeconds` for the Liveness probe |
 | imagePullSecrets | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources) |
+| fsGroupChangePolicy | string | Controls how Kubernetes handles ownership and permission changes for volumes. Valid values: `Always` or `OnRootMismatch`. Default: `OnRootMismatch` |
+
+### FSGroup Change Policy
+
+The `fsGroupChangePolicy` setting controls how Kubernetes handles ownership and permission changes for volumes before exposing them inside Pods. This can significantly impact startup performance for pods with large persistent volumes.
+
+**Valid Values:**
+- `Always` - Always change permissions and ownership to match fsGroup on volume mount. This ensures consistent permissions but may slow down pod startup for large volumes.
+- `OnRootMismatch` - Only change permissions when the root directory does not match the expected fsGroup. This provides better performance for large volumes.
+
+**Default:** `OnRootMismatch` (optimized for performance)
+
+#### Configuration via Spec Field
+
+Set the policy permanently in your Custom Resource spec:
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+spec:
+  fsGroupChangePolicy: OnRootMismatch
+```
+
+#### Configuration via Annotation
+
+Override the policy using an annotation (useful for quick operational changes without modifying the spec):
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: Standalone
+metadata:
+  name: example
+  annotations:
+    operator.splunk.com/fs-group-change-policy: "Always"
+spec:
+  # ...
+```
+
+#### Precedence
+
+When both methods are used, the following precedence applies:
+1. **Annotation** (highest priority) - If set with a valid value
+2. **Spec field** - If annotation is not set or invalid
+3. **Default** (`OnRootMismatch`) - If neither is set
+
+> **Note:** Invalid annotation values (anything other than "Always" or "OnRootMismatch") will be logged as warnings and ignored, falling back to the next precedence level.
 
 ## LicenseManager Resource Spec Parameters
 
@@ -352,6 +414,221 @@ The Splunk Operator now includes a CRD for the Monitoring Console (MC). This off
 
 The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
 
+#### Scaling Behavior Annotations
+
+The Splunk Operator supports annotations that control how StatefulSets scale up when pods are not ready. These annotations can be set on any Splunk Enterprise CR (Standalone, IndexerCluster, SearchHeadCluster, etc.) and will automatically propagate to the underlying StatefulSets.
+
+##### Scale-Up Ready Wait Timeout
+
+**Annotation:** `operator.splunk.com/scale-up-ready-wait-timeout`
+
+By default, when scaling up a StatefulSet, the operator proceeds immediately without waiting for existing pods to become ready. This allows faster scaling operations. The `scale-up-ready-wait-timeout` annotation allows you to configure a specific timeout if you want to wait for existing pods to be ready before proceeding.
+
+**Default Value:** `0` (no wait - scale up immediately)
+
+**Supported Values:**
+- Any valid Go duration string like `"5s"`, `"30s"`, `"5m"`, `"10m"`, `"1h"`, `"48h"`, `"168h"` (7 days), etc.
+- `"0s"` or `"0"` (default) to immediately proceed with scale-up without waiting
+- Negative values like `"-1"` to wait indefinitely for all pods to be ready
+- Empty or missing annotation uses default (no wait)
+- Invalid format uses default (no wait)
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs (Standalone, IndexerCluster, SearchHeadCluster, etc.), use the `sts-only.` prefix to prevent the annotation from propagating to pod templates:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/scale-up-ready-wait-timeout: "5m"
+```
+
+The `sts-only.` prefix ensures the annotation is only applied to the StatefulSet and not to the pod template. The unprefixed key (`operator.splunk.com/scale-up-ready-wait-timeout`) is for advanced use cases where you need to annotate the StatefulSet directly.
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Recommended: use sts-only. prefix on CRs
+    sts-only.operator.splunk.com/scale-up-ready-wait-timeout: "5m"
+spec:
+  replicas: 5
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. When scaling up from N to N+M replicas, the operator checks if existing pods are ready
+2. By default (no annotation or `"0"`), the operator proceeds immediately with scale-up without waiting
+3. If a positive timeout is configured, the operator waits up to that duration for existing pods to be ready before proceeding
+4. Setting a negative value like `"-1"` waits indefinitely for all pods to be ready before scaling up
+
+**Use Cases:**
+- **Default behavior (fast scaling):** Omit the annotation for immediate scale-up without waiting
+- **Bounded waiting:** Set a specific timeout like `"5m"` or `"30m"` to wait for pods to be ready, but proceed after timeout
+- **Maximum stability:** Set to `"-1"` to wait indefinitely, ensuring all pods are ready before adding more
+- **Development workflows:** Use short timeouts like `"1m"` to balance speed and stability
+
+**Note:** This annotation affects scale-up operations only. Scale-down operations always proceed to remove pods even if other pods are not ready, as removing pods doesn't add additional load to the cluster.
+
+##### Preserve Total CPU
+
+**Annotation:** `operator.splunk.com/preserve-total-cpu`
+
+The `preserve-total-cpu` annotation enables CPU-aware scaling, which automatically adjusts the number of replicas to maintain the same total CPU allocation when CPU requests per pod change. This is useful for license-based or cost-optimized deployments where total resource allocation should remain constant regardless of individual pod sizing.
+
+**Default Value:** Not set (disabled)
+
+**Supported Values:**
+- `"true"` or `"both"`: Enable CPU-preserving scaling for both scale-up and scale-down directions
+- `"down"`: Enable CPU-preserving scaling only when replicas decrease (i.e., when CPU per pod increases)
+- `"up"`: Enable CPU-preserving scaling only when replicas increase (i.e., when CPU per pod decreases)
+- Empty or missing annotation: Feature is disabled
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs (Standalone, IndexerCluster, SearchHeadCluster, etc.), use the `sts-only.` prefix to prevent the annotation from propagating to pod templates:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/preserve-total-cpu: "both"
+```
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Enable CPU-preserving scaling for both directions
+    sts-only.operator.splunk.com/preserve-total-cpu: "both"
+spec:
+  replicas: 4
+  resources:
+    requests:
+      cpu: "2"
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. When CPU requests per pod change, the operator calculates the new replica count to preserve total CPU
+2. For example, if you have 4 replicas with 2 CPU each (total 8 CPU) and change to 1 CPU per pod, the operator will scale to 8 replicas to maintain 8 total CPU
+3. The direction setting allows you to control which scaling operations are allowed
+4. During the transition, the operator manages pod recycling to maintain cluster stability
+
+**Use Cases:**
+- **License optimization:** Maintain consistent CPU allocation that matches your Splunk license
+- **Cost control:** Ensure total resource usage stays within budget when changing pod specs
+- **Cluster rebalancing:** Safely transition between different pod sizes while maintaining capacity
+
+##### Parallel Pod Updates
+
+**Annotation:** `operator.splunk.com/parallel-pod-updates`
+
+The `parallel-pod-updates` annotation controls how many pods can be deleted/recycled simultaneously during rolling updates. This can significantly speed up large cluster updates while maintaining cluster stability.
+
+**Default Value:** `1` (sequential updates - one pod at a time)
+
+**Supported Values:**
+- A floating-point value `<= 1.0`: Interpreted as a percentage of total replicas (e.g., `"0.25"` means 25% of pods can be updated in parallel)
+- A value `> 1.0`: Interpreted as an absolute number of pods (e.g., `"3"` allows up to 3 pods to be updated at once)
+- Invalid or missing annotation uses default (sequential updates)
+- Values are clamped to the range [1, total replicas]
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs, use the `sts-only.` prefix:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/parallel-pod-updates: "3"
+```
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Allow up to 25% of pods to be updated in parallel
+    sts-only.operator.splunk.com/parallel-pod-updates: "0.25"
+spec:
+  replicas: 12
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. During rolling updates, the operator will delete/recycle up to the specified number of pods simultaneously
+2. Using percentage values scales with cluster size (e.g., 25% of a 12-pod cluster = 3 pods in parallel)
+3. The operator waits for recycled pods to become ready before proceeding to the next batch
+
+**Use Cases:**
+- **Large cluster updates:** Speed up updates on clusters with many replicas
+- **Maintenance windows:** Complete updates faster during limited maintenance periods
+- **Development environments:** Faster iteration with less concern for availability
+
+**Note:** Use with caution in production environments. Updating too many pods simultaneously may impact cluster availability and search performance.
+
+##### Unified Transition Stall Timeout
+
+**Annotation:** `operator.splunk.com/unified-transition-stall-timeout`
+
+The `unified-transition-stall-timeout` annotation allows you to configure the maximum time a CPU-aware transition can run before being considered stalled. If a transition exceeds this timeout, the operator will take recovery action.
+
+**Default Value:** `30m` (30 minutes)
+
+**Supported Values:**
+- Any valid Go duration string like `"15m"`, `"30m"`, `"1h"`, `"2h"`, etc.
+- Invalid format uses default (30 minutes)
+
+**Recommended CR Annotation:**
+
+When setting this annotation on CRs, use the `sts-only.` prefix:
+
+```yaml
+metadata:
+  annotations:
+    sts-only.operator.splunk.com/unified-transition-stall-timeout: "1h"
+```
+
+**Example Usage:**
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: IndexerCluster
+metadata:
+  name: example
+  annotations:
+    # Allow transitions up to 1 hour before considering them stalled
+    sts-only.operator.splunk.com/unified-transition-stall-timeout: "1h"
+    sts-only.operator.splunk.com/preserve-total-cpu: "both"
+spec:
+  replicas: 20
+  clusterManagerRef:
+    name: example-cm
+```
+
+**Behavior:**
+1. The operator tracks the start time of CPU-aware transitions
+2. If a transition exceeds the configured timeout without progress, it is marked as stalled
+3. The operator will attempt recovery actions for stalled transitions
+
+**Use Cases:**
+- **Large clusters:** Increase timeout for clusters with many replicas that take longer to transition
+- **Slow environments:** Accommodate environments where pods take longer to become ready
+- **Debugging:** Set shorter timeouts to quickly detect issues during testing
 
 ## Examples of Guaranteed and Burstable QoS
 
