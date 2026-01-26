@@ -21,13 +21,11 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-func init() {
-}
 
 func TestClusterManagerEventPublisher(t *testing.T) {
 
@@ -161,4 +159,34 @@ func TestLicenseManagerEventPublisher(t *testing.T) {
 
 	// Use client to avoid unused variable warning
 	_ = c
+}
+
+func TestGetEventPublisher(t *testing.T) {
+	recorder := record.NewFakeRecorder(10)
+	cm := &enterpriseApi.ClusterManager{}
+
+	// Test 1: GetEventPublisher with recorder in context
+	ctx := context.WithValue(context.TODO(), splcommon.EventRecorderKey, recorder)
+	eventPublisher := GetEventPublisher(ctx, cm)
+	if eventPublisher == nil {
+		t.Error("Expected non-nil event publisher")
+	}
+
+	// Test 2: GetEventPublisher with existing publisher in context
+	ctx = context.WithValue(context.TODO(), splcommon.EventPublisherKey, eventPublisher)
+	eventPublisher2 := GetEventPublisher(ctx, cm)
+	if eventPublisher2 != eventPublisher {
+		t.Error("Expected to get same event publisher from context")
+	}
+
+	// Test 3: GetEventPublisher with no recorder in context
+	ctx = context.TODO()
+	eventPublisher3 := GetEventPublisher(ctx, cm)
+	if eventPublisher3 == nil {
+		t.Error("Expected non-nil event publisher even without recorder")
+	}
+
+	// Test 4: Verify publisher works (no panic)
+	eventPublisher.Normal(context.TODO(), "TestReason", "Test message")
+	eventPublisher.Warning(context.TODO(), "TestReason", "Test warning")
 }

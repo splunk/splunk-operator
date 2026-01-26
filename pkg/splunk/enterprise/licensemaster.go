@@ -26,7 +26,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -48,14 +47,7 @@ func ApplyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyLicenseMaster")
 
-	// Get event recorder from context
-	var eventPublisher *K8EventPublisher
-	if recorder := ctx.Value(splcommon.EventRecorderKey); recorder != nil {
-		if rec, ok := recorder.(record.EventRecorder); ok {
-			eventPublisher, _ = newK8EventPublisher(rec, cr)
-		}
-	}
-
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	var err error

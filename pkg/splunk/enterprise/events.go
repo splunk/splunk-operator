@@ -18,6 +18,7 @@ package enterprise
 import (
 	"context"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -71,4 +72,23 @@ func (k *K8EventPublisher) Normal(ctx context.Context, reason, message string) {
 // Warning publish warning events to k8s
 func (k *K8EventPublisher) Warning(ctx context.Context, reason, message string) {
 	k.publishEvent(ctx, "Warning", reason, message)
+}
+
+// GetEventPublisher returns an event publisher from context if available,
+// otherwise creates a new one. This is a shared helper to avoid code duplication.
+func GetEventPublisher(ctx context.Context, cr runtime.Object) *K8EventPublisher {
+	// First check if there's already an event publisher in context
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if eventPublisher, ok := pub.(*K8EventPublisher); ok {
+			return eventPublisher
+		}
+	}
+
+	// Otherwise, create a new one from the recorder in context
+	var recorder record.EventRecorder
+	if rec := ctx.Value(splcommon.EventRecorderKey); rec != nil {
+		recorder, _ = rec.(record.EventRecorder)
+	}
+	eventPublisher, _ := newK8EventPublisher(recorder, cr)
+	return eventPublisher
 }

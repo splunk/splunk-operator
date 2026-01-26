@@ -33,7 +33,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/tools/record"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -51,13 +50,7 @@ func ApplyClusterManager(ctx context.Context, client splcommon.ControllerClient,
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterManager")
 
-	// Get event recorder from context and create event publisher
-	var recorder record.EventRecorder
-	if rec := ctx.Value(splcommon.EventRecorderKey); rec != nil {
-		recorder, _ = rec.(record.EventRecorder)
-	}
-	eventPublisher, _ := newK8EventPublisher(recorder, cr)
-
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "ClusterManager"
 
@@ -331,14 +324,7 @@ func CheckIfsmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.Con
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfsmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
-	// Get event publisher from context, create one if not present
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		eventPublisher, _ = pub.(*K8EventPublisher)
-	}
-	if eventPublisher == nil {
-		eventPublisher, _ = newK8EventPublisher(nil, cr)
-	}
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
