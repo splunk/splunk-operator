@@ -23,14 +23,9 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"k8s.io/client-go/tools/record"
-
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestClusterManagerEventPublisher(t *testing.T) {
-
-	builder := fake.NewClientBuilder()
-	c := builder.Build()
 	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.ClusterManager{}
@@ -46,15 +41,9 @@ func TestClusterManagerEventPublisher(t *testing.T) {
 	cmaster := enterpriseApiV3.ClusterMaster{}
 	k8sevent.instance = &cmaster
 	k8sevent.Normal(ctx, "", "")
-
-	// Use client to avoid unused variable warning
-	_ = c
 }
 
 func TestIndexerClusterEventPublisher(t *testing.T) {
-
-	builder := fake.NewClientBuilder()
-	c := builder.Build()
 	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.IndexerCluster{}
@@ -65,15 +54,9 @@ func TestIndexerClusterEventPublisher(t *testing.T) {
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
-
-	// Use client to avoid unused variable warning
-	_ = c
 }
 
 func TestMonitoringConsoleEventPublisher(t *testing.T) {
-
-	builder := fake.NewClientBuilder()
-	c := builder.Build()
 	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.MonitoringConsole{}
@@ -84,15 +67,9 @@ func TestMonitoringConsoleEventPublisher(t *testing.T) {
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
-
-	// Use client to avoid unused variable warning
-	_ = c
 }
 
 func TestSearchHeadClusterEventPublisher(t *testing.T) {
-
-	builder := fake.NewClientBuilder()
-	c := builder.Build()
 	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.SearchHeadCluster{}
@@ -103,15 +80,9 @@ func TestSearchHeadClusterEventPublisher(t *testing.T) {
 
 	k8sevent.Normal(context.TODO(), "testing", "normal message")
 	k8sevent.Warning(context.TODO(), "testing", "warning message")
-
-	// Use client to avoid unused variable warning
-	_ = c
 }
 
 func TestStandaloneEventPublisher(t *testing.T) {
-
-	builder := fake.NewClientBuilder()
-	c := builder.Build()
 	recorder := record.NewFakeRecorder(10)
 
 	cm := enterpriseApi.Standalone{}
@@ -132,15 +103,9 @@ func TestStandaloneEventPublisher(t *testing.T) {
 	k8sevent.recorder = recorder
 	k8sevent.instance = &cm
 	k8sevent.publishEvent(ctx, "Normal", "TestReason", "Test message")
-
-	// Use client to avoid unused variable warning
-	_ = c
 }
 
 func TestLicenseManagerEventPublisher(t *testing.T) {
-
-	builder := fake.NewClientBuilder()
-	c := builder.Build()
 	recorder := record.NewFakeRecorder(10)
 
 	lmanager := enterpriseApi.LicenseManager{}
@@ -157,8 +122,6 @@ func TestLicenseManagerEventPublisher(t *testing.T) {
 	k8sevent.instance = &lmaster
 	k8sevent.Normal(ctx, "", "")
 
-	// Use client to avoid unused variable warning
-	_ = c
 }
 
 func TestGetEventPublisher(t *testing.T) {
