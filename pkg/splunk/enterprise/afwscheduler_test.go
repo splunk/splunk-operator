@@ -2875,6 +2875,24 @@ func TestSHCRunPlaybook(t *testing.T) {
 		t.Errorf("runPlaybook() should not have returned error or wrong bundle push state, err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
 	}
 
+	// Test7b: Bundle push is still in progress when the status file has only benign Splunk CLI banner/warning
+	// (e.g. FIPS banner), and does not yet include the bundle push completion string.
+	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
+	mockPodExecReturnContexts[2].StdOut = "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success\nWARNING: Server Certificate Hostname Validation is disabled. Please see server.conf/[sslConfig]/cliVerifyServerName for details.\n"
+	err = playbookContext.runPlaybook(ctx)
+	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
+		t.Errorf("runPlaybook() should not have returned error for banner-only output; err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
+	}
+
+	// Test7c: Bundle push is still in progress when Splunk reports a deployment job is already running.
+	// This should NOT reset the state to Pending (which would retrigger and create a retry storm).
+	appDeployContext.BundlePushStatus.BundlePushStage = enterpriseApi.BundlePushInProgress
+	mockPodExecReturnContexts[2].StdOut = "FIPS provider enabled. name: OpenSSL FIPS Provider, version: 3.0.9, buildinfo: 3.0.9, status: Success\nConfDeploymentException: Can't start deployment job as one is already running!\n"
+	err = playbookContext.runPlaybook(ctx)
+	if err != nil || getBundlePushState(afwPipeline) != enterpriseApi.BundlePushInProgress {
+		t.Errorf("runPlaybook() should not have returned error for ConfDeploymentException already-running output; err=%v, bundle push state=%s", err, bundlePushStateAsStr(ctx, getBundlePushState(afwPipeline)))
+	}
+
 	// Test8: Bundle push is still in progress since stdOut != shcBundlePushCompleteStr
 	mockPodExecReturnContexts[2].StdOut = "Error while deploying apps"
 	err = playbookContext.runPlaybook(ctx)
