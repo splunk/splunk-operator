@@ -59,7 +59,7 @@ type MonitoringConsoleStatus struct {
 	// App Framework status
 	AppContext AppDeploymentContext `json:"appContext,omitempty"`
 
-	// Auxillary message describing CR status
+	// Auxiliary message describing CR status
 	Message string `json:"message"`
 }
 
@@ -73,7 +73,7 @@ type MonitoringConsoleStatus struct {
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.replicas",description="Desired number of monitoring console members"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Current number of ready monitoring console members"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of monitoring console"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxillary message describing CR status"
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Auxiliary message describing CR status"
 // +kubebuilder:storageversion
 type MonitoringConsole struct {
 	metav1.TypeMeta   `json:",inline"`

@@ -52,6 +52,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        ports: []
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -85,6 +86,7 @@ spec:
         volumeMounts:
           - mountPath: /opt/splunk/appframework/
             name: app-staging
+        # Additional volumeMounts will be added by patches for webhook and metrics certs
       serviceAccountName: controller-manager
       volumes:
       - configMap:
