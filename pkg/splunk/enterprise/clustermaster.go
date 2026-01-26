@@ -47,7 +47,8 @@ func ApplyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyClusterMaster")
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	cr.Kind = "ClusterMaster"
 
 	if cr.Status.ResourceRevMap == nil {
@@ -303,7 +304,14 @@ func getClusterMasterStatefulSet(ctx context.Context, client splcommon.Controlle
 func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster, podExecClient splutil.PodExecClientImpl) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("CheckIfMastersmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -382,7 +390,14 @@ func PerformCmasterBundlePush(ctx context.Context, c splcommon.ControllerClient,
 func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)

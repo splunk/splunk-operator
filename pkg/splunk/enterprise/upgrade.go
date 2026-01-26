@@ -36,7 +36,14 @@ var GetClusterInfoCall = func(ctx context.Context, mgr *indexerClusterPodManager
 func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, mgr *indexerClusterPodManager) (bool, error) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
-	eventPublisher, _ := newK8EventPublisher(c, cr)
+
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
 	kind := cr.GroupVersionKind().Kind
 	scopedLog.Info("kind is set to ", "kind", kind)
 	// start from standalone first
