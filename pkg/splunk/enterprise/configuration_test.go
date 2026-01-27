@@ -1816,3 +1816,111 @@ func TestValidateLivenessProbe(t *testing.T) {
 		t.Errorf("Unexpected error when less than deault values passed for livenessProbe InitialDelaySeconds %d, TimeoutSeconds %d, PeriodSeconds %d. Error %s", livenessProbe.InitialDelaySeconds, livenessProbe.TimeoutSeconds, livenessProbe.PeriodSeconds, err)
 	}
 }
+
+func TestGetFSGroupChangePolicy(t *testing.T) {
+	ctx := context.TODO()
+
+	// Helper to create pointer to PodFSGroupChangePolicy
+	policyPtr := func(p corev1.PodFSGroupChangePolicy) *corev1.PodFSGroupChangePolicy {
+		return &p
+	}
+
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		specPolicy  *corev1.PodFSGroupChangePolicy
+		expected    corev1.PodFSGroupChangePolicy
+	}{
+		{
+			name:        "Valid annotation Always, no spec value",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "Always"},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeAlways,
+		},
+		{
+			name:        "Valid annotation OnRootMismatch, no spec value",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "OnRootMismatch"},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+		{
+			name:        "Invalid annotation with spec fallback",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "InvalidValue"},
+			specPolicy:  policyPtr(corev1.FSGroupChangeAlways),
+			expected:    corev1.FSGroupChangeAlways,
+		},
+		{
+			name:        "Invalid annotation, no spec (default fallback)",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "InvalidValue"},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+		{
+			name:        "Spec field only, no annotation",
+			annotations: map[string]string{},
+			specPolicy:  policyPtr(corev1.FSGroupChangeAlways),
+			expected:    corev1.FSGroupChangeAlways,
+		},
+		{
+			name:        "Default value, nothing set",
+			annotations: map[string]string{},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+		{
+			name:        "Annotation takes precedence over spec",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "Always"},
+			specPolicy:  policyPtr(corev1.FSGroupChangeOnRootMismatch),
+			expected:    corev1.FSGroupChangeAlways,
+		},
+		{
+			name:        "Empty annotations map, no spec",
+			annotations: map[string]string{},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+		{
+			name:        "Nil annotations map, spec set to Always",
+			annotations: nil,
+			specPolicy:  policyPtr(corev1.FSGroupChangeAlways),
+			expected:    corev1.FSGroupChangeAlways,
+		},
+		{
+			name:        "Empty string annotation value (invalid), falls back to spec",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: ""},
+			specPolicy:  policyPtr(corev1.FSGroupChangeAlways),
+			expected:    corev1.FSGroupChangeAlways,
+		},
+		{
+			name:        "Empty string annotation value (invalid), falls back to default",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: ""},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+		{
+			name:        "Case-sensitive: lowercase 'always' is invalid",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "always"},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+		{
+			name:        "Case-sensitive: uppercase 'ALWAYS' is invalid",
+			annotations: map[string]string{splctrl.FSGroupChangePolicyAnnotation: "ALWAYS"},
+			specPolicy:  nil,
+			expected:    corev1.FSGroupChangeOnRootMismatch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getFSGroupChangePolicy(ctx, tt.annotations, tt.specPolicy)
+			if result == nil {
+				t.Error("Expected non-nil result")
+				return
+			}
+			if *result != tt.expected {
+				t.Errorf("Expected %v, got %v", tt.expected, *result)
+			}
+		})
+	}
+}

@@ -19,12 +19,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,7 +108,7 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised := current.DeepCopy()
 	revised.Spec.Template.ObjectMeta.Labels = map[string]string{"one": "two"}
 	reconcile := func(c *spltest.MockClient, cr interface{}) error {
-		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet))
+		_, err := ApplyStatefulSet(ctx, c, cr.(*appsv1.StatefulSet), nil)
 		return err
 	}
 	spltest.ReconcileTester(t, "TestApplyStatefulSet", current, revised, createCalls, updateCalls, reconcile, false)
@@ -121,7 +123,7 @@ func TestApplyStatefulSet(t *testing.T) {
 	revised = current.DeepCopy()
 	revised.Spec.Template.Spec.Containers = []corev1.Container{{Image: "efgh"}}
 	c.InduceErrorKind[splcommon.MockClientInduceErrorUpdate] = rerr
-	_, err := ApplyStatefulSet(ctx, c, revised)
+	_, err := ApplyStatefulSet(ctx, c, revised, nil)
 	if err == nil {
 		t.Errorf("Expected error")
 	}
@@ -198,10 +200,12 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	}
 
 	// CurrentRevision = UpdateRevision
+	// With refactored logic, scale-down is prioritized over waiting for scale-up
+	// readyReplicas=2 > desiredReplicas=1, so we expect PhaseScalingDown
 	statefulSet.Status.CurrentRevision = "v1"
 	phase, err = updateStatefulSetPodsTester(t, &mgr, statefulSet, 1 /*desiredReplicas*/, statefulSet, pod)
-	if err == nil && phase != enterpriseApi.PhaseScalingUp {
-		t.Errorf("UpdateStatefulSetPods should have returned error or phase should have been PhaseError, but we got phase=%s", phase)
+	if err == nil && phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("UpdateStatefulSetPods should have returned PhaseScalingDown, but we got phase=%s", phase)
 	}
 
 	// readyReplicas > replicas
@@ -259,6 +263,18 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	errPodMgr := errTestPodManager{
 		c: c,
 	}
+	// Create the pod that will be scaled down so PrepareScaleDown is called
+	podToScaleDown := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-2",
+			Namespace: "test",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+		},
+	}
+	c.Create(ctx, podToScaleDown)
+
 	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 1)
 	if err == nil {
 		t.Errorf("Expected error")
@@ -399,7 +415,7 @@ func TestGetStatefulSetByName(t *testing.T) {
 		},
 	}
 
-	_, err := ApplyStatefulSet(ctx, c, &current)
+	_, err := ApplyStatefulSet(ctx, c, &current, nil)
 	if err != nil {
 		return
 	}
@@ -619,5 +635,858 @@ func TestRemoveUnwantedOwnerRefSs(t *testing.T) {
 	err = RemoveUnwantedOwnerRefSs(ctx, c, namespacedName, &cr)
 	if err == nil {
 		t.Errorf("Expected error")
+	}
+}
+
+func TestGetScaleUpReadyWaitTimeout(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotation  string
+		expected    string // Use string for easier comparison
+		expectError bool
+	}{
+		{
+			name:       "valid 10m timeout",
+			annotation: "10m",
+			expected:   "10m0s",
+		},
+		{
+			name:       "valid 5m30s timeout",
+			annotation: "5m30s",
+			expected:   "5m30s",
+		},
+		{
+			name:       "valid 1h timeout",
+			annotation: "1h",
+			expected:   "1h0m0s",
+		},
+		{
+			name:       "zero timeout",
+			annotation: "0s",
+			expected:   "0s",
+		},
+		{
+			name:       "zero timeout alternate",
+			annotation: "0",
+			expected:   "0s",
+		},
+		{
+			name:       "missing annotation returns -1 (wait forever)",
+			annotation: "",
+			expected:   "-1ns",
+		},
+		{
+			name:       "invalid format returns -1 (wait forever)",
+			annotation: "invalid",
+			expected:   "-1ns",
+		},
+		{
+			name:       "negative value returns -1 (wait forever)",
+			annotation: "-5m",
+			expected:   "-1ns",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset",
+					Namespace: "test",
+				},
+			}
+
+			if tt.annotation != "" {
+				statefulSet.ObjectMeta.Annotations = map[string]string{
+					ScaleUpReadyWaitTimeoutAnnotation: tt.annotation,
+				}
+			}
+
+			result := getScaleUpReadyWaitTimeout(statefulSet)
+			if result.String() != tt.expected {
+				t.Errorf("getScaleUpReadyWaitTimeout() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetScaleUpWaitStarted(t *testing.T) {
+	now := "2025-12-10T10:00:00Z"
+
+	tests := []struct {
+		name       string
+		annotation string
+		expectOk   bool
+	}{
+		{
+			name:       "valid RFC3339 timestamp",
+			annotation: now,
+			expectOk:   true,
+		},
+		{
+			name:       "missing annotation",
+			annotation: "",
+			expectOk:   false,
+		},
+		{
+			name:       "invalid format",
+			annotation: "invalid-timestamp",
+			expectOk:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			statefulSet := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-statefulset",
+					Namespace: "test",
+				},
+			}
+
+			if tt.annotation != "" {
+				statefulSet.ObjectMeta.Annotations = map[string]string{
+					ScaleUpWaitStartedAnnotation: tt.annotation,
+				}
+			}
+
+			_, ok := getScaleUpWaitStarted(statefulSet)
+			if ok != tt.expectOk {
+				t.Errorf("getScaleUpWaitStarted() ok = %v, want %v", ok, tt.expectOk)
+			}
+		})
+	}
+}
+
+func TestSetAndClearScaleUpWaitStarted(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: func() *int32 { r := int32(3); return &r }(),
+		},
+	}
+
+	c.AddObject(statefulSet)
+
+	// Test setScaleUpWaitStarted
+	err := setScaleUpWaitStarted(ctx, c, statefulSet)
+	if err != nil {
+		t.Errorf("setScaleUpWaitStarted() error = %v", err)
+	}
+
+	// Verify timestamp was set
+	_, ok := getScaleUpWaitStarted(statefulSet)
+	if !ok {
+		t.Errorf("Expected timestamp to be set")
+	}
+
+	// Test clearScaleUpWaitStarted
+	err = clearScaleUpWaitStarted(ctx, c, statefulSet)
+	if err != nil {
+		t.Errorf("clearScaleUpWaitStarted() error = %v", err)
+	}
+
+	// Verify timestamp was cleared
+	_, ok = getScaleUpWaitStarted(statefulSet)
+	if ok {
+		t.Errorf("Expected timestamp to be cleared")
+	}
+}
+
+// TestHandleScaleUpNegativeTimeout verifies that handleScaleUp waits indefinitely
+// when the timeout is negative (no annotation set, default behavior)
+func TestHandleScaleUpNegativeTimeout(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	var replicas int32 = 3
+	var readyReplicas int32 = 2 // Not all pods are ready
+	var desiredReplicas int32 = 5
+
+	// StatefulSet WITHOUT the scale-up-ready-wait-timeout annotation
+	// This results in timeout = -1 (wait forever)
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "test",
+			// No annotations - this is intentional to test default behavior
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: readyReplicas,
+		},
+	}
+
+	c.AddObject(statefulSet)
+
+	// Verify that getScaleUpReadyWaitTimeout returns -1 for missing annotation
+	timeout := getScaleUpReadyWaitTimeout(statefulSet)
+	if timeout != time.Duration(-1) {
+		t.Errorf("Expected timeout = -1 for missing annotation, got %v", timeout)
+	}
+
+	// Call handleScaleUp - it should wait indefinitely (return PhaseScalingUp, not proceed with scale-up)
+	phase, err := handleScaleUp(ctx, c, statefulSet, replicas, readyReplicas, desiredReplicas)
+
+	// Should not return an error
+	if err != nil {
+		t.Errorf("handleScaleUp() error = %v, expected nil", err)
+	}
+
+	// Should return PhaseScalingUp (since readyReplicas > 0) indicating it's waiting
+	// and not proceeding with scale-up
+	if phase != enterpriseApi.PhaseScalingUp {
+		t.Errorf("Expected PhaseScalingUp while waiting indefinitely, got %v", phase)
+	}
+
+	// Verify that replicas was NOT changed (scale-up was not initiated)
+	if *statefulSet.Spec.Replicas != replicas {
+		t.Errorf("Expected replicas to remain %d, but got %d", replicas, *statefulSet.Spec.Replicas)
+	}
+
+	// Verify that the wait start annotation was set
+	_, hasStartTime := getScaleUpWaitStarted(statefulSet)
+	if !hasStartTime {
+		t.Errorf("Expected scale-up wait start time to be set")
+	}
+
+	// Call handleScaleUp again - should continue waiting (not bypass due to timeout)
+	phase, err = handleScaleUp(ctx, c, statefulSet, replicas, readyReplicas, desiredReplicas)
+
+	if err != nil {
+		t.Errorf("handleScaleUp() second call error = %v, expected nil", err)
+	}
+
+	// Should still be waiting
+	if phase != enterpriseApi.PhaseScalingUp {
+		t.Errorf("Expected PhaseScalingUp on second call (still waiting), got %v", phase)
+	}
+
+	// Verify replicas still unchanged
+	if *statefulSet.Spec.Replicas != replicas {
+		t.Errorf("Expected replicas to remain %d after second call, but got %d", replicas, *statefulSet.Spec.Replicas)
+	}
+}
+
+// TestHandleScaleUpNegativeTimeoutPhasePending verifies that handleScaleUp returns PhasePending
+// when waiting indefinitely and there are no ready replicas
+func TestHandleScaleUpNegativeTimeoutPhasePending(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	var replicas int32 = 3
+	var readyReplicas int32 = 0 // No pods are ready
+	var desiredReplicas int32 = 5
+
+	// StatefulSet WITHOUT the scale-up-ready-wait-timeout annotation
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset-pending",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: readyReplicas,
+		},
+	}
+
+	c.AddObject(statefulSet)
+
+	// Call handleScaleUp - should return PhasePending when no replicas are ready
+	phase, err := handleScaleUp(ctx, c, statefulSet, replicas, readyReplicas, desiredReplicas)
+
+	if err != nil {
+		t.Errorf("handleScaleUp() error = %v, expected nil", err)
+	}
+
+	// Should return PhasePending (since readyReplicas == 0)
+	if phase != enterpriseApi.PhasePending {
+		t.Errorf("Expected PhasePending while waiting with no ready replicas, got %v", phase)
+	}
+
+	// Verify that replicas was NOT changed
+	if *statefulSet.Spec.Replicas != replicas {
+		t.Errorf("Expected replicas to remain %d, but got %d", replicas, *statefulSet.Spec.Replicas)
+	}
+}
+
+func TestScaleDownBugFix(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	// Create test scenario: replicas=5, readyReplicas=2, desiredReplicas=3
+	// This tests the bug fix where we check replicas > desiredReplicas instead of readyReplicas > desiredReplicas
+	var replicas int32 = 5
+	var readyReplicas int32 = 2
+	var desiredReplicas int32 = 3
+
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "test",
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": "test",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "test",
+							Image: "test:latest",
+						},
+					},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: readyReplicas,
+		},
+	}
+
+	c.AddObject(statefulSet)
+	mgr := &DefaultStatefulSetPodManager{}
+
+	// Call UpdateStatefulSetPods
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+
+	if err != nil {
+		t.Errorf("UpdateStatefulSetPods() error = %v", err)
+	}
+
+	// Should return PhaseScalingDown since replicas(5) > desiredReplicas(3)
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("Expected PhaseScalingDown, got %v", phase)
+	}
+
+	// Verify the scale-down logic would target the correct pod (replicas-1 = pod-4, not readyReplicas-1 = pod-1)
+	// The function should attempt to decommission pod index 4 (replicas-1)
+}
+
+// TestPrepareScaleDownAlwaysCalled verifies that PrepareScaleDown is called regardless of pod state
+func TestPrepareScaleDownAlwaysCalled(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	var replicas int32 = 3
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   replicas,
+			UpdatedReplicas: replicas,
+		},
+	}
+
+	c.AddObject(statefulSet)
+
+	// Track whether PrepareScaleDown was called
+	prepareScaleDownCalled := false
+	var calledWithIndex int32 = -1
+
+	// Custom pod manager that tracks PrepareScaleDown calls
+	mgr := &testTrackingPodManager{
+		onPrepareScaleDown: func(n int32) (bool, error) {
+			prepareScaleDownCalled = true
+			calledWithIndex = n
+			return true, nil
+		},
+	}
+
+	// Test 1: Pod exists and is running - PrepareScaleDown should be called
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-indexer-2",
+			Namespace: "test",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
+	c.Create(ctx, pod)
+
+	prepareScaleDownCalled = false
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, 2)
+	if err != nil {
+		t.Errorf("UpdateStatefulSetPods() error = %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("Expected PhaseScalingDown, got %v", phase)
+	}
+	if !prepareScaleDownCalled {
+		t.Errorf("PrepareScaleDown was not called for running pod")
+	}
+	if calledWithIndex != 2 {
+		t.Errorf("PrepareScaleDown called with wrong index: got %d, want 2", calledWithIndex)
+	}
+
+	// Clean up for next test
+	c.Delete(ctx, pod)
+}
+
+// TestScaleDownPodPending verifies scale-down works when pod is in Pending state
+func TestScaleDownPodPending(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	var replicas int32 = 3
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   2, // Only 2 ready, one is pending
+			UpdatedReplicas: replicas,
+		},
+	}
+
+	c.AddObject(statefulSet)
+
+	// Pod exists but is in Pending state (e.g., after manual deletion and recreation)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-indexer-2",
+			Namespace: "test",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodPending,
+			// No container statuses since pod is pending
+		},
+	}
+	c.Create(ctx, pod)
+
+	prepareScaleDownCalled := false
+	mgr := &testTrackingPodManager{
+		onPrepareScaleDown: func(n int32) (bool, error) {
+			prepareScaleDownCalled = true
+			return true, nil
+		},
+	}
+
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, 2)
+	if err != nil {
+		t.Errorf("UpdateStatefulSetPods() error = %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("Expected PhaseScalingDown, got %v", phase)
+	}
+	if !prepareScaleDownCalled {
+		t.Errorf("PrepareScaleDown was not called for pending pod")
+	}
+}
+
+// TestScaleDownPodNotExists verifies scale-down works when pod doesn't exist at all
+func TestScaleDownPodNotExists(t *testing.T) {
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+
+	var replicas int32 = 3
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-indexer",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-etc", Namespace: "test"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var", Namespace: "test"}},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:        replicas,
+			ReadyReplicas:   2, // Only 2 ready, one was deleted
+			UpdatedReplicas: 2,
+		},
+	}
+
+	c.AddObject(statefulSet)
+
+	// Pod doesn't exist at all (manually deleted)
+	// Don't create the pod, so it's not found
+
+	prepareScaleDownCalled := false
+	mgr := &testTrackingPodManager{
+		onPrepareScaleDown: func(n int32) (bool, error) {
+			prepareScaleDownCalled = true
+			return true, nil
+		},
+	}
+
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, 2)
+	if err != nil {
+		t.Errorf("UpdateStatefulSetPods() error = %v", err)
+	}
+	if phase != enterpriseApi.PhaseScalingDown {
+		t.Errorf("Expected PhaseScalingDown, got %v", phase)
+	}
+	if !prepareScaleDownCalled {
+		t.Errorf("PrepareScaleDown was not called even though pod doesn't exist")
+	}
+}
+
+// testTrackingPodManager is a test helper that tracks method calls
+type testTrackingPodManager struct {
+	onPrepareScaleDown func(n int32) (bool, error)
+	onPrepareRecycle   func(n int32) (bool, error)
+	onFinishRecycle    func(n int32) (bool, error)
+	onFinishUpgrade    func(n int32) error
+}
+
+func (mgr *testTrackingPodManager) Update(ctx context.Context, client splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, desiredReplicas int32) (enterpriseApi.Phase, error) {
+	return enterpriseApi.PhaseReady, nil
+}
+
+func (mgr *testTrackingPodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, error) {
+	if mgr.onPrepareScaleDown != nil {
+		return mgr.onPrepareScaleDown(n)
+	}
+	return true, nil
+}
+
+func (mgr *testTrackingPodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error) {
+	if mgr.onPrepareRecycle != nil {
+		return mgr.onPrepareRecycle(n)
+	}
+	return true, nil
+}
+
+func (mgr *testTrackingPodManager) FinishRecycle(ctx context.Context, n int32) (bool, error) {
+	if mgr.onFinishRecycle != nil {
+		return mgr.onFinishRecycle(n)
+	}
+	return true, nil
+}
+
+func (mgr *testTrackingPodManager) FinishUpgrade(ctx context.Context, n int32) error {
+	if mgr.onFinishUpgrade != nil {
+		return mgr.onFinishUpgrade(n)
+	}
+	return nil
+}
+
+func TestCompareVolumeClaimTemplates_NoChanges(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if result.RequiresRecreate {
+		t.Errorf("Expected no recreate required, got RequiresRecreate=true with reason: %s", result.RecreateReason)
+	}
+	if len(result.StorageExpansions) != 0 {
+		t.Errorf("Expected no storage expansions, got %d", len(result.StorageExpansions))
+	}
+}
+
+func TestCompareVolumeClaimTemplates_StorageExpansion(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("20Gi")
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if result.RequiresRecreate {
+		t.Errorf("Expected no recreate for storage expansion, got RequiresRecreate=true with reason: %s", result.RecreateReason)
+	}
+	if len(result.StorageExpansions) != 1 {
+		t.Errorf("Expected 1 storage expansion, got %d", len(result.StorageExpansions))
+	}
+	if len(result.StorageExpansions) > 0 {
+		expansion := result.StorageExpansions[0]
+		if expansion.TemplateName != "pvc-data" {
+			t.Errorf("Expected template name 'pvc-data', got '%s'", expansion.TemplateName)
+		}
+		if expansion.OldSize.String() != "10Gi" {
+			t.Errorf("Expected old size '10Gi', got '%s'", expansion.OldSize.String())
+		}
+		if expansion.NewSize.String() != "20Gi" {
+			t.Errorf("Expected new size '20Gi', got '%s'", expansion.NewSize.String())
+		}
+	}
+}
+
+func TestCompareVolumeClaimTemplates_StorageDecrease(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("20Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("10Gi")
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for storage decrease")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for storage decrease recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_StorageClassChange(t *testing.T) {
+	storageClass1 := "standard"
+	storageClass2 := "premium"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass1,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.StorageClassName = &storageClass2
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for storage class change")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for storage class change recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_VCTAdded(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates = append(revised.Spec.VolumeClaimTemplates, corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-logs"},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClass,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("5Gi"),
+				},
+			},
+		},
+	})
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for VCT addition")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for VCT addition recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_VCTRemoved(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-logs"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("5Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for VCT removal")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for VCT removal recreate")
+	}
+}
+
+func TestCompareVolumeClaimTemplates_AccessModesChange(t *testing.T) {
+	storageClass := "standard"
+	current := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pvc-data"},
+					Spec: corev1.PersistentVolumeClaimSpec{
+						StorageClassName: &storageClass,
+						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("10Gi"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	revised := current.DeepCopy()
+	revised.Spec.VolumeClaimTemplates[0].Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+
+	result := CompareVolumeClaimTemplates(current, revised)
+
+	if !result.RequiresRecreate {
+		t.Error("Expected RequiresRecreate=true for access modes change")
+	}
+	if result.RecreateReason == "" {
+		t.Error("Expected a reason for access modes change recreate")
 	}
 }

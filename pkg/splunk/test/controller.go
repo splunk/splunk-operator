@@ -146,6 +146,8 @@ func coreObjectListCopier(dst, src *client.ObjectList) bool {
 			*dstP.(*corev1.PersistentVolumeClaimList) = *srcP.(*corev1.PersistentVolumeClaimList)
 		case *corev1.SecretList:
 			*dstP.(*corev1.SecretList) = *srcP.(*corev1.SecretList)
+		case *corev1.PodList:
+			*dstP.(*corev1.PodList) = *srcP.(*corev1.PodList)
 		default:
 			return false
 		}
@@ -374,6 +376,28 @@ func (c MockClient) List(ctx context.Context, obj client.ObjectList, opts ...cli
 		copyMockObjectList(&obj, &srcObj)
 		return nil
 	}
+
+	// Synthesize list from State for PodList when ListObj is not set
+	if podList, ok := obj.(*corev1.PodList); ok {
+		podList.Items = []corev1.Pod{}
+		for _, item := range c.State {
+			if pod, ok := item.(*corev1.Pod); ok {
+				// Apply namespace filter if present
+				namespace := ""
+				for _, opt := range opts {
+					if nsOpt, ok := opt.(client.InNamespace); ok {
+						namespace = string(nsOpt)
+						break
+					}
+				}
+				if namespace == "" || pod.Namespace == namespace {
+					podList.Items = append(podList.Items, *pod)
+				}
+			}
+		}
+		return nil
+	}
+
 	return c.NotFoundError
 }
 
@@ -792,13 +816,15 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseUpdating, revised, updateCalls, nil, current)
 
 	// test scale up (zero ready so far; wait for ready)
+	// Now includes Update+Get for setScaleUpWaitStarted annotation tracking
 	revised = current.DeepCopy()
 	current.Status.ReadyReplicas = 0
-	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
+	scaleUpCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0], funcCalls[0]}, "Update": {funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingUp, 0 ready")
 	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhasePending, revised, scaleUpCalls, nil, current)
 
 	// test scale up (1 ready scaling to 2; wait for ready)
+	// Now includes Update+Get for setScaleUpWaitStarted annotation tracking
 	replicas = 2
 	current.Status.Replicas = 2
 	current.Status.ReadyReplicas = 1
@@ -814,14 +840,16 @@ func PodManagerTester(t *testing.T, method string, mgr splcommon.StatefulSetPodM
 	PodManagerUpdateTester(t, methodPlus, mgr, 2, enterpriseApi.PhaseScalingUp, revised, updateCalls, nil, current, pod)
 
 	// test scale down (2 ready, 1 desired)
+	// In this case readyReplicas > replicas, so no clearScaleUpWaitStarted is called
 	replicas = 1
 	current.Status.Replicas = 1
 	current.Status.ReadyReplicas = 2
-	delete(scaleUpCalls, "Update")
+	scaleDownReadyCalls := map[string][]MockFuncCall{"Get": {funcCalls[0], funcCalls[0]}}
 	methodPlus = fmt.Sprintf("%s(%s)", method, "ScalingDown, Ready > Replicas")
-	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleUpCalls, nil, current, pod)
+	PodManagerUpdateTester(t, methodPlus, mgr, 1, enterpriseApi.PhaseScalingDown, revised, scaleDownReadyCalls, nil, current, pod)
 
 	// test scale down (2 ready scaling down to 1)
+	// The Get calls are: initial StatefulSet re-fetch, then PVC lookups for deletion.
 	pvcCalls := []MockFuncCall{
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
 		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
