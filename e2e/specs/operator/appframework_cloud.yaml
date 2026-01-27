@@ -1,0 +1,480 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_s1_aws_s3
+  description: "App Framework with AWS S3 backend - install and upgrade"
+  component: appframework
+  tags: [operator, appframework, s1, aws, s3, cloud]
+requires:
+  - s3
+  - appframework-apps
+topology:
+  kind: s1
+steps:
+  - name: ensure_s3_secret
+    action: objectstore.secret.ensure
+    with:
+      provider: s3
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Install v1 apps from S3
+  - name: build_appframework_v1
+    action: appframework.spec.build
+    with:
+      provider: s3
+      bucket: ${E2E_S3_BUCKET}
+      region: ${E2E_S3_REGION}
+      prefix: ${E2E_S3_PREFIX}
+      location: ${E2E_S3_PREFIX}appframework/v1apps/
+      scope: local
+      app_source_name: s3-apps
+      poll_interval: 60
+      secret_ref: ${s3_secret_name}
+  - name: apply_appframework_v1
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+
+  # Wait for apps to install
+  - name: wait_apps_download
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: s3-apps
+      phase: download
+  - name: wait_apps_install
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: s3-apps
+      phase: install
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+
+  # Verify apps installed
+  - name: verify_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      path: /opt/splunk/etc/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+  - name: verify_apps_enabled
+    action: appframework.apps.assert
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+
+  # Upgrade to v2 apps
+  - name: build_appframework_v2
+    action: appframework.spec.build
+    with:
+      provider: s3
+      bucket: ${E2E_S3_BUCKET}
+      region: ${E2E_S3_REGION}
+      prefix: ${E2E_S3_PREFIX}
+      location: ${E2E_S3_PREFIX}appframework/v2apps/
+      scope: local
+      app_source_name: s3-apps
+      poll_interval: 60
+      secret_ref: ${s3_secret_name}
+  - name: apply_appframework_v2
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+  - name: wait_apps_upgrade
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: s3-apps
+      phase: install
+  - name: verify_apps_upgraded
+    action: appframework.apps.assert
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+      verify_version: true
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_c3_gcp_gcs
+  description: "App Framework with GCP GCS backend - cluster scope apps"
+  component: appframework
+  tags: [operator, appframework, c3, gcp, gcs, cloud]
+requires:
+  - gcs
+  - appframework-apps
+topology:
+  kind: c3
+steps:
+  - name: ensure_gcs_secret
+    action: objectstore.secret.ensure
+    with:
+      provider: gcs
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 3
+      shc_replicas: 3
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Install cluster-scope apps from GCS
+  - name: build_appframework_cluster
+    action: appframework.spec.build
+    with:
+      provider: gcs
+      bucket: ${E2E_GCS_BUCKET}
+      prefix: ${E2E_GCS_PREFIX}
+      location: ${E2E_GCS_PREFIX}appframework/v1apps/
+      scope: cluster
+      app_source_name: gcs-cluster-apps
+      poll_interval: 60
+      secret_ref: ${gcs_secret_name}
+      gcp_project: ${E2E_GCP_PROJECT}
+
+  # Apply to both CM and SHC
+  - name: apply_appframework_cm
+    action: appframework.apply
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      spec_path: ${last_appframework_spec_path}
+  - name: apply_appframework_shc
+    action: appframework.apply
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      spec_path: ${last_appframework_spec_path}
+
+  # Wait for apps on both
+  - name: wait_apps_cm
+    action: appframework.phase.wait
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      app_source: gcs-cluster-apps
+      phase: install
+  - name: wait_apps_shc
+    action: appframework.phase.wait
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      app_source: gcs-cluster-apps
+      phase: install
+
+  # Verify bundle push
+  - name: capture_bundle_hash
+    action: cluster.bundle.hash.capture
+  - name: verify_bundle_push
+    action: assert.cluster.bundle.push
+    with:
+      replicas: 3
+
+  # Verify apps on indexers (from cluster manager)
+  - name: verify_indexer_apps
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${indexer_cluster_name}-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+
+  # Verify apps on search heads (from SHC)
+  - name: verify_sh_apps
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${search_head_cluster_name}-search-head-0
+      path: /opt/splunk/etc/shcluster/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_m4_azure_blob
+  description: "App Framework with Azure Blob Storage - multisite deployment"
+  component: appframework
+  tags: [operator, appframework, m4, azure, blob, cloud]
+requires:
+  - azure
+  - appframework-apps
+topology:
+  kind: m4
+  params:
+    site_count: "3"
+steps:
+  - name: ensure_azure_secret
+    action: objectstore.secret.ensure
+    with:
+      provider: azure
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: m4
+      site_count: 3
+      indexer_replicas: 1
+      shc_replicas: 3
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Install apps from Azure Blob
+  - name: build_appframework
+    action: appframework.spec.build
+    with:
+      provider: azure
+      bucket: ${E2E_AZURE_CONTAINER}
+      prefix: ${E2E_AZURE_PREFIX}
+      location: ${E2E_AZURE_PREFIX}appframework/v1apps/
+      scope: cluster
+      app_source_name: azure-apps
+      poll_interval: 60
+      secret_ref: ${azure_secret_name}
+      azure_account: ${E2E_AZURE_ACCOUNT}
+
+  # Apply to CM and SHC
+  - name: apply_to_cm
+    action: appframework.apply
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      spec_path: ${last_appframework_spec_path}
+  - name: apply_to_shc
+    action: appframework.apply
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      spec_path: ${last_appframework_spec_path}
+
+  # Wait for installation
+  - name: wait_cm_apps
+    action: appframework.phase.wait
+    with:
+      target_kind: cluster_manager
+      target_name: ${cluster_manager_name}
+      app_source: azure-apps
+      phase: install
+  - name: wait_shc_apps
+    action: appframework.phase.wait
+    with:
+      target_kind: searchheadcluster
+      target_name: ${search_head_cluster_name}
+      app_source: azure-apps
+      phase: install
+
+  # Verify apps on all sites
+  - name: verify_site1_apps
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${base_name}-site1-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+  - name: verify_site2_apps
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${base_name}-site2-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+  - name: verify_site3_apps
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${base_name}-site3-indexer-0
+      path: /opt/splunk/etc/peer-apps
+      files:
+        - Splunk_SA_CIM
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_s3_large_app_download
+  description: "App Framework handles large app downloads from S3"
+  component: appframework
+  tags: [operator, appframework, s1, aws, s3, performance]
+requires:
+  - s3
+  - large-apps
+topology:
+  kind: s1
+steps:
+  - name: ensure_s3_secret
+    action: objectstore.secret.ensure
+    with:
+      provider: s3
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Track timing
+  - name: capture_start_time
+    action: metrics.time.start
+    with:
+      metric_name: large_app_download
+
+  # Install large app (>500MB)
+  - name: build_appframework_large
+    action: appframework.spec.build
+    with:
+      provider: s3
+      bucket: ${E2E_S3_BUCKET}
+      location: ${E2E_S3_PREFIX}appframework/large-apps/
+      scope: local
+      app_source_name: large-apps
+      poll_interval: 30
+      secret_ref: ${s3_secret_name}
+  - name: apply_large_apps
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+
+  # Monitor download progress
+  - name: wait_download_complete
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: large-apps
+      phase: download
+      timeout: 30m
+  - name: wait_install_complete
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: large-apps
+      phase: install
+      timeout: 30m
+
+  # Capture completion time
+  - name: capture_end_time
+    action: metrics.time.end
+    with:
+      metric_name: large_app_download
+
+  # Verify app installed
+  - name: verify_large_app_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      path: /opt/splunk/etc/apps
+      files:
+        - LargeApp
+
+  # Verify no OOM or resource issues
+  - name: verify_no_oom
+    action: diagnostics.events.list
+    with:
+      resource_name: splunk-${standalone_name}-standalone-0
+  - name: verify_pod_resources
+    action: diagnostics.pod.resource_usage
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_appframework_s3_network_interruption
+  description: "App Framework resilient to network interruptions during S3 download"
+  component: appframework
+  tags: [operator, appframework, s1, aws, s3, resilience, chaos]
+requires:
+  - s3
+  - appframework-apps
+topology:
+  kind: s1
+steps:
+  - name: ensure_s3_secret
+    action: objectstore.secret.ensure
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Start app download
+  - name: build_appframework
+    action: appframework.spec.build
+    with:
+      provider: s3
+      bucket: ${E2E_S3_BUCKET}
+      location: ${E2E_S3_PREFIX}appframework/v1apps/
+      scope: local
+      app_source_name: s3-apps
+      poll_interval: 30
+      secret_ref: ${s3_secret_name}
+  - name: apply_appframework
+    action: appframework.apply
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      spec_path: ${last_appframework_spec_path}
+
+  # Wait for download to start
+  - name: wait_download_start
+    action: k8s.wait.condition
+    with:
+      kind: standalone
+      name: ${standalone_name}
+      condition: app_download_inprogress
+      timeout: 5m
+
+  # Introduce network delay
+  - name: introduce_network_delay
+    action: chaos.network.delay
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      delay: 500ms
+      duration: 2m
+
+  # Verify download eventually completes despite delay
+  - name: wait_download_complete_after_chaos
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: s3-apps
+      phase: download
+      timeout: 15m
+  - name: wait_install_complete
+    action: appframework.phase.wait
+    with:
+      target_kind: standalone
+      target_name: ${standalone_name}
+      app_source: s3-apps
+      phase: install
+
+  # Verify apps installed successfully
+  - name: verify_apps_after_chaos
+    action: appframework.apps.assert
+    with:
+      pods:
+        - splunk-${standalone_name}-standalone-0
+      apps:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate

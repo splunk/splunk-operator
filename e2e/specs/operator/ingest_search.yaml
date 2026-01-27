@@ -1,0 +1,94 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_ingest_search_internal
+  description: "Ingest/search: internal log searches (source test/ingest_search/ingest_search_test.go)"
+  component: ingest-search
+  tags: [operator, ingest, search, s1]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: search_internal_stats
+    action: splunk.search.sync
+    with:
+      query: "index=_internal | stats count by host"
+  - name: verify_host_field
+    action: assert.search.field
+    with:
+      field: host
+      value: "${search_pod}"
+  - name: search_internal_async
+    action: splunk.search.req
+    with:
+      query: "index=_internal GUID component=ServerConfig"
+  - name: wait_search_async
+    action: splunk.search.wait
+  - name: fetch_search_results
+    action: splunk.search.results
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_ingest_search_custom_data
+  description: "Ingest/search: custom data to new index (source test/ingest_search/ingest_search_test.go)"
+  component: ingest-search
+  tags: [operator, ingest, search, s1]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+  - name: splunk_status
+    action: splunk.status.check
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: myTestIndex
+  - name: generate_data
+    action: data.generate.log
+    with:
+      lines: 1
+  - name: ingest
+    action: splunk.ingest.oneshot
+    with:
+      path: "${last_generated_path}"
+      index: myTestIndex
+  - name: wait_for_indexing
+    action: sleep
+    with:
+      duration: 10s
+  - name: search_count_by_host
+    action: splunk.search.sync
+    with:
+      query: "index=myTestIndex | stats count by host"
+  - name: assert_count
+    action: assert.search.count
+    with:
+      count: 1
+  - name: assert_host
+    action: assert.search.field
+    with:
+      field: host
+      value: "${search_pod}"
+  - name: search_token_async
+    action: splunk.search.req
+    with:
+      query: "index=myTestIndex ${last_generated_token}"
+  - name: wait_token_search
+    action: splunk.search.wait
+  - name: fetch_token_results
+    action: splunk.search.results
+  - name: assert_raw_contains
+    action: assert.search.results.raw_contains
+    with:
+      value: "${last_generated_first_line}"

@@ -1,0 +1,160 @@
+name: comprehensive
+description: Comprehensive test matrix covering all major topologies and scenarios
+
+topologies:
+  - s1
+  - c3
+  - m4
+
+cloud_providers:
+  - kind
+  - eks
+  - gke
+  - aks
+
+splunk_versions:
+  - "9.1.0"
+  - "9.2.0"
+  - "10.0.0"
+  - latest
+
+operator_versions:
+  - latest
+
+tags:
+  - matrix
+  - comprehensive
+
+scenarios:
+  - name: basic_deployment
+    description: Basic deployment and readiness check
+    tags:
+      - smoke
+      - basic
+    steps:
+      - name: deploy
+        action: topology.deploy
+        with:
+          kind: ${topology}
+      - name: wait_ready
+        action: topology.wait_ready
+      - name: wait_stable
+        action: topology.wait_stable
+      - name: diagnostics
+        action: diagnostics.snapshot.full
+
+  - name: with_license
+    description: Deployment with license manager
+    tags:
+      - license
+      - integration
+    requires:
+      - license
+    steps:
+      - name: deploy_license_manager
+        action: splunk.license_manager.deploy
+      - name: deploy
+        action: topology.deploy
+        with:
+          kind: ${topology}
+          license_manager_ref: ${license_manager_name}
+      - name: wait_ready
+        action: topology.wait_ready
+      - name: verify_license
+        action: splunk.license.verify
+
+  - name: with_smartstore
+    description: Deployment with SmartStore configured
+    tags:
+      - smartstore
+      - storage
+      - integration
+    requires:
+      - objectstore
+    steps:
+      - name: deploy
+        action: topology.deploy
+        with:
+          kind: ${topology}
+          smartstore_enabled: true
+      - name: wait_ready
+        action: topology.wait_ready
+      - name: verify_smartstore
+        action: splunk.smartstore.verify
+
+  - name: pod_failure_recovery
+    description: Pod deletion and automatic recovery
+    tags:
+      - chaos
+      - resilience
+    steps:
+      - name: deploy
+        action: topology.deploy
+        with:
+          kind: ${topology}
+      - name: wait_ready
+        action: topology.wait_ready
+      - name: delete_pod
+        action: chaos.pod.kill_random
+        with:
+          selector: app.kubernetes.io/component=splunk
+      - name: wait_recovery
+        action: topology.wait_ready
+      - name: verify_stable
+        action: topology.wait_stable
+
+  - name: upgrade_test
+    description: Splunk version upgrade
+    tags:
+      - upgrade
+      - integration
+    steps:
+      - name: deploy
+        action: topology.deploy
+        with:
+          kind: ${topology}
+          splunk_image: "splunk/splunk:9.1.0"
+      - name: wait_ready
+        action: topology.wait_ready
+      - name: upgrade
+        action: upgrade.splunk.rolling
+        with:
+          kind: ${topology}
+          name: ${standalone_name}
+          image: "splunk/splunk:${splunk_version}"
+          batch_size: 1
+      - name: verify_version
+        action: upgrade.verify.version
+        with:
+          pod: splunk-${standalone_name}-standalone-0
+          expected_version: ${splunk_version}
+
+# Constraints to limit test combinations
+constraints:
+  # Exclude upgrade tests for latest version (no known target)
+  - type: exclude
+    condition:
+      scenario: upgrade_test
+      splunk_version: latest
+    reason: Cannot upgrade to/from latest without specific version
+
+  # SmartStore only on cloud providers (not kind)
+  - type: exclude
+    condition:
+      scenario: with_smartstore
+      cloud_provider: kind
+    reason: SmartStore requires real object storage (S3/GCS/Azure)
+
+  # Chaos tests only on stable versions
+  - type: exclude
+    condition:
+      scenario_tag: chaos
+      splunk_version: latest
+    reason: Chaos testing only on stable, known versions
+
+  # Only run full resilience tests on specific topologies
+  - type: exclude
+    condition:
+      scenario: pod_failure_recovery
+      topology: s1
+    reason: Single standalone has limited resilience testing value
