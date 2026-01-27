@@ -172,9 +172,6 @@ jobs:
           sudo snap install kustomize
           mkdir -p ./bin
           cp /snap/bin/kustomize ./bin/kustomize
-      - name: Set test mode
-        run: |
-          kubectl patch configmap splunk-operator-manager-config --type merge -p '{"data":{"test.mode":"true"}}'
       - name: Run Integration test
         run: |
           make int-test
