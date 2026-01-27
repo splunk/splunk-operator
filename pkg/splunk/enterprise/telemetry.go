@@ -11,7 +11,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -21,7 +21,12 @@ import (
 )
 
 const (
+	// TODO: Should be set to one day for the release
 	requeAfterInSeconds = 30
+	// TODO: Should change to false for the release
+	isTestMode = false
+	// TODO: Ideally the version string should be set from the release tag
+	SOK_VERSION = "3.0.0"
 )
 
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
@@ -53,7 +58,7 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	data = make(map[string]interface{})
 
 	// Add SOK version
-	data[telSOKVersionKey] = "3.0.0"
+	data[telSOKVersionKey] = SOK_VERSION
 	// Add per CR telemetry
 	crList := getAllCustomResources(ctx, client)
 
@@ -258,25 +263,17 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 	}
 }
 
-func isTest(ctx context.Context, client splcommon.ControllerClient, namespace string) bool {
+func isTest(ctx context.Context) bool {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("isTelemetryTest").WithValues(
-		"namespace", namespace)
-	scopedLog.Info("Start")
+	scopedLog := reqLogger.WithName("checkTestMode")
 
-	cm := &corev1.ConfigMap{}
-	key := types.NamespacedName{
-		Namespace: namespace,
-		Name:      GetManagerConfigMapName("splunk-operator-"),
-	}
-	err := client.Get(ctx, key, cm)
-	if err != nil {
-		return isTestMode
-	}
-	if val, exists := cm.Data[testModeKey]; exists && val == "true" {
-		scopedLog.Info("Test mode is enabled via configmap")
+	// Retrieve SPLUNK_TEST_MODE environment variable
+	testModeStr := os.Getenv("SPLUNK_TEST_MODE")
+	if testModeStr == "1" {
+		scopedLog.Info("Test mode is enabled via SPLUNK_TEST_MODE env variable")
 		return true
 	}
+
 	scopedLog.Info("Return test mode", "isTestMode", isTestMode)
 	return isTestMode
 }
@@ -309,7 +306,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	}
 
 	serviceName := GetSplunkServiceName(instanceID, cr.GetName(), false)
-	scopedLog.Info("mqiu: got service name", "serviceName", serviceName)
+	scopedLog.Info("Got service name", "serviceName", serviceName)
 
 	splunkReadableData, err := splutil.GetSplunkReadableNamespaceScopedSecretData(ctx, client, cr.GetNamespace())
 	if err != nil {
@@ -336,7 +333,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		Component:     "sok",
 		OptInRequired: 2,
 		Data:          data,
-		Test:          isTest(ctx, client, cr.GetNamespace()),
+		Test:          isTest(ctx),
 	}
 
 	path := fmt.Sprintf("/servicesNS/nobody/%s/telemetry-metric", telAppNameStr)

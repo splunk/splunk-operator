@@ -218,8 +218,6 @@ access = read : [ * ], write : [ admin ]
 	telLicenseInfoKey = "license_info"
 
 	managerConfigMapTemplateStr = "%smanager-config"
-	testModeKey                 = "test.mode"
-	isTestMode                  = false
 )
 
 const (
