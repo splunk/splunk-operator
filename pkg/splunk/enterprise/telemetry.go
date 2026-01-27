@@ -24,7 +24,7 @@ const (
 	// TODO: Should be set to one day for the release
 	requeAfterInSeconds = 30
 	// TODO: Should change to false for the release
-	isTestMode = false
+	isTestMode = true
 	// TODO: Ideally the version string should be set from the release tag
 	SOK_VERSION = "3.0.0"
 )
@@ -99,6 +99,10 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(standaloneList.Items) > 0 {
 		crList[standaloneList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range standaloneList.Items {
+			if !cr.Status.TelAppInstalled {
+				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
+				continue
+			}
 			crList[standaloneList.Items[0].Kind] = append(crList[standaloneList.Items[0].Kind], &cr)
 		}
 	}
@@ -112,6 +116,10 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(lmanagerList.Items) > 0 {
 		crList[lmanagerList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range lmanagerList.Items {
+			if !cr.Status.TelAppInstalled {
+				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
+				continue
+			}
 			crList[lmanagerList.Items[0].Kind] = append(crList[lmanagerList.Items[0].Kind], &cr)
 		}
 	}
@@ -125,6 +133,10 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(lmasterList.Items) > 0 {
 		crList[lmasterList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range lmasterList.Items {
+			if !cr.Status.TelAppInstalled {
+				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
+				continue
+			}
 			crList[lmasterList.Items[0].Kind] = append(crList[lmasterList.Items[0].Kind], &cr)
 		}
 	}
@@ -138,32 +150,25 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(shcList.Items) > 0 {
 		crList[shcList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range shcList.Items {
+			if !cr.Status.TelAppInstalled {
+				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
+				continue
+			}
 			crList[shcList.Items[0].Kind] = append(crList[shcList.Items[0].Kind], &cr)
 		}
 	}
 
-	var idxList enterpriseApi.IndexerClusterList
-	//instanceID = SplunkSearchHead
-	//telAppName = fmt.Sprintf(telAppNameTemplateStr, "shc")
-	err = client.List(ctx, &idxList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list SearchHeadCluster objects")
-	} else if len(idxList.Items) > 0 {
-		crList[idxList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
-		for _, cr := range idxList.Items {
-			crList[idxList.Items[0].Kind] = append(crList[idxList.Items[0].Kind], &cr)
-		}
-	}
-
 	var cmanagerList enterpriseApi.ClusterManagerList
-	//instanceID = SplunkClusterManager
-	//telAppName = fmt.Sprintf(telAppNameTemplateStr, "cmanager")
 	err = client.List(ctx, &cmanagerList)
 	if err != nil {
 		scopedLog.Error(err, "Failed to list ClusterManager objects")
 	} else if len(cmanagerList.Items) > 0 {
 		crList[cmanagerList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range cmanagerList.Items {
+			if !cr.Status.TelAppInstalled {
+				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
+				continue
+			}
 			crList[cmanagerList.Items[0].Kind] = append(crList[cmanagerList.Items[0].Kind], &cr)
 		}
 	}
@@ -175,6 +180,10 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(cmasterList.Items) > 0 {
 		crList[cmasterList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range cmasterList.Items {
+			if !cr.Status.TelAppInstalled {
+				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
+				continue
+			}
 			crList[cmasterList.Items[0].Kind] = append(crList[cmasterList.Items[0].Kind], &cr)
 		}
 	}
@@ -308,12 +317,15 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	serviceName := GetSplunkServiceName(instanceID, cr.GetName(), false)
 	scopedLog.Info("Got service name", "serviceName", serviceName)
 
-	splunkReadableData, err := splutil.GetSplunkReadableNamespaceScopedSecretData(ctx, client, cr.GetNamespace())
+	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
 	if err != nil {
-		scopedLog.Error(err, "Failed to retrieve secrets")
+		scopedLog.Error(err, "Could not access default secret object")
 		return false
 	}
-	adminPwd, foundSecret := splunkReadableData["password"]
+
+	//Get the admin password from the secret object
+	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
 		scopedLog.Info("Failed to find admin password")
 		return false

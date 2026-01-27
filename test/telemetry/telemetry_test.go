@@ -60,10 +60,10 @@ var _ = Describe("Telemetry integration", func() {
 		// Create a telemetry ConfigMap
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "telemetry-cm",
+				Name:      "splunk-operator-manager-telemetry",
 				Namespace: testcaseEnvInst.GetName(),
 			},
-			Data: map[string]string{"telemetry": "{\"test\":\"value\"}"},
+			Data: map[string]string{"test_telemetry": "{\"test\":\"value\"}"},
 		}
 		Expect(testcaseEnvInst.GetKubeClient().Create(ctx, cm)).To(Succeed())
 
