@@ -1,7 +1,5 @@
 # Default environment is default
-ENVIRONMENT ?= ${1}
-${ENVIRONMENT}:
-	ENVIRONMENT = default
+ENVIRONMENT ?= default
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
@@ -120,7 +118,7 @@ help: ## Display this help.
 
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	rm config/crd/bases/_.yaml
+	rm -f config/crd/bases/_.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -190,7 +188,7 @@ docker-buildx:
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
             --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
             --tag "${IMG}" -f "$$DOCKERFILE" .; \
-        - docker buildx rm project-v3-builder || true
+        docker buildx rm project-v3-builder || true
 
 
 
