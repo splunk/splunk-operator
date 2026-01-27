@@ -2494,12 +2494,12 @@ func changeAnnotations(ctx context.Context, c splcommon.ControllerClient, image 
 	return err
 }
 
-// ApplyKVServiceCR ensures the KVService CR exists with the current CR as an owner.
+// createKVServiceCR ensures the KVService CR exists with the current CR as an owner.
 // - If KVService doesn't exist, create it with the current CR as owner
 // - If KVService exists but current CR is not an owner, add owner reference
-func ApplyKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject) error {
+func createKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject) error {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("ApplyKVServiceCR").WithValues(
+	scopedLog := reqLogger.WithName("createKVServiceCR").WithValues(
 		"kind", cr.GetObjectKind().GroupVersionKind().Kind,
 		"name", cr.GetName(),
 		"namespace", cr.GetNamespace())
@@ -2616,11 +2616,6 @@ func DeleteKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr spl
 	}
 	scopedLog.Info("Removed owner reference from KVService CR")
 	return nil
-}
-
-// GetKVServiceName returns the fixed KVService CR name
-func GetKVServiceName() string {
-	return splcommon.KVServiceCrName
 }
 
 // hasOwnerReference checks if the given CR is already an owner

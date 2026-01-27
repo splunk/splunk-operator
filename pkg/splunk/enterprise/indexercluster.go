@@ -163,9 +163,9 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// create or update KVService CR with owner reference
-	err = ApplyKVServiceCR(ctx, client, cr)
+	err = createKVServiceCR(ctx, client, cr)
 	if err != nil {
-		eventPublisher.Warning(ctx, "ApplyKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
+		eventPublisher.Warning(ctx, "createKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
 		return result, err
 	}
 

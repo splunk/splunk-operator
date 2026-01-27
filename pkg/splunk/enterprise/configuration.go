@@ -970,6 +970,15 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		})
 	}
 
+	// append KVService connection string, if KVService is ready
+	kvConnStr := getKVServiceConnectionString(ctx, client, cr.GetNamespace())
+	if kvConnStr != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "KVSERVICE_CONNECTION_STRING",
+			Value: kvConnStr,
+		})
+	}
+
 	// append URL for cluster manager, if configured
 	var clusterManagerURL string
 	if isCMDeployed(instanceType) {
@@ -2113,4 +2122,19 @@ func validateSplunkGeneralTerms() error {
 		return nil
 	}
 	return fmt.Errorf("license not accepted, please adjust SPLUNK_GENERAL_TERMS to indicate you have accepted the current/latest version of the license. See README file for additional information")
+}
+
+// getKVServiceConnectionString returns the connection string for KVService
+func getKVServiceConnectionString(ctx context.Context, client splcommon.ControllerClient, namespace string) string {
+	// TODO:
+	// wait until the KVService is ready
+
+	// Derive connection string from fixed KVService name
+	// Format: splunk-kvservice.{namespace}.svc.cluster.local:{port}
+	kvServiceName := splcommon.KVServiceCrName
+	url := splcommon.GetServiceFQDN(namespace, kvServiceName)
+	// TODO: Define KVService port constant? configurable?
+	// 443 placeholder for https
+
+	return fmt.Sprintf("%s:%d", url, 443)
 }

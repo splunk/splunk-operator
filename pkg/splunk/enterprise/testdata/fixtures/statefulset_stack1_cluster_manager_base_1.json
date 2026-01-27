@@ -125,6 +125,10 @@
               {
                 "name": "SPLUNK_LICENSE_MASTER_URL",
                 "value": "splunk-stack1-license-manager-service.test.svc.cluster.local"
+              },
+              {
+                "name": "KVSERVICE_CONNECTION_STRING",
+                "value": "splunk-kvservice.test.svc.cluster.local:443"
               }
             ],
             "resources": {
