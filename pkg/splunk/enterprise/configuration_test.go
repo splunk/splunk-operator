@@ -1150,6 +1150,45 @@ maxGlobalRawDataSizeMB = 5000
 		t.Errorf("expected: %s, returned: %s", expectedINIFormatString, indexesConfIni)
 	}
 }
+
+func TestGetSmartstoreVolumesConfigAddsUseSdk(t *testing.T) {
+	ctx := context.TODO()
+	cr := enterpriseApi.Standalone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "standalone",
+			Namespace: "test",
+		},
+	}
+
+	client := spltest.NewMockClient()
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
+	require.NoError(t, err)
+	secret.Data[s3AccessKey] = []byte("access")
+	secret.Data[s3SecretKey] = []byte("secret")
+	_, err = splctrl.ApplySecret(ctx, client, secret)
+	require.NoError(t, err)
+
+	smartstore := &enterpriseApi.SmartStoreSpec{
+		VolList: []enterpriseApi.VolumeSpec{
+			{
+				Name:      "msos_s2s3_vol",
+				Endpoint:  "https://s3.us-west-2.amazonaws.com",
+				Path:      "testbucket",
+				Region:    "us-west-2",
+				SecretRef: secret.Name,
+			},
+		},
+	}
+
+	conf, err := GetSmartstoreVolumesConfig(ctx, client, &cr, smartstore, map[string]string{})
+	require.NoError(t, err)
+	require.Contains(t, conf, "use_sdk = true")
+
+	smartstore.VolList[0].SecretRef = ""
+	conf, err = GetSmartstoreVolumesConfig(ctx, client, &cr, smartstore, map[string]string{})
+	require.NoError(t, err)
+	require.Contains(t, conf, "use_sdk = true")
+}
 func TestGetServerConfigEntries(t *testing.T) {
 
 	SmartStoreCacheManager := enterpriseApi.CacheManagerSpec{
