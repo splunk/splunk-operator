@@ -109,52 +109,19 @@ func TestSendTelemetry_NoSecret(t *testing.T) {
 
 func TestTelemetryGetAllCustomResources_AllKinds(t *testing.T) {
 	ctx := context.TODO()
-	mockClient := spltest.NewMockClient()
-
-	// Standalone
-	standalone := &enterpriseApi.Standalone{}
-	standalone.TypeMeta.Kind = "Standalone"
-	standalone.ObjectMeta.Name = "test-standalone"
-	mockClient.AddObject(standalone)
-
-	// LicenseManager
-	licenseManager := &enterpriseApi.LicenseManager{}
-	licenseManager.TypeMeta.Kind = "LicenseManager"
-	licenseManager.ObjectMeta.Name = "test-licensemanager"
-	mockClient.AddObject(licenseManager)
-
-	// LicenseMaster (v3)
-	licenseMaster := &enterpriseApiV3.LicenseMaster{}
-	licenseMaster.TypeMeta.Kind = "LicenseMaster"
-	licenseMaster.ObjectMeta.Name = "test-licensemaster"
-	mockClient.AddObject(licenseMaster)
-
-	// SearchHeadCluster
-	shc := &enterpriseApi.SearchHeadCluster{}
-	shc.TypeMeta.Kind = "SearchHeadCluster"
-	shc.ObjectMeta.Name = "test-shc"
-	mockClient.AddObject(shc)
-
-	// IndexerCluster
-	idx := &enterpriseApi.IndexerCluster{}
-	idx.TypeMeta.Kind = "IndexerCluster"
-	idx.ObjectMeta.Name = "test-idx"
-	mockClient.AddObject(idx)
-
-	// ClusterManager
-	cmanager := &enterpriseApi.ClusterManager{}
-	cmanager.TypeMeta.Kind = "ClusterManager"
-	cmanager.ObjectMeta.Name = "test-cmanager"
-	mockClient.AddObject(cmanager)
-
-	// ClusterMaster (v3)
-	cmaster := &enterpriseApiV3.ClusterMaster{}
-	cmaster.TypeMeta.Kind = "ClusterMaster"
-	cmaster.ObjectMeta.Name = "test-cmaster"
-	mockClient.AddObject(cmaster)
-
-	crMap := getAllCustomResources(ctx, mockClient)
-	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "IndexerCluster", "ClusterManager", "ClusterMaster"}
+	fakeClient := &FakeListClient{
+		crs: map[string][]client.Object{
+			"Standalone":        {&enterpriseApi.Standalone{TypeMeta: metav1.TypeMeta{Kind: "Standalone"}, ObjectMeta: metav1.ObjectMeta{Name: "test-standalone"}}},
+			"LicenseManager":    {&enterpriseApi.LicenseManager{TypeMeta: metav1.TypeMeta{Kind: "LicenseManager"}, ObjectMeta: metav1.ObjectMeta{Name: "test-licensemanager"}}},
+			"LicenseMaster":     {&enterpriseApiV3.LicenseMaster{TypeMeta: metav1.TypeMeta{Kind: "LicenseMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-licensemaster"}}},
+			"SearchHeadCluster": {&enterpriseApi.SearchHeadCluster{TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-shc"}}},
+			"ClusterManager":    {&enterpriseApi.ClusterManager{TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"}, ObjectMeta: metav1.ObjectMeta{Name: "test-cmanager"}}},
+			"ClusterMaster":     {&enterpriseApiV3.ClusterMaster{TypeMeta: metav1.TypeMeta{Kind: "ClusterMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-cmaster"}}},
+		},
+		sts: []apps.StatefulSet{}, // ensure all keys are present
+	}
+	crMap := getAllCustomResources(ctx, fakeClient)
+	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "ClusterManager", "ClusterMaster"}
 	for _, kind := range kinds {
 		if _, ok := crMap[kind]; !ok {
 			t.Errorf("expected kind %s in CR map", kind)
@@ -162,19 +129,14 @@ func TestTelemetryGetAllCustomResources_AllKinds(t *testing.T) {
 	}
 }
 
-// Test for resource extraction from StatefulSet (integration style, not a pure unit test)
 func TestTelemetryCollectCRTelData_ResourceData(t *testing.T) {
-	mockClient := spltest.NewMockClient()
 	ctx := context.TODO()
 	cr := &enterpriseApi.Standalone{}
 	cr.TypeMeta.Kind = "Standalone"
 	cr.ObjectMeta.Name = "test-standalone"
 	cr.ObjectMeta.Namespace = "default"
 	crList := map[string][]splcommon.MetaObject{"Standalone": {cr}}
-	data := make(map[string]interface{})
-
-	// Create a fake StatefulSet owned by the CR with resource settings
-	sts := &apps.StatefulSet{
+	sts := apps.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-standalone-sts",
 			Namespace: "default",
@@ -202,11 +164,11 @@ func TestTelemetryCollectCRTelData_ResourceData(t *testing.T) {
 			},
 		},
 	}
-	mockClient.AddObject(sts)
-
-	// Run the function under test
-	collectCRTelData(ctx, mockClient, crList, data)
-
+	fakeClient := &FakeListClient{
+		sts: []apps.StatefulSet{sts},
+	}
+	data := make(map[string]interface{})
+	collectCRTelData(ctx, fakeClient, crList, data)
 	standaloneData, ok := data["Standalone"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected Standalone data map")
@@ -313,8 +275,56 @@ type errorUpdateClient struct {
 	spltest.MockClient
 }
 
-func (c *errorUpdateClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (c *errorUpdateClient) Update(_ context.Context, _ client.Object, _ ...client.UpdateOption) error {
 	return errors.New("forced update error")
+}
+
+// FakeListClient is a local mock client that supports List for CRs and StatefulSets for testing
+// Only implements List for the types needed in these tests
+type FakeListClient struct {
+	spltest.MockClient
+	crs map[string][]client.Object
+	sts []apps.StatefulSet
+}
+
+func (c *FakeListClient) List(_ context.Context, list client.ObjectList, _ ...client.ListOption) error {
+	switch l := list.(type) {
+	case *enterpriseApi.StandaloneList:
+		l.Items = nil
+		for _, obj := range c.crs["Standalone"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApi.Standalone)))
+		}
+	case *enterpriseApi.LicenseManagerList:
+		l.Items = nil
+		for _, obj := range c.crs["LicenseManager"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApi.LicenseManager)))
+		}
+	case *enterpriseApiV3.LicenseMasterList:
+		l.Items = nil
+		for _, obj := range c.crs["LicenseMaster"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApiV3.LicenseMaster)))
+		}
+	case *enterpriseApi.SearchHeadClusterList:
+		l.Items = nil
+		for _, obj := range c.crs["SearchHeadCluster"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApi.SearchHeadCluster)))
+		}
+	case *enterpriseApi.ClusterManagerList:
+		l.Items = nil
+		for _, obj := range c.crs["ClusterManager"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApi.ClusterManager)))
+		}
+	case *enterpriseApiV3.ClusterMasterList:
+		l.Items = nil
+		for _, obj := range c.crs["ClusterMaster"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApiV3.ClusterMaster)))
+		}
+	case *apps.StatefulSetList:
+		l.Items = c.sts
+	default:
+		return nil
+	}
+	return nil
 }
 
 // Additional tests for error paths and success can be added with more advanced mocks.
