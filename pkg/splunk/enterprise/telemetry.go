@@ -27,6 +27,8 @@ const (
 	isTestMode = true
 	// TODO: Ideally the version string should be set from the release tag
 	SOK_VERSION = "3.0.0"
+
+	telStatusKey = "status"
 )
 
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
@@ -37,6 +39,10 @@ type Telemetry struct {
 	OptInRequired int                    `json:"optInRequired"`
 	Data          map[string]interface{} `json:"data"`
 	Test          bool                   `json:"test"`
+}
+
+type TelemetryStatus struct {
+	LastTransmission string `json:"lastTransmission"`
 }
 
 func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
@@ -71,12 +77,35 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 		for _, cr := range crs {
 			success := SendTelemetry(ctx, client, cr, data)
 			if success {
+				updateLastTransmissionTime(ctx, client, cm)
 				return result, nil
 			}
 		}
 	}
 
 	return result, errors.New("Failed to send telemetry data")
+}
+
+func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) error {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("updateLastTransmissionTime")
+
+	var status TelemetryStatus
+	status.LastTransmission = time.Now().UTC().Format(time.RFC3339)
+
+	updated, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		scopedLog.Error(err, "Failed to marshal telemetry status")
+		return err
+	}
+	cm.Data[telStatusKey] = string(updated)
+	if err = client.Update(ctx, cm); err != nil {
+		scopedLog.Error(err, "Failed to update telemetry status in configmap")
+		return err
+	}
+	scopedLog.Info("Updated last transmission time in configmap", "newStatus", cm.Data[telStatusKey])
+
+	return nil
 }
 
 func getAllCustomResources(ctx context.Context, client splcommon.ControllerClient) map[string][]splcommon.MetaObject {
@@ -260,8 +289,11 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 	scopedLog.Info("Start")
 
 	for key, val := range cm.Data {
+		if key == telStatusKey {
+			continue
+		}
 		var compData interface{}
-		scopedLog.Info("mqiu: Processing telemetry input from other components", "key", key, "value", val)
+		scopedLog.Info("Processing telemetry input from other components", "key", key, "value", val)
 		err := json.Unmarshal([]byte(val), &compData)
 		if err != nil {
 			scopedLog.Info("Not able to unmarshal. Will include the input as string", "key", key, "value", val)
@@ -361,6 +393,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		scopedLog.Error(err, "Failed to send telemetry")
 		return false
 	}
+
 	scopedLog.Info("Successfully sent telemetry", "response", response)
 	return true
 }
