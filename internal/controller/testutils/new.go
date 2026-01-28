@@ -46,7 +46,7 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 }
 
 // NewIngestorCluster returns new IngestorCluster instance with its config hash
-func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
+func NewIngestorCluster(name, ns, image string, os *enterpriseApi.ObjectStorage, queue *enterpriseApi.Queue) *enterpriseApi.IngestorCluster {
 	return &enterpriseApi.IngestorCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: enterpriseApi.IngestorClusterSpec{
@@ -55,7 +55,12 @@ func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
 			},
 			Replicas: 3,
 			QueueRef: corev1.ObjectReference{
-				Name: "queue",
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      os.Name,
+				Namespace: os.Namespace,
 			},
 		},
 	}

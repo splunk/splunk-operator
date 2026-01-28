@@ -104,7 +104,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 			annotations = map[string]string{}
 			icSpec.Annotations = annotations
 			icSpec.Status.Phase = "Ready"
-			UpdateIngestorCluster(icSpec, enterpriseApi.PhaseReady)
+			UpdateIngestorCluster(icSpec, enterpriseApi.PhaseReady, os, queue)
 			DeleteIngestorCluster("test", nsSpecs.Name)
 			Expect(k8sClient.Delete(context.Background(), nsSpecs)).Should(Succeed())
 		})
@@ -161,6 +161,35 @@ var _ = Describe("IngestorCluster Controller", func() {
 
 			Expect(k8sClient.Create(context.Background(), nsSpecs)).Should(Succeed())
 
+			queue := &enterpriseApi.Queue{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "queue",
+					Namespace: nsSpecs.Name,
+				},
+				Spec: enterpriseApi.QueueSpec{
+					Provider: "sqs",
+					SQS: enterpriseApi.SQSSpec{
+						Name:       "smartbus-queue",
+						AuthRegion: "us-west-2",
+						DLQ:        "smartbus-dlq",
+						Endpoint:   "https://sqs.us-west-2.amazonaws.com",
+					},
+				},
+			}
+			os := &enterpriseApi.ObjectStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "os",
+					Namespace: nsSpecs.Name,
+				},
+				Spec: enterpriseApi.ObjectStorageSpec{
+					Provider: "s3",
+					S3: enterpriseApi.S3Spec{
+						Endpoint: "https://s3.us-west-2.amazonaws.com",
+						Path:     "s3://ingestion/smartbus-test",
+					},
+				},
+			}
+
 			ctx := context.TODO()
 			builder := fake.NewClientBuilder()
 			c := builder.Build()
@@ -177,7 +206,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 			_, err := instance.Reconcile(ctx, request)
 			Expect(err).ToNot(HaveOccurred())
 
-			icSpec := testutils.NewIngestorCluster("test", namespace, "image")
+			icSpec := testutils.NewIngestorCluster("test", namespace, "image", os, queue)
 			Expect(c.Create(ctx, icSpec)).Should(Succeed())
 
 			annotations := make(map[string]string)
@@ -269,7 +298,7 @@ func CreateIngestorCluster(name string, namespace string, annotations map[string
 	return ic
 }
 
-func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enterpriseApi.Phase) *enterpriseApi.IngestorCluster {
+func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enterpriseApi.Phase, os *enterpriseApi.ObjectStorage, queue *enterpriseApi.Queue) *enterpriseApi.IngestorCluster {
 	By("Expecting IngestorCluster custom resource to be updated successfully")
 
 	key := types.NamespacedName{
@@ -277,7 +306,7 @@ func UpdateIngestorCluster(instance *enterpriseApi.IngestorCluster, status enter
 		Namespace: instance.Namespace,
 	}
 
-	icSpec := testutils.NewIngestorCluster(instance.Name, instance.Namespace, "image")
+	icSpec := testutils.NewIngestorCluster(instance.Name, instance.Namespace, "image", os, queue)
 	icSpec.ResourceVersion = instance.ResourceVersion
 	Expect(k8sClient.Update(context.Background(), icSpec)).Should(Succeed())
 	time.Sleep(2 * time.Second)

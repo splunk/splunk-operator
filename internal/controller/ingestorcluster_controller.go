@@ -50,6 +50,10 @@ type IngestorClusterReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=ingestorclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=ingestorclusters/finalizers,verbs=update
 
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues;objectstorages,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/status;objectstorages/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=queues/finalizers;objectstorages/finalizers,verbs=update
+
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
@@ -129,6 +133,57 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IngestorCluster{},
 			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				secret, ok := obj.(*corev1.Secret)
+				if !ok {
+					return nil
+				}
+
+				// Only consider ingestor clusters in the same namespace as the Secret
+				var list enterpriseApi.IngestorClusterList
+				if err := r.Client.List(ctx, &list, client.InNamespace(secret.Namespace)); err != nil {
+					return nil
+				}
+
+				var reqs []reconcile.Request
+				for _, ic := range list.Items {
+					if ic.Spec.QueueRef.Name == "" {
+						continue
+					}
+
+					queueNS := ic.Spec.QueueRef.Namespace
+					if queueNS == "" {
+						queueNS = ic.Namespace
+					}
+
+					queue := &enterpriseApi.Queue{}
+					if err := r.Client.Get(ctx, types.NamespacedName{
+						Name:      ic.Spec.QueueRef.Name,
+						Namespace: queueNS,
+					}, queue); err != nil {
+						continue
+					}
+
+					if queue.Spec.Provider != "sqs" {
+						continue
+					}
+
+					for _, vol := range queue.Spec.SQS.VolList {
+						if vol.SecretRef == secret.Name {
+							reqs = append(reqs, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Name:      ic.Name,
+									Namespace: ic.Namespace,
+								},
+							})
+							break
+						}
+					}
+				}
+				return reqs
+			}),
+		).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

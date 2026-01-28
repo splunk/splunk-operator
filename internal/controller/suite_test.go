@@ -98,12 +98,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		Scheme: clientgoscheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	if err := (&QueueReconciler{
-		Client: k8sManager.GetClient(),
-		Scheme: k8sManager.GetScheme(),
-	}).SetupWithManager(k8sManager); err != nil {
-		Expect(err).NotTo(HaveOccurred())
-	}
 	if err := (&ClusterManagerReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
@@ -123,12 +117,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	if err := (&IngestorClusterReconciler{
-		Client: k8sManager.GetClient(),
-		Scheme: k8sManager.GetScheme(),
-	}).SetupWithManager(k8sManager); err != nil {
-		Expect(err).NotTo(HaveOccurred())
-	}
-	if err := (&ObjectStorageReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
 	}).SetupWithManager(k8sManager); err != nil {

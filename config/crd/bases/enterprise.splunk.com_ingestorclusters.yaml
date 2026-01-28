@@ -4306,6 +4306,11 @@ spec:
             - objectStorageRef
             - queueRef
             type: object
+            x-kubernetes-validations:
+            - message: queueRef is immutable once created
+              rule: self.queueRef == oldSelf.queueRef
+            - message: objectStorageRef is immutable once created
+              rule: self.objectStorageRef == oldSelf.objectStorageRef
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
               Cluster
@@ -4594,35 +4599,6 @@ spec:
               message:
                 description: Auxillary message describing CR status
                 type: string
-              objectStorage:
-                description: Object Storage
-                properties:
-                  provider:
-                    description: Provider of queue resources
-                    enum:
-                    - s3
-                    type: string
-                  s3:
-                    description: s3 specific inputs
-                    properties:
-                      endpoint:
-                        description: S3-compatible Service endpoint
-                        pattern: ^https?://[^\s/$.?#].[^\s]*$
-                        type: string
-                      path:
-                        description: S3 bucket path
-                        pattern: ^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$
-                        type: string
-                    required:
-                    - path
-                    type: object
-                required:
-                - provider
-                - s3
-                type: object
-                x-kubernetes-validations:
-                - message: s3 must be provided when provider is s3
-                  rule: self.provider != 's3' || has(self.s3)
               phase:
                 description: Phase of the ingestor pods
                 enum:
@@ -4634,44 +4610,9 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              queue:
-                description: Queue
-                properties:
-                  provider:
-                    description: Provider of queue resources
-                    enum:
-                    - sqs
-                    type: string
-                  sqs:
-                    description: sqs specific inputs
-                    properties:
-                      authRegion:
-                        description: Auth Region of the resources
-                        pattern: ^(?:us|ap|eu|me|af|sa|ca|cn|il)(?:-[a-z]+){1,3}-\d$
-                        type: string
-                      dlq:
-                        description: Name of the dead letter queue resource
-                        minLength: 1
-                        type: string
-                      endpoint:
-                        description: Amazon SQS Service endpoint
-                        pattern: ^https?://[^\s/$.?#].[^\s]*$
-                        type: string
-                      name:
-                        description: Name of the queue
-                        minLength: 1
-                        type: string
-                    required:
-                    - dlq
-                    - name
-                    type: object
-                required:
-                - provider
-                - sqs
-                type: object
-                x-kubernetes-validations:
-                - message: sqs must be provided when provider is sqs
-                  rule: self.provider != 'sqs' || has(self.sqs)
+              queueBucketAccessSecretVersion:
+                description: Queue and bucket access secret version
+                type: string
               readyReplicas:
                 description: Number of ready ingestor pods
                 format: int32

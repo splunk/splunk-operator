@@ -1,3 +1,9 @@
+---
+title: Index and Ingestion Separation
+parent: Deploy & Configure
+nav_order: 6
+---
+
 # Background
 
 Separation between ingestion and indexing services within Splunk Operator for Kubernetes enables the operator to independently manage the ingestion service while maintaining seamless integration with the indexing service.
@@ -10,7 +16,7 @@ This separation enables:
 # Important Note
 
 > [!WARNING]
-> **As of now, only brand new deployments are supported for Index and Ingestion Separation. No migration path is implemented, described or tested for existing deployments to move from a standard model to Index & Ingestion separation model.**
+> **For customers deploying SmartBus on CMP, the Splunk Operator for Kubernetes (SOK) manages the configuration and lifecycle of the ingestor tier. The following SOK guide provides implementation details for setting up ingestion separation and integrating with existing indexers. This reference is primarily intended for CMP users leveraging SOK-managed ingestors.**
 
 # Document Variables
 
@@ -34,11 +40,12 @@ SQS message queue inputs can be found in the table below.
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | name   | string | [Required] Name of the queue |
-| region   | string | [Required] Region where the queue is located  |
-| endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
+| authRegion   | string | [Required] Region where the queue is located  |
+| endpoint   | string | [Optional, if not provided formed based on authRegion] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
+| volumes | []VolumeSpec | [Optional] List of remote storage volumes used to mount the credentials for queue and bucket access (must contain s3_access_key and s3_secret_key) |
 
-Change of any of the queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+**SOK doesn't support update of any of the Queue inputs except from the volumes which allow the change of secrets.**
 
 ## Example
 ```
@@ -50,9 +57,12 @@ spec:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
+    volumes:
+      - name: s3-sqs-volume
+        secretRef: s3-secret
 ```
 
 # ObjectStorage
@@ -61,21 +71,21 @@ ObjectStorage is introduced to store large message (messages that exceed the siz
 
 ## Spec
 
-ObjectStorage inputs can be found in the table below. As of now, only S3 provider of large message store is supported.
+ObjectStorage inputs can be found in the table below. As of now, only S3 provider of object storage is supported.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
-| provider   | string | [Required] Provider of large message store (Allowed values: s3) |
-| s3   | S3 | [Required if provider=s3] S3 large message store inputs  |
+| provider   | string | [Required] Provider of object storage (Allowed values: s3) |
+| s3   | S3 | [Required if provider=s3] S3 object storage inputs  |
 
-S3 large message store inputs can be found in the table below.
+S3 object storage inputs can be found in the table below.
 
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
-| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
+| endpoint   | string | [Optional, if not provided formed based on authRegion] S3-compatible service endpoint
 
-Change of any of the large message queue inputs triggers the restart of Splunk so that appropriate .conf files are correctly refreshed and consumed.
+**SOK doesn't support update of any of the ObjectStorage inputs.**
 
 ## Example
 ```
@@ -102,13 +112,17 @@ In addition to common spec inputs, the IngestorCluster resource provides the fol
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | queueRef   | corev1.ObjectReference | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | Large message store reference |
+| objectStorageRef   | corev1.ObjectReference | Object storage reference |
+
+**SOK doesn't support update of queueRef and objectStorageRef.**
+
+**First provisioning or scaling up the number of replicas requires Ingestor Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
 
 ## Example
 
-The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
+The example presented below configures IngestorCluster named ingestor with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the ingestion traffic. This IngestorCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the ingestion process. 
 
-In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -139,13 +153,17 @@ In addition to common spec inputs, the IndexerCluster resource provides the foll
 | ---------- | ------- | ------------------------------------------------- |
 | replicas   | integer | The number of replicas (defaults to 3) |
 | queueRef   | corev1.ObjectReference | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | Large message store reference |
+| objectStorageRef   | corev1.ObjectReference | Object storage reference |
+
+**SOK doesn't support update of queueRef and objectStorageRef.**
+
+**First provisioning or scaling up the number of replicas requires Indexer Cluster Splunkd restart, but this restart is implemented automatically and done by SOK.**
 
 ## Example
 
-The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the service account named ingestor-sa allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
+The example presented below configures IndexerCluster named indexer with Splunk ${SPLUNK_IMAGE_VERSION} image that resides in a default namespace and is scaled to 3 replicas that serve the indexing traffic. This IndexerCluster custom resource is set up with the s3-secret credentials allowing it to perform SQS and S3 operations. Queue and ObjectStorage references allow the user to specify queue and bucket settings for the indexing process. 
 
-In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The large message store is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
+In this case, the setup uses the SQS and S3 based configuration where the messages are stored in and retrieved from sqs-test queue in us-west-2 region with dead letter queue set to sqs-dlq-test queue. The object storage is set to ingestion bucket in smartbus-test directory. Based on these inputs, default-mode.conf, inputs.conf and outputs.conf files are configured accordingly.
 
 ```
 apiVersion: enterprise.splunk.com/v4
@@ -195,9 +213,12 @@ queue:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
+    volumes:
+        - name: s3-sqs-volume
+          secretRef: s3-secret
 ```
 
 ```
@@ -425,6 +446,14 @@ In the following example, the dashboard presents ingestion and indexing data in 
 
 - [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
 
+# App Installation for Ingestor Cluster Instances
+
+Application installation is supported for Ingestor Cluster instances. However, as of now, applications are installed using local scope and if any application requires Splunk restart, there is no automated way to detect it and trigger automatically via Splunk Operator. 
+
+Therefore, to be able to enforce Splunk restart for each of the Ingestor Cluster pods, it is recommended to add/update IngestorCluster CR annotations/labels and apply the new configuration which will trigger the rolling restart of Splunk pods for Ingestor Cluster. 
+
+We are under the investigation on how to make it fully automated. What is more, ideally, update of annotations and labels should not trigger pod restart at all and we are investigating on how to fix this behaviour eventually.
+
 # Example
 
 1. Install CRDs and Splunk Operator for Kubernetes.
@@ -555,7 +584,7 @@ spec:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
 ```
@@ -587,7 +616,7 @@ Metadata:
   UID:               12345678-1234-5678-1234-012345678911
 Spec:
   Sqs:
-    Region:                        us-west-2
+    Auth Region:                        us-west-2
     DLQ:                           sqs-dlq-test
     Endpoint:                      https://sqs.us-west-2.amazonaws.com
     Name:                          sqs-test
@@ -703,7 +732,7 @@ Spec:
     Name:           queue
     Namespace:      default
   Image:  splunk/splunk:${SPLUNK_IMAGE_VERSION}
-  Large Message Store Ref:
+  Object Storage Ref:
     Name:           os
     Namespace:      default
   Replicas:                          3
@@ -720,18 +749,7 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
-  Queue:
-    Sqs:
-      Region:                   us-west-2
-      DLQ:                      sqs-dlq-test
-      Endpoint:                 https://sqs.us-west-2.amazonaws.com
-      Name:                     sqs-test
-    Provider:                   sqs
-  Large Message Store:
-    S3:
-      Endpoint:  https://s3.us-west-2.amazonaws.com
-      Path:      s3://ingestion/smartbus-test
-    Provider:    s3
+  Queue Bucket Access Secret Version:  33744270
   Message:                      
   Phase:                        Ready
   Ready Replicas:               3

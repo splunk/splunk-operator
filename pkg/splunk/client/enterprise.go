@@ -1015,22 +1015,3 @@ func (c *SplunkClient) UpdateConfFile(scopedLog logr.Logger, fileName, property 
 	}
 	return err
 }
-
-// Deletes conf files properties
-func (c *SplunkClient) DeleteConfFileProperty(scopedLog logr.Logger, fileName, property string) error {
-	endpoint := fmt.Sprintf("%s/servicesNS/nobody/system/configs/conf-%s/%s", c.ManagementURI, fileName, property)
-
-	scopedLog.Info("Deleting conf file object", "fileName", fileName, "property", property)
-	request, err := http.NewRequest("DELETE", endpoint, nil)
-	if err != nil {
-		scopedLog.Error(err, "Failed to delete conf file object", "fileName", fileName, "property", property)
-		return err
-	}
-
-	expectedStatus := []int{200, 201, 404}
-	err = c.Do(request, expectedStatus, nil)
-	if err != nil {
-		scopedLog.Error(err, fmt.Sprintf("Status not in %v for conf file object deletion", expectedStatus), "fileName", fileName, "property", property)
-	}
-	return err
-}

@@ -35,6 +35,8 @@ const (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.queueRef) == has(self.objectStorageRef)",message="queueRef and objectStorageRef must both be set or both be empty"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.queueRef) || self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.objectStorageRef) || self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IndexerClusterSpec defines the desired state of a Splunk Enterprise indexer cluster
 type IndexerClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
@@ -121,11 +123,8 @@ type IndexerClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Queue
-	Queue *QueueSpec `json:"queue,omitempty"`
-
-	// Object Storage
-	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
+	// Queue and bucket access secret version
+	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
