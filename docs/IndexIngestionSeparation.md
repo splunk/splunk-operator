@@ -40,8 +40,8 @@ SQS message queue inputs can be found in the table below.
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | name   | string | [Required] Name of the queue |
-| region   | string | [Required] Region where the queue is located  |
-| endpoint   | string | [Optional, if not provided formed based on region] AWS SQS Service endpoint
+| authRegion   | string | [Required] Region where the queue is located  |
+| endpoint   | string | [Optional, if not provided formed based on authRegion] AWS SQS Service endpoint
 | dlq   | string | [Required] Name of the dead letter queue |
 | volumes | []VolumeSpec | [Optional] List of remote storage volumes used to mount the credentials for queue and bucket access (must contain s3_access_key and s3_secret_key) |
 
@@ -57,7 +57,7 @@ spec:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
     volumes:
@@ -83,7 +83,7 @@ S3 object storage inputs can be found in the table below.
 | Key        | Type    | Description                                       |
 | ---------- | ------- | ------------------------------------------------- |
 | path   | string | [Required] Remote storage location for messages that are larger than the underlying maximum message size  |
-| endpoint   | string | [Optional, if not provided formed based on region] S3-compatible service endpoint
+| endpoint   | string | [Optional, if not provided formed based on authRegion] S3-compatible service endpoint
 
 **SOK doesn't support update of any of the ObjectStorage inputs.**
 
@@ -213,7 +213,7 @@ queue:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
     volumes:
@@ -584,7 +584,7 @@ spec:
   provider: sqs
   sqs:
     name: sqs-test
-    region: us-west-2
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
     dlq: sqs-dlq-test
 ```
@@ -616,7 +616,7 @@ Metadata:
   UID:               12345678-1234-5678-1234-012345678911
 Spec:
   Sqs:
-    Region:                        us-west-2
+    Auth Region:                        us-west-2
     DLQ:                           sqs-dlq-test
     Endpoint:                      https://sqs.us-west-2.amazonaws.com
     Name:                          sqs-test
