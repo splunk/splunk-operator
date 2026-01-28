@@ -129,7 +129,7 @@ func TestTelemetryGetAllCustomResources_AllKinds(t *testing.T) {
 	}
 }
 
-func TestTelemetryCollectCRTelData_ResourceData(t *testing.T) {
+func TestTelemetryCollectCRTelData_StandaloneData(t *testing.T) {
 	ctx := context.TODO()
 	cr := &enterpriseApi.Standalone{}
 	cr.TypeMeta.Kind = "Standalone"
@@ -183,25 +183,273 @@ func TestTelemetryCollectCRTelData_ResourceData(t *testing.T) {
 	}
 }
 
-func TestTelemetryCollectCMTelData_SetsDataCorrectly(t *testing.T) {
+func TestTelemetryCollectCRTelData_LicenseManagerData(t *testing.T) {
 	ctx := context.TODO()
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
-		Data: map[string]string{
-			"json":  "{\"foo\":\"bar\"}",
-			"plain": "baz",
+	cr := &enterpriseApi.LicenseManager{}
+	cr.TypeMeta.Kind = "LicenseManager"
+	cr.ObjectMeta.Name = "test-licensemanager"
+	cr.ObjectMeta.Namespace = "default"
+	crList := map[string][]splcommon.MetaObject{"LicenseManager": {cr}}
+	sts := apps.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-licensemanager-sts",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				UID: cr.GetUID(),
+			}},
+		},
+		Spec: apps.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("600m"),
+								corev1.ResourceMemory: resource.MustParse("256Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("2"),
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+							},
+						},
+					}},
+				},
+			},
 		},
 	}
-	data := make(map[string]interface{})
-	CollectCMTelData(ctx, cm, data)
-
-	// JSON key should be unmarshaled
-	if m, ok := data["json"].(map[string]interface{}); !ok || m["foo"] != "bar" {
-		t.Errorf("expected 'json' key to be unmarshaled to map with foo=bar, got: %v", data["json"])
+	fakeClient := &FakeListClient{
+		sts: []apps.StatefulSet{sts},
 	}
-	// Plain key should be set as string
-	if s, ok := data["plain"].(string); !ok || s != "baz" {
-		t.Errorf("expected 'plain' key to be set as string 'baz', got: %v", data["plain"])
+	data := make(map[string]interface{})
+	collectCRTelData(ctx, fakeClient, crList, data)
+	lmData, ok := data["LicenseManager"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected LicenseManager data map")
+	}
+	crData, ok := lmData["test-licensemanager"].([]map[string]string)
+	if !ok || len(crData) == 0 {
+		t.Fatalf("expected resource data slice")
+	}
+	container := crData[0]
+	if container["cpu_request"] != "600m" || container["memory_request"] != "256Mi" || container["cpu_limit"] != "2" || container["memory_limit"] != "512Mi" {
+		t.Errorf("unexpected resource values: got %+v", container)
+	}
+}
+
+func TestTelemetryCollectCRTelData_LicenseMasterData(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApiV3.LicenseMaster{}
+	cr.TypeMeta.Kind = "LicenseMaster"
+	cr.ObjectMeta.Name = "test-licensemaster"
+	cr.ObjectMeta.Namespace = "default"
+	crList := map[string][]splcommon.MetaObject{"LicenseMaster": {cr}}
+	sts := apps.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-licensemaster-sts",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				UID: cr.GetUID(),
+			}},
+		},
+		Spec: apps.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("700m"),
+								corev1.ResourceMemory: resource.MustParse("384Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("3"),
+								corev1.ResourceMemory: resource.MustParse("768Mi"),
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+	fakeClient := &FakeListClient{
+		sts: []apps.StatefulSet{sts},
+	}
+	data := make(map[string]interface{})
+	collectCRTelData(ctx, fakeClient, crList, data)
+	lmData, ok := data["LicenseMaster"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected LicenseMaster data map")
+	}
+	crData, ok := lmData["test-licensemaster"].([]map[string]string)
+	if !ok || len(crData) == 0 {
+		t.Fatalf("expected resource data slice")
+	}
+	container := crData[0]
+	if container["cpu_request"] != "700m" || container["memory_request"] != "384Mi" || container["cpu_limit"] != "3" || container["memory_limit"] != "768Mi" {
+		t.Errorf("unexpected resource values: got %+v", container)
+	}
+}
+
+func TestTelemetryCollectCRTelData_SearchHeadClusterData(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.SearchHeadCluster{}
+	cr.TypeMeta.Kind = "SearchHeadCluster"
+	cr.ObjectMeta.Name = "test-shc"
+	cr.ObjectMeta.Namespace = "default"
+	crList := map[string][]splcommon.MetaObject{"SearchHeadCluster": {cr}}
+	sts := apps.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shc-sts",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				UID: cr.GetUID(),
+			}},
+		},
+		Spec: apps.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("800m"),
+								corev1.ResourceMemory: resource.MustParse("512Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("4"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+	fakeClient := &FakeListClient{
+		sts: []apps.StatefulSet{sts},
+	}
+	data := make(map[string]interface{})
+	collectCRTelData(ctx, fakeClient, crList, data)
+	shcData, ok := data["SearchHeadCluster"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected SearchHeadCluster data map")
+	}
+	crData, ok := shcData["test-shc"].([]map[string]string)
+	if !ok || len(crData) == 0 {
+		t.Fatalf("expected resource data slice")
+	}
+	container := crData[0]
+	if container["cpu_request"] != "800m" || container["memory_request"] != "512Mi" || container["cpu_limit"] != "4" || container["memory_limit"] != "1Gi" {
+		t.Errorf("unexpected resource values: got %+v", container)
+	}
+}
+
+func TestTelemetryCollectCRTelData_ClusterManagerData(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApi.ClusterManager{}
+	cr.TypeMeta.Kind = "ClusterManager"
+	cr.ObjectMeta.Name = "test-cmanager"
+	cr.ObjectMeta.Namespace = "default"
+	crList := map[string][]splcommon.MetaObject{"ClusterManager": {cr}}
+	sts := apps.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cmanager-sts",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				UID: cr.GetUID(),
+			}},
+		},
+		Spec: apps.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("900m"),
+								corev1.ResourceMemory: resource.MustParse("640Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("5"),
+								corev1.ResourceMemory: resource.MustParse("2Gi"),
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+	fakeClient := &FakeListClient{
+		sts: []apps.StatefulSet{sts},
+	}
+	data := make(map[string]interface{})
+	collectCRTelData(ctx, fakeClient, crList, data)
+	cmData, ok := data["ClusterManager"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected ClusterManager data map")
+	}
+	crData, ok := cmData["test-cmanager"].([]map[string]string)
+	if !ok || len(crData) == 0 {
+		t.Fatalf("expected resource data slice")
+	}
+	container := crData[0]
+	if container["cpu_request"] != "900m" || container["memory_request"] != "640Mi" || container["cpu_limit"] != "5" || container["memory_limit"] != "2Gi" {
+		t.Errorf("unexpected resource values: got %+v", container)
+	}
+}
+
+func TestTelemetryCollectCRTelData_ClusterMasterData(t *testing.T) {
+	ctx := context.TODO()
+	cr := &enterpriseApiV3.ClusterMaster{}
+	cr.TypeMeta.Kind = "ClusterMaster"
+	cr.ObjectMeta.Name = "test-cmaster"
+	cr.ObjectMeta.Namespace = "default"
+	crList := map[string][]splcommon.MetaObject{"ClusterMaster": {cr}}
+	sts := apps.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cmaster-sts",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				UID: cr.GetUID(),
+			}},
+		},
+		Spec: apps.StatefulSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+								corev1.ResourceMemory: resource.MustParse("768Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("6"),
+								corev1.ResourceMemory: resource.MustParse("4Gi"),
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+	fakeClient := &FakeListClient{
+		sts: []apps.StatefulSet{sts},
+	}
+	data := make(map[string]interface{})
+	collectCRTelData(ctx, fakeClient, crList, data)
+	cmData, ok := data["ClusterMaster"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected ClusterMaster data map")
+	}
+	crData, ok := cmData["test-cmaster"].([]map[string]string)
+	if !ok || len(crData) == 0 {
+		t.Fatalf("expected resource data slice")
+	}
+	container := crData[0]
+	if container["cpu_request"] != "1" || container["memory_request"] != "768Mi" || container["cpu_limit"] != "6" || container["memory_limit"] != "4Gi" {
+		t.Errorf("unexpected resource values: got %+v", container)
 	}
 }
 
