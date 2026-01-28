@@ -71,6 +71,9 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 			// Verify Standalone goes to ready state
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
+			// Verify telemetry is sent successfully
+			testenv.VerifyTelemetry(ctx, deployment)
+
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")

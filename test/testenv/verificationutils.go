@@ -1213,3 +1213,29 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 		}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 	}
 }
+
+// VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
+func VerifyTelemetry(ctx context.Context, deployment *Deployment) {
+	const (
+		configMapName = "splunk-operator-manager-telemetry"
+		statusKey     = "status"
+	)
+	type telemetryStatus struct {
+		LastTransmission string `json:"lastTransmission"`
+	}
+	gomega.Eventually(func() bool {
+		cm, err := deployment.GetConfigMap(ctx, configMapName)
+		if err != nil {
+			return false
+		}
+		statusVal, ok := cm.Data[statusKey]
+		if !ok || statusVal == "" {
+			return false
+		}
+		var status telemetryStatus
+		if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
+			return false
+		}
+		return status.LastTransmission != ""
+	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}

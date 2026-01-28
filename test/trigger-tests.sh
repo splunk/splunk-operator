@@ -141,7 +141,8 @@ if [[ -z "${DEBUG}" ]]; then
   export DEBUG="${DEBUG_RUN}"
 fi
 
-
+# Set test mode
+export SPLUNK_TEST_MODE=1
 
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
