@@ -132,6 +132,8 @@ func enterpriseObjListCopier(dst, src *client.ObjectList) bool {
 		*dstP.(*enterpriseApi.StandaloneList) = *srcP.(*enterpriseApi.StandaloneList)
 	case *enterpriseApi.MonitoringConsoleList:
 		*dstP.(*enterpriseApi.MonitoringConsoleList) = *srcP.(*enterpriseApi.MonitoringConsoleList)
+	case *enterpriseApi.KVServiceList:
+		*dstP.(*enterpriseApi.KVServiceList) = *srcP.(*enterpriseApi.KVServiceList)
 	default:
 		return false
 	}
@@ -642,6 +644,15 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 			Group:   "enterprise.splunk.com",
 			Version: "v4",
 			Kind:    "SearchHeadCluster",
+		}
+		cr.SetGroupVersionKind(gvk)
+		c.Create(context.Background(), cr)
+	case *enterpriseApi.KVService:
+		cr := resource.(*enterpriseApi.KVService)
+		gvk := schema.GroupVersionKind{
+			Group:   "enterprise.splunk.com",
+			Version: "v4",
+			Kind:    "KVService",
 		}
 		cr.SetGroupVersionKind(gvk)
 		c.Create(context.Background(), cr)

@@ -74,6 +74,9 @@ const (
 
 	// TmpAppDownloadDir is the Operator directory for app framework, when there is no explicit volume specified
 	TmpAppDownloadDir string = "/tmp/appframework/"
+
+	// SplunkKVService is KVService instance
+	SplunkKVService InstanceType = "kvservice"
 )
 
 type commonResourceTracker struct {
@@ -270,7 +273,10 @@ func (instanceType InstanceType) ToKind() string {
 		kind = "license-manager"
 	case SplunkMonitoringConsole:
 		kind = "monitoring-console"
+	case SplunkKVService:
+		kind = "kvservice"
 	}
+
 	return kind
 }
 

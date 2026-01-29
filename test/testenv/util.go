@@ -544,7 +544,7 @@ func newPVC(name, ns, storage, storageClassName string) (*corev1.PersistentVolum
 	return &pvc, nil
 }
 
-func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag string) *appsv1.Deployment {
+func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAndTag, kvserviceImageAndTag string) *appsv1.Deployment {
 	var replicas int32 = 1
 
 	operator := appsv1.Deployment{
@@ -597,6 +597,9 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 								}, {
 									Name:  "RELATED_IMAGE_SPLUNK_ENTERPRISE",
 									Value: splunkEnterpriseImageAndTag,
+								}, {
+									Name:  "RELATED_IMAGE_SPLUNK_KVSERVICE",
+									Value: kvserviceImageAndTag,
 								}, {
 									Name:  "SPLUNK_GENERAL_TERMS",
 									Value: "--accept-sgt-current-at-splunk-com",

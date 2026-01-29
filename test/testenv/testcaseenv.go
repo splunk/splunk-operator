@@ -44,6 +44,7 @@ type TestCaseEnv struct {
 	operatorName        string
 	operatorImage       string
 	splunkImage         string
+	kvserviceImage      string
 	initialized         bool
 	SkipTeardown        bool
 	licenseFilePath     string
@@ -63,14 +64,14 @@ func (testenv *TestCaseEnv) GetKubeClient() client.Client {
 // NewDefaultTestCaseEnv creates a default test environment
 func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv, error) {
 	if os.Getenv("GRAVITON_TESTING") == "true" {
-		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), specifiedLicenseFilePath)
+		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), os.Getenv("SPLUNK_KVSERVICE_IMAGE"), specifiedLicenseFilePath)
 	} else {
-		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
+		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, specifiedSplunkImage, specifiedKVServiceImage, specifiedLicenseFilePath)
 	}
 }
 
 // NewTestCaseEnv creates a new test environment to run tests againsts
-func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string, licenseFilePath string) (*TestCaseEnv, error) {
+func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string, kvserviceImage string, licenseFilePath string) (*TestCaseEnv, error) {
 	var envName string
 
 	// The name are used in various resource label and there is a 63 char limit. Do our part to make sure we do not exceed that limit
@@ -88,6 +89,7 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 		operatorName:        "splunk-op-" + name,
 		operatorImage:       operatorImage,
 		splunkImage:         splunkImage,
+		kvserviceImage:      kvserviceImage,
 		SkipTeardown:        specifiedSkipTeardown,
 		licenseCMName:       name,
 		licenseFilePath:     licenseFilePath,
@@ -387,7 +389,7 @@ func (testenv *TestCaseEnv) attachPVCToOperator(name string) error {
 
 func (testenv *TestCaseEnv) createOperator() error {
 	//op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, "nil")
-	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage)
+	op := newOperator(testenv.operatorName, testenv.namespace, testenv.serviceAccountName, testenv.operatorImage, testenv.splunkImage, testenv.kvserviceImage)
 	err := testenv.GetKubeClient().Create(context.TODO(), op)
 	if err != nil {
 		testenv.Log.Error(err, "Unable to create operator")

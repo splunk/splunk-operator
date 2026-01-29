@@ -21,24 +21,30 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // KVServiceReconciler reconciles a KVService object
 type KVServiceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
@@ -89,28 +95,35 @@ func (r *KVServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err, "could not load kvservice data")
 	}
 
+	// ensure that APIVersion is defined (this gets wiped by client.Get)
+	instance.SetGroupVersionKind(enterprisev4.GroupVersion.WithKind("KVService"))
+
 	// If the reconciliation is paused, requeue
 	annotations := instance.GetAnnotations()
 	if annotations != nil {
 		if _, ok := annotations[enterprisev4.KVServicePausedAnnotation]; ok {
+			reqLogger.Info("reconciliation paused", "annotation", enterprisev4.KVServicePausedAnnotation)
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 
-	// ToDo: Commenting for now, will be implementing in follow-up stories
-	// result, err := ApplyKVService(ctx, r.Client, instance)
-	// if result.Requeue && result.RequeueAfter != 0 {
-	// 	reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
-	// }
+	result, err := ApplyKVService(ctx, r.Client, r.Recorder, instance)
+	if result.Requeue && result.RequeueAfter != 0 {
+		reqLogger.Info("Requeued", "period(seconds)", int(result.RequeueAfter/time.Second))
+	}
 
-	// return result, err
+	return result, err
+}
 
-	return ctrl.Result{}, nil
+// ApplyKVService adding to handle unit test case
+var ApplyKVService = func(ctx context.Context, client client.Client, recorder record.EventRecorder, instance *enterprisev4.KVService) (reconcile.Result, error) {
+	return enterprise.ApplyKVService(ctx, client, recorder, instance)
 }
 
 func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("kvservice-controller")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev4.KVService{}).
 		WithEventFilter(predicate.Or(
@@ -118,11 +131,17 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
-			common.StatefulsetChangedPredicate(),
+			common.DeploymentChangedPredicate(),
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
 		)).
+		Watches(&appsv1.Deployment{},
+			handler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&enterpriseApi.KVService{},
+			)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

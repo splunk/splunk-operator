@@ -28,6 +28,23 @@ const (
 	TotalWorker int = 15
 )
 
+// Event reasons for CRs
+const (
+	// Normal events
+	EventReasonCreated = "Created"
+	EventReasonUpdated = "Updated"
+	EventReasonScaled  = "Scaled"
+	EventReasonReady   = "Ready"
+
+	// Warning events
+	EventReasonConfigInvalid    = "ConfigInvalid"
+	EventReasonDeploymentFailed = "DeploymentFailed"
+	EventReasonImagePullFailed  = "ImagePullFailed"
+	EventReasonCRDeletionFailed = "CRDeletionFailed"
+	EventReasonCRUpdateFailed   = "CRUpdateFailed"
+	EventReasonServiceFailed    = "ApplyServiceFailed"
+)
+
 // default all fields to being optional
 // +kubebuilder:validation:Optional
 

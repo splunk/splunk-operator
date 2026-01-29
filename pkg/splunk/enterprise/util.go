@@ -2369,6 +2369,20 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		}
 		origCR.(*enterpriseApi.MonitoringConsole).Status.DeepCopyInto(&latestMcCR.Status)
 		return latestMcCR, nil
+
+	case "KVService":
+		latestKvCR := &enterpriseApi.KVService{}
+		err = client.Get(ctx, namespacedName, latestKvCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.KVService).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.KVService).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.KVService).Status.DeepCopyInto(&latestKvCR.Status)
+		return latestKvCR, nil
 	}
 
 	return nil, fmt.Errorf("invalid CR Kind")
@@ -2533,6 +2547,8 @@ func createKVServiceCR(ctx context.Context, c splcommon.ControllerClient, cr spl
 			},
 			Spec: enterpriseApi.KVServiceSpec{},
 		}
+
+		ValidateImagePullPolicy(&kvService.Spec.ImagePullPolicy)
 
 		err = splutil.CreateResource(ctx, c, kvService)
 		if err != nil {

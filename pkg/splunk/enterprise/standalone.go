@@ -173,11 +173,11 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update KVService CR with owner reference
-	err = createKVServiceCR(ctx, client, cr)
-	if err != nil {
-		eventPublisher.Warning(ctx, "createKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
-		return result, err
-	}
+	// err = createKVServiceCR(ctx, client, cr)
+	// if err != nil {
+	// 	eventPublisher.Warning(ctx, "createKVServiceCR", fmt.Sprintf("apply KVService CR failed %s", err.Error()))
+	// 	return result, err
+	// }
 
 	// If we are using appFramework and are scaling up, we should re-populate the
 	// configMap with all the appSource entries. This is done so that the new pods
