@@ -20,12 +20,14 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -54,6 +56,11 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	// Version information (set via ldflags at build time)
+	version   = "dev"
+	buildTime = "unknown"
+	gitCommit = "unknown"
 )
 
 func init() {
@@ -70,8 +77,11 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var pprofActive bool
-	var logEncoder string
-	var logLevel int
+
+	// Structured logging flags
+	var logLevel string
+	var logFormat string
+	var logAddSource bool
 
 	var leaseDuration time.Duration
 	var renewDeadline time.Duration
@@ -80,13 +90,16 @@ func main() {
 
 	var tlsOpts []func(*tls.Config)
 
-	flag.StringVar(&logEncoder, "log-encoder", "json", "log encoding ('json' or 'console')")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&pprofActive, "pprof", true, "Enable pprof endpoint")
-	flag.IntVar(&logLevel, "log-level", int(zapcore.InfoLevel), "set log level")
+
+	// Structured logging flags (can also be set via LOG_LEVEL, LOG_FORMAT, LOG_ADD_SOURCE env vars)
+	flag.StringVar(&logLevel, "log-level", "", "log level: debug, info, warn, error (overrides LOG_LEVEL env var)")
+	flag.StringVar(&logFormat, "log-format", "", "log output format: json, text (overrides LOG_FORMAT env var)")
+	flag.BoolVar(&logAddSource, "log-add-source", false, "add source file:line to log output (overrides LOG_ADD_SOURCE env var)")
 	flag.IntVar(&leaseDurationSecond, "lease-duration", int(leaseDurationSecond), "manager lease duration in seconds")
 	flag.IntVar(&renewDeadlineSecond, "renew-duration", int(renewDeadlineSecond), "manager renew duration in seconds")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to. "+
@@ -140,7 +153,30 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	// Logging setup
+	// Initialize structured logging infrastructure
+	// Flags take precedence over environment variables
+	var addSourcePtr *bool
+	if logAddSource {
+		addSourcePtr = &logAddSource
+	}
+	logCfg := logging.LoadConfigWithFlags(logLevel, logFormat, addSourcePtr)
+	logger := logging.SetupLogger(logCfg,
+		slog.String("component", "splunk-operator"),
+		slog.String("version", version),
+		slog.String("build", gitCommit))
+
+	// Log startup information using slog
+	slog.Info("Splunk Operator starting",
+		slog.String("version", version),
+		slog.String("build_time", buildTime),
+		slog.String("git_commit", gitCommit),
+		slog.String("log_level", logging.LevelToString(logCfg.Level)),
+		slog.String("log_format", logCfg.Format),
+		slog.Bool("log_add_source", logCfg.AddSource))
+
+	_ = logger // logger is available for future use
+
+	// Logging setup (existing zap logger for controller-runtime compatibility)
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	baseOptions := ctrl.Options{
