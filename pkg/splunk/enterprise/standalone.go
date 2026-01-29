@@ -48,7 +48,8 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 	cr.Kind = "Standalone"
 
@@ -288,6 +289,9 @@ func getStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 
 // validateStandaloneSpec checks validity and makes default updates to a StandaloneSpec, and returns error if something is wrong.
 func validateStandaloneSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.Standalone) error {
+	if cr.Spec.Replicas < 0 {
+		return fmt.Errorf("replicas must be >= 0")
+	}
 	if cr.Spec.Replicas == 0 {
 		cr.Spec.Replicas = 1
 	}
