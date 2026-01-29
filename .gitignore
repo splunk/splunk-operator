@@ -100,3 +100,4 @@ test/secret/*.log
 kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
+e2e/artifacts/*

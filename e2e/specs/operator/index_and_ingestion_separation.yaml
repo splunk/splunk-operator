@@ -1,0 +1,676 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_index_ingestion_separation_basic
+  description: Deploy queue, object storage, ingestor, cluster manager, and indexer cluster, then delete resources (source test/index_and_ingestion_separation/index_and_ingestion_separation_test.go)
+  component: indingsep
+  tags: [operator, indingsep, smoke]
+steps:
+  - name: namespace
+    action: k8s.namespace.ensure
+  - name: service_account
+    action: k8s.service_account.create
+    with:
+      name: index-ingest-sa
+  - name: queue
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Queue
+        metadata:
+          name: ${base_name}-queue
+        spec:
+          provider: sqs
+          sqs:
+            name: test-queue
+            authRegion: us-west-2
+            endpoint: https://sqs.us-west-2.amazonaws.com
+            dlq: test-dead-letter-queue
+  - name: object_storage
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ObjectStorage
+        metadata:
+          name: ${base_name}-os
+        spec:
+          provider: s3
+          s3:
+            endpoint: https://s3.us-west-2.amazonaws.com
+            path: s3://test-bucket/smartbus-test
+  - name: ingestor_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IngestorCluster
+        metadata:
+          name: ${base_name}-ingest
+        spec:
+          replicas: 3
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: cluster_manager
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ClusterManager
+        metadata:
+          name: ${base_name}
+        spec:
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: indexer_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IndexerCluster
+        metadata:
+          name: ${base_name}-idxc
+        spec:
+          replicas: 3
+          clusterManagerRef:
+            name: ${base_name}
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: wait_ingestor_ready
+    action: assert.splunk.phase
+    with:
+      kind: IngestorCluster
+      name: ${base_name}-ingest
+      phase: Ready
+  - name: wait_cluster_manager_ready
+    action: assert.splunk.phase
+    with:
+      kind: ClusterManager
+      name: ${base_name}
+      phase: Ready
+  - name: wait_indexer_ready
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-idxc
+      phase: Ready
+  - name: delete_indexer_cluster
+    action: k8s.resource.delete
+    with:
+      kind: IndexerCluster
+      apiVersion: enterprise.splunk.com/v4
+      name: ${base_name}-idxc
+  - name: delete_ingestor_cluster
+    action: k8s.resource.delete
+    with:
+      kind: IngestorCluster
+      apiVersion: enterprise.splunk.com/v4
+      name: ${base_name}-ingest
+  - name: delete_queue
+    action: k8s.resource.delete
+    with:
+      kind: Queue
+      apiVersion: enterprise.splunk.com/v4
+      name: ${base_name}-queue
+  - name: delete_object_storage
+    action: k8s.resource.delete
+    with:
+      kind: ObjectStorage
+      apiVersion: enterprise.splunk.com/v4
+      name: ${base_name}-os
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_index_ingestion_separation_appframework
+  description: Deploy ingestor cluster with app framework and probe configuration (source test/index_and_ingestion_separation/index_and_ingestion_separation_test.go)
+  component: indingsep
+  tags: [operator, indingsep, integration]
+requires:
+  - objectstore
+steps:
+  - name: namespace
+    action: k8s.namespace.ensure
+  - name: service_account
+    action: k8s.service_account.create
+    with:
+      name: index-ingest-sa
+  - name: queue
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Queue
+        metadata:
+          name: ${base_name}-queue
+        spec:
+          provider: sqs
+          sqs:
+            name: test-queue
+            authRegion: us-west-2
+            endpoint: https://sqs.us-west-2.amazonaws.com
+            dlq: test-dead-letter-queue
+  - name: object_storage
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ObjectStorage
+        metadata:
+          name: ${base_name}-os
+        spec:
+          provider: s3
+          s3:
+            endpoint: https://s3.us-west-2.amazonaws.com
+            path: s3://test-bucket/smartbus-test
+  - name: ingestor_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IngestorCluster
+        metadata:
+          name: ${base_name}-ingest
+        spec:
+          replicas: 3
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+          livenessInitialDelaySeconds: 600
+          readinessInitialDelaySeconds: 50
+          startupProbe:
+            initialDelaySeconds: 40
+            timeoutSeconds: 30
+            periodSeconds: 30
+            failureThreshold: 12
+          livenessProbe:
+            initialDelaySeconds: 400
+            timeoutSeconds: 30
+            periodSeconds: 30
+            failureThreshold: 12
+          readinessProbe:
+            initialDelaySeconds: 20
+            timeoutSeconds: 30
+            periodSeconds: 30
+            failureThreshold: 12
+  - name: cluster_manager
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ClusterManager
+        metadata:
+          name: ${base_name}
+        spec:
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: indexer_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IndexerCluster
+        metadata:
+          name: ${base_name}-idxc
+        spec:
+          replicas: 3
+          clusterManagerRef:
+            name: ${base_name}
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: build_appframework_spec
+    action: appframework.spec.build
+    with:
+      provider: ${objectstore_provider}
+      bucket: ${objectstore_bucket}
+      prefix: ${objectstore_prefix}
+      location: ${objectstore_prefix}appframework/v1apps/
+      scope: local
+      app_source_name: ingest-apps
+      poll_interval: 60
+      max_concurrent_downloads: 5
+  - name: apply_appframework
+    action: appframework.apply
+    with:
+      target_kind: ingestorcluster
+      target_name: ${base_name}-ingest
+      spec_path: ${last_appframework_spec_path}
+      replace: true
+  - name: wait_ingestor_ready
+    action: assert.splunk.phase
+    with:
+      kind: IngestorCluster
+      name: ${base_name}-ingest
+      phase: Ready
+  - name: assert_ingestor_apps_present
+    action: assert.k8s.pod.files.present
+    with:
+      pod: splunk-${base_name}-ingest-0
+      path: /opt/splunk/etc/apps
+      files:
+        - Splunk_SA_CIM
+        - DA-ESS-ContentUpdate
+        - Splunk_TA_paloalto
+        - TA-MS-AAD
+  - name: assert_probe_configmap
+    action: assert.k8s.configmap.exists
+    with:
+      name: splunk-${namespace}-probe-configmap
+  - name: assert_probe_scripts
+    action: assert.k8s.pod.files.present
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      path: /mnt/probes
+      files:
+        - livenessProbe.sh
+        - readinessProbe.sh
+        - startupProbe.sh
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_index_ingestion_separation_config_validation
+  description: Validate outputs/inputs/default-mode configuration for ingestor and indexer clusters (source test/index_and_ingestion_separation/index_and_ingestion_separation_test.go)
+  component: indingsep
+  tags: [operator, indingsep, integration]
+steps:
+  - name: namespace
+    action: k8s.namespace.ensure
+  - name: service_account
+    action: k8s.service_account.create
+    with:
+      name: index-ingest-sa
+  - name: queue
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Queue
+        metadata:
+          name: ${base_name}-queue
+        spec:
+          provider: sqs
+          sqs:
+            name: test-queue
+            authRegion: us-west-2
+            endpoint: https://sqs.us-west-2.amazonaws.com
+            dlq: test-dead-letter-queue
+  - name: object_storage
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ObjectStorage
+        metadata:
+          name: ${base_name}-os
+        spec:
+          provider: s3
+          s3:
+            endpoint: https://s3.us-west-2.amazonaws.com
+            path: s3://test-bucket/smartbus-test
+  - name: ingestor_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IngestorCluster
+        metadata:
+          name: ${base_name}-ingest
+        spec:
+          replicas: 3
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: cluster_manager
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ClusterManager
+        metadata:
+          name: ${base_name}
+        spec:
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: indexer_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IndexerCluster
+        metadata:
+          name: ${base_name}-idxc
+        spec:
+          replicas: 3
+          clusterManagerRef:
+            name: ${base_name}
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: wait_ingestor_ready
+    action: assert.splunk.phase
+    with:
+      kind: IngestorCluster
+      name: ${base_name}-ingest
+      phase: Ready
+  - name: wait_cluster_manager_ready
+    action: assert.splunk.phase
+    with:
+      kind: ClusterManager
+      name: ${base_name}
+      phase: Ready
+  - name: wait_indexer_ready
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-idxc
+      phase: Ready
+  - name: outputs_conf_contains
+    action: assert.k8s.pod.file.contains
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/outputs.conf
+      contains:
+        - "[remote_queue:test-queue]"
+        - remote_queue.type = sqs_smartbus
+        - remote_queue.sqs_smartbus.auth_region = us-west-2
+        - remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue
+        - remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test
+        - remote_queue.sqs_smartbus.retry_policy = max_count
+        - remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
+        - remote_queue.sqs_smartbus.encoding_format = s2s
+        - remote_queue.sqs_smartbus.send_interval = 5s
+  - name: default_mode_contains
+    action: assert.k8s.pod.file.contains
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/default-mode.conf
+      contains:
+        - "[pipeline:remotequeueruleset]\ndisabled = false"
+        - "[pipeline:ruleset]\ndisabled = true"
+        - "[pipeline:remotequeuetyping]\ndisabled = false"
+        - "[pipeline:remotequeueoutput]\ndisabled = false"
+        - "[pipeline:typing]\ndisabled = true"
+  - name: aws_env_contains
+    action: assert.k8s.pod.env.contains
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      contains:
+        - AWS_REGION=us-west-2
+        - AWS_DEFAULT_REGION=us-west-2
+        - AWS_WEB_IDENTITY_TOKEN_FILE=/var/run/secrets/eks.amazonaws.com/serviceaccount/token
+        - AWS_ROLE_ARN=arn:aws:iam::
+        - AWS_STS_REGIONAL_ENDPOINTS=regional
+  - name: default_mode_ingest_contains
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-ingest-0
+      path: /opt/splunk/etc/system/local/default-mode.conf
+      contains:
+        - "[pipeline:indexerPipe]\ndisabled = true"
+  - name: inputs_conf_contains
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/inputs.conf
+      contains:
+        - "[remote_queue:test-queue]"
+        - remote_queue.type = sqs_smartbus
+        - remote_queue.sqs_smartbus.auth_region = us-west-2
+        - remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue
+        - remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test
+        - remote_queue.sqs_smartbus.retry_policy = max_count
+        - remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_index_ingestion_separation_update_queue
+  description: Update queue configuration and verify updated outputs/inputs/default-mode (source test/index_and_ingestion_separation/index_and_ingestion_separation_test.go)
+  component: indingsep
+  tags: [operator, indingsep, integration]
+steps:
+  - name: namespace
+    action: k8s.namespace.ensure
+  - name: service_account
+    action: k8s.service_account.create
+    with:
+      name: index-ingest-sa
+  - name: queue
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Queue
+        metadata:
+          name: ${base_name}-queue
+        spec:
+          provider: sqs
+          sqs:
+            name: test-queue
+            authRegion: us-west-2
+            endpoint: https://sqs.us-west-2.amazonaws.com
+            dlq: test-dead-letter-queue
+  - name: object_storage
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ObjectStorage
+        metadata:
+          name: ${base_name}-os
+        spec:
+          provider: s3
+          s3:
+            endpoint: https://s3.us-west-2.amazonaws.com
+            path: s3://test-bucket/smartbus-test
+  - name: ingestor_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IngestorCluster
+        metadata:
+          name: ${base_name}-ingest
+        spec:
+          replicas: 3
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: cluster_manager
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: ClusterManager
+        metadata:
+          name: ${base_name}
+        spec:
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: indexer_cluster
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: IndexerCluster
+        metadata:
+          name: ${base_name}-idxc
+        spec:
+          replicas: 3
+          clusterManagerRef:
+            name: ${base_name}
+          queueRef:
+            name: ${base_name}-queue
+          objectStorageRef:
+            name: ${base_name}-os
+          serviceAccount: index-ingest-sa
+          image: ${splunk_image}
+          imagePullPolicy: Always
+  - name: wait_ingestor_ready
+    action: assert.splunk.phase
+    with:
+      kind: IngestorCluster
+      name: ${base_name}-ingest
+      phase: Ready
+  - name: wait_cluster_manager_ready
+    action: assert.splunk.phase
+    with:
+      kind: ClusterManager
+      name: ${base_name}
+      phase: Ready
+  - name: wait_indexer_ready
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-idxc
+      phase: Ready
+  - name: patch_queue
+    action: k8s.resource.patch
+    with:
+      kind: Queue
+      name: ${base_name}-queue
+      spec:
+        provider: sqs
+        sqs:
+          name: test-queue-updated
+          authRegion: us-west-2
+          endpoint: https://sqs.us-west-2.amazonaws.com
+          dlq: test-dead-letter-queue-updated
+  - name: wait_ingestor_ready_after_patch
+    action: assert.splunk.phase
+    with:
+      kind: IngestorCluster
+      name: ${base_name}-ingest
+      phase: Ready
+  - name: wait_indexer_ready_after_patch
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${base_name}-idxc
+      phase: Ready
+  - name: outputs_conf_updated
+    action: assert.k8s.pod.file.contains
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/outputs.conf
+      contains:
+        - "[remote_queue:test-queue-updated]"
+        - remote_queue.type = sqs_smartbus
+        - remote_queue.sqs_smartbus.auth_region = us-west-2
+        - remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue-updated
+        - remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket-updated/smartbus-test
+        - remote_queue.sqs_smartbus.retry_policy = max
+        - remote_queue.max.sqs_smartbus.max_retries_per_part = 5
+        - remote_queue.sqs_smartbus.encoding_format = s2s
+        - remote_queue.sqs_smartbus.send_interval = 4s
+  - name: outputs_conf_not_contains_old
+    action: assert.k8s.pod.file.contains
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/outputs.conf
+      match: false
+      contains:
+        - "[remote_queue:test-queue]"
+        - remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue
+        - remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test
+        - remote_queue.sqs_smartbus.retry_policy = max_count
+        - remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4
+        - remote_queue.sqs_smartbus.send_interval = 5s
+  - name: default_mode_updated
+    action: assert.k8s.pod.file.contains
+    with:
+      pods:
+        - splunk-${base_name}-ingest-0
+        - splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/default-mode.conf
+      contains:
+        - "[pipeline:remotequeueruleset]\ndisabled = false"
+        - "[pipeline:ruleset]\ndisabled = false"
+        - "[pipeline:remotequeuetyping]\ndisabled = false"
+        - "[pipeline:remotequeueoutput]\ndisabled = false"
+        - "[pipeline:typing]\ndisabled = true"
+  - name: default_mode_ingest_updated
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-ingest-0
+      path: /opt/splunk/etc/system/local/default-mode.conf
+      contains:
+        - "[pipeline:indexerPipe]\ndisabled = true"
+  - name: inputs_conf_updated
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/inputs.conf
+      contains:
+        - "[remote_queue:test-queue-updated]"
+        - remote_queue.type = sqs_smartbus
+        - remote_queue.sqs_smartbus.auth_region = us-west-2
+        - remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue-updated
+        - remote_queue.sqs_smartbus.endpoint = https://sqs.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.endpoint = https://s3.us-west-2.amazonaws.com
+        - remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket-updated/smartbus-test
+        - remote_queue.sqs_smartbus.retry_policy = max
+        - remote_queue.max.sqs_smartbus.max_retries_per_part = 5
+  - name: inputs_conf_not_contains_old
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-idxc-indexer-0
+      path: /opt/splunk/etc/system/local/inputs.conf
+      match: false
+      contains:
+        - "[remote_queue:test-queue]"
+        - remote_queue.sqs_smartbus.dead_letter_queue.name = test-dead-letter-queue
+        - remote_queue.sqs_smartbus.large_message_store.path = s3://test-bucket/smartbus-test
+        - remote_queue.sqs_smartbus.retry_policy = max_count
+        - remote_queue.sqs_smartbus.max_count.max_retries_per_part = 4

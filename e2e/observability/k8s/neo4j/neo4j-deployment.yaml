@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: neo4j
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neo4j-data
+  namespace: neo4j
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j
+  namespace: neo4j
+  labels:
+    app: neo4j
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neo4j
+  template:
+    metadata:
+      labels:
+        app: neo4j
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: neo4j
+        image: neo4j:5.15-community
+        ports:
+        - name: http
+          containerPort: 7474
+          protocol: TCP
+        - name: bolt
+          containerPort: 7687
+          protocol: TCP
+        env:
+        - name: NEO4J_AUTH
+          value: "neo4j/changeme123"
+        - name: NEO4J_ACCEPT_LICENSE_AGREEMENT
+          value: "yes"
+        - name: NEO4J_server_memory_pagecache_size
+          value: "512M"
+        - name: NEO4J_server_memory_heap_initial__size
+          value: "512M"
+        - name: NEO4J_server_memory_heap_max__size
+          value: "1G"
+        - name: NEO4J_dbms_security_procedures_unrestricted
+          value: "apoc.*"
+        - name: NEO4J_dbms_security_procedures_allowlist
+          value: "apoc.*"
+        volumeMounts:
+        - name: neo4j-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 7474
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 7474
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+      volumes:
+      - name: neo4j-data
+        persistentVolumeClaim:
+          claimName: neo4j-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j
+  namespace: neo4j
+  labels:
+    app: neo4j
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 7474
+    targetPort: 7474
+    protocol: TCP
+  - name: bolt
+    port: 7687
+    targetPort: 7687
+    protocol: TCP
+  selector:
+    app: neo4j

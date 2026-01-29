@@ -1,0 +1,1056 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_s1_reconfig
+  tags: [operator, monitoringconsole, smoke, s1, manager]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_version
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: patch_standalone_mc
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}
+  - name: wait_standalone
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      phase: Ready
+  - name: mc_version_changed
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: wait_mc_after
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_standalone
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_peers_standalone
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: patch_standalone_mc_two
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}-two
+  - name: deploy_mc_two
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}-two
+  - name: wait_mc_two
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}-two
+  - name: mc_two_configmap_standalone
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_two_peers_standalone
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_one_ready_final
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_one_configmap_standalone_removed
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      match: false
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_one_peers_standalone_removed
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      match: false
+      contains:
+        - splunk-${standalone_name}-standalone-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_s1_add_standalone
+  tags: [operator, monitoringconsole, integration, s1, manager]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_version
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: patch_standalone_mc
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}
+  - name: mc_version_changed
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: wait_mc_after
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_standalone
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_peers_standalone
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_version_before_standalone_two
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+      var: mc_version_two
+  - name: deploy_standalone_two
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Standalone
+        metadata:
+          name: ${base_name}-two
+        spec:
+          replicas: 1
+          monitoringConsoleRef:
+            name: ${base_name}
+          imagePullPolicy: IfNotPresent
+          image: ${splunk_image}
+  - name: wait_standalone_two
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${base_name}-two
+      phase: Ready
+  - name: mc_version_changed_two
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+      var: mc_version_two
+  - name: wait_mc_after_two
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_both_standalones
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-${base_name}-two-standalone-0
+  - name: mc_peers_both_standalones
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-${base_name}-two-standalone-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_s1_scale_standalone
+  tags: [operator, monitoringconsole, integration, s1, manager]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: patch_standalone_mc
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}
+  - name: wait_mc_after
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: scale_standalone
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        replicas: 2
+  - name: wait_standalone_scaled
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      phase: Ready
+  - name: mc_configmap_scaled
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-${standalone_name}-standalone-1
+  - name: mc_peers_scaled
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-${standalone_name}-standalone-1
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_c3_scale_standalone
+  tags: [operator, monitoringconsole, smoke, c3]
+variants:
+  - name: operator_monitoring_console_c3_scale_standalone
+    tags: [manager]
+  - name: operator_monitoring_console_master_c3_scale_standalone
+    tags: [master]
+    params:
+      cluster_manager_kind: master
+    step_overrides:
+      - name: mc_configmap_cluster_manager
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+topology:
+  kind: c3
+steps:
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_version
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      monitoring_console_ref: ${base_name}
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: mc_version_changed
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: wait_mc_after
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_cluster_manager
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_configmap_deployer
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_DEPLOYER_URL
+      contains:
+        - splunk-${base_name}-shc-deployer-service
+  - name: mc_configmap_search_heads
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_peers_search_heads
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_peers_indexers
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-idxc-indexer-0
+        - splunk-${base_name}-idxc-indexer-1
+        - splunk-${base_name}-idxc-indexer-2
+      use_pod_ip: true
+  - name: scale_shc
+    action: k8s.resource.patch
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      spec:
+        replicas: 4
+  - name: wait_shc_ready
+    action: assert.splunk.phase
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      phase: Ready
+  - name: scale_indexers
+    action: k8s.resource.patch
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+      spec:
+        replicas: 4
+  - name: wait_indexer_ready
+    action: assert.splunk.phase
+    with:
+      kind: IndexerCluster
+      name: ${indexer_cluster_name}
+      phase: Ready
+  - name: deploy_standalone
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Standalone
+        metadata:
+          name: ${base_name}-standalone
+        spec:
+          replicas: 1
+          monitoringConsoleRef:
+            name: ${base_name}
+          imagePullPolicy: IfNotPresent
+          image: ${splunk_image}
+  - name: wait_standalone
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: ${base_name}-standalone
+      phase: Ready
+  - name: mc_configmap_standalone
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${base_name}-standalone-0
+  - name: mc_peers_standalone
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-standalone-0
+  - name: mc_configmap_search_heads_scaled
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+        - splunk-${base_name}-shc-search-head-3
+  - name: mc_peers_search_heads_scaled
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+        - splunk-${base_name}-shc-search-head-3
+  - name: mc_peers_indexers_scaled
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-idxc-indexer-0
+        - splunk-${base_name}-idxc-indexer-1
+        - splunk-${base_name}-idxc-indexer-2
+        - splunk-${base_name}-idxc-indexer-3
+      use_pod_ip: true
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_c3_reconfig
+  tags: [operator, monitoringconsole, integration, c3]
+variants:
+  - name: operator_monitoring_console_c3_reconfig
+    tags: [manager]
+  - name: operator_monitoring_console_master_c3_reconfig
+    tags: [master]
+    params:
+      cluster_manager_kind: master
+    step_overrides:
+      - name: mc_configmap_cluster_manager
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+      - name: mc_two_name_patch_cm
+        with:
+          apiVersion: enterprise.splunk.com/v3
+          kind: ClusterMaster
+      - name: wait_cm_ready
+        with:
+          kind: ClusterMaster
+      - name: mc_two_configmap_cluster_manager
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+      - name: mc_one_configmap_cluster_manager_removed
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+topology:
+  kind: c3
+steps:
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_version
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      monitoring_console_ref: ${base_name}
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: mc_version_changed
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+  - name: wait_mc_after
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_cluster_manager
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_configmap_deployer
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_DEPLOYER_URL
+      contains:
+        - splunk-${base_name}-shc-deployer-service
+  - name: mc_configmap_search_heads
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_peers_search_heads
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_peers_indexers
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-idxc-indexer-0
+        - splunk-${base_name}-idxc-indexer-1
+        - splunk-${base_name}-idxc-indexer-2
+      use_pod_ip: true
+  - name: mc_two_name_patch_cm
+    action: k8s.resource.patch
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}-two
+  - name: wait_cm_ready
+    action: assert.splunk.phase
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      phase: Ready
+  - name: deploy_mc_two
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}-two
+  - name: wait_mc_two
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}-two
+  - name: mc_two_configmap_cluster_manager
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_two_configmap_deployer_missing
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_DEPLOYER_URL
+      match: false
+      contains:
+        - splunk-${base_name}-shc-deployer-service
+  - name: mc_two_configmap_search_heads_missing
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      match: false
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_two_peers_indexers
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-idxc-indexer-0
+        - splunk-${base_name}-idxc-indexer-1
+        - splunk-${base_name}-idxc-indexer-2
+      use_pod_ip: true
+  - name: mc_two_peers_search_heads_missing
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      match: false
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_one_ready
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_one_configmap_cluster_manager_removed
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      match: false
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_one_configmap_search_heads_present
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_one_peers_search_heads_present
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: patch_shc_mc_two
+    action: k8s.resource.patch
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}-two
+  - name: wait_shc_ready
+    action: assert.splunk.phase
+    with:
+      kind: SearchHeadCluster
+      name: ${search_head_cluster_name}
+      phase: Ready
+  - name: mc_two_configmap_deployer_present
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_DEPLOYER_URL
+      contains:
+        - splunk-${base_name}-shc-deployer-service
+  - name: mc_two_configmap_search_heads_present
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_two_peers_search_heads_present
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_two_peers_indexers_present
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-idxc-indexer-0
+        - splunk-${base_name}-idxc-indexer-1
+        - splunk-${base_name}-idxc-indexer-2
+      use_pod_ip: true
+  - name: mc_one_configmap_deployer_removed
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_DEPLOYER_URL
+      match: false
+      contains:
+        - splunk-${base_name}-shc-deployer-service
+  - name: mc_one_configmap_search_heads_removed
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      match: false
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_one_peers_search_heads_removed
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      match: false
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_m4_reconfig
+  tags: [operator, monitoringconsole, integration, m4]
+variants:
+  - name: operator_monitoring_console_m4_reconfig
+    tags: [manager]
+  - name: operator_monitoring_console_master_m4_reconfig
+    tags: [master]
+    params:
+      cluster_manager_kind: master
+    step_overrides:
+      - name: mc_configmap_cluster_manager
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+      - name: patch_cm_mc_two
+        with:
+          apiVersion: enterprise.splunk.com/v3
+          kind: ClusterMaster
+      - name: wait_cm_ready
+        with:
+          kind: ClusterMaster
+      - name: mc_two_configmap_cluster_manager
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+      - name: mc_one_configmap_cluster_manager_removed
+        with:
+          contains:
+            - splunk-${base_name}-cluster-master-service
+topology:
+  kind: m4
+  params:
+    indexer_replicas: "1"
+    site_count: "3"
+steps:
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      monitoring_console_ref: ${base_name}
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_cluster_manager
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_configmap_deployer
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_DEPLOYER_URL
+      contains:
+        - splunk-${base_name}-shc-deployer-service
+  - name: mc_configmap_search_heads
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_peers_search_heads
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_peers_indexers
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-site1-indexer-0
+        - splunk-${base_name}-site2-indexer-0
+        - splunk-${base_name}-site3-indexer-0
+      use_pod_ip: true
+  - name: patch_cm_mc_two
+    action: k8s.resource.patch
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}-two
+  - name: wait_cm_ready
+    action: assert.splunk.phase
+    with:
+      kind: ClusterManager
+      name: ${cluster_manager_name}
+      phase: Ready
+  - name: deploy_mc_two
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}-two
+  - name: wait_mc_two
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}-two
+  - name: mc_two_configmap_cluster_manager
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_two_peers_indexers
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains_from_pods:
+        - splunk-${base_name}-site1-indexer-0
+        - splunk-${base_name}-site2-indexer-0
+        - splunk-${base_name}-site3-indexer-0
+      use_pod_ip: true
+  - name: mc_two_configmap_search_heads_missing
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-two-monitoring-console
+      key: SPLUNK_SEARCH_HEAD_URL
+      match: false
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_two_peers_search_heads_missing
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-two-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      match: false
+      contains:
+        - splunk-${base_name}-shc-search-head-0
+        - splunk-${base_name}-shc-search-head-1
+        - splunk-${base_name}-shc-search-head-2
+  - name: mc_one_configmap_cluster_manager_removed
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_CLUSTER_MASTER_URL
+      match: false
+      contains:
+        - splunk-${base_name}-cluster-manager-service
+  - name: mc_one_peers_indexers_removed
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      match: false
+      contains_from_pods:
+        - splunk-${base_name}-site1-indexer-0
+        - splunk-${base_name}-site2-indexer-0
+        - splunk-${base_name}-site3-indexer-0
+      use_pod_ip: true
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_s1_similar_names
+  tags: [operator, monitoringconsole, integration, s1, manager]
+topology:
+  kind: s1
+  params:
+    name: search-head-adhoc
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+    with:
+      name: ${base_name}
+  - name: wait_mc
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: patch_standalone_mc
+    action: k8s.resource.patch
+    with:
+      kind: Standalone
+      name: ${standalone_name}
+      spec:
+        monitoringConsoleRef:
+          name: ${base_name}
+  - name: wait_mc_after
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_standalone
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_peers_standalone
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+  - name: mc_version_before_second
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+      var: mc_version_similar
+  - name: deploy_standalone_similar
+    action: k8s.resource.apply
+    with:
+      manifest:
+        apiVersion: enterprise.splunk.com/v4
+        kind: Standalone
+        metadata:
+          name: search-head
+        spec:
+          replicas: 1
+          monitoringConsoleRef:
+            name: ${base_name}
+          imagePullPolicy: IfNotPresent
+          image: ${splunk_image}
+  - name: wait_standalone_similar
+    action: assert.splunk.phase
+    with:
+      kind: Standalone
+      name: search-head
+      phase: Ready
+  - name: mc_version_changed
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+      var: mc_version_similar
+  - name: wait_mc_after_similar
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_both
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      contains:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-search-head-standalone-0
+  - name: mc_peers_both
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      contains:
+        - splunk-${standalone_name}-standalone-0
+        - splunk-search-head-standalone-0
+  - name: mc_version_before_delete
+    action: k8s.resource.version.capture
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+      var: mc_version_delete
+  - name: delete_standalone_similar
+    action: k8s.resource.delete
+    with:
+      kind: Standalone
+      name: search-head
+  - name: mc_version_changed_delete
+    action: k8s.resource.version.wait_change
+    with:
+      kind: MonitoringConsole
+      name: ${base_name}
+      var: mc_version_delete
+  - name: wait_mc_after_delete
+    action: splunk.monitoring_console.wait_ready
+    with:
+      name: ${base_name}
+  - name: mc_configmap_similar_removed
+    action: assert.k8s.configmap.contains
+    with:
+      name: splunk-${base_name}-monitoring-console
+      key: SPLUNK_STANDALONE_URL
+      match: false
+      contains:
+        - splunk-search-head-standalone-0
+  - name: mc_peers_similar_removed
+    action: assert.k8s.pod.file.contains
+    with:
+      pod: splunk-${base_name}-monitoring-console-0
+      path: /opt/splunk/etc/apps/splunk_monitoring_console/local/splunk_monitoring_console_assets.conf
+      match: false
+      contains:
+        - splunk-search-head-standalone-0

@@ -1,0 +1,378 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_c3_scale_indexers_and_sh
+  description: "Monitoring Console reconfigures after scaling both indexers and search heads"
+  component: monitoring_console
+  tags: [operator, monitoring_console, c3, scaling, integration]
+topology:
+  kind: c3
+steps:
+  # Deploy Monitoring Console first
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+  - name: wait_mc_ready_initial
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=monitoring-console
+      condition: ready
+
+  # Deploy C3 cluster
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 3
+      shc_replicas: 3
+      monitoring_console_ref: ${monitoring_console_name}
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+
+  # Verify initial MC configuration
+  - name: verify_initial_cm_in_mc
+    action: monitoring_console.verify.configured
+    with:
+      component: cluster_manager
+      name: ${cluster_manager_name}
+  - name: verify_initial_indexers_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 3
+  - name: verify_initial_sh_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: search_head
+      expected_count: 3
+
+  # Scale indexers up
+  - name: scale_indexers_up
+    action: k8s.scale
+    with:
+      kind: indexercluster
+      name: ${indexer_cluster_name}
+      replicas: 5
+  - name: wait_indexers_scaled
+    action: k8s.wait.replicas
+    with:
+      kind: indexercluster
+      name: ${indexer_cluster_name}
+      replicas: 5
+  - name: wait_ready_after_indexer_scale
+    action: topology.wait_ready
+
+  # Scale search heads up
+  - name: scale_sh_up
+    action: k8s.scale
+    with:
+      kind: searchheadcluster
+      name: ${search_head_cluster_name}
+      replicas: 5
+  - name: wait_sh_scaled
+    action: k8s.wait.replicas
+    with:
+      kind: searchheadcluster
+      name: ${search_head_cluster_name}
+      replicas: 5
+  - name: wait_ready_after_sh_scale
+    action: topology.wait_ready
+
+  # Verify MC reconfigured with new peers
+  - name: verify_scaled_indexers_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 5
+  - name: verify_scaled_sh_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: search_head
+      expected_count: 5
+
+  # Scale down
+  - name: scale_indexers_down
+    action: k8s.scale
+    with:
+      kind: indexercluster
+      name: ${indexer_cluster_name}
+      replicas: 2
+  - name: scale_sh_down
+    action: k8s.scale
+    with:
+      kind: searchheadcluster
+      name: ${search_head_cluster_name}
+      replicas: 2
+  - name: wait_ready_after_scale_down
+    action: topology.wait_ready
+
+  # Verify MC reconfigured after scale down
+  - name: verify_scaled_down_indexers_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 2
+  - name: verify_scaled_down_sh_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: search_head
+      expected_count: 2
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_m4_multisite_all_sites
+  description: "Monitoring Console configured with all multisite indexers across sites"
+  component: monitoring_console
+  tags: [operator, monitoring_console, m4, multisite, integration]
+topology:
+  kind: m4
+  params:
+    site_count: "3"
+steps:
+  # Deploy MC
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+  - name: wait_mc_ready
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=monitoring-console
+      condition: ready
+
+  # Deploy multisite cluster
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      kind: m4
+      site_count: 3
+      indexer_replicas: 2  # 2 indexers per site
+      shc_replicas: 3
+      monitoring_console_ref: ${monitoring_console_name}
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: verify_multisite
+    action: assert.cluster.multisite_sites
+    with:
+      site_count: 3
+
+  # Verify all site indexers in MC
+  - name: verify_site1_indexers
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      site: site1
+      expected_count: 2
+  - name: verify_site2_indexers
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      site: site2
+      expected_count: 2
+  - name: verify_site3_indexers
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      site: site3
+      expected_count: 2
+  - name: verify_total_indexers
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 6  # 2 per site × 3 sites
+
+  # Verify MC can query across all sites
+  - name: search_across_sites
+    action: splunk.search.sync
+    with:
+      query: "| makeresults count=10 | eval site=mvindex(split('site1,site2,site3',','), random()%3)"
+      pod: splunk-${monitoring_console_name}-monitoring-console-0
+  - name: verify_mc_dashboard_access
+    action: splunk.api.rest
+    with:
+      pod: splunk-${monitoring_console_name}-monitoring-console-0
+      endpoint: /services/data/ui/views
+      method: GET
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_dynamic_deployment_order
+  description: "Monitoring Console handles deployments in different orders"
+  component: monitoring_console
+  tags: [operator, monitoring_console, c3, ordering, integration]
+topology:
+  kind: c3
+steps:
+  # Scenario 1: Deploy cluster FIRST, then MC
+  - name: deploy_cluster_first
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 3
+      shc_replicas: 3
+  - name: wait_cluster_ready
+    action: topology.wait_ready
+
+  # Now deploy MC and attach to existing cluster
+  - name: deploy_mc_after_cluster
+    action: splunk.monitoring_console.deploy
+    with:
+      cluster_manager_ref: ${cluster_manager_name}
+  - name: wait_mc_ready_after_cluster
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=monitoring-console
+      condition: ready
+
+  # Verify MC automatically discovered and configured all components
+  - name: verify_cm_discovered
+    action: monitoring_console.verify.configured
+    with:
+      component: cluster_manager
+      name: ${cluster_manager_name}
+  - name: verify_deployer_discovered
+    action: monitoring_console.verify.configured
+    with:
+      component: deployer
+      name: ${search_head_cluster_name}-deployer
+  - name: verify_indexers_discovered
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 3
+  - name: verify_sh_discovered
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: search_head
+      expected_count: 3
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_multiple_namespaces
+  description: "Monitoring Console can monitor clusters across multiple namespaces"
+  component: monitoring_console
+  tags: [operator, monitoring_console, multi-namespace, advanced]
+requires:
+  - multi-namespace
+topology:
+  kind: custom
+steps:
+  # Deploy MC in main namespace
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+  - name: wait_mc_ready
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=monitoring-console
+      condition: ready
+
+  # Deploy standalone in same namespace
+  - name: deploy_standalone_ns1
+    action: topology.deploy
+    with:
+      kind: s1
+      monitoring_console_ref: ${monitoring_console_name}
+  - name: wait_standalone_ns1_ready
+    action: topology.wait_ready
+
+  # Create second namespace
+  - name: create_namespace_2
+    action: k8s.namespace.create
+    with:
+      name: ${namespace}-secondary
+
+  # Deploy standalone in second namespace
+  - name: deploy_standalone_ns2
+    action: topology.deploy
+    with:
+      kind: s1
+      namespace: ${namespace}-secondary
+      monitoring_console_ref: ${namespace}.${monitoring_console_name}
+  - name: wait_standalone_ns2_ready
+    action: k8s.wait.pod
+    with:
+      namespace: ${namespace}-secondary
+      selector: app.kubernetes.io/component=standalone
+      condition: ready
+
+  # Verify MC sees both standalones
+  - name: verify_both_standalones_in_mc
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: standalone
+      expected_count: 2
+  - name: verify_mc_can_search_both
+    action: splunk.search.sync
+    with:
+      query: "| rest /services/server/info | stats count"
+      pod: splunk-${monitoring_console_name}-monitoring-console-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_monitoring_console_resilience_pod_failure
+  description: "Monitoring Console recovers from pod failure and maintains configuration"
+  component: monitoring_console
+  tags: [operator, monitoring_console, chaos, resilience, c3]
+topology:
+  kind: c3
+steps:
+  # Setup
+  - name: deploy_mc
+    action: splunk.monitoring_console.deploy
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 3
+      shc_replicas: 3
+      monitoring_console_ref: ${monitoring_console_name}
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Verify initial configuration
+  - name: verify_initial_config
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 3
+  - name: snapshot_before
+    action: diagnostics.snapshot.full
+
+  # Kill MC pod
+  - name: delete_mc_pod
+    action: chaos.pod.delete
+    with:
+      pod: splunk-${monitoring_console_name}-monitoring-console-0
+  - name: wait_mc_recreated
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=monitoring-console
+      condition: ready
+      timeout: 10m
+
+  # Verify configuration persists
+  - name: verify_config_after_restart
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: indexer
+      expected_count: 3
+  - name: verify_sh_after_restart
+    action: monitoring_console.verify.peers
+    with:
+      peer_type: search_head
+      expected_count: 3
+  - name: snapshot_after
+    action: diagnostics.snapshot.full
+
+  # Verify MC functionality
+  - name: verify_search_works
+    action: splunk.search.sync
+    with:
+      query: "| rest /services/cluster/master/info"
+      pod: splunk-${monitoring_console_name}-monitoring-console-0

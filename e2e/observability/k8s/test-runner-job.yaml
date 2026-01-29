@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: e2e-test-runner
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: e2e-test-runner
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/exec", "services", "configmaps", "secrets", "namespaces"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+- apiGroups: ["enterprise.splunk.com"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: e2e-test-runner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: e2e-test-runner
+subjects:
+- kind: ServiceAccount
+  name: e2e-test-runner
+  namespace: observability
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-observability-test
+  namespace: observability
+  labels:
+    app: e2e-test-runner
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: e2e-test-runner
+    spec:
+      serviceAccountName: e2e-test-runner
+      restartPolicy: Never
+      containers:
+      - name: e2e-runner
+        image: golang:1.24-bullseye
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "========================================="
+          echo "E2E Observability Test Runner"
+          echo "========================================="
+
+          # Install git
+          echo "Installing git..."
+          apt-get update -qq && apt-get install -y -qq git > /dev/null 2>&1
+
+          # Clone the repository
+          echo "Cloning splunk-operator repository..."
+          cd /tmp
+          git clone --depth 1 --branch e2e-new-test-framework https://github.com/splunk/splunk-operator.git
+          cd splunk-operator
+
+          # Check directory structure
+          echo "Checking directory structure..."
+          pwd
+          ls -la
+          ls -la e2e/ || true
+          ls -la e2e/cmd/ || true
+
+          # Build e2e-runner
+          echo "Building e2e-runner..."
+          if [ -d "e2e/cmd/e2e-runner" ]; then
+            go build -o /tmp/e2e-runner ./e2e/cmd/e2e-runner
+          elif [ -f "e2e/cmd/e2e-runner/main.go" ]; then
+            cd e2e/cmd/e2e-runner && go build -o /tmp/e2e-runner .
+          else
+            echo "ERROR: Cannot find e2e-runner source code"
+            exit 1
+          fi
+
+          # Create a simple smoke test spec
+          cat > /tmp/smoke-observability.yaml <<'EOF'
+          apiVersion: e2e.splunk.com/v1
+          kind: Test
+          metadata:
+            name: observability_smoke_test
+            description: "Smoke test for observability stack validation"
+            tags: [observability, smoke, s1]
+          topology:
+            kind: s1
+          steps:
+            - name: deploy
+              action: topology.deploy
+            - name: wait_ready
+              action: topology.wait_ready
+            - name: wait_stable
+              action: topology.wait_stable
+          EOF
+
+          echo ""
+          echo "Running E2E tests with observability enabled..."
+          echo "OTel Endpoint: ${E2E_OTEL_ENDPOINT}"
+          echo "Neo4j URI: ${E2E_NEO4J_URI}"
+          echo ""
+
+          # Run the test
+          /tmp/e2e-runner \
+            -cluster-provider eks \
+            -operator-namespace splunk-operator \
+            -default-timeout 10m \
+            /tmp/smoke-observability.yaml \
+            || true
+
+          echo ""
+          echo "========================================="
+          echo "Test completed! Check artifacts in /tmp"
+          echo "========================================="
+
+          # Keep container alive for log inspection
+          sleep 300
+        env:
+        - name: E2E_OTEL_ENABLED
+          value: "true"
+        - name: E2E_OTEL_ENDPOINT
+          value: "otel-collector.observability.svc.cluster.local:4317"
+        - name: E2E_OTEL_INSECURE
+          value: "true"
+        - name: E2E_NEO4J_ENABLED
+          value: "true"
+        - name: E2E_NEO4J_URI
+          value: "bolt://neo4j.neo4j.svc.cluster.local:7687"
+        - name: E2E_NEO4J_USER
+          value: "neo4j"
+        - name: E2E_NEO4J_PASSWORD
+          value: "changeme123"
+        - name: E2E_GRAPH_ENABLED
+          value: "true"
+        - name: E2E_METRICS_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"

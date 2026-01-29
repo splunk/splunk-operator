@@ -1,0 +1,517 @@
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_performance_c3_large_scale_deployment
+  description: "Performance test: Large C3 deployment (10 indexers, 5 search heads)"
+  component: performance
+  tags: [operator, performance, c3, large-scale]
+topology:
+  kind: c3
+steps:
+  - name: capture_start_time
+    action: metrics.time.start
+    with:
+      metric_name: large_c3_deployment
+
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 10
+      shc_replicas: 5
+  - name: wait_ready
+    action: topology.wait_ready
+    with:
+      timeout: 60m
+  - name: wait_stable
+    action: topology.wait_stable
+
+  - name: capture_end_time
+    action: metrics.time.end
+    with:
+      metric_name: large_c3_deployment
+
+  # Verify cluster health
+  - name: verify_rf_sf
+    action: assert.cluster.rf_sf
+  - name: verify_all_indexers_ready
+    action: k8s.wait.replicas
+    with:
+      kind: indexercluster
+      name: ${indexer_cluster_name}
+      replicas: 10
+  - name: verify_all_sh_ready
+    action: k8s.wait.replicas
+    with:
+      kind: searchheadcluster
+      name: ${search_head_cluster_name}
+      replicas: 5
+
+  # Performance checks
+  - name: check_resource_usage
+    action: diagnostics.pod.resource_usage
+    with:
+      pod: splunk-${cluster_manager_name}-cluster-manager-0
+  - name: check_cluster_health
+    action: diagnostics.cluster.health
+
+  # Test search performance
+  - name: search_test
+    action: splunk.search.sync
+    with:
+      query: "| makeresults count=1000 | eval test=random()"
+      pod: splunk-${search_head_cluster_name}-search-head-0
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_resilience_cluster_manager_failure
+  description: "Resilience: Cluster recovers from cluster manager pod failure"
+  component: resilience
+  tags: [operator, resilience, chaos, c3]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 3
+      shc_replicas: 3
+  - name: wait_ready
+    action: topology.wait_ready
+  - name: wait_stable
+    action: topology.wait_stable
+
+  # Ingest data before failure
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: test_resilience
+      pod: splunk-${cluster_manager_name}-cluster-manager-0
+  - name: generate_data
+    action: data.generate.log
+    with:
+      lines: 100
+  - name: ingest_data
+    action: splunk.ingest.oneshot
+    with:
+      path: ${last_generated_path}
+      index: test_resilience
+      pod: splunk-${indexer_cluster_name}-indexer-0
+
+  # Snapshot before
+  - name: snapshot_before
+    action: diagnostics.snapshot.full
+  - name: capture_bundle_hash_before
+    action: cluster.bundle.hash.capture
+
+  # Delete cluster manager pod
+  - name: delete_cm_pod
+    action: chaos.pod.delete
+    with:
+      pod: splunk-${cluster_manager_name}-cluster-manager-0
+      grace_period: 0
+
+  # Wait for recovery
+  - name: wait_cm_recreated
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=cluster-manager
+      condition: ready
+      timeout: 15m
+  - name: wait_cluster_stable_after_cm_restart
+    action: topology.wait_stable
+
+  # Verify cluster still functions
+  - name: verify_rf_sf_after_restart
+    action: assert.cluster.rf_sf
+  - name: verify_bundle_unchanged
+    action: cluster.bundle.verify_hash
+    with:
+      expected_hash: ${bundle_hash}
+
+  # Verify data still searchable
+  - name: search_after_cm_restart
+    action: splunk.search.sync
+    with:
+      query: "index=test_resilience | stats count"
+      pod: splunk-${search_head_cluster_name}-search-head-0
+  - name: verify_search_count
+    action: assert.search.count
+    with:
+      count: 100
+
+  # Snapshot after
+  - name: snapshot_after
+    action: diagnostics.snapshot.full
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_resilience_multiple_indexer_failures
+  description: "Resilience: Cluster handles multiple simultaneous indexer failures"
+  component: resilience
+  tags: [operator, resilience, chaos, c3]
+topology:
+  kind: c3
+steps:
+  - name: deploy
+    action: topology.deploy
+    with:
+      kind: c3
+      indexer_replicas: 5  # Need enough for RF/SF to still be met
+      shc_replicas: 3
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Ingest data
+  - name: create_index
+    action: splunk.index.create
+    with:
+      index: resilience_test
+  - name: generate_large_dataset
+    action: data.generate.log
+    with:
+      lines: 10000
+  - name: ingest_data
+    action: splunk.ingest.oneshot
+    with:
+      path: ${last_generated_path}
+      index: resilience_test
+
+  # Wait for data to replicate
+  - name: wait_for_replication
+    action: k8s.wait.condition
+    with:
+      kind: indexercluster
+      name: ${indexer_cluster_name}
+      condition: data_replicated
+      timeout: 10m
+
+  # Delete 2 indexer pods simultaneously
+  - name: delete_indexer_0
+    action: chaos.pod.delete
+    with:
+      pod: splunk-${indexer_cluster_name}-indexer-0
+      grace_period: 0
+  - name: delete_indexer_1
+    action: chaos.pod.delete
+    with:
+      pod: splunk-${indexer_cluster_name}-indexer-1
+      grace_period: 0
+
+  # Wait for pods to recreate
+  - name: wait_indexers_recreate
+    action: k8s.wait.replicas
+    with:
+      kind: indexercluster
+      name: ${indexer_cluster_name}
+      replicas: 5
+      timeout: 20m
+
+  # Verify cluster health
+  - name: wait_stable_after_failures
+    action: topology.wait_stable
+  - name: verify_rf_sf_after_failures
+    action: assert.cluster.rf_sf
+
+  # Verify data still available (no data loss)
+  - name: search_after_failures
+    action: splunk.search.sync
+    with:
+      query: "index=resilience_test | stats count"
+      pod: splunk-${search_head_cluster_name}-search-head-0
+  - name: verify_data_intact
+    action: assert.search.count
+    with:
+      count: 10000
+      tolerance: 0  # No data loss expected with proper RF
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_resilience_operator_restart_during_deployment
+  description: "Resilience: Operator restart during deployment doesn't corrupt state"
+  component: resilience
+  tags: [operator, resilience, chaos, c3]
+topology:
+  kind: c3
+steps:
+  # Start deployment
+  - name: deploy_cluster
+    action: topology.deploy
+    with:
+      kind: c3
+      with_shc: true
+      indexer_replicas: 3
+      shc_replicas: 3
+      wait: false  # Don't wait for completion
+
+  # Wait for deployment to start but not complete
+  - name: wait_partial_deployment
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=cluster-manager
+      condition: running
+      timeout: 5m
+
+  # Restart operator pod
+  - name: get_operator_pod
+    action: k8s.pod.get
+    with:
+      namespace: ${operator_namespace}
+      selector: control-plane=controller-manager
+  - name: delete_operator_pod
+    action: chaos.pod.delete
+    with:
+      pod: ${operator_pod_name}
+      namespace: ${operator_namespace}
+      grace_period: 0
+  - name: wait_operator_restart
+    action: k8s.wait.pod
+    with:
+      namespace: ${operator_namespace}
+      selector: control-plane=controller-manager
+      condition: ready
+      timeout: 5m
+
+  # Verify deployment continues and completes
+  - name: wait_cm_ready_after_operator_restart
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/component=cluster-manager
+      condition: ready
+      timeout: 20m
+  - name: wait_full_deployment
+    action: topology.wait_ready
+    with:
+      timeout: 30m
+  - name: wait_stable
+    action: topology.wait_stable
+
+  # Verify cluster health
+  - name: verify_rf_sf
+    action: assert.cluster.rf_sf
+  - name: verify_all_components_ready
+    action: diagnostics.cluster.health
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_edge_case_rapid_cr_updates
+  description: "Edge case: Rapid CR updates don't cause race conditions"
+  component: edge_cases
+  tags: [operator, edge_cases, s1, stress]
+topology:
+  kind: s1
+steps:
+  - name: deploy
+    action: topology.deploy
+  - name: wait_ready
+    action: topology.wait_ready
+
+  # Rapid updates to CR
+  - name: update_replicas_1
+    action: k8s.patch
+    with:
+      kind: standalone
+      name: ${standalone_name}
+      patch: '{"spec": {"replicas": 1}}'
+  - name: update_image_1
+    action: k8s.patch
+    with:
+      kind: standalone
+      name: ${standalone_name}
+      patch: '{"spec": {"image": "splunk/splunk:${SPLUNK_VERSION}"}}'
+  - name: update_resources_1
+    action: k8s.patch
+    with:
+      kind: standalone
+      name: ${standalone_name}
+      patch: '{"spec": {"resources": {"limits": {"memory": "4Gi"}}}}'
+
+  # Wait for reconciliation
+  - name: wait_after_rapid_updates
+    action: topology.wait_ready
+    with:
+      timeout: 20m
+
+  # Verify final state is consistent
+  - name: verify_final_state
+    action: k8s.resource.get
+    with:
+      kind: standalone
+      name: ${standalone_name}
+  - name: verify_pod_matches_spec
+    action: assert.pod.matches_cr_spec
+    with:
+      pod: splunk-${standalone_name}-standalone-0
+      cr_kind: standalone
+      cr_name: ${standalone_name}
+
+  # Verify no orphaned resources
+  - name: check_pod_count
+    action: k8s.pod.count
+    with:
+      selector: app.kubernetes.io/instance=splunk-${standalone_name}
+      expected: 1
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_edge_case_empty_cr_fields
+  description: "Edge case: Operator handles empty/null CR fields gracefully"
+  component: edge_cases
+  tags: [operator, edge_cases, s1]
+topology:
+  kind: s1
+steps:
+  # Deploy with minimal spec
+  - name: deploy_minimal
+    action: k8s.apply
+    with:
+      manifest: |
+        apiVersion: enterprise.splunk.com/v4
+        kind: Standalone
+        metadata:
+          name: minimal-${random_suffix}
+          namespace: ${namespace}
+        spec:
+          # Minimal spec - let operator fill in defaults
+          image: splunk/splunk:${SPLUNK_VERSION}
+
+  # Wait for operator to fill in defaults and deploy
+  - name: wait_pod_created
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/instance=splunk-minimal-${random_suffix}
+      condition: running
+      timeout: 10m
+  - name: wait_ready_minimal
+    action: k8s.wait.pod
+    with:
+      selector: app.kubernetes.io/instance=splunk-minimal-${random_suffix}
+      condition: ready
+      timeout: 15m
+
+  # Verify defaults applied
+  - name: verify_defaults_applied
+    action: k8s.resource.get
+    with:
+      kind: standalone
+      name: minimal-${random_suffix}
+  - name: verify_pod_running
+    action: k8s.pod.get
+    with:
+      selector: app.kubernetes.io/instance=splunk-minimal-${random_suffix}
+
+  # Verify Splunk is functional
+  - name: verify_splunk_api
+    action: splunk.api.rest
+    with:
+      pod: splunk-minimal-${random_suffix}-standalone-0
+      endpoint: /services/server/info
+      method: GET
+---
+apiVersion: e2e.splunk.com/v1
+kind: Test
+metadata:
+  name: operator_performance_parallel_deployments
+  description: "Performance: Multiple independent deployments in parallel"
+  component: performance
+  tags: [operator, performance, parallel]
+topology:
+  kind: custom
+steps:
+  - name: capture_start_time
+    action: metrics.time.start
+    with:
+      metric_name: parallel_deployments
+
+  # Deploy 5 standalone instances in parallel
+  - name: deploy_standalone_1
+    action: topology.deploy
+    with:
+      kind: s1
+      name: parallel-s1-1
+      wait: false
+  - name: deploy_standalone_2
+    action: topology.deploy
+    with:
+      kind: s1
+      name: parallel-s1-2
+      wait: false
+  - name: deploy_standalone_3
+    action: topology.deploy
+    with:
+      kind: s1
+      name: parallel-s1-3
+      wait: false
+  - name: deploy_standalone_4
+    action: topology.deploy
+    with:
+      kind: s1
+      name: parallel-s1-4
+      wait: false
+  - name: deploy_standalone_5
+    action: topology.deploy
+    with:
+      kind: s1
+      name: parallel-s1-5
+      wait: false
+
+  # Wait for all to be ready
+  - name: wait_all_ready
+    action: k8s.wait.pods
+    with:
+      selector: app.kubernetes.io/managed-by=splunk-operator
+      condition: ready
+      count: 5
+      timeout: 30m
+
+  - name: capture_end_time
+    action: metrics.time.end
+    with:
+      metric_name: parallel_deployments
+
+  # Verify all instances
+  - name: verify_s1_1_ready
+    action: k8s.wait.phase
+    with:
+      kind: standalone
+      name: parallel-s1-1
+      phase: Ready
+  - name: verify_s1_2_ready
+    action: k8s.wait.phase
+    with:
+      kind: standalone
+      name: parallel-s1-2
+      phase: Ready
+  - name: verify_s1_3_ready
+    action: k8s.wait.phase
+    with:
+      kind: standalone
+      name: parallel-s1-3
+      phase: Ready
+  - name: verify_s1_4_ready
+    action: k8s.wait.phase
+    with:
+      kind: standalone
+      name: parallel-s1-4
+      phase: Ready
+  - name: verify_s1_5_ready
+    action: k8s.wait.phase
+    with:
+      kind: standalone
+      name: parallel-s1-5
+      phase: Ready
+
+  # Check operator resource usage
+  - name: check_operator_resources
+    action: diagnostics.pod.resource_usage
+    with:
+      pod: ${operator_pod_name}
+      namespace: ${operator_namespace}
