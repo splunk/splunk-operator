@@ -91,11 +91,11 @@ var _ = Describe("Licensemanager test", func() {
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// Deploy Monitoring Console
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+			// mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
+			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")

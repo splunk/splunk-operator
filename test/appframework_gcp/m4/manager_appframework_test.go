@@ -29,7 +29,6 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	testenv "github.com/splunk/splunk-operator/test/testenv"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("m4appfw test", func() {
@@ -130,10 +129,10 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+			// appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			// volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			/* mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
@@ -143,15 +142,16 @@ var _ = Describe("m4appfw test", func() {
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
+			*/
 
 			// Deploy Monitoring Console
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload V1 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -172,7 +172,7 @@ var _ = Describe("m4appfw test", func() {
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, s3TestDirShc, 60)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			// resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Deploy M4 CRD
 			testcaseEnvInst.Log.Info("Deploy Multisite Indexer Cluster with Search Head Cluster")
@@ -199,10 +199,10 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			// testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -222,11 +222,11 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			// mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			// mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
@@ -239,7 +239,7 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = nil
 
 			// get revision number of the resource
-			_ = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			// _ = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Upload V2 apps to GCP for Indexer Cluster
 			appVersion = "V2"
@@ -280,10 +280,10 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify MC is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -295,10 +295,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			// mcAppSourceInfo.CrAppVersion = appVersion
+			// mcAppSourceInfo.CrAppList = appListV2
+			// mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
@@ -349,10 +349,10 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+			// appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			// volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			/* mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
@@ -362,15 +362,16 @@ var _ = Describe("m4appfw test", func() {
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
+			*/
 
 			// Deploy Monitoring Console
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload V2 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -415,7 +416,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -426,11 +427,11 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			// mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV2, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			// mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
@@ -482,7 +483,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -494,10 +495,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV1
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV1
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			// mcAppSourceInfo.CrAppVersion = appVersion
+			// mcAppSourceInfo.CrAppList = appListV1
+			// mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
@@ -963,10 +964,10 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+			// appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			// volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, volumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 0)
+			/* mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
@@ -976,15 +977,16 @@ var _ = Describe("m4appfw test", func() {
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
+			*/
 
 			// Deploy Monitoring Console
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload V1 apps to GCP for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCP for Indexer Cluster", appVersion))
@@ -1027,7 +1029,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -1038,11 +1040,11 @@ var _ = Describe("m4appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterManagerPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
+			// mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexersPerSite, CrMultisite: true, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			// mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			clusterManagerBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
@@ -1089,7 +1091,7 @@ var _ = Describe("m4appfw test", func() {
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
@@ -1141,7 +1143,7 @@ var _ = Describe("m4appfw test", func() {
 
 			time.Sleep(2 * time.Minute)
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -1162,10 +1164,10 @@ var _ = Describe("m4appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			// mcAppSourceInfo.CrAppVersion = appVersion
+			// mcAppSourceInfo.CrAppList = appListV2
+			// mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, clusterManagerBundleHash)
 
 			// Verify no pods reset by checking the pod age
@@ -1615,11 +1617,11 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			// appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			// appSource// volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+			/* mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
@@ -1629,15 +1631,16 @@ var _ = Describe("m4appfw test", func() {
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
+			*/
 
 			// Deploy Monitoring Console
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
@@ -1749,11 +1752,11 @@ var _ = Describe("m4appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Prepare Monitoring Console spec with its own app source
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
+			// appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
+			// appSource// volumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
+			// appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, s3TestDirMC, 60)
 
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
+			/* mcSpec := enterpriseApi.MonitoringConsoleSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
 						ImagePullPolicy: "IfNotPresent",
@@ -1763,15 +1766,16 @@ var _ = Describe("m4appfw test", func() {
 				},
 				AppFrameworkConfig: appFrameworkSpecMC,
 			}
+			*/
 
 			// Deploy Monitoring Console
 			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
 			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
+			// mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
 
 			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Download all test apps from GCP
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)

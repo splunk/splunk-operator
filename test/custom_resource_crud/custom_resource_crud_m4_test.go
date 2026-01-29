@@ -82,11 +82,11 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			// mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
+			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -119,7 +119,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)

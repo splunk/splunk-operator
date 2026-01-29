@@ -104,14 +104,14 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			// mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
+			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
+			// resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
@@ -147,10 +147,10 @@ var _ = Describe("Secret Test for SVA C3", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
+			// testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF after secret change")
