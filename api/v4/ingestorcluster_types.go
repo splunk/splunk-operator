@@ -78,6 +78,9 @@ type IngestorClusterStatus struct {
 
 	// Queue and bucket access secret version
 	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
+
+	// Queue and bucket access service account
+	QueueBucketAccessServiceAccount string `json:"queueBucketAccessServiceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true

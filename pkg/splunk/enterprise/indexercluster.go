@@ -77,6 +77,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.QueueBucketAccessSecretVersion = "0"
+		cr.Status.QueueBucketAccessServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -300,10 +301,11 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 
 		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+		serviceAccountChanged := cr.Status.QueueBucketAccessServiceAccount != cr.Spec.ServiceAccount
 
 		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged {
+			if 	secretChanged || serviceAccountChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 				if err != nil {
@@ -322,6 +324,7 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 				}
 
 				cr.Status.QueueBucketAccessSecretVersion = version
+				cr.Status.QueueBucketAccessServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -415,6 +418,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.QueueBucketAccessSecretVersion = "0"
+		cr.Status.QueueBucketAccessServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -641,9 +645,10 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 
 		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+		serviceAccountChanged := cr.Status.QueueBucketAccessServiceAccount != cr.Spec.ServiceAccount
 
 		if cr.Spec.QueueRef.Name != "" {
-			if secretChanged {
+			if secretChanged || serviceAccountChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 				if err != nil {
@@ -662,6 +667,7 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 				}
 
 				cr.Status.QueueBucketAccessSecretVersion = version
+				cr.Status.QueueBucketAccessServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 

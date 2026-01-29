@@ -73,6 +73,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	defer updateCRStatus(ctx, client, cr, &err)
 	if cr.Status.Replicas < cr.Spec.Replicas {
 		cr.Status.QueueBucketAccessSecretVersion = "0"
+		cr.Status.QueueBucketAccessServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
@@ -266,9 +267,10 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 
 		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+		serviceAccountChanged := cr.Status.QueueBucketAccessServiceAccount != cr.Spec.ServiceAccount
 
 		// If queue is updated
-		if secretChanged {
+		if secretChanged || serviceAccountChanged {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 			if err != nil {
@@ -287,6 +289,7 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 
 			cr.Status.QueueBucketAccessSecretVersion = version
+			cr.Status.QueueBucketAccessServiceAccount = cr.Spec.ServiceAccount
 		}
 
 		// Upgrade fron automated MC to MC CRD

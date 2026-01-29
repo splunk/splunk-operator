@@ -8431,6 +8431,9 @@ spec:
               queueBucketAccessSecretVersion:
                 description: Queue and bucket access secret version
                 type: string
+              queueBucketAccessServiceAccount:
+                description: Queue and bucket access service account
+                type: string
               readyReplicas:
                 description: current number of ready indexer peers
                 format: int32

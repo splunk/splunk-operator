@@ -4613,6 +4613,9 @@ spec:
               queueBucketAccessSecretVersion:
                 description: Queue and bucket access secret version
                 type: string
+              queueBucketAccessServiceAccount:
+                description: Queue and bucket access service account
+                type: string
               readyReplicas:
                 description: Number of ready ingestor pods
                 format: int32

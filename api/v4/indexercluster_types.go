@@ -125,6 +125,9 @@ type IndexerClusterStatus struct {
 
 	// Queue and bucket access secret version
 	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
+
+	// Queue and bucket access service account
+	QueueBucketAccessServiceAccount string `json:"queueBucketAccessServiceAccount,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
