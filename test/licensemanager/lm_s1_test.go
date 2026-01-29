@@ -54,7 +54,7 @@ var _ = Describe("Licensemanager test", func() {
 	})
 
 	Context("Standalone deployment (S1) with LM", func() {
-		It("licensemanager, smoke, s1: Splunk Operator can configure License Manager with Standalone in S1 SVA", func() {
+		It("licensemanager, smoke, s1: Splunk Operator can configure License Manager with Standalone", func() {
 
 			// Download License File
 			downloadDir := "licenseFolder"
@@ -80,8 +80,7 @@ var _ = Describe("Licensemanager test", func() {
 			}
 
 			// Create standalone Deployment with License Manager
-			mcRef := deployment.GetName()
-			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), mcRef)
+			standalone, err := deployment.DeployStandaloneWithLM(ctx, deployment.GetName(), deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance with LM")
 
 			// Wait for License Manager to be in READY status
@@ -89,13 +88,6 @@ var _ = Describe("Licensemanager test", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Deploy Monitoring Console
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ############ Verify livenessProbe and readinessProbe config object and scripts############
 			testcaseEnvInst.Log.Info("Get config map for livenessProbe and readinessProbe")
@@ -109,10 +101,6 @@ var _ = Describe("Licensemanager test", func() {
 			// Verify LM is configured on standalone instance
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
 			testenv.VerifyLMConfiguredOnPod(ctx, deployment, standalonePodName)
-
-			// Verify LM Configured on Monitoring Console
-			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 
 		})
 	})

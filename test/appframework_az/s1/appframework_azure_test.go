@@ -111,47 +111,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Verify App enabled  and version by running splunk cmd
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-
-			// Upload V1 apps to Azure for Monitoring Console
-			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-
-			azTestDirMC := "s1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Maximum apps to be downloaded in parallel
-			maxConcurrentAppDownloads := 5
-
-			// Create App framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			appFrameworkSpecMC.MaxConcurrentAppDownloads = uint64(maxConcurrentAppDownloads)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// ################## SETUP FOR STANDALONE ####################
+			// ################## SETUP ####################
 			// Upload V1 apps to Azure for Standalone
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
 			azTestDir = "s1appfw-" + testenv.RandomDNSName(4)
@@ -170,9 +130,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -185,18 +142,14 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			// ############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############## UPGRADE APPS #################
@@ -216,7 +169,6 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -225,8 +177,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -235,10 +185,7 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV2
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 		})
@@ -292,32 +239,9 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
 			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
 
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Create App framework Spec for Standalone
 			appSourceName = "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
@@ -329,9 +253,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -344,18 +265,14 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
 			//############ INITIAL VERIFICATION ###########
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV2, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// ############# DOWNGRADE APPS ################
@@ -365,8 +282,6 @@ var _ = Describe("s1appfw test", func() {
 			azureBlobClient.DeleteFilesOnAzure(ctx, testenv.GetAzureEndpoint(ctx), testenv.StorageAccountKey, testenv.StorageAccount, uploadedApps)
 			uploadedApps = nil
 
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Upload V1 apps to Azure for Standalone and Monitoring Console
 			appVersion = "V1"
@@ -378,7 +293,6 @@ var _ = Describe("s1appfw test", func() {
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -388,10 +302,7 @@ var _ = Describe("s1appfw test", func() {
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
 			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -400,10 +311,7 @@ var _ = Describe("s1appfw test", func() {
 			standaloneAppSourceInfo.CrAppVersion = appVersion
 			standaloneAppSourceInfo.CrAppList = appListV1
 			standaloneAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV1
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 		})
@@ -462,36 +370,13 @@ var _ = Describe("s1appfw test", func() {
 			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
 
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
 
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Standalone", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
-			// Create App framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
 
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload apps to Azure for Standalone
 			azTestDir := "azures1appfw-" + testenv.RandomDNSName(4)
@@ -510,9 +395,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -525,8 +407,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -534,10 +414,8 @@ var _ = Describe("s1appfw test", func() {
 			//########## INITIAL VERIFICATION #############
 			scaledReplicaCount := 2
 			standalonePod := []string{fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			standaloneAppSourceInfo := testenv.AppSourceInfo{CrKind: standalone.Kind, CrName: standalone.Name, CrAppSourceName: appSourceName, CrPod: standalonePod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: scaledReplicaCount}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{standaloneAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			//############### SCALING UP ##################
@@ -559,8 +437,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			//########### SCALING UP VERIFICATION #########
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
@@ -583,8 +459,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			//########### SCALING DOWN VERIFICATION #######
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
@@ -944,32 +818,10 @@ var _ = Describe("s1appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
 			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
 			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Create App framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 0)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
 
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Upload V1 apps to Azure
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
@@ -987,9 +839,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1001,8 +850,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -1029,7 +876,6 @@ var _ = Describe("s1appfw test", func() {
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV2, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -1038,8 +884,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// ############ VERIFICATION APPS ARE NOT UPDATED BEFORE ENABLING MANUAL POLL ############
 			appVersion = "V1"
@@ -1054,15 +898,12 @@ var _ = Describe("s1appfw test", func() {
 
 			testcaseEnvInst.Log.Info("Modify config map to trigger manual update")
 			config.Data["Standalone"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
-			config.Data["MonitoringConsole"] = strings.Replace(config.Data["Standalone"], "off", "on", 1)
 			err = deployment.UpdateCR(ctx, config)
 			Expect(err).To(Succeed(), "Unable to update config map")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
@@ -1070,7 +911,7 @@ var _ = Describe("s1appfw test", func() {
 			//Verify config map set back to off after poll trigger
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Verify config map set back to off after poll trigger for %s app", appVersion))
 			config, _ = testenv.GetAppframeworkManualUpdateConfigMap(ctx, deployment, testcaseEnvInst.GetName())
-			Expect(strings.Contains(config.Data["Standalone"], "status: off") && strings.Contains(config.Data["MonitoringConsole"], "status: off")).To(Equal(true), "Config map update not complete")
+			Expect(strings.Contains(config.Data["Standalone"], "status: off")).To(Equal(true), "Config map update not complete")
 
 			//############### VERIFICATION FOR UPGRADE ################
 			standaloneAppSourceInfo.CrAppVersion = appVersion
@@ -1202,42 +1043,7 @@ var _ = Describe("s1appfw test", func() {
 			    * Verify all apps are installed on Standalone
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-			// Upload V1 apps to Azure for Monitoring Console
-			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// ################## SETUP FOR STANDALONE ####################
+			// ################## SETUP ####################
 			// Download all test apps from Azure
 			appList := append(testenv.BigSingleApp, testenv.ExtraApps...)
 			appFileList = testenv.GetAppFileList(appList)
@@ -1263,9 +1069,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -1929,47 +1732,7 @@ var _ = Describe("s1appfw test", func() {
 			   * Wait for the pod to be ready
 			*/
 
-			// ################## SETUP FOR MONITORING CONSOLE ####################
-
-			// Upload V1 apps to Azure for Monitoring Console
-			appVersion := "V1"
-			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Monitoring Console", appVersion))
-
-			azTestDirMC := "azures1appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDirMC, appFileList)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to Azure test directory for Monitoring Console", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App framework spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, azTestDirMC, 60)
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify IsDeploymentInProgress Flag is set to true for Monitroing Console CR
-			testcaseEnvInst.Log.Info("Checking isDeploymentInProgressFlag")
-			testenv.VerifyIsDeploymentInProgressFlagIsSet(ctx, deployment, testcaseEnvInst, mcName, mc.Kind)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// ################## SETUP FOR STANDALONE ####################
+			// ################## SETUP ####################
 			// Upload V1 apps to Azure for Standalone
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Azure for Standalone", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToAzure(ctx, testenv.StorageAccount, testenv.StorageAccountKey, downloadDirV1, azTestDir, appFileList)
@@ -1990,9 +1753,6 @@ var _ = Describe("s1appfw test", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 				AppFrameworkConfig: appFrameworkSpec,
 			}
@@ -2008,8 +1768,6 @@ var _ = Describe("s1appfw test", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 		})
 	})

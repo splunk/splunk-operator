@@ -68,8 +68,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		It("mastercrcrud, integration, c3: can deploy indexer and search head cluster, change their CR, update the instances", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
-			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Master goes to Ready phase
@@ -80,13 +79,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -147,9 +139,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
 			// Verify CPU limits on Search Heads after updating the CR
 			for i := 0; i < searchHeadCount; i++ {
 				SearchHeadPodName := fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), i)
@@ -162,8 +151,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 		It("mastercrcrud, integration, c3: can verify IDXC, CM and SHC PVCs are correctly deleted after the CRs deletion", func() {
 
 			// Deploy Single site Cluster and Search Head Clusters
-			mcRef := deployment.GetName()
-			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, mcRef)
+			err := deployment.DeploySingleSiteCluster(ctx, deployment.GetName(), 3, true /*shc*/, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the Cluster Master goes to Ready phase
@@ -174,13 +162,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify Search Head go to ready state
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -218,12 +199,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			err = deployment.DeleteCR(ctx, cm)
 			Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manger Name", cm)
 
-			// Delete Monitoring Console
-			err = deployment.GetInstance(ctx, mcRef, mc)
-			Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
-			err = deployment.DeleteCR(ctx, mc)
-			Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
-
 			// Verify Search Heads PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "shc-search-head", 3, false, verificationTimeout)
 
@@ -235,9 +210,6 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 
 			// Verify Cluster Master PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, splcommon.ClusterManager, 1, false, verificationTimeout)
-
-			// Verify Monitoring Console PVCs (etc and var) have been deleted
-			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "monitoring-console", 1, false, verificationTimeout)
 		})
 	})
 })

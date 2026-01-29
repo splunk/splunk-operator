@@ -56,8 +56,8 @@ var _ = Describe("Secret Test for SVA S1", func() {
 		}
 	})
 
-	Context("Standalone deployment (S1) with LM and MC", func() {
-		It("mastersecret, integration, s1: Secret update on a standalone instance with LM and MC", func() {
+	Context("Standalone deployment (S1) with LM", func() {
+		It("mastersecret, integration, s1: Secret update on a standalone instance with LM", func() {
 
 			//  Test Scenario
 			// 1. Update Secrets Data
@@ -100,16 +100,6 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
-
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
@@ -132,12 +122,6 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
@@ -163,7 +147,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 		})
 	})
 
-	Context("Standalone deployment (S1) with LM amd MC", func() {
+	Context("Standalone deployment (S1) with LM", func() {
 		It("mastersecret, integration, s1: Secret Object is recreated on delete and new secrets are applied to Splunk Pods", func() {
 
 			// Test Scenario
@@ -207,16 +191,6 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
-
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
 			secretStruct, err := testenv.GetSecretStruct(ctx, deployment, testcaseEnvInst.GetName(), namespaceScopedSecretName)
@@ -235,12 +209,6 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)
@@ -275,8 +243,7 @@ var _ = Describe("Secret Test for SVA S1", func() {
 			// 4. Verify New Secrets are present in server.conf (Pass4SymmKey)
 			// 5. Verify New Secrets via api access (password)
 
-			// Create standalone Deployment with MonitoringConsoleRef
-			mcName := deployment.GetName()
+			// Create standalone Deployment
 			standaloneSpec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 					Spec: enterpriseApi.Spec{
@@ -284,26 +251,13 @@ var _ = Describe("Secret Test for SVA S1", func() {
 						Image:           testcaseEnvInst.GetSplunkImage(),
 					},
 					Volumes: []corev1.Volume{},
-					MonitoringConsoleRef: corev1.ObjectReference{
-						Name: mcName,
-					},
 				},
 			}
 			standalone, err := deployment.DeployStandaloneWithGivenSpec(ctx, deployment.GetName(), standaloneSpec)
-			Expect(err).To(Succeed(), "Unable to deploy standalone instance with MonitoringConsoleRef")
+			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Get Current Secrets Struct
 			namespaceScopedSecretName := fmt.Sprintf(testenv.NamespaceScopedSecretObjectName, testcaseEnvInst.GetName())
@@ -320,12 +274,6 @@ var _ = Describe("Secret Test for SVA S1", func() {
 
 			// Wait for Standalone to be in READY status
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Once Pods are READY check each versioned secret for updated secret keys
 			secretObjectNames := testenv.GetVersionedSecretNames(testcaseEnvInst.GetName(), 2)

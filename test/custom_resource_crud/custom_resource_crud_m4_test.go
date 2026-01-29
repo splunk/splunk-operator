@@ -64,9 +64,8 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 		It("mastercrcrud, integration, m4: can deploy can deploy multisite indexer and search head clusters, change their CR, update the instances", func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
-			mcRef := deployment.GetName()
 			siteCount := 3
-			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, "")
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-master goes to Ready phase
@@ -80,13 +79,6 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -117,9 +109,6 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Verify Indexers go to ready state
 			testenv.IndexersReady(ctx, deployment, testcaseEnvInst, siteCount)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)

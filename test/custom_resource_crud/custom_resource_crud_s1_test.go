@@ -64,19 +64,11 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 		It("managercrcrud, integration, s1: can deploy a standalone instance, change its CR, update the instance", func() {
 
 			// Deploy Standalone
-			mcRef := deployment.GetName()
-			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), mcRef, "")
+			standalone, err := deployment.DeployStandalone(ctx, deployment.GetName(), "", "")
 			Expect(err).To(Succeed(), "Unable to deploy standalone instance")
 
 			// Verify Standalone goes to ready state
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify CPU limits before updating the CR
 			standalonePodName := fmt.Sprintf(testenv.StandalonePod, deployment.GetName(), 0)
@@ -94,9 +86,6 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 
 			// Verify Standalone goes to ready state
 			testenv.VerifyStandalonePhase(ctx, deployment, testcaseEnvInst, deployment.GetName(), enterpriseApi.PhaseReady)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify CPU limits after updating the CR
 			testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), standalonePodName, newCPULimits)

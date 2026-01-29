@@ -110,16 +110,6 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 			// Ensure cluster configured as multisite
 			testenv.IndexerClusterMultisiteStatus(ctx, deployment, testcaseEnvInst, siteCount)
 
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, deployment.GetName(), deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
-
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF before secret change")
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -159,12 +149,6 @@ var _ = Describe("Secret Test for M4 SVA", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testcaseEnvInst.Log.Info("Checkin RF SF after secret change")

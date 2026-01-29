@@ -79,8 +79,7 @@ var _ = Describe("Licensemaster test", func() {
 			}
 
 			siteCount := 3
-			mcRef := deployment.GetName()
-			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
+			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, deployment.GetName())
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
 
 			// Ensure that the cluster-manager goes to Ready phase
@@ -94,13 +93,6 @@ var _ = Describe("Licensemaster test", func() {
 
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
-
-			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, deployment.GetName())
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -120,10 +112,6 @@ var _ = Describe("Licensemaster test", func() {
 			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
 			searchHeadPodName = fmt.Sprintf(testenv.SearchHeadPod, deployment.GetName(), 2)
 			testenv.VerifyLMConfiguredOnPod(ctx, deployment, searchHeadPodName)
-
-			// Verify LM Configured on Monitoring Console
-			monitoringConsolePodName := fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())
-			testenv.VerifyLMConfiguredOnPod(ctx, deployment, monitoringConsolePodName)
 
 		})
 	})

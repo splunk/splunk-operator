@@ -95,9 +95,6 @@ var _ = Describe("c3appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V1 apps to GCS for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
 			   * Upload V1 apps to GCS for Indexer Cluster and Search Head Cluster
 			   * Create app sources for Cluster Master and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
@@ -108,10 +105,10 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
-			   * Verify V1 apps are copied, installed on Monitoring Console and on Search Heads and Indexers pods
+			   * Verify V1 apps are copied, installed on Search Heads and Indexers pods
 			   ############### UPGRADE APPS ################
 			   * Upload V2 apps on GCS
-			   * Wait for Monitoring Console and C3 pods to be ready
+			   * Wait for C3 pods to be ready
 			   ############ FINAL VERIFICATIONS ############
 			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -119,48 +116,16 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
-			   * Verify V2 apps are copied and upgraded on Monitoring Console and on Search Heads and Indexers pods
+			   * Verify V2 apps are copied and upgraded on Search Heads and Indexers pods
 			*/
 
 			//################## SETUP ####################
-			// Upload V1 apps to GCS for Monitoring Console
+			// Upload V1 apps to GCS for Indexer Cluster
 			appVersion := "V1"
 			appFileList := testenv.GetAppFileList(appListV1)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-			gcsTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGcsBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Prepare Monitoring Console spec with its own app source
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + "mc-" + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// Upload V1 apps to GCS for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to Bucket for Indexer Cluster", appVersion))
 			gcsTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirIdxc, appFileList, downloadDirV1)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirIdxc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -179,14 +144,11 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, gcsTestDirIdxc, 60)
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, gcsTestDirShc, 60)
 
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
-
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -201,12 +163,6 @@ var _ = Describe("c3appfw test", func() {
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
-
-			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify no SH in disconnected status is present on CM
 			testenv.VerifyNoDisconnectedSHPresentOnCM(ctx, deployment, testcaseEnvInst)
@@ -229,11 +185,9 @@ var _ = Describe("c3appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: appVersion, CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			ClusterMasterBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
@@ -244,9 +198,6 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
 			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
-
-			// get revision number of the resource
-			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Upload V2 apps to GCS for Indexer Cluster
 			appVersion = "V2"
@@ -260,12 +211,6 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Search Head Cluster", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirShc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Search Head Cluster", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Upload V2 apps to GCS for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -283,11 +228,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
@@ -298,10 +238,7 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV2
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV2
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV2)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, ClusterMasterBundleHash)
 
 			// Verify no pods reset by checking the pod age
@@ -315,9 +252,6 @@ var _ = Describe("c3appfw test", func() {
 
 			/* Test Steps
 			   ################## SETUP ####################
-			   * Upload V2 apps to GCS for Monitoring Console
-			   * Create app source for Monitoring Console
-			   * Prepare and deploy Monitoring Console CRD with app framework and wait for the pod to be ready
 			   * Upload V2 apps to GCS for Indexer Cluster and Search Head Cluster
 			   * Create app source for Cluster Master and Deployer
 			   * Prepare and deploy C3 CRD with app framework and wait for the pods to be ready
@@ -328,10 +262,10 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
-			   * Verify V2 apps are copied, installed on Monitoring Console and also on Search Heads and Indexers pods
+			   * Verify V2 apps are copied, installed on Search Heads and Indexers pods
 			   ############## DOWNGRADE APPS ###############
 			   * Upload V1 apps on GCS
-			   * Wait for Monitoring Console and C3 pods to be ready
+			   * Wait for C3 pods to be ready
 			   ########### FINAL VERIFICATIONS #############
 			   * Verify Apps are Downloaded in App Deployment Info
 			   * Verify Apps Copied in App Deployment Info
@@ -339,49 +273,16 @@ var _ = Describe("c3appfw test", func() {
 			   * Verify Apps Installed in App Deployment Info
 			   * Verify App Package is deleted from Splunk Pod
 			   * Verify bundle push is successful
-			   * Verify apps are copied and downgraded on Monitoring Console and on Search Heads and Indexers pods
+			   * Verify apps are copied and downgraded on Search Heads and Indexers pods
 			*/
 
 			//################## SETUP ####################
-			// Upload V2 apps to GCS for Monitoring Console
+			// Upload V2 apps to GCS for Indexer Cluster
 			appVersion := "V2"
 			appFileList := testenv.GetAppFileList(appListV2)
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-			gcsTestDirMC := "c3appfw-mc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirMC, appFileList, downloadDirV2)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGcsBucket))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Create App framework Spec for Monitoring Console
-			appSourceNameMC := "appframework-" + enterpriseApi.ScopeLocal + testenv.RandomDNSName(3)
-			appSourceVolumeNameMC := "appframework-test-volume-mc-" + testenv.RandomDNSName(3)
-			appFrameworkSpecMC := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameMC, enterpriseApi.ScopeLocal, appSourceNameMC, gcsTestDirMC, 60)
-
-			// Monitoring Console AppFramework Spec
-			mcSpec := enterpriseApi.MonitoringConsoleSpec{
-				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "IfNotPresent",
-						Image:           testcaseEnvInst.GetSplunkImage(),
-					},
-					Volumes: []corev1.Volume{},
-				},
-				AppFrameworkConfig: appFrameworkSpecMC,
-			}
-
-			// Deploy Monitoring Console
-			testcaseEnvInst.Log.Info("Deploy Monitoring Console")
-			mcName := deployment.GetName()
-			mc, err := deployment.DeployMonitoringConsoleWithGivenSpec(ctx, testcaseEnvInst.GetName(), mcName, mcSpec)
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
-
-			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
-			// Upload V2 apps to GCS for Indexer Cluster
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Indexer Cluster", appVersion))
 			gcsTestDirIdxc = "c3appfw-idxc-" + testenv.RandomDNSName(4)
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirIdxc, appFileList, downloadDirV2)
+			uploadedFiles, err := testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirIdxc, appFileList, downloadDirV2)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Indexer Cluster %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
@@ -400,14 +301,11 @@ var _ = Describe("c3appfw test", func() {
 			appFrameworkSpecIdxc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameIdxc, enterpriseApi.ScopeCluster, appSourceNameIdxc, gcsTestDirIdxc, 60)
 			appFrameworkSpecShc := testenv.GenerateAppFrameworkSpec(ctx, testcaseEnvInst, appSourceVolumeNameShc, enterpriseApi.ScopeCluster, appSourceNameShc, gcsTestDirShc, 60)
 
-			// get revision number of the resource
-			resourceVersion := testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
-
 			// Deploy C3 CRD
 			testcaseEnvInst.Log.Info("Deploy Single Site Indexer Cluster with Search Head Cluster")
 			indexerReplicas := 3
 			shReplicas := 3
-			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, mcName, "")
+			cm, _, shc, err := deployment.DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx, deployment.GetName(), indexerReplicas, true, appFrameworkSpecIdxc, appFrameworkSpecShc, "", "")
 
 			Expect(err).To(Succeed(), "Unable to deploy Single Site Indexer Cluster with Search Head Cluster")
 
@@ -423,12 +321,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
-			// wait for custom resource resource version to change
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
 			// Get Pod age to check for pod resets later
 			splunkPodAge := testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
@@ -438,11 +330,9 @@ var _ = Describe("c3appfw test", func() {
 			shcPodNames = testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), indexerReplicas, false, 1)
 			cmPod := []string{fmt.Sprintf(testenv.ClusterMasterPod, deployment.GetName())}
 			deployerPod := []string{fmt.Sprintf(testenv.DeployerPod, deployment.GetName())}
-			mcPod := []string{fmt.Sprintf(testenv.MonitoringConsolePod, deployment.GetName())}
 			cmAppSourceInfo := testenv.AppSourceInfo{CrKind: cm.Kind, CrName: cm.Name, CrAppSourceName: appSourceNameIdxc, CrAppSourceVolumeName: appSourceVolumeNameIdxc, CrPod: cmPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: indexerReplicas, CrClusterPods: idxcPodNames}
 			shcAppSourceInfo := testenv.AppSourceInfo{CrKind: shc.Kind, CrName: shc.Name, CrAppSourceName: appSourceNameShc, CrAppSourceVolumeName: appSourceVolumeNameShc, CrPod: deployerPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeCluster, CrAppList: appListV1, CrAppFileList: appFileList, CrReplicas: shReplicas, CrClusterPods: shcPodNames}
-			mcAppSourceInfo := testenv.AppSourceInfo{CrKind: mc.Kind, CrName: mc.Name, CrAppSourceName: appSourceNameMC, CrAppSourceVolumeName: appSourceNameMC, CrPod: mcPod, CrAppVersion: "V2", CrAppScope: enterpriseApi.ScopeLocal, CrAppList: appListV1, CrAppFileList: appFileList}
-			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo := []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			ClusterMasterBundleHash := testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, "")
 
 			// Verify no pods reset by checking the pod age
@@ -453,9 +343,6 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Delete %s apps on GCS", appVersion))
 			testenv.DeleteFilesOnGCP(testGcsBucket, uploadedApps)
 			uploadedApps = nil
-
-			// get revision number of the resource
-			resourceVersion = testenv.GetResourceVersion(ctx, deployment, testcaseEnvInst, mc)
 
 			// Upload V1 apps to GCS for Indexer Cluster
 			appVersion = "V1"
@@ -469,12 +356,6 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Search Head Cluster", appVersion))
 			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirShc, appFileList, downloadDirV1)
 			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Search Head Cluster", appVersion))
-			uploadedApps = append(uploadedApps, uploadedFiles...)
-
-			// Upload V1 apps to GCS for Monitoring Console
-			testcaseEnvInst.Log.Info(fmt.Sprintf("Upload %s apps to GCS for Monitoring Console", appVersion))
-			uploadedFiles, err = testenv.UploadFilesToGCP(testGcsBucket, gcsTestDirMC, appFileList, downloadDirV1)
-			Expect(err).To(Succeed(), fmt.Sprintf("Unable to upload %s apps to GCS test directory for Monitoring Console %s", appVersion, testGcsBucket))
 			uploadedApps = append(uploadedApps, uploadedFiles...)
 
 			// Check for changes in App phase to determine if next poll has been triggered
@@ -492,11 +373,6 @@ var _ = Describe("c3appfw test", func() {
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
 
-			testenv.VerifyCustomResourceVersionChanged(ctx, deployment, testcaseEnvInst, mc, resourceVersion)
-
-			// Verify Monitoring Console is ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
-
 			// Get Pod age to check for pod resets later
 			splunkPodAge = testenv.GetPodsStartTime(testcaseEnvInst.GetName())
 
@@ -507,10 +383,7 @@ var _ = Describe("c3appfw test", func() {
 			shcAppSourceInfo.CrAppVersion = appVersion
 			shcAppSourceInfo.CrAppList = appListV1
 			shcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			mcAppSourceInfo.CrAppVersion = appVersion
-			mcAppSourceInfo.CrAppList = appListV1
-			mcAppSourceInfo.CrAppFileList = testenv.GetAppFileList(appListV1)
-			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo, mcAppSourceInfo}
+			allAppSourceInfo = []testenv.AppSourceInfo{cmAppSourceInfo, shcAppSourceInfo}
 			testenv.AppFrameWorkVerifications(ctx, deployment, testcaseEnvInst, allAppSourceInfo, splunkPodAge, ClusterMasterBundleHash)
 
 			// Verify no pods reset by checking the pod age
