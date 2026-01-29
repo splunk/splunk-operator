@@ -391,6 +391,21 @@ func (c MockClient) Create(ctx context.Context, obj client.Object, opts ...clien
 	return nil
 }
 
+// Apply applies the given apply configuration to the mock client's state
+func (c MockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	// Check for induced errors
+	if value, ok := c.InduceErrorKind[splcommon.MockClientInduceErrorApply]; ok && value != nil {
+		return value
+	}
+	c.Calls["Apply"] = append(c.Calls["Apply"], MockFuncCall{
+		CTX: ctx,
+		// Note: obj is ApplyConfiguration interface, not client.Object
+		// For mock purposes, we just record the call
+	})
+	// For mock purposes, we treat Apply similar to Update/Create
+	return nil
+}
+
 // Delete returns mock client's Err field
 func (c MockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	// Check for induced errors

@@ -108,6 +108,9 @@ const (
 	// MockClientInduceErrorDelete represents an error for delete Api
 	MockClientInduceErrorDelete = "mockClientDeleteError"
 
+	// MockClientInduceErrorApply represents an error for apply Api
+	MockClientInduceErrorApply = "mockClientApplyError"
+
 	// Rerr represents a random error strting
 	Rerr = "randomError"
 )
