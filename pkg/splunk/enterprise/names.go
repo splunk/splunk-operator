@@ -201,13 +201,23 @@ access = read : [ * ], write : [ admin ]
 `
 
 	// Command to create telemetry app on non SHC scenarios
-	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/; mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s_%s/metadata/; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s_%s/default/app.conf; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s_%s/metadata/default.meta"
+	createTelAppNonShcString = "mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s/default/; mkdir -p /opt/splunk/etc/apps/app_tel_for_sok8s/metadata/; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s/default/app.conf; echo -e \"%s\" > /opt/splunk/etc/apps/app_tel_for_sok8s/metadata/default.meta"
 
 	// Command to create telemetry app on SHC scenarios
-	createTelAppShcString = "mkdir -p %s/app_tel_for_sok8s_%s/default/; mkdir -p %s/app_tel_for_sok8s_%s/metadata/; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/default/app.conf; echo -e \"%s\" > %s/app_tel_for_sok8s_%s/metadata/default.meta"
+	createTelAppShcString = "mkdir -p %s/app_tel_for_sok8s/default/; mkdir -p %s/app_tel_for_sok8s/metadata/; echo -e \"%s\" > %s/app_tel_for_sok8s/default/app.conf; echo -e \"%s\" > %s/app_tel_for_sok8s/metadata/default.meta"
 
 	// Command to reload app configuration
 	telAppReloadString = "curl -k -u admin:`cat /mnt/splunk-secrets/password` https://localhost:8089/services/apps/local/_reload"
+
+	// Name of the telemetry configmap: <namePrefix>-manager-telemetry
+	telConfigMapTemplateStr = "%smanager-telemetry"
+
+	// Name of the telemetry app: app_tel_for_sok8s
+	telAppNameStr     = "app_tel_for_sok8s"
+	telSOKVersionKey  = "version"
+	telLicenseInfoKey = "license_info"
+
+	managerConfigMapTemplateStr = "%smanager-config"
 )
 
 const (
@@ -362,4 +372,14 @@ func GetLivenessDriverFileDir() string {
 // GetStartupScriptName returns the name of startup probe script on pod
 func GetStartupScriptName() string {
 	return startupScriptName
+}
+
+// GetTelemetryConfigMapName returns the name of telemetry configmap
+func GetTelemetryConfigMapName(namePrefix string) string {
+	return fmt.Sprintf(telConfigMapTemplateStr, namePrefix)
+}
+
+// GetManagerConfigMapName returns the name of manager configmap
+func GetManagerConfigMapName(namePrefix string) string {
+	return fmt.Sprintf(managerConfigMapTemplateStr, namePrefix)
 }

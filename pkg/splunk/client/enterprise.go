@@ -16,6 +16,7 @@
 package client
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -952,6 +953,49 @@ func (c *SplunkClient) SetIdxcSecret(idxcSecret string) error {
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	expectedStatus := []int{200}
 	return c.Do(request, expectedStatus, nil)
+}
+
+type LicenseInfo struct {
+	ID   string `json:"guid"`
+	Type string `json:"type"`
+}
+
+func (c *SplunkClient) GetLicenseInfo() (*LicenseInfo, error) {
+	apiResponse := struct {
+		Entry []struct {
+			Content LicenseInfo `json:"content"`
+		} `json:"entry"`
+	}{}
+	path := "/services/licenser/licenses"
+	err := c.Get(path, &apiResponse)
+	if err != nil {
+		return nil, err
+	}
+	if len(apiResponse.Entry) < 1 {
+		return nil, fmt.Errorf("invalid response from %s%s", c.ManagementURI, path)
+	}
+	return &apiResponse.Entry[0].Content, nil
+}
+
+type TelemetryResponse struct {
+	Message       string `json:"message"`
+	MetricValueID string `json:"metricValueId"`
+}
+
+func (c *SplunkClient) SendTelemetry(path string, body []byte) (*TelemetryResponse, error) {
+	endpoint := fmt.Sprintf("%s%s", c.ManagementURI, path)
+	request, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	expectedStatus := []int{201}
+	var response TelemetryResponse
+	err = c.Do(request, expectedStatus, &response)
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
 }
 
 // RestartSplunk restarts specific Splunk instance
