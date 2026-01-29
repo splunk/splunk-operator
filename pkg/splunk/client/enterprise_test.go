@@ -16,6 +16,7 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -640,6 +641,93 @@ func TestSetIdxcSecret(t *testing.T) {
 
 	// Test invalid http request
 	splunkClientErrorTester(t, test)
+}
+
+func TestGetLicenseInfo_Success(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/licenser/licenses?count=0&output_mode=json", nil)
+	wantLicenseInfo := LicenseInfo{
+		ID:   "1234-5678-90AB-CDEF",
+		Type: "Enterprise",
+	}
+	test := func(c SplunkClient) error {
+		info, err := c.GetLicenseInfo()
+		if err != nil {
+			return err
+		}
+		if info.ID != wantLicenseInfo.ID || info.Type != wantLicenseInfo.Type {
+			t.Errorf("LicenseInfo = %+v; want %+v", info, wantLicenseInfo)
+		}
+		return nil
+	}
+	body := `{"entry":[{"content":{"guid":"1234-5678-90AB-CDEF","type":"Enterprise"}}]}`
+	splunkClientTester(t, "TestGetLicenseInfo", 200, body, wantRequest, test)
+
+	// test body with no entries
+	test = func(c SplunkClient) error {
+		_, err := c.GetLicenseInfo()
+		if err == nil {
+			t.Errorf("GetLicenseInfo returned nil; want error")
+		}
+		return nil
+	}
+	body = `{"entry":[]}`
+	splunkClientTester(t, "TestGetLicenseInfo", 200, body, wantRequest, test)
+}
+
+func TestGetLicenseInfo_Error(t *testing.T) {
+	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/licenser/licenses?count=0&output_mode=json", nil)
+
+	test := func(c SplunkClient) error {
+		_, err := c.GetLicenseInfo()
+		if err == nil {
+			t.Errorf("GetLicenseInfo should return error for 500 response code")
+		}
+		return nil
+	}
+
+	// Simulate a 500 error response from the mock client
+	splunkClientTester(t, "TestGetLicenseInfo_Error", 500, "", wantRequest, test)
+}
+
+func TestSendTelemetry_Success(t *testing.T) {
+	path := "/services/telemetry/metrics"
+	bodyBytes := []byte(`{"metric":"value"}`)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
+	wantRequest.Header.Set("Content-Type", "application/json")
+	wantResponse := TelemetryResponse{
+		Message:       "Telemetry sent successfully",
+		MetricValueID: "abc123",
+	}
+	test := func(c SplunkClient) error {
+		resp, err := c.SendTelemetry(path, bodyBytes)
+		if err != nil {
+			return err
+		}
+		if resp.Message != wantResponse.Message || resp.MetricValueID != wantResponse.MetricValueID {
+			t.Errorf("SendTelemetry = %+v; want %+v", resp, wantResponse)
+		}
+		return nil
+	}
+	responseBody := `{"message":"Telemetry sent successfully","metricValueId":"abc123"}`
+	splunkClientTester(t, "TestSendTelemetry", 201, responseBody, wantRequest, test)
+}
+
+func TestSendTelemetry_Error(t *testing.T) {
+	path := "/services/telemetry/metrics"
+	bodyBytes := []byte(`{"metric":"value"}`)
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/telemetry/metrics", bytes.NewReader(bodyBytes))
+	wantRequest.Header.Set("Content-Type", "application/json")
+
+	test := func(c SplunkClient) error {
+		_, err := c.SendTelemetry(path, bodyBytes)
+		if err == nil {
+			t.Errorf("SendTelemetry should return error for 500 response code")
+		}
+		return nil
+	}
+
+	// Simulate a 500 error response from the mock client
+	splunkClientTester(t, "TestSendTelemetry_Error", 500, "", wantRequest, test)
 }
 
 func TestRestartSplunk(t *testing.T) {
