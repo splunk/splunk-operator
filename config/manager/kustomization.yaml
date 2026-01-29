@@ -17,4 +17,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: 667741767953.dkr.ecr.us-west-2.amazonaws.com/splunk-operator
-  newTag: rolling-restart-20260124-022000
+  newTag: rolling-restart-test

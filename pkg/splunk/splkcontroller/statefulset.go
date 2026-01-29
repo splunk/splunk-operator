@@ -21,7 +21,6 @@ import (
 	"reflect"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
-
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
@@ -118,21 +117,15 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
-	// wait for all replicas ready
 	replicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
-	if readyReplicas < replicas {
-		scopedLog.Info("Waiting for pods to become ready")
-		if readyReplicas > 0 {
-			return enterpriseApi.PhaseScalingUp, nil
-		}
-		return enterpriseApi.PhasePending, nil
-	} else if readyReplicas > replicas {
-		scopedLog.Info("Waiting for scale down to complete")
-		return enterpriseApi.PhaseScalingDown, nil
-	}
 
-	// readyReplicas == replicas
+	// CRITICAL: Check for scaling FIRST before waiting for pods to be ready
+	// This ensures we detect when CR spec changes (e.g., replicas: 3 -> 2)
+	scopedLog.Info("UpdateStatefulSetPods called",
+		"currentReplicas", replicas,
+		"desiredReplicas", desiredReplicas,
+		"readyReplicas", readyReplicas)
 
 	// check for scaling up
 	if readyReplicas < desiredReplicas {
@@ -157,6 +150,15 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseScalingDown, nil
 		}
 
+		// V3 FIX #1: Mark pods with scale-down intent BEFORE scaling down
+		// This ensures the finalizer handler can reliably detect scale-down vs restart
+		// Inline implementation to avoid import cycle (enterprise -> splkcontroller -> enterprise)
+		err = markPodForScaleDown(ctx, c, statefulSet, n)
+		if err != nil {
+			scopedLog.Error(err, "Failed to mark pod for scale-down", "newReplicas", n)
+			// Don't fail - fall back to ordinal comparison in finalizer
+		}
+
 		// scale down statefulset to terminate pod
 		scopedLog.Info("Scaling replicas down", "replicas", n)
 		*statefulSet.Spec.Replicas = n
@@ -166,31 +168,59 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseError, err
 		}
 
-		// delete PVCs used by the pod so that a future scale up will have clean state
-		for _, vol := range statefulSet.Spec.VolumeClaimTemplates {
-			namespacedName := types.NamespacedName{
-				Namespace: vol.ObjectMeta.Namespace,
-				Name:      fmt.Sprintf("%s-%s", vol.ObjectMeta.Name, podName),
-			}
-			var pvc corev1.PersistentVolumeClaim
-			err := c.Get(ctx, namespacedName, &pvc)
-			if err != nil {
-				scopedLog.Error(err, "Unable to find PVC for deletion", "pvcName", pvc.ObjectMeta.Name)
-				return enterpriseApi.PhaseError, err
-			}
-			scopedLog.Info("Deleting PVC", "pvcName", pvc.ObjectMeta.Name)
-			err = c.Delete(ctx, &pvc)
-			if err != nil {
-				scopedLog.Error(err, "Unable to delete PVC", "pvcName", pvc.ObjectMeta.Name)
-				return enterpriseApi.PhaseError, err
-			}
-		}
+		// V3 FIX #3: PVC deletion removed - handled by finalizer synchronously
+		// The pod finalizer will delete PVCs before allowing pod termination
+		// This ensures PVCs are always deleted even if operator crashes
 
 		return enterpriseApi.PhaseScalingDown, nil
 	}
 
-	// ready and no StatefulSet scaling is required
-	// readyReplicas == desiredReplicas
+	// No scaling needed: readyReplicas == desiredReplicas
+	// But we need to wait for StatefulSet to stabilize at the desired count
+
+	// Wait for StatefulSet.Spec.Replicas to match desiredReplicas (should be updated now)
+	// and wait for all desired pods to be ready
+	if readyReplicas < desiredReplicas {
+		scopedLog.Info("Waiting for pods to become ready during scale-up",
+			"ready", readyReplicas,
+			"desired", desiredReplicas)
+		return enterpriseApi.PhaseScalingUp, nil
+	}
+
+	if readyReplicas > desiredReplicas {
+		scopedLog.Info("Waiting for scale-down to complete",
+			"ready", readyReplicas,
+			"desired", desiredReplicas)
+		return enterpriseApi.PhaseScalingDown, nil
+	}
+
+	// readyReplicas == desiredReplicas - all pods are ready
+
+	// Check if using RollingUpdate strategy
+	// With RollingUpdate, Kubernetes automatically handles pod updates + preStop hooks + finalizers handle cleanup
+	if statefulSet.Spec.UpdateStrategy.Type == appsv1.RollingUpdateStatefulSetStrategyType {
+		scopedLog.Info("RollingUpdate strategy detected - letting Kubernetes handle pod updates")
+
+		// Check if update is in progress
+		if statefulSet.Status.UpdatedReplicas < statefulSet.Status.Replicas {
+			scopedLog.Info("RollingUpdate in progress",
+				"updated", statefulSet.Status.UpdatedReplicas,
+				"total", statefulSet.Status.Replicas)
+			return enterpriseApi.PhaseUpdating, nil
+		}
+
+		// All pods updated, call FinishUpgrade for post-upgrade tasks
+		err := mgr.FinishUpgrade(ctx, 0)
+		if err != nil {
+			scopedLog.Error(err, "Unable to finalize rolling upgrade process")
+			return enterpriseApi.PhaseError, err
+		}
+
+		return enterpriseApi.PhaseReady, nil
+	}
+
+	// For OnDelete strategy, continue with manual pod management
+	scopedLog.Info("OnDelete strategy detected - using manual pod management")
 
 	// check existing pods for desired updates
 	for n := readyReplicas - 1; n >= 0; n-- {
@@ -391,4 +421,44 @@ func IsStatefulSetScalingUpOrDown(ctx context.Context, client splcommon.Controll
 	}
 
 	return enterpriseApi.StatefulSetNotScaling, nil
+}
+
+// markPodForScaleDown updates the intent annotation on the pod that will be deleted
+// This is called before scaling down to mark the pod with scale-down intent
+// Inline version to avoid import cycle with enterprise package
+func markPodForScaleDown(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, newReplicas int32) error {
+	scopedLog := log.FromContext(ctx).WithName("markPodForScaleDown")
+
+	// Mark the pod that will be deleted (ordinal = newReplicas)
+	podName := fmt.Sprintf("%s-%d", statefulSet.Name, newReplicas)
+	pod := &corev1.Pod{}
+	err := c.Get(ctx, types.NamespacedName{
+		Name:      podName,
+		Namespace: statefulSet.Namespace,
+	}, pod)
+
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			scopedLog.Info("Pod already deleted, skipping", "pod", podName)
+			return nil
+		}
+		return fmt.Errorf("failed to get pod %s: %w", podName, err)
+	}
+
+	// Update intent annotation
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+
+	// Only update if annotation is different
+	if pod.Annotations["splunk.com/pod-intent"] != "scale-down" {
+		pod.Annotations["splunk.com/pod-intent"] = "scale-down"
+		scopedLog.Info("Marking pod for scale-down", "pod", podName)
+
+		if err := c.Update(ctx, pod); err != nil {
+			return fmt.Errorf("failed to update pod %s annotation: %w", podName, err)
+		}
+	}
+
+	return nil
 }

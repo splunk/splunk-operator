@@ -19,15 +19,19 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 
+	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splctrl "github.com/splunk/splunk-operator/pkg/splunk/splkcontroller"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -165,6 +169,16 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 
+	// Create or update PodDisruptionBudget for high availability during rolling restarts
+	// Only create PDB if we have more than 1 replica
+	if cr.Spec.Replicas > 1 {
+		err = ApplyPodDisruptionBudget(ctx, client, cr, SplunkStandalone, cr.Spec.Replicas)
+		if err != nil {
+			eventPublisher.Warning(ctx, "ApplyPodDisruptionBudget", fmt.Sprintf("create/update PodDisruptionBudget failed %s", err.Error()))
+			return result, err
+		}
+	}
+
 	// If we are using appFramework and are scaling up, we should re-populate the
 	// configMap with all the appSource entries. This is done so that the new pods
 	// that come up now will have the complete list of all the apps and then can
@@ -256,6 +270,14 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
 		}
+
+		// Handle rolling restart using Pod Eviction approach
+		// Standalone uses per-pod eviction (checking restart_required individually)
+		restartErr := checkAndEvictStandaloneIfNeeded(ctx, client, cr)
+		if restartErr != nil {
+			scopedLog.Error(restartErr, "Failed to check/evict standalone pods")
+			// Don't return error, just log it - we don't want to block other operations
+		}
 	}
 	// RequeueAfter if greater than 0, tells the Controller to requeue the reconcile key after the Duration.
 	// Implies that Requeue is true, there is no need to set Requeue to true at the same time as RequeueAfter.
@@ -323,4 +345,110 @@ func getStandaloneList(ctx context.Context, c splcommon.ControllerClient, cr spl
 	}
 
 	return objectList, nil
+}
+
+// ============================================================================
+// Pod Eviction Approach for Standalone
+// ============================================================================
+
+// checkAndEvictStandaloneIfNeeded checks each standalone pod individually for
+// restart_required and evicts pods that need restart.
+func checkAndEvictStandaloneIfNeeded(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	cr *enterpriseApi.Standalone,
+) error {
+	scopedLog := log.FromContext(ctx).WithName("checkAndEvictStandaloneIfNeeded")
+
+	// Get admin credentials
+	secret := &corev1.Secret{}
+	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get splunk secret")
+		return fmt.Errorf("failed to get splunk secret: %w", err)
+	}
+	password := string(secret.Data["password"])
+
+	// Check each standalone pod individually (NO consensus needed)
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("splunk-%s-standalone-%d", cr.Name, i)
+
+		// Get pod
+		pod := &corev1.Pod{}
+		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			continue // Skip pods that don't exist
+		}
+
+		// Only check running pods
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		// Check if pod is ready
+		if !isPodReady(pod) {
+			continue
+		}
+
+		// Get pod IP
+		if pod.Status.PodIP == "" {
+			continue
+		}
+
+		// Check if THIS specific pod needs restart
+		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+		restartRequired, message, err := splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+			continue
+		}
+
+		if !restartRequired {
+			continue // This pod is fine
+		}
+
+		scopedLog.Info("Pod needs restart, evicting",
+			"pod", podName, "message", message)
+
+		// Evict the pod - PDB automatically protects
+		err = evictPodStandalone(ctx, c, pod)
+		if err != nil {
+			if isPDBViolationStandalone(err) {
+				scopedLog.Info("PDB blocked eviction, will retry",
+					"pod", podName)
+				continue
+			}
+			return err
+		}
+
+		scopedLog.Info("Pod eviction initiated", "pod", podName)
+
+		// Only evict ONE pod per reconcile
+		// Next reconcile (5s later) will check remaining pods
+		return nil
+	}
+
+	return nil
+}
+
+// evictPodStandalone evicts a standalone pod using Kubernetes Eviction API
+func evictPodStandalone(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+	eviction := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+	}
+
+	// Eviction API automatically checks PDB
+	return c.SubResource("eviction").Create(ctx, pod, eviction)
+}
+
+// isPDBViolationStandalone checks if an error is due to PDB violation
+func isPDBViolationStandalone(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Cannot evict pod")
 }

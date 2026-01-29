@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -30,7 +31,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -151,6 +152,13 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		return result, err
 	}
 
+	// Create or update PodDisruptionBudget for high availability during rolling restarts
+	err = ApplyPodDisruptionBudget(ctx, client, cr, SplunkIngestor, cr.Spec.Replicas)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudget", fmt.Sprintf("create/update PodDisruptionBudget failed %s", err.Error()))
+		return result, err
+	}
+
 	// If we are using App Framework and are scaling up, we should re-populate the
 	// config map with all the appSource entries
 	// This is done so that the new pods
@@ -267,10 +275,36 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
-		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
+		// Determine if configuration needs to be updated
+		configNeedsUpdate := false
+		updateReason := ""
 
-		// If queue is updated
-		if secretChanged {
+		// Check for secret changes (traditional secret-based approach)
+		// For IRSA: version and Status tracking is different, handled separately below
+		secretChanged := false
+		if cr.Spec.ServiceAccount == "" {
+			// Traditional secret-based auth: check if secret version changed
+			secretChanged = cr.Status.QueueBucketAccessSecretVersion != version
+			if secretChanged {
+				configNeedsUpdate = true
+				updateReason = "Queue/ObjectStorage secret change detected"
+				scopedLog.Info("Queue/ObjectStorage secrets changed", "oldVersion", cr.Status.QueueBucketAccessSecretVersion, "newVersion", version)
+			}
+		} else {
+			// IRSA scenario: ServiceAccount is set, no secrets used
+			// Check if this is first deployment (config never applied)
+			if cr.Status.QueueBucketAccessSecretVersion == "" && version == "" {
+				// First deployment with IRSA - configuration needs to be applied
+				configNeedsUpdate = true
+				updateReason = "Initial Queue/ObjectStorage configuration for IRSA"
+				scopedLog.Info("Detected first deployment with IRSA, will apply Queue/ObjectStorage configuration")
+			}
+			// If status is "irsa-config-applied" and version is "", config was already applied
+			// Do NOT trigger updates on subsequent reconciles
+		}
+
+		// If configuration needs to be updated
+		if configNeedsUpdate {
 			mgr := newIngestorClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 			err = mgr.updateIngestorConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 			if err != nil {
@@ -279,21 +313,27 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				return result, err
 			}
 
-			// Trigger rolling restart mechanism instead of restarting all pods immediately
-			// This ensures proper rolling restart with PDB respect
-			// For secret changes, skip reload attempt and go directly to InProgress
-			// because secrets are mounted volumes and require pod restart to pick up changes
-			scopedLog.Info("Queue/ObjectStorage secrets changed, triggering rolling restart")
-			now := metav1.Now()
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseInProgress
-			cr.Status.RestartStatus.TotalPods = cr.Spec.Replicas
-			cr.Status.RestartStatus.PodsNeedingRestart = cr.Spec.Replicas
-			cr.Status.RestartStatus.PodsRestarted = 0
-			cr.Status.RestartStatus.LastCheckTime = &now
-			cr.Status.RestartStatus.LastRestartTime = &now
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Secret change detected, starting rolling restart of %d pods", cr.Spec.Replicas)
+			// Only trigger rolling restart for secret changes (not for IRSA initial config)
+			if secretChanged {
+				// Trigger rolling restart via StatefulSet annotation update
+				// Kubernetes will handle the actual rolling restart automatically
+				// For secret changes, pods must restart to remount updated secrets
+				scopedLog.Info("Queue/ObjectStorage secrets changed, triggering rolling restart via annotation")
 
-			cr.Status.QueueBucketAccessSecretVersion = version
+				err = triggerRollingRestartViaAnnotation(ctx, client, cr, updateReason)
+				if err != nil {
+					scopedLog.Error(err, "Failed to trigger rolling restart for secret change")
+					return result, err
+				}
+			}
+
+			// Update status to mark configuration as applied
+			// For IRSA, set to "irsa-config-applied" to track that config was done
+			if version == "" && cr.Spec.ServiceAccount != "" {
+				cr.Status.QueueBucketAccessSecretVersion = "irsa-config-applied"
+			} else {
+				cr.Status.QueueBucketAccessSecretVersion = version
+			}
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -326,12 +366,24 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			cr.Status.TelAppInstalled = true
 		}
 
-		// Handle rolling restart mechanism
-		// This runs after everything else is ready to check for config changes
-		restartResult, restartErr := handleRollingRestart(ctx, client, cr)
+		// Handle rolling restart mechanism - IngestorCluster uses TWO approaches:
+		// 1. StatefulSet RollingUpdate: For secret changes (operator-controlled)
+		//    - Already handled above via triggerRollingRestartViaAnnotation()
+		// 2. Pod Eviction: For restart_required signals (SOK/Cloud config changes)
+		//    - Check each pod individually and evict if restart_required is set
+		//    - These two mechanisms are INDEPENDENT and can run simultaneously
+
+		// Always check for restart_required and evict if needed
+		restartErr := checkAndEvictIngestorsIfNeeded(ctx, client, cr)
 		if restartErr != nil {
-			scopedLog.Error(restartErr, "Rolling restart handler failed")
+			scopedLog.Error(restartErr, "Failed to check/evict ingestors")
 			// Don't return error, just log it - we don't want to block other operations
+		}
+
+		// Monitor rolling restart progress (for secret changes)
+		restartResult, restartErr := monitorRollingRestart(ctx, client, cr)
+		if restartErr != nil {
+			scopedLog.Error(restartErr, "Rolling restart monitoring failed")
 		}
 		// If restart handler wants to requeue, honor that
 		if restartResult.Requeue || restartResult.RequeueAfter > 0 {
@@ -547,17 +599,29 @@ func shouldCheckRestartRequired(cr *enterpriseApi.IngestorCluster) bool {
 	return elapsed > checkInterval
 }
 
-// checkPodsRestartRequired checks which pods need restart
-// Returns count of pods needing restart, total pods checked, error
+// checkPodsRestartRequired checks if ALL pods agree that restart is required
+// This ensures configuration consistency across all replicas.
+//
+// Returns:
+//   - allPodsAgree: true only if ALL pods are ready AND ALL agree restart is needed
+//   - reason: the restart reason from Splunk
+//   - error: error if we can't determine state
+//
+// CRITICAL: This function enforces the "ALL pods must agree" policy to prevent
+// configuration split-brain scenarios. If any pod is not ready, we return false
+// to wait for the cluster to stabilize before triggering restart.
 func checkPodsRestartRequired(
 	ctx context.Context,
 	c client.Client,
 	cr *enterpriseApi.IngestorCluster,
-) (int32, int32, error) {
+) (bool, string, error) {
 	scopedLog := log.FromContext(ctx).WithName("checkPodsRestartRequired")
 
-	var podsNeedingRestart int32
-	totalPods := cr.Spec.Replicas
+	var allPodsReady = true
+	var allReadyPodsAgreeOnRestart = true
+	var restartReason string
+	var readyPodsChecked int32
+	var readyPodsNeedingRestart int32
 
 	// Get Splunk admin credentials
 	secret := &corev1.Secret{}
@@ -565,10 +629,11 @@ func checkPodsRestartRequired(
 	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get splunk secret")
-		return 0, totalPods, fmt.Errorf("failed to get splunk secret: %w", err)
+		return false, "", fmt.Errorf("failed to get splunk secret: %w", err)
 	}
 	password := string(secret.Data["password"])
 
+	// Check ALL pods in the StatefulSet
 	for i := int32(0); i < cr.Spec.Replicas; i++ {
 		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
 
@@ -577,20 +642,28 @@ func checkPodsRestartRequired(
 		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
 		if err != nil {
 			scopedLog.Error(err, "Failed to get pod", "pod", podName)
-			continue // Skip this pod
+			// Pod doesn't exist or can't be retrieved - cluster not stable
+			allPodsReady = false
+			continue
 		}
 
 		// Check if pod is ready
 		if !isPodReady(pod) {
-			scopedLog.Info("Pod not ready, skipping restart check", "pod", podName)
+			scopedLog.Info("Pod not ready, cannot verify restart state", "pod", podName)
+			// Pod not ready - cluster not stable, wait before restart
+			allPodsReady = false
 			continue
 		}
 
 		// Get pod IP
 		if pod.Status.PodIP == "" {
-			scopedLog.Info("Pod has no IP, skipping", "pod", podName)
+			scopedLog.Info("Pod has no IP", "pod", podName)
+			allPodsReady = false
 			continue
 		}
+
+		// Pod is ready, check its restart_required status
+		readyPodsChecked++
 
 		// Create SplunkClient for this pod
 		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
@@ -600,40 +673,211 @@ func checkPodsRestartRequired(
 		restartRequired, reason, err := splunkClient.CheckRestartRequired()
 		if err != nil {
 			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
-			continue // Don't fail entire check, just skip this pod
+			// Can't verify this pod's state - treat as cluster not stable
+			allPodsReady = false
+			continue
 		}
 
 		if restartRequired {
 			scopedLog.Info("Pod needs restart", "pod", podName, "reason", reason)
-			podsNeedingRestart++
+			readyPodsNeedingRestart++
+			restartReason = reason
+		} else {
+			scopedLog.Info("Pod does not need restart", "pod", podName)
+			// This pod doesn't need restart - not all pods agree
+			allReadyPodsAgreeOnRestart = false
 		}
 	}
 
-	return podsNeedingRestart, totalPods, nil
+	// Log summary
+	scopedLog.Info("Restart check summary",
+		"totalPods", cr.Spec.Replicas,
+		"readyPodsChecked", readyPodsChecked,
+		"readyPodsNeedingRestart", readyPodsNeedingRestart,
+		"allPodsReady", allPodsReady,
+		"allReadyPodsAgreeOnRestart", allReadyPodsAgreeOnRestart)
+
+	// CRITICAL DECISION LOGIC:
+	// Only trigger restart if:
+	// 1. ALL pods are ready (cluster is stable)
+	// 2. ALL ready pods agree they need restart (configuration consistency)
+	//
+	// This prevents split-brain scenarios where some pods have new config
+	// and others don't, which can happen during:
+	// - Partial app deployments
+	// - Network partitions
+	// - Pod restarts/failures
+	// - Slow config propagation
+
+	if !allPodsReady {
+		return false, "Not all pods are ready - waiting for cluster to stabilize", nil
+	}
+
+	if readyPodsChecked == 0 {
+		return false, "No ready pods found to check", nil
+	}
+
+	if !allReadyPodsAgreeOnRestart {
+		return false, fmt.Sprintf("Not all pods agree on restart (%d/%d need restart)",
+			readyPodsNeedingRestart, readyPodsChecked), nil
+	}
+
+	// All pods are ready AND all agree on restart - safe to proceed
+	return true, restartReason, nil
 }
 
-// tryReloadAllPods attempts to reload configuration on all pods sequentially
-// Returns: count of pods still needing restart after reload, error
-func tryReloadAllPods(
+// Note: Reload functionality is handled by the app framework.
+// This operator handles restart in two ways:
+// 1. StatefulSet RollingUpdate for secret changes (operator-controlled)
+// 2. Pod Eviction for SOK/Cloud config changes (per-pod restart_required)
+
+// ============================================================================
+// Approach 1: StatefulSet RollingUpdate (for secret changes)
+// ============================================================================
+
+// triggerRollingRestartViaAnnotation triggers a rolling restart by updating the
+// StatefulSet pod template annotation. Kubernetes StatefulSet controller will
+// handle the actual rolling restart automatically.
+// This is used for SECRET CHANGES where all pods need coordinated restart.
+func triggerRollingRestartViaAnnotation(
 	ctx context.Context,
 	c client.Client,
 	cr *enterpriseApi.IngestorCluster,
-) (int32, error) {
-	scopedLog := log.FromContext(ctx).WithName("tryReloadAllPods")
+	reason string,
+) error {
+	scopedLog := log.FromContext(ctx).WithName("triggerRollingRestart")
 
-	// Get Splunk admin credentials
+	// Get current StatefulSet
+	statefulSetName := fmt.Sprintf("splunk-%s-ingestor", cr.Name)
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, types.NamespacedName{
+		Name:      statefulSetName,
+		Namespace: cr.Namespace,
+	}, statefulSet)
+	if err != nil {
+		return fmt.Errorf("failed to get StatefulSet: %w", err)
+	}
+
+	// Update pod template with restart annotation
+	// This triggers StatefulSet controller to recreate pods
+	if statefulSet.Spec.Template.Annotations == nil {
+		statefulSet.Spec.Template.Annotations = make(map[string]string)
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	statefulSet.Spec.Template.Annotations["splunk.com/restartedAt"] = now
+	statefulSet.Spec.Template.Annotations["splunk.com/restartReason"] = reason
+
+	scopedLog.Info("Triggering rolling restart via StatefulSet update",
+		"reason", reason,
+		"timestamp", now,
+		"replicas", *statefulSet.Spec.Replicas)
+
+	// Update StatefulSet - Kubernetes handles rolling restart automatically
+	err = c.Update(ctx, statefulSet)
+	if err != nil {
+		return fmt.Errorf("failed to update StatefulSet: %w", err)
+	}
+
+	// Update CR status to track restart
+	cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseInProgress
+	cr.Status.RestartStatus.LastRestartTime = &metav1.Time{Time: time.Now()}
+	cr.Status.RestartStatus.Message = fmt.Sprintf("Rolling restart triggered: %s", reason)
+
+	return nil
+}
+
+// monitorRollingRestart monitors the progress of a rolling restart by checking
+// StatefulSet status. Returns when restart is complete or if it should requeue.
+func monitorRollingRestart(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.IngestorCluster,
+) (reconcile.Result, error) {
+	scopedLog := log.FromContext(ctx).WithName("monitorRollingRestart")
+
+	// Only monitor if restart is in progress
+	if cr.Status.RestartStatus.Phase != enterpriseApi.RestartPhaseInProgress {
+		return reconcile.Result{}, nil
+	}
+
+	// Get StatefulSet
+	statefulSetName := fmt.Sprintf("splunk-%s-ingestor", cr.Name)
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, types.NamespacedName{
+		Name:      statefulSetName,
+		Namespace: cr.Namespace,
+	}, statefulSet)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Check if rolling update is complete
+	// All these conditions must be true for completion:
+	// 1. UpdatedReplicas == Replicas (all pods have new template)
+	// 2. ReadyReplicas == Replicas (all pods are ready)
+	// 3. CurrentRevision == UpdateRevision (update is done)
+	if statefulSet.Status.UpdatedReplicas == statefulSet.Status.Replicas &&
+		statefulSet.Status.ReadyReplicas == statefulSet.Status.Replicas &&
+		statefulSet.Status.CurrentRevision == statefulSet.Status.UpdateRevision {
+
+		// Rolling restart complete!
+		scopedLog.Info("Rolling restart completed successfully",
+			"replicas", statefulSet.Status.Replicas,
+			"ready", statefulSet.Status.ReadyReplicas)
+
+		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
+		cr.Status.RestartStatus.Message = fmt.Sprintf(
+			"Rolling restart completed successfully for %d pods",
+			statefulSet.Status.Replicas)
+
+		return reconcile.Result{}, nil
+	}
+
+	// Still in progress - update status with current progress
+	cr.Status.RestartStatus.Message = fmt.Sprintf(
+		"Rolling restart in progress: %d/%d pods updated, %d/%d ready",
+		statefulSet.Status.UpdatedReplicas,
+		statefulSet.Status.Replicas,
+		statefulSet.Status.ReadyReplicas,
+		statefulSet.Status.Replicas)
+
+	scopedLog.Info("Rolling restart in progress",
+		"updated", statefulSet.Status.UpdatedReplicas,
+		"ready", statefulSet.Status.ReadyReplicas,
+		"target", statefulSet.Status.Replicas,
+		"currentRevision", statefulSet.Status.CurrentRevision,
+		"updateRevision", statefulSet.Status.UpdateRevision)
+
+	// Check again in 30 seconds
+	return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+}
+
+// ============================================================================
+// Approach 2: Pod Eviction (for SOK/Cloud config changes)
+// ============================================================================
+
+// checkAndEvictIngestorsIfNeeded checks each ingestor pod individually for
+// restart_required and evicts pods that need restart.
+// This is used for SOK/CLOUD CONFIG CHANGES where pods signal independently.
+func checkAndEvictIngestorsIfNeeded(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.IngestorCluster,
+) error {
+	scopedLog := log.FromContext(ctx).WithName("checkAndEvictIngestorsIfNeeded")
+
+	// Get admin credentials
 	secret := &corev1.Secret{}
 	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get splunk secret")
-		return 0, fmt.Errorf("failed to get splunk secret: %w", err)
+		return fmt.Errorf("failed to get splunk secret: %w", err)
 	}
 	password := string(secret.Data["password"])
 
-	var podsStillNeedingRestart int32
-
-	// Iterate pods sequentially (one at a time)
+	// Check each ingestor pod individually (NO consensus needed)
 	for i := int32(0); i < cr.Spec.Replicas; i++ {
 		podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
 
@@ -642,252 +886,79 @@ func tryReloadAllPods(
 		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
 		if err != nil {
 			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			continue // Skip pods that don't exist
+		}
+
+		// Only check running pods
+		if pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
 
 		// Check if pod is ready
 		if !isPodReady(pod) {
-			scopedLog.Info("Pod not ready, skipping reload", "pod", podName)
 			continue
 		}
 
 		// Get pod IP
 		if pod.Status.PodIP == "" {
-			scopedLog.Info("Pod has no IP, skipping", "pod", podName)
 			continue
 		}
 
-		// Create SplunkClient for this pod
+		// Check if THIS specific pod needs restart
 		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
 		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
 
-		// Check if restart is required before reload
-		restartRequired, reason, err := splunkClient.CheckRestartRequired()
+		restartRequired, message, err := splunkClient.CheckRestartRequired()
 		if err != nil {
 			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
 			continue
 		}
 
 		if !restartRequired {
-			scopedLog.Info("Pod does not need restart, skipping reload", "pod", podName)
-			continue
+			continue // This pod is fine
 		}
 
-		scopedLog.Info("Pod needs restart, attempting reload", "pod", podName, "reason", reason)
+		scopedLog.Info("Pod needs restart, evicting",
+			"pod", podName, "message", message)
 
-		// Attempt reload
-		err = splunkClient.ReloadSplunk()
+		// Evict the pod - PDB automatically protects
+		err = evictPod(ctx, c, pod)
 		if err != nil {
-			scopedLog.Error(err, "Failed to reload Splunk", "pod", podName)
-			// Count as still needing restart if reload fails
-			podsStillNeedingRestart++
-			continue
+			if isPDBViolation(err) {
+				scopedLog.Info("PDB blocked eviction, will retry",
+					"pod", podName)
+				continue
+			}
+			return err
 		}
 
-		scopedLog.Info("Successfully triggered reload on pod", "pod", podName)
+		scopedLog.Info("Pod eviction initiated", "pod", podName)
 
-		// Wait 5 seconds for reload to settle
-		time.Sleep(5 * time.Second)
-
-		// Check if restart is still required after reload
-		restartRequired, reason, err = splunkClient.CheckRestartRequired()
-		if err != nil {
-			scopedLog.Error(err, "Failed to check restart required after reload", "pod", podName)
-			// Assume still needs restart if check fails
-			podsStillNeedingRestart++
-			continue
-		}
-
-		if restartRequired {
-			scopedLog.Info("Pod still needs restart after reload, will require full restart", "pod", podName, "reason", reason)
-			podsStillNeedingRestart++
-		} else {
-			scopedLog.Info("Reload successful, pod no longer needs restart", "pod", podName)
-		}
+		// Only evict ONE pod per reconcile
+		// Next reconcile (5s later) will check remaining pods
+		return nil
 	}
 
-	return podsStillNeedingRestart, nil
+	return nil
 }
 
-// ============================================================================
-// Rolling Restart State Machine
-// ============================================================================
-
-// handleRollingRestart manages the rolling restart state machine
-// Returns: result with requeue info, error
-func handleRollingRestart(
-	ctx context.Context,
-	c client.Client,
-	cr *enterpriseApi.IngestorCluster,
-) (reconcile.Result, error) {
-	scopedLog := log.FromContext(ctx).WithName("handleRollingRestart")
-	now := metav1.Now()
-
-	// State: None or Completed - Check if restart is needed
-	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseNone ||
-		cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseCompleted {
-
-		// Rate limit: only check every 5 minutes
-		if !shouldCheckRestartRequired(cr) {
-			return reconcile.Result{}, nil
-		}
-
-		scopedLog.Info("Checking if pods need restart")
-		cr.Status.RestartStatus.LastCheckTime = &now
-
-		podsNeedingRestart, totalPods, err := checkPodsRestartRequired(ctx, c, cr)
-		if err != nil {
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Failed to check restart status: %v", err)
-			return reconcile.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-
-		if podsNeedingRestart == 0 {
-			scopedLog.Info("No pods need restart")
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseNone
-			cr.Status.RestartStatus.Message = ""
-			cr.Status.RestartStatus.TotalPods = totalPods
-			cr.Status.RestartStatus.PodsNeedingRestart = 0
-			cr.Status.RestartStatus.PodsRestarted = 0
-			return reconcile.Result{}, nil
-		}
-
-		// Transition to Pending
-		scopedLog.Info("Pods need restart, transitioning to Pending", "podsNeedingRestart", podsNeedingRestart)
-		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhasePending
-		cr.Status.RestartStatus.TotalPods = totalPods
-		cr.Status.RestartStatus.PodsNeedingRestart = podsNeedingRestart
-		cr.Status.RestartStatus.PodsRestarted = 0
-		cr.Status.RestartStatus.Message = fmt.Sprintf("%d/%d pods need restart", podsNeedingRestart, totalPods)
-
-		// Requeue immediately to start reload attempt
-		return reconcile.Result{Requeue: true}, nil
+// evictPod evicts a pod using Kubernetes Eviction API
+// The Eviction API automatically checks PodDisruptionBudget
+func evictPod(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+	eviction := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
 	}
 
-	// State: Pending - Try reload first
-	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhasePending {
-		scopedLog.Info("Attempting sequential reload on all pods")
-		cr.Status.RestartStatus.Message = fmt.Sprintf("Attempting reload on %d pods", cr.Status.RestartStatus.PodsNeedingRestart)
+	// Eviction API automatically checks PDB
+	// If PDB would be violated, this returns an error
+	return c.SubResource("eviction").Create(ctx, pod, eviction)
+}
 
-		podsStillNeedingRestart, err := tryReloadAllPods(ctx, c, cr)
-		if err != nil {
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Reload failed: %v", err)
-			return reconcile.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-
-		if podsStillNeedingRestart == 0 {
-			// Success! All pods reloaded successfully
-			scopedLog.Info("All pods reloaded successfully, no restarts needed")
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Configuration reloaded successfully on all %d pods, no restarts needed", cr.Status.RestartStatus.TotalPods)
-			cr.Status.RestartStatus.PodsNeedingRestart = 0
-			return reconcile.Result{}, nil
-		}
-
-		// Some pods still need restart, transition to InProgress
-		scopedLog.Info("Reload helped but some pods still need restart", "podsStillNeedingRestart", podsStillNeedingRestart)
-		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseInProgress
-		cr.Status.RestartStatus.PodsNeedingRestart = podsStillNeedingRestart
-		cr.Status.RestartStatus.PodsRestarted = 0
-		cr.Status.RestartStatus.LastRestartTime = &now
-		cr.Status.RestartStatus.Message = fmt.Sprintf("Reloaded all pods, %d/%d still need restart", podsStillNeedingRestart, cr.Status.RestartStatus.TotalPods)
-
-		// Requeue immediately to start restart
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	// State: InProgress - Perform rolling restart one pod per reconcile
-	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseInProgress {
-		// Timeout check: fail if stuck for more than 2 hours
-		if cr.Status.RestartStatus.LastRestartTime != nil {
-			elapsed := time.Since(cr.Status.RestartStatus.LastRestartTime.Time)
-			if elapsed > 2*time.Hour {
-				scopedLog.Error(nil, "Rolling restart timeout", "elapsed", elapsed)
-				cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
-				cr.Status.RestartStatus.Message = fmt.Sprintf("Restart timeout after %v", elapsed)
-				return reconcile.Result{}, fmt.Errorf("rolling restart timeout")
-			}
-		}
-
-		scopedLog.Info("Rolling restart in progress", "podsRestarted", cr.Status.RestartStatus.PodsRestarted, "podsNeedingRestart", cr.Status.RestartStatus.PodsNeedingRestart)
-
-		// Find next pod that needs restart
-		var podToRestart *corev1.Pod
-		var podIndex int32 = -1
-
-		// If we still have pods to restart (PodsRestarted < PodsNeedingRestart),
-		// restart the next ready pod in sequence
-		// This handles secret changes where CheckRestartRequired won't detect the change
-		if cr.Status.RestartStatus.PodsRestarted < cr.Status.RestartStatus.PodsNeedingRestart {
-			for i := int32(0); i < cr.Spec.Replicas; i++ {
-				podName := fmt.Sprintf("splunk-%s-ingestor-%d", cr.Name, i)
-				pod := &corev1.Pod{}
-				err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
-				if err != nil {
-					scopedLog.Error(err, "Failed to get pod", "pod", podName)
-					continue
-				}
-
-				// Check if pod is ready - we only restart ready pods
-				if !isPodReady(pod) || pod.Status.PodIP == "" {
-					continue
-				}
-
-				// Restart pods in order: restart pod index = PodsRestarted
-				// This ensures sequential restart
-				if i == cr.Status.RestartStatus.PodsRestarted {
-					scopedLog.Info("Found pod to restart", "pod", podName, "index", i)
-					podToRestart = pod
-					podIndex = i
-					break
-				}
-			}
-		}
-
-		// No pod found needing restart - we're done!
-		if podToRestart == nil {
-			scopedLog.Info("All pods restarted successfully")
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Rolling restart completed successfully for %d pods", cr.Status.RestartStatus.TotalPods)
-			cr.Status.RestartStatus.PodsNeedingRestart = 0
-			return reconcile.Result{}, nil
-		}
-
-		// Restart this pod using eviction API
-		scopedLog.Info("Restarting pod", "pod", podToRestart.Name, "index", podIndex, "progress", fmt.Sprintf("%d/%d", cr.Status.RestartStatus.PodsRestarted+1, cr.Status.RestartStatus.PodsNeedingRestart))
-
-		err := c.Delete(ctx, podToRestart)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			scopedLog.Error(err, "Failed to delete pod", "pod", podToRestart.Name)
-			cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseFailed
-			cr.Status.RestartStatus.Message = fmt.Sprintf("Failed to restart pod %s: %v", podToRestart.Name, err)
-			return reconcile.Result{RequeueAfter: 1 * time.Minute}, err
-		}
-
-		// Update progress
-		cr.Status.RestartStatus.PodsRestarted++
-		cr.Status.RestartStatus.Message = fmt.Sprintf("Restarting pod %d (%d/%d)", podIndex, cr.Status.RestartStatus.PodsRestarted, cr.Status.RestartStatus.PodsNeedingRestart)
-
-		// Requeue after 30 seconds to wait for pod to restart and become ready
-		scopedLog.Info("Pod deleted, waiting for restart", "pod", podToRestart.Name, "requeueAfter", "30s")
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
-	// State: Failed - Wait before retrying
-	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseFailed {
-		scopedLog.Info("Restart operation failed, will retry", "message", cr.Status.RestartStatus.Message)
-		// Reset to None after 5 minutes to allow retry
-		if cr.Status.RestartStatus.LastCheckTime != nil {
-			elapsed := time.Since(cr.Status.RestartStatus.LastCheckTime.Time)
-			if elapsed > 5*time.Minute {
-				scopedLog.Info("Resetting failed restart status for retry")
-				cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseNone
-				cr.Status.RestartStatus.Message = ""
-			}
-		}
-		return reconcile.Result{RequeueAfter: 1 * time.Minute}, nil
-	}
-
-	return reconcile.Result{}, nil
+// isPDBViolation checks if an error is due to PDB violation
+func isPDBViolation(err error) bool {
+	// PDB violations return TooManyRequests (429) status
+	return err != nil && strings.Contains(err.Error(), "Cannot evict pod")
 }

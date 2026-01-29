@@ -87,6 +87,7 @@ COPY LICENSE /licenses/LICENSE-2.0.txt
 COPY tools/k8_probes/livenessProbe.sh /tools/k8_probes/
 COPY tools/k8_probes/readinessProbe.sh /tools/k8_probes/
 COPY tools/k8_probes/startupProbe.sh /tools/k8_probes/
+COPY tools/k8_probes/preStop.sh /tools/k8_probes/
 
 # Set the user
 USER 1001

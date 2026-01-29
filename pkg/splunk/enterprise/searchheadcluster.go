@@ -31,6 +31,8 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -157,6 +159,13 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	// Create or update PodDisruptionBudget for high availability during rolling restarts
+	err = ApplyPodDisruptionBudget(ctx, client, cr, SplunkSearchHead, cr.Spec.Replicas)
+	if err != nil {
+		eventPublisher.Warning(ctx, "ApplyPodDisruptionBudget", fmt.Sprintf("create/update PodDisruptionBudget failed %s", err.Error()))
+		return result, err
+	}
+
 	// create or update a deployer service
 	err = splctrl.ApplyService(ctx, client, getSplunkService(ctx, cr, &cr.Spec.CommonSplunkSpec, SplunkDeployer, false))
 	if err != nil {
@@ -220,6 +229,25 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	// no need to requeue if everything is ready
 	if cr.Status.Phase == enterpriseApi.PhaseReady {
+		// V3: Check if replicas have changed - if so, need to handle scale-down/up
+		currentReplicas := *statefulSet.Spec.Replicas
+		desiredReplicas := cr.Spec.Replicas
+		if currentReplicas != desiredReplicas {
+			scopedLog.Info("Replica count changed - handling scale operation",
+				"current", currentReplicas,
+				"desired", desiredReplicas)
+
+			// Call Update() to handle scale-down/up with proper pod marking
+			phase, err := mgr.Update(ctx, client, statefulSet, desiredReplicas)
+			if err != nil {
+				return result, err
+			}
+			cr.Status.Phase = phase
+
+			// Update status and requeue to check completion
+			return result, nil
+		}
+
 		//upgrade fron automated MC to MC CRD
 		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: GetSplunkStatefulsetName(SplunkMonitoringConsole, cr.GetNamespace())}
 		err = splctrl.DeleteReferencesToAutomatedMCIfExists(ctx, client, cr, namespacedName)
@@ -244,6 +272,22 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 			// Mark telemetry app as installed
 			cr.Status.TelAppInstalled = true
 		}
+
+		// V3 FIX #2: PVC cleanup removed - handled by pod finalizer synchronously
+		// PVCs are now deleted by the finalizer BEFORE the pod is removed
+
+		// Handle rolling restart mechanism
+		// This runs after everything else is ready to check for config changes
+		restartResult, restartErr := handleSearchHeadClusterRollingRestart(ctx, client, cr)
+		if restartErr != nil {
+			scopedLog.Error(restartErr, "Rolling restart handler failed")
+			// Don't return error, just log it - we don't want to block other operations
+		}
+		// If restart handler wants to requeue, honor that
+		if restartResult.Requeue || restartResult.RequeueAfter > 0 {
+			result = restartResult
+		}
+
 		// Update the requeue result as needed by the app framework
 		if finalResult != nil {
 			result = *finalResult
@@ -333,13 +377,9 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			}
 			scopedLog.Info("shcSecret changed")
 
-			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
-			err = shClient.RestartSplunk()
-			if err != nil {
-				return err
-			}
-			scopedLog.Info("Restarted Splunk")
+			// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
+			// The handleSearchHeadClusterRollingRestart() function will detect the change and trigger
+			// a zero-downtime rolling restart of all pods
 
 			// Set the shc_secret changed flag to true
 			if i < int32(len(mgr.cr.Status.ShcSecretChanged)) {
@@ -368,13 +408,9 @@ func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, repli
 			}
 			scopedLog.Info("admin password changed on the splunk instance of pod")
 
-			// Get client for Pod and restart splunk instance on pod
-			shClient := mgr.getClient(ctx, i)
-			err = shClient.RestartSplunk()
-			if err != nil {
-				return err
-			}
-			scopedLog.Info("Restarted Splunk")
+			// Note: Restart will be triggered via rolling restart mechanism after all secrets are updated
+			// The handleSearchHeadClusterRollingRestart() function will detect the change and trigger
+			// a zero-downtime rolling restart of all pods
 
 			// Set the adminSecretChanged changed flag to true
 			if i < int32(len(mgr.cr.Status.AdminSecretChanged)) {
@@ -517,4 +553,353 @@ func getSearchHeadClusterList(ctx context.Context, c splcommon.ControllerClient,
 	}
 
 	return objectList, nil
+}
+
+// ============================================================================
+// Rolling Restart Functions for SearchHeadCluster
+// ============================================================================
+
+// shouldCheckSearchHeadRestartRequired determines if we should check restart_required endpoint
+// Rate limits checks to avoid overwhelming Splunk REST API
+func shouldCheckSearchHeadRestartRequired(cr *enterpriseApi.SearchHeadCluster) bool {
+	// Don't check if restart is already in progress or failed
+	if cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseInProgress ||
+		cr.Status.RestartStatus.Phase == enterpriseApi.RestartPhaseFailed {
+		return false
+	}
+
+	// Check every 5 minutes
+	if cr.Status.RestartStatus.LastCheckTime == nil {
+		return true
+	}
+
+	elapsed := time.Since(cr.Status.RestartStatus.LastCheckTime.Time)
+	checkInterval := 5 * time.Minute
+
+	return elapsed > checkInterval
+}
+
+// checkSearchHeadPodsRestartRequired checks if ALL search head pods agree that restart is required
+func checkSearchHeadPodsRestartRequired(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.SearchHeadCluster,
+) (bool, string, error) {
+	scopedLog := log.FromContext(ctx).WithName("checkSearchHeadPodsRestartRequired")
+
+	var allPodsReady = true
+	var allReadyPodsAgreeOnRestart = true
+	var restartReason string
+	var readyPodsChecked int32
+	var readyPodsNeedingRestart int32
+
+	// Get Splunk admin credentials
+	secret := &corev1.Secret{}
+	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get splunk secret")
+		return false, "", fmt.Errorf("failed to get splunk secret: %w", err)
+	}
+	password := string(secret.Data["password"])
+
+	// Check ALL pods in the StatefulSet
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("splunk-%s-search-head-%d", cr.Name, i)
+
+		// Get pod
+		pod := &corev1.Pod{}
+		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			allPodsReady = false
+			continue
+		}
+
+		// Check if pod is ready
+		if !isPodReady(pod) {
+			scopedLog.Info("Pod not ready, cannot verify restart state", "pod", podName)
+			allPodsReady = false
+			continue
+		}
+
+		// Get pod IP
+		if pod.Status.PodIP == "" {
+			scopedLog.Info("Pod has no IP", "pod", podName)
+			allPodsReady = false
+			continue
+		}
+
+		// Pod is ready, check its restart_required status
+		readyPodsChecked++
+
+		// Create SplunkClient for this pod
+		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+		// Check restart required
+		restartRequired, reason, err := splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+			allPodsReady = false
+			continue
+		}
+
+		if restartRequired {
+			scopedLog.Info("Pod needs restart", "pod", podName, "reason", reason)
+			readyPodsNeedingRestart++
+			restartReason = reason
+		} else {
+			scopedLog.Info("Pod does not need restart", "pod", podName)
+			allReadyPodsAgreeOnRestart = false
+		}
+	}
+
+	// Log summary
+	scopedLog.Info("Restart check summary",
+		"totalPods", cr.Spec.Replicas,
+		"readyPodsChecked", readyPodsChecked,
+		"readyPodsNeedingRestart", readyPodsNeedingRestart,
+		"allPodsReady", allPodsReady,
+		"allReadyPodsAgreeOnRestart", allReadyPodsAgreeOnRestart)
+
+	if !allPodsReady {
+		return false, "Not all pods are ready - waiting for cluster to stabilize", nil
+	}
+
+	if readyPodsChecked == 0 {
+		return false, "No ready pods found to check", nil
+	}
+
+	if !allReadyPodsAgreeOnRestart {
+		return false, fmt.Sprintf("Not all pods agree on restart (%d/%d need restart)",
+			readyPodsNeedingRestart, readyPodsChecked), nil
+	}
+
+	// All pods are ready AND all agree on restart - safe to proceed
+	return true, restartReason, nil
+}
+
+// triggerSearchHeadRollingRestart triggers a rolling restart by updating the StatefulSet pod template annotation
+func triggerSearchHeadRollingRestart(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.SearchHeadCluster,
+	reason string,
+) error {
+	scopedLog := log.FromContext(ctx).WithName("triggerSearchHeadRollingRestart")
+
+	// Get current StatefulSet
+	statefulSetName := fmt.Sprintf("splunk-%s-search-head", cr.Name)
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, types.NamespacedName{
+		Name:      statefulSetName,
+		Namespace: cr.Namespace,
+	}, statefulSet)
+	if err != nil {
+		return fmt.Errorf("failed to get StatefulSet: %w", err)
+	}
+
+	// Update pod template with restart annotation
+	if statefulSet.Spec.Template.Annotations == nil {
+		statefulSet.Spec.Template.Annotations = make(map[string]string)
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	statefulSet.Spec.Template.Annotations["splunk.com/restartedAt"] = now
+	statefulSet.Spec.Template.Annotations["splunk.com/restartReason"] = reason
+
+	scopedLog.Info("Triggering rolling restart via StatefulSet update",
+		"reason", reason,
+		"timestamp", now,
+		"replicas", *statefulSet.Spec.Replicas)
+
+	// Update StatefulSet - Kubernetes handles rolling restart automatically
+	err = c.Update(ctx, statefulSet)
+	if err != nil {
+		return fmt.Errorf("failed to update StatefulSet: %w", err)
+	}
+
+	scopedLog.Info("Successfully triggered rolling restart")
+	return nil
+}
+
+// monitorSearchHeadRollingRestartProgress monitors the progress of an ongoing rolling restart
+func monitorSearchHeadRollingRestartProgress(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.SearchHeadCluster,
+) (reconcile.Result, error) {
+	scopedLog := log.FromContext(ctx).WithName("monitorSearchHeadRollingRestartProgress")
+
+	// Get current StatefulSet
+	statefulSetName := fmt.Sprintf("splunk-%s-search-head", cr.Name)
+	statefulSet := &appsv1.StatefulSet{}
+	err := c.Get(ctx, types.NamespacedName{
+		Name:      statefulSetName,
+		Namespace: cr.Namespace,
+	}, statefulSet)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to get StatefulSet: %w", err)
+	}
+
+	// Check if rolling restart is complete
+	// Complete when: currentRevision == updateRevision AND all replicas updated and ready
+	if statefulSet.Status.CurrentRevision == statefulSet.Status.UpdateRevision &&
+		statefulSet.Status.UpdatedReplicas == statefulSet.Status.Replicas &&
+		statefulSet.Status.ReadyReplicas == statefulSet.Status.Replicas {
+
+		scopedLog.Info("Rolling restart completed successfully",
+			"revision", statefulSet.Status.CurrentRevision,
+			"replicas", statefulSet.Status.Replicas)
+
+		now := metav1.Now()
+		cr.Status.RestartStatus.Phase = enterpriseApi.RestartPhaseCompleted
+		cr.Status.RestartStatus.LastRestartTime = &now
+		cr.Status.RestartStatus.Message = fmt.Sprintf(
+			"Rolling restart completed successfully at %s. All %d pods restarted.",
+			now.Format(time.RFC3339),
+			statefulSet.Status.Replicas)
+
+		return reconcile.Result{}, nil
+	}
+
+	// Still in progress - update status with current progress
+	cr.Status.RestartStatus.Message = fmt.Sprintf(
+		"Rolling restart in progress: %d/%d pods updated, %d/%d ready",
+		statefulSet.Status.UpdatedReplicas,
+		statefulSet.Status.Replicas,
+		statefulSet.Status.ReadyReplicas,
+		statefulSet.Status.Replicas)
+
+	scopedLog.Info("Rolling restart in progress",
+		"updated", statefulSet.Status.UpdatedReplicas,
+		"ready", statefulSet.Status.ReadyReplicas,
+		"target", statefulSet.Status.Replicas,
+		"currentRevision", statefulSet.Status.CurrentRevision,
+		"updateRevision", statefulSet.Status.UpdateRevision)
+
+	// Check again in 30 seconds
+	return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+}
+
+// handleSearchHeadClusterRollingRestart uses per-pod eviction like IngestorCluster
+// Changed from consensus-based to individual pod eviction for better responsiveness
+func handleSearchHeadClusterRollingRestart(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.SearchHeadCluster,
+) (reconcile.Result, error) {
+	scopedLog := log.FromContext(ctx).WithName("handleSearchHeadClusterRollingRestart")
+
+	// Always check for restart_required and evict if needed (per-pod approach)
+	restartErr := checkAndEvictSearchHeadsIfNeeded(ctx, c, cr)
+	if restartErr != nil {
+		scopedLog.Error(restartErr, "Failed to check/evict search heads")
+		// Don't return error, just log it - we don't want to block other operations
+	}
+
+	return reconcile.Result{}, nil
+}
+
+// checkAndEvictSearchHeadsIfNeeded checks each search head pod individually for
+// restart_required and evicts pods that need restart.
+func checkAndEvictSearchHeadsIfNeeded(
+	ctx context.Context,
+	c client.Client,
+	cr *enterpriseApi.SearchHeadCluster,
+) error {
+	scopedLog := log.FromContext(ctx).WithName("checkAndEvictSearchHeadsIfNeeded")
+
+	// Get admin credentials
+	secret := &corev1.Secret{}
+	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
+	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
+	if err != nil {
+		scopedLog.Error(err, "Failed to get splunk secret")
+		return fmt.Errorf("failed to get splunk secret: %w", err)
+	}
+	password := string(secret.Data["password"])
+
+	// Check each search head pod individually (NO consensus needed)
+	for i := int32(0); i < cr.Spec.Replicas; i++ {
+		podName := fmt.Sprintf("splunk-%s-search-head-%d", cr.Name, i)
+
+		// Get pod
+		pod := &corev1.Pod{}
+		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			scopedLog.Error(err, "Failed to get pod", "pod", podName)
+			continue // Skip pods that don't exist
+		}
+
+		// Only check running pods
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		// Check if pod is ready
+		if !isPodReady(pod) {
+			continue
+		}
+
+		// Get pod IP
+		if pod.Status.PodIP == "" {
+			continue
+		}
+
+		// Check if THIS specific pod needs restart
+		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
+		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
+
+		restartRequired, message, err := splunkClient.CheckRestartRequired()
+		if err != nil {
+			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
+			continue
+		}
+
+		if !restartRequired {
+			continue // This pod is fine
+		}
+
+		scopedLog.Info("Pod needs restart, evicting",
+			"pod", podName, "message", message)
+
+		// Evict the pod - PDB automatically protects
+		err = evictPodSearchHead(ctx, c, pod)
+		if err != nil {
+			if isPDBViolationSearchHead(err) {
+				scopedLog.Info("PDB blocked eviction, will retry",
+					"pod", podName)
+				continue
+			}
+			return err
+		}
+
+		scopedLog.Info("Pod eviction initiated", "pod", podName)
+
+		// Only evict ONE pod per reconcile
+		// Next reconcile (5s later) will check remaining pods
+		return nil
+	}
+
+	return nil
+}
+
+// evictPodSearchHead evicts a search head pod using Kubernetes Eviction API
+func evictPodSearchHead(ctx context.Context, c client.Client, pod *corev1.Pod) error {
+	eviction := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+	}
+
+	// Eviction API automatically checks PDB
+	return c.SubResource("eviction").Create(ctx, pod, eviction)
+}
+
+// isPDBViolationSearchHead checks if an error is due to PDB violation
+func isPDBViolationSearchHead(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Cannot evict pod")
 }

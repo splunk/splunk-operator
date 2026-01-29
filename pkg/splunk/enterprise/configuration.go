@@ -659,6 +659,13 @@ func getProbeConfigMap(ctx context.Context, client splcommon.ControllerClient, c
 		return &configMap, err
 	}
 	configMap.Data[GetStartupScriptName()] = data
+	// Add preStop script to config map
+	preStopScriptLocation, _ := filepath.Abs(GetPreStopScriptLocation())
+	data, err = ReadFile(ctx, preStopScriptLocation)
+	if err != nil {
+		return &configMap, err
+	}
+	configMap.Data[GetPreStopScriptName()] = data
 
 	// Apply the configured config map
 	_, err = splctrl.ApplyConfigMap(ctx, client, &configMap)
@@ -731,7 +738,13 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 		Replicas:            &replicas,
 		PodManagementPolicy: appsv1.ParallelPodManagement,
 		UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-			Type: appsv1.OnDeleteStatefulSetStrategyType,
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				MaxUnavailable: &intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 1, // Only 1 pod unavailable at a time
+				},
+			},
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -786,6 +799,26 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+
+	// Add finalizer and intent annotation for instance types that need cleanup before pod deletion
+	// This ensures decommission/detention and cleanup operations complete before pod is removed
+	if instanceType == SplunkIndexer || instanceType == SplunkSearchHead {
+		// Add finalizer
+		if statefulSet.Spec.Template.ObjectMeta.Finalizers == nil {
+			statefulSet.Spec.Template.ObjectMeta.Finalizers = []string{}
+		}
+		statefulSet.Spec.Template.ObjectMeta.Finalizers = append(
+			statefulSet.Spec.Template.ObjectMeta.Finalizers,
+			"splunk.com/pod-cleanup",
+		)
+
+		// Add intent annotation (default: serve)
+		// This will be updated to "scale-down" when scaling down
+		if statefulSet.Spec.Template.ObjectMeta.Annotations == nil {
+			statefulSet.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		statefulSet.Spec.Template.ObjectMeta.Annotations["splunk.com/pod-intent"] = "serve"
+	}
 
 	return statefulSet, nil
 }
@@ -1085,6 +1118,18 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 	}
 
 	privileged := false
+
+	// Set termination grace period for graceful Splunk shutdown
+	// Splunk needs time to flush data, close connections, etc.
+	// Indexers need more time for decommissioning (moving buckets to other peers)
+	var terminationGracePeriodSeconds int64
+	if instanceType == SplunkIndexer {
+		terminationGracePeriodSeconds = 300 // 5 minutes for indexers (decommission + stop)
+	} else {
+		terminationGracePeriodSeconds = 120 // 2 minutes for other roles
+	}
+	podTemplateSpec.Spec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
+
 	// update each container in pod
 	for idx := range podTemplateSpec.Spec.Containers {
 		podTemplateSpec.Spec.Containers[idx].Resources = spec.Resources
@@ -1092,6 +1137,20 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		podTemplateSpec.Spec.Containers[idx].ReadinessProbe = readinessProbe
 		podTemplateSpec.Spec.Containers[idx].StartupProbe = startupProbe
 		podTemplateSpec.Spec.Containers[idx].Env = env
+
+		// Add preStop lifecycle hook for graceful Splunk shutdown
+		// Uses /mnt/probes/preStop.sh which handles role-specific shutdown:
+		// - Indexers: Decommission then stop (moves buckets to other peers)
+		// - Search Heads: Detention then stop (removes from pool gracefully)
+		// - Others: Just stop gracefully
+		podTemplateSpec.Spec.Containers[idx].Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/mnt/probes/preStop.sh"},
+				},
+			},
+		}
+
 		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
 			RunAsUser:                &runAsUser,
 			RunAsNonRoot:             &runAsNonRoot,
