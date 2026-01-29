@@ -138,26 +138,6 @@ func runCustomCommandOnSplunkPods(ctx context.Context, cr splcommon.MetaObject, 
 	return err
 }
 
-// Get extension for name of telemetry app
-func getTelAppNameExtension(crKind string) (string, error) {
-	switch crKind {
-	case "Standalone":
-		return "stdaln", nil
-	case "LicenseMaster":
-		return "lmaster", nil
-	case "LicenseManager":
-		return "lmanager", nil
-	case "SearchHeadCluster":
-		return "shc", nil
-	case "ClusterMaster":
-		return "cmaster", nil
-	case "ClusterManager":
-		return "cmanager", nil
-	default:
-		return "", errors.New("Invalid CR kind for telemetry app")
-	}
-}
-
 // addTelApp adds a telemetry app
 var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImpl, replicas int32, cr splcommon.MetaObject) error {
 	var err error
@@ -170,26 +150,20 @@ var addTelApp = func(ctx context.Context, podExecClient splutil.PodExecClientImp
 	// Create pod exec client
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 
-	// Get Tel App Name Extension
-	appNameExt, err := getTelAppNameExtension(crKind)
-	if err != nil {
-		return err
-	}
-
 	// Commands to run on pods
 	var command1, command2 string
 
 	// Handle non SHC scenarios(Standalone, CM, LM)
 	if crKind != "SearchHeadCluster" {
 		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppNonShcString, appNameExt, appNameExt, telAppConfString, appNameExt, telAppDefMetaConfString, appNameExt)
+		command1 = fmt.Sprintf(createTelAppNonShcString, telAppConfString, telAppDefMetaConfString)
 
 		// App reload
 		command2 = telAppReloadString
 
 	} else {
 		// Create dir on pods
-		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, appNameExt, shcAppsLocationOnDeployer, appNameExt, telAppConfString, shcAppsLocationOnDeployer, appNameExt, telAppDefMetaConfString, shcAppsLocationOnDeployer, appNameExt)
+		command1 = fmt.Sprintf(createTelAppShcString, shcAppsLocationOnDeployer, shcAppsLocationOnDeployer, telAppConfString, shcAppsLocationOnDeployer, telAppDefMetaConfString, shcAppsLocationOnDeployer)
 
 		// Bundle push
 		command2 = fmt.Sprintf(applySHCBundleCmdStr, GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkSearchHead, cr.GetName(), 0, false), "/tmp/status.txt")
