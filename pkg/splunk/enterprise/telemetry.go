@@ -347,7 +347,8 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	}
 
 	serviceName := GetSplunkServiceName(instanceID, cr.GetName(), false)
-	scopedLog.Info("Got service name", "serviceName", serviceName)
+	serviceFQDN := splcommon.GetServiceFQDN(cr.GetNamespace(), serviceName)
+	scopedLog.Info("Got service FQDN", "serviceFQDN", serviceFQDN)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
@@ -362,7 +363,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		scopedLog.Info("Failed to find admin password")
 		return false
 	}
-	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", serviceName), "admin", string(adminPwd))
+	splunkClient := splclient.NewSplunkClient(fmt.Sprintf("https://%s:8089", serviceFQDN), "admin", string(adminPwd))
 
 	var licenseInfo *splclient.LicenseInfo
 	licenseInfo, err = splunkClient.GetLicenseInfo()
