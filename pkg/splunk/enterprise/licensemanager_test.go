@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -60,6 +61,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		{MetaName: "*v1.Secret-test-splunk-test-secret"},
 		{MetaName: "*v1.Secret-test-splunk-stack1-license-manager-secret-v1"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
+		{MetaName: "*v1.Pod-test-splunk-stack1-license-manager-0"},
 		{MetaName: "*v1.StatefulSet-test-splunk-stack1-license-manager"},
 		{MetaName: "*v4.LicenseManager-test-stack1"},
 		{MetaName: "*v4.LicenseManager-test-stack1"},
@@ -77,7 +79,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		{ListOpts: listOpts},
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[10], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
-	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[11], funcCalls[13], funcCalls[13]}
+	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[13], funcCalls[14], funcCalls[15]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
@@ -1315,4 +1317,255 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected error while running reconciliation for license manager with app framework  %v", err)
 		debug.PrintStack()
 	}
+}
+
+func TestCheckLicenseRelatedPodFailures(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := context.TODO()
+
+	// Test 1: Pod does not exist - should return early without error
+	t.Run("Pod does not exist", func(t *testing.T) {
+		lm := enterpriseApi.LicenseManager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.LicenseManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Mock: true,
+				},
+			},
+		}
+
+		c := spltest.NewMockClient()
+		recorder := record.NewFakeRecorder(100)
+		eventPublisher, _ := NewK8EventPublisherWithRecorder(recorder, &lm)
+
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager",
+				Namespace: "test",
+			},
+		}
+
+		// Don't create pod, just call the function
+		checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
+
+		// Verify that no events were published
+		select {
+		case event := <-recorder.Events:
+			t.Errorf("Expected no events when pod doesn't exist, got: %s", event)
+		default:
+			// No event published, which is expected
+		}
+	})
+
+	// Test 2: Pod not in running state - should return early
+	t.Run("Pod not in running state", func(t *testing.T) {
+		lm := enterpriseApi.LicenseManager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.LicenseManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Mock: true,
+				},
+			},
+		}
+
+		c := spltest.NewMockClient()
+		recorder := record.NewFakeRecorder(100)
+		eventPublisher, _ := NewK8EventPublisherWithRecorder(recorder, &lm)
+
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager",
+				Namespace: "test",
+			},
+		}
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager-0",
+				Namespace: "test",
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+			},
+		}
+		c.Create(ctx, pod)
+
+		checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
+
+		// Verify that no events were published for non-running pod
+		select {
+		case event := <-recorder.Events:
+			t.Errorf("Unexpected event published for non-running pod: %s", event)
+		default:
+			// No event published, which is expected
+		}
+	})
+
+	// Test 3: Pod running but no secret - should return early
+	t.Run("Pod running but no secret", func(t *testing.T) {
+		lm := enterpriseApi.LicenseManager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.LicenseManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Mock: true,
+				},
+			},
+		}
+
+		c := spltest.NewMockClient()
+		recorder := record.NewFakeRecorder(100)
+		eventPublisher, _ := NewK8EventPublisherWithRecorder(recorder, &lm)
+
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager",
+				Namespace: "test",
+			},
+		}
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager-0",
+				Namespace: "test",
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+			},
+		}
+		c.Create(ctx, pod)
+
+		// No secret created - should return early without panic
+		checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
+
+		// Verify that no events were published
+		select {
+		case event := <-recorder.Events:
+			t.Errorf("Unexpected event published when secret missing: %s", event)
+		default:
+			// No event published, which is expected
+		}
+	})
+
+	// Test 4: Pod running with secret but empty password - should return early
+	t.Run("Pod running with empty password", func(t *testing.T) {
+		lm := enterpriseApi.LicenseManager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.LicenseManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Mock: true,
+				},
+			},
+		}
+
+		c := spltest.NewMockClient()
+		recorder := record.NewFakeRecorder(100)
+		eventPublisher, _ := NewK8EventPublisherWithRecorder(recorder, &lm)
+
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager",
+				Namespace: "test",
+			},
+		}
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager-0",
+				Namespace: "test",
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+			},
+		}
+		c.Create(ctx, pod)
+
+		// Create secret with empty password
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-secret",
+				Namespace: "test",
+			},
+			Data: map[string][]byte{
+				"password": []byte(""),
+			},
+		}
+		c.Create(ctx, secret)
+
+		checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
+
+		// Verify that no events were published
+		select {
+		case event := <-recorder.Events:
+			t.Errorf("Unexpected event published with empty password: %s", event)
+		default:
+			// No event published, which is expected
+		}
+	})
+
+	// Test 5: Pod running with valid secret - API call will fail in test env but no panic
+	t.Run("Pod running with valid secret", func(t *testing.T) {
+		lm := enterpriseApi.LicenseManager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test",
+				Namespace: "test",
+			},
+			Spec: enterpriseApi.LicenseManagerSpec{
+				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+					Mock: true,
+				},
+			},
+		}
+
+		c := spltest.NewMockClient()
+		recorder := record.NewFakeRecorder(100)
+		eventPublisher, _ := NewK8EventPublisherWithRecorder(recorder, &lm)
+
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager",
+				Namespace: "test",
+			},
+		}
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-license-manager-0",
+				Namespace: "test",
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+			},
+		}
+		c.Create(ctx, pod)
+
+		// Create secret with valid password
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "splunk-test-secret",
+				Namespace: "test",
+			},
+			Data: map[string][]byte{
+				"password": []byte("testpassword"),
+			},
+		}
+		c.Create(ctx, secret)
+
+		// Function should not panic even when API call fails
+		checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
+
+		// In unit test environment, API call will fail so no events expected
+		// This test verifies the function handles API errors gracefully
+	})
 }
