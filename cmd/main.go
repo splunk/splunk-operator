@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	intController "github.com/splunk/splunk-operator/internal/controller"
 	"github.com/splunk/splunk-operator/internal/controller/debug"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/splunk/enterprise/validation"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 
@@ -294,8 +296,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup centralized validation webhook for all CRDs
-	enterpriseApi.SetupWebhookWithManager(mgr)
+	// Setup centralized validation webhook server
+	webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
+		Port:       9443,
+		CertDir:    "/tmp/k8s-webhook-server/serving-certs",
+		Validators: validation.DefaultValidators,
+	})
+
+	// Add webhook server as a runnable to the manager
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return webhookServer.Start(ctx)
+	})); err != nil {
+		setupLog.Error(err, "unable to add webhook server to manager")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	// Register certificate watchers with the manager
