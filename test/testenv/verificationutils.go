@@ -1214,8 +1214,7 @@ func VerifyFilesInDirectoryOnPod(ctx context.Context, deployment *Deployment, te
 	}
 }
 
-// VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
-func VerifyTelemetry(ctx context.Context, deployment *Deployment) {
+func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment) string {
 	const (
 		configMapName = "splunk-operator-manager-telemetry"
 		statusKey     = "status"
@@ -1223,19 +1222,35 @@ func VerifyTelemetry(ctx context.Context, deployment *Deployment) {
 	type telemetryStatus struct {
 		LastTransmission string `json:"lastTransmission"`
 	}
+	cm, err := deployment.GetConfigMap(ctx, configMapName)
+	if err != nil {
+		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
+		return ""
+	}
+	statusVal, ok := cm.Data[statusKey]
+	if !ok || statusVal == "" {
+		logf.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
+		return ""
+	}
+	logf.Log.Info("GetTelemetryLastSubmissionTime: retrieved status", "status", statusVal)
+
+	var status telemetryStatus
+	if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
+		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to unmarshal status", "statusVal", statusVal)
+		return ""
+	}
+	return status.LastTransmission
+}
+
+// VerifyTelemetry checks that the telemetry ConfigMap has a non-empty lastTransmission field in its status key.
+func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string) {
+	logf.Log.Info("VerifyTelemetry: start")
 	gomega.Eventually(func() bool {
-		cm, err := deployment.GetConfigMap(ctx, configMapName)
-		if err != nil {
-			return false
+		currentVal := GetTelemetryLastSubmissionTime(ctx, deployment)
+		if currentVal != "" && currentVal != prevVal {
+			logf.Log.Info("VerifyTelemetry: success", "previous", prevVal, "current", currentVal)
+			return true
 		}
-		statusVal, ok := cm.Data[statusKey]
-		if !ok || statusVal == "" {
-			return false
-		}
-		var status telemetryStatus
-		if err := json.Unmarshal([]byte(statusVal), &status); err != nil {
-			return false
-		}
-		return status.LastTransmission != ""
+		return false
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
 }
