@@ -31,7 +31,6 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
@@ -790,116 +789,12 @@ func handleSearchHeadClusterRollingRestart(
 	c client.Client,
 	cr *enterpriseApi.SearchHeadCluster,
 ) (reconcile.Result, error) {
-	scopedLog := log.FromContext(ctx).WithName("handleSearchHeadClusterRollingRestart")
-
-	// Always check for restart_required and evict if needed (per-pod approach)
-	restartErr := checkAndEvictSearchHeadsIfNeeded(ctx, c, cr)
-	if restartErr != nil {
-		scopedLog.Error(restartErr, "Failed to check/evict search heads")
-		// Don't return error, just log it - we don't want to block other operations
-	}
-
+	// SearchHeadCluster restart orchestration is handled by Deployer + Captain
+	// Operator only handles finalizer cleanup during scale-down/restart
+	// StatefulSet rolling updates will trigger pod restarts naturally
 	return reconcile.Result{}, nil
 }
 
-// checkAndEvictSearchHeadsIfNeeded checks each search head pod individually for
-// restart_required and evicts pods that need restart.
-func checkAndEvictSearchHeadsIfNeeded(
-	ctx context.Context,
-	c client.Client,
-	cr *enterpriseApi.SearchHeadCluster,
-) error {
-	scopedLog := log.FromContext(ctx).WithName("checkAndEvictSearchHeadsIfNeeded")
-
-	// Get admin credentials
-	secret := &corev1.Secret{}
-	secretName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
-	err := c.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cr.Namespace}, secret)
-	if err != nil {
-		scopedLog.Error(err, "Failed to get splunk secret")
-		return fmt.Errorf("failed to get splunk secret: %w", err)
-	}
-	password := string(secret.Data["password"])
-
-	// Check each search head pod individually (NO consensus needed)
-	for i := int32(0); i < cr.Spec.Replicas; i++ {
-		podName := fmt.Sprintf("splunk-%s-search-head-%d", cr.Name, i)
-
-		// Get pod
-		pod := &corev1.Pod{}
-		err := c.Get(ctx, types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod)
-		if err != nil {
-			scopedLog.Error(err, "Failed to get pod", "pod", podName)
-			continue // Skip pods that don't exist
-		}
-
-		// Only check running pods
-		if pod.Status.Phase != corev1.PodRunning {
-			continue
-		}
-
-		// Check if pod is ready
-		if !isPodReady(pod) {
-			continue
-		}
-
-		// Get pod IP
-		if pod.Status.PodIP == "" {
-			continue
-		}
-
-		// Check if THIS specific pod needs restart
-		managementURI := fmt.Sprintf("https://%s:8089", pod.Status.PodIP)
-		splunkClient := splclient.NewSplunkClient(managementURI, "admin", password)
-
-		restartRequired, message, err := splunkClient.CheckRestartRequired()
-		if err != nil {
-			scopedLog.Error(err, "Failed to check restart required", "pod", podName)
-			continue
-		}
-
-		if !restartRequired {
-			continue // This pod is fine
-		}
-
-		scopedLog.Info("Pod needs restart, evicting",
-			"pod", podName, "message", message)
-
-		// Evict the pod - PDB automatically protects
-		err = evictPodSearchHead(ctx, c, pod)
-		if err != nil {
-			if isPDBViolationSearchHead(err) {
-				scopedLog.Info("PDB blocked eviction, will retry",
-					"pod", podName)
-				continue
-			}
-			return err
-		}
-
-		scopedLog.Info("Pod eviction initiated", "pod", podName)
-
-		// Only evict ONE pod per reconcile
-		// Next reconcile (5s later) will check remaining pods
-		return nil
-	}
-
-	return nil
-}
-
-// evictPodSearchHead evicts a search head pod using Kubernetes Eviction API
-func evictPodSearchHead(ctx context.Context, c client.Client, pod *corev1.Pod) error {
-	eviction := &policyv1.Eviction{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		},
-	}
-
-	// Eviction API automatically checks PDB
-	return c.SubResource("eviction").Create(ctx, pod, eviction)
-}
-
-// isPDBViolationSearchHead checks if an error is due to PDB violation
-func isPDBViolationSearchHead(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "Cannot evict pod")
-}
+// NOTE: SearchHeadCluster restart orchestration removed
+// Deployer + Captain handle restart coordination for search heads
+// Operator only manages finalizers for scale-down/restart cleanup
