@@ -65,6 +65,7 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 
 			// Deploy Multisite Cluster and Search Head Clusters
 			mcRef := deployment.GetName()
+			prevTelemetrySubmissionTime := testenv.GetTelemetryLastSubmissionTime(ctx, deployment)
 			siteCount := 3
 			err := deployment.DeployMultisiteClusterMasterWithSearchHead(ctx, deployment.GetName(), 1, siteCount, mcRef)
 			Expect(err).To(Succeed(), "Unable to deploy cluster")
@@ -96,6 +97,9 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, defaultCPULimits)
 			}
+
+			// Verify telemetry is sent successfully
+			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Change CPU limits to trigger CR update
 			idxc := &enterpriseApi.IndexerCluster{}

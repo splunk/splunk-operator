@@ -11,7 +11,6 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -21,10 +20,8 @@ import (
 )
 
 const (
-	// TODO: Should be set to one day for the release
-	requeAfterInSeconds = 30
-	// TODO: Should change to false for the release
-	isTestMode = true
+	requeAfterInSeconds = 86400 // Send telemetry once a day
+	defaultTestMode     = true
 	// TODO: Ideally the version string should be set from the release tag
 	SOK_VERSION = "3.0.0"
 
@@ -42,7 +39,8 @@ type Telemetry struct {
 }
 
 type TelemetryStatus struct {
-	LastTransmission string `json:"lastTransmission"`
+	LastTransmission string `json:"lastTransmission,omitempty"`
+	Test             string `json:"test,omitempty"`
 }
 
 func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
@@ -75,9 +73,10 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	// Now send the telemetry
 	for _, crs := range crList {
 		for _, cr := range crs {
-			success := SendTelemetry(ctx, client, cr, data)
+			test := isTest(ctx, cm)
+			success := SendTelemetry(ctx, client, cr, data, test)
 			if success {
-				updateLastTransmissionTime(ctx, client, cm)
+				updateLastTransmissionTime(ctx, client, cm, test)
 				return result, nil
 			}
 		}
@@ -86,12 +85,17 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	return result, errors.New("Failed to send telemetry data")
 }
 
-func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) error {
+func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap, test bool) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateLastTransmissionTime")
 
 	var status TelemetryStatus
 	status.LastTransmission = time.Now().UTC().Format(time.RFC3339)
+	if test {
+		status.Test = "true"
+	} else {
+		status.Test = "false"
+	}
 
 	updated, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
@@ -304,23 +308,34 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 	}
 }
 
-func isTest(ctx context.Context) bool {
+func isTest(ctx context.Context, cm *corev1.ConfigMap) bool {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("checkTestMode")
 
-	// Retrieve SPLUNK_TEST_MODE environment variable
-	testModeStr := os.Getenv("SPLUNK_TEST_MODE")
-	if testModeStr == "1" {
-		scopedLog.Info("Test mode is enabled via SPLUNK_TEST_MODE env variable")
-		return true
+	if cm.Data != nil {
+		if val, ok := cm.Data[telStatusKey]; ok {
+			var status TelemetryStatus
+			err := json.Unmarshal([]byte(val), &status)
+			if err != nil {
+				scopedLog.Error(err, "Failed to unmarshal telemetry status")
+				return defaultTestMode
+			} else {
+				if status.Test == "true" {
+					scopedLog.Info("Test is true")
+					return true
+				}
+				scopedLog.Info("Test is false")
+				return false
+			}
+		}
 	}
 
-	scopedLog.Info("Return test mode", "isTestMode", isTestMode)
-	return isTestMode
+	scopedLog.Info("Failed to retrieve test mode")
+	return defaultTestMode
 }
 
 // SendTelemetry is exported for testing
-func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, data map[string]interface{}) bool {
+func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, data map[string]interface{}, test bool) bool {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("sendTelemetry").WithValues(
 		"name", cr.GetObjectMeta().GetName(),
@@ -378,7 +393,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 		Component:     "sok",
 		OptInRequired: 2,
 		Data:          data,
-		Test:          isTest(ctx),
+		Test:          test,
 	}
 
 	path := fmt.Sprintf("/servicesNS/nobody/%s/telemetry-metric", telAppNameStr)
