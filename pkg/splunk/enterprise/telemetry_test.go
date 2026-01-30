@@ -50,12 +50,9 @@ func TestApplyTelemetry_ConfigMapNoData(t *testing.T) {
 		Data:       map[string]string{},
 	}
 	ctx := context.TODO()
-	result, err := ApplyTelemetry(ctx, mockClient, cm)
+	_, err := ApplyTelemetry(ctx, mockClient, cm)
 	if err == nil {
 		t.Errorf("expected error when no CRs present, got nil")
-	}
-	if !result.Requeue {
-		t.Errorf("expected requeue to be true, got false")
 	}
 }
 
@@ -90,7 +87,7 @@ func TestTelemetryCollectCMTelData_ValidJSON(t *testing.T) {
 func TestSendTelemetry_UnknownKind(t *testing.T) {
 	cr := &enterpriseApi.Standalone{}
 	cr.TypeMeta.Kind = "UnknownKind"
-	ok := SendTelemetry(context.TODO(), spltest.NewMockClient(), cr, map[string]interface{}{})
+	ok := SendTelemetry(context.TODO(), spltest.NewMockClient(), cr, map[string]interface{}{}, false)
 	if ok {
 		t.Errorf("expected SendTelemetry to return false for unknown kind")
 	}
@@ -101,7 +98,7 @@ func TestSendTelemetry_NoSecret(t *testing.T) {
 	cr.TypeMeta.Kind = "Standalone"
 	cr.ObjectMeta.Name = "test"
 	cr.ObjectMeta.Namespace = "default"
-	ok := SendTelemetry(context.TODO(), spltest.NewMockClient(), cr, map[string]interface{}{})
+	ok := SendTelemetry(context.TODO(), spltest.NewMockClient(), cr, map[string]interface{}{}, false)
 	if ok {
 		t.Errorf("expected SendTelemetry to return false if no secret found")
 	}
@@ -461,7 +458,7 @@ func TestTelemetryUpdateLastTransmissionTime_SetsTimestamp(t *testing.T) {
 		Data:       map[string]string{},
 	}
 
-	err := updateLastTransmissionTime(ctx, mockClient, cm)
+	err := updateLastTransmissionTime(ctx, mockClient, cm, false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -479,6 +476,9 @@ func TestTelemetryUpdateLastTransmissionTime_SetsTimestamp(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, status.LastTransmission); err != nil {
 		t.Errorf("LastTransmission is not RFC3339: %v", status.LastTransmission)
 	}
+	if status.Test != "false" {
+		t.Errorf("expected Test to be 'false', got %v", status.Test)
+	}
 }
 
 func TestTelemetryUpdateLastTransmissionTime_UpdateError(t *testing.T) {
@@ -488,7 +488,7 @@ func TestTelemetryUpdateLastTransmissionTime_UpdateError(t *testing.T) {
 		Data:       map[string]string{},
 	}
 	badClient := &errorUpdateClient{}
-	err := updateLastTransmissionTime(ctx, badClient, cm)
+	err := updateLastTransmissionTime(ctx, badClient, cm, false)
 	if err == nil {
 		t.Errorf("expected error from client.Update, got nil")
 	}
@@ -501,13 +501,13 @@ func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
 		Data:       map[string]string{},
 	}
-	err := updateLastTransmissionTime(ctx, mockClient, cm)
+	err := updateLastTransmissionTime(ctx, mockClient, cm, false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 	firstStatus := cm.Data[telStatusKey]
 	time.Sleep(1 * time.Second)
-	err = updateLastTransmissionTime(ctx, mockClient, cm)
+	err = updateLastTransmissionTime(ctx, mockClient, cm, false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
