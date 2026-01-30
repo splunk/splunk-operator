@@ -61,6 +61,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	// validate and updates defaults for CR
 	err = validateLicenseManagerSpec(ctx, client, cr)
 	if err != nil {
+		eventPublisher.Warning(ctx, "validateLicenseManagerSpec", fmt.Sprintf("validate license manager spec failed %s", err.Error()))
 		scopedLog.Error(err, "Failed to validate license manager spec")
 		return result, err
 	}
@@ -77,6 +78,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	if len(cr.Spec.AppFrameworkConfig.AppSources) != 0 {
 		err := initAndCheckAppInfoStatus(ctx, client, cr, &cr.Spec.AppFrameworkConfig, &cr.Status.AppContext)
 		if err != nil {
+			eventPublisher.Warning(ctx, "initAndCheckAppInfoStatus", fmt.Sprintf("init and check app info status failed %s", err.Error()))
 			cr.Status.AppContext.IsDeploymentInProgress = false
 			return result, err
 		}
@@ -86,6 +88,7 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 	_, err = ApplySplunkConfig(ctx, client, cr, cr.Spec.CommonSplunkSpec, SplunkLicenseManager)
 	if err != nil {
 		scopedLog.Error(err, "create or update general config failed", "error", err.Error())
+		eventPublisher.Warning(ctx, "ApplySplunkConfig", fmt.Sprintf("create or update general config failed with error %s", err.Error()))
 		return result, err
 	}
 
@@ -115,6 +118,9 @@ func ApplyLicenseManager(ctx context.Context, client splcommon.ControllerClient,
 			cr.Status.Phase = enterpriseApi.PhaseTerminating
 		} else {
 			result.Requeue = false
+		}
+		if err != nil {
+			eventPublisher.Warning(ctx, "Delete", fmt.Sprintf("delete custom resource failed %s", err.Error()))
 		}
 		return result, err
 	}
