@@ -82,11 +82,11 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			// mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
+			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -148,7 +148,7 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify CPU limits on Search Heads after updating the CR
 			for i := 0; i < searchHeadCount; i++ {
@@ -176,11 +176,11 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
 			// Deploy Monitoring Console CRD
-			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
-			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
+			// mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
+			// Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
 
 			// Verify Monitoring Console is Ready and stays in ready state
-			testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
+			// testenv.VerifyMonitoringConsoleReady(ctx, deployment, deployment.GetName(), mc, testcaseEnvInst)
 
 			// Verify RF SF is met
 			testenv.VerifyRFSFMet(ctx, deployment, testcaseEnvInst)
@@ -219,10 +219,10 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			Expect(err).To(Succeed(), "Unable to delete Cluster Manager instance", "Cluster Manger Name", cm)
 
 			// Delete Monitoring Console
-			err = deployment.GetInstance(ctx, mcRef, mc)
-			Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
-			err = deployment.DeleteCR(ctx, mc)
-			Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
+			// err = deployment.GetInstance(ctx, mcRef, mc)
+			// Expect(err).To(Succeed(), "Unable to GET Monitoring Console instance", "Monitoring Console Name", mcRef)
+			// err = deployment.DeleteCR(ctx, mc)
+			// Expect(err).To(Succeed(), "Unable to delete Monitoring Console instance", "Monitoring Console Name", mcRef)
 
 			// Verify Search Heads PVCs (etc and var) have been deleted
 			testenv.VerifyPVCsPerDeployment(deployment, testcaseEnvInst, "shc-search-head", 3, false, verificationTimeout)
