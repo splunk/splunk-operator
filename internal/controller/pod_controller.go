@@ -34,9 +34,9 @@ import (
 // PodReconciler reconciles Splunk pods with finalizers to ensure proper cleanup
 // during pod deletion (decommission, peer removal, PVC cleanup)
 //
-//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups="",resources=pods/status,verbs=get
-//+kubebuilder:rbac:groups="",resources=pods/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="",resources=pods/status,verbs=get
+// +kubebuilder:rbac:groups="",resources=pods/finalizers,verbs=update
 type PodReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme

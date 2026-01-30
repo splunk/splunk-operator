@@ -39,9 +39,9 @@ const (
 	PodIntentAnnotation = "splunk.com/pod-intent"
 
 	// Intent values
-	PodIntentServe      = "serve"      // Pod is actively serving traffic
-	PodIntentScaleDown  = "scale-down" // Pod is being removed due to scale-down
-	PodIntentRestart    = "restart"    // Pod is being restarted/updated
+	PodIntentServe     = "serve"      // Pod is actively serving traffic
+	PodIntentScaleDown = "scale-down" // Pod is being removed due to scale-down
+	PodIntentRestart   = "restart"    // Pod is being restarted/updated
 )
 
 // HandlePodDeletion processes pod deletion events and performs cleanup when finalizer is present
