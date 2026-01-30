@@ -143,7 +143,7 @@ fi
 
 # Always set telemetry test to true before running tests
 echo "Setting telemetry test to true"
-kubectl patch configmap splunk-operator-manager-telemetry --type merge -p '{"data":{"status":"{\"test\":\"true\",\"lastTransmission\":\"\"}"}}'
+kubectl patch configmap splunk-operator-manager-telemetry -n splunk-operator --type merge -p '{"data":{"status":"{\"test\":\"true\",\"lastTransmission\":\"\"}"}}'
 
 echo "Skipping following test :: ${TEST_TO_SKIP}"
 
