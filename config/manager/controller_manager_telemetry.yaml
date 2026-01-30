@@ -6,4 +6,5 @@ data:
   status: |
     {
       "lastTransmission": ""
+      "test": "true"
     }
