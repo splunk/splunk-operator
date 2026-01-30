@@ -10,9 +10,9 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-splunk-enterprise
+      path: /validate
   failurePolicy: Fail
-  name: vsplunk.kb.io
+  name: vsplunk.enterprise.splunk.com
   rules:
   - apiGroups:
     - enterprise.splunk.com
