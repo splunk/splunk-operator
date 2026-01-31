@@ -63,15 +63,17 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 
 	// Add SOK version
 	data[telSOKVersionKey] = SOK_VERSION
-	// Add per CR telemetry
-	crList := getAllCustomResources(ctx, client)
-
+	// Add SOK telemetry
+	crWithTelAppList, crList := getAllCustomResources(ctx, client)
 	collectCRTelData(ctx, client, crList, data)
-	// Add telemetry set in this configmap, i.e splunk POD's telemetry
+	/*
+	 * Add other component's telemetry set in splunk-operator-manager-telemetry configmap.
+	 * i.e splunk POD's telemetry
+	 */
 	CollectCMTelData(ctx, cm, data)
 
 	// Now send the telemetry
-	for _, crs := range crList {
+	for _, crs := range crWithTelAppList {
 		for _, cr := range crs {
 			test := isTest(ctx, cm)
 			success := SendTelemetry(ctx, client, cr, data, test)
@@ -112,15 +114,15 @@ func updateLastTransmissionTime(ctx context.Context, client splcommon.Controller
 	return nil
 }
 
-func getAllCustomResources(ctx context.Context, client splcommon.ControllerClient) map[string][]splcommon.MetaObject {
+func getAllCustomResources(ctx context.Context, client splcommon.ControllerClient) (map[string][]splcommon.MetaObject, map[string][]splcommon.MetaObject) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("collectCRTelData")
 
 	var crList map[string][]splcommon.MetaObject
 	crList = make(map[string][]splcommon.MetaObject)
 
-	//var instanceID InstanceType
-	//var telAppName string
+	var crWithTelAppList map[string][]splcommon.MetaObject
+	crWithTelAppList = make(map[string][]splcommon.MetaObject)
 
 	var err error
 	var standaloneList enterpriseApi.StandaloneList
@@ -132,62 +134,64 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(standaloneList.Items) > 0 {
 		crList[standaloneList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range standaloneList.Items {
-			if !cr.Status.TelAppInstalled {
-				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
-				continue
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[standaloneList.Items[0].Kind] = append(crWithTelAppList[standaloneList.Items[0].Kind], &cr)
 			}
 			crList[standaloneList.Items[0].Kind] = append(crList[standaloneList.Items[0].Kind], &cr)
 		}
 	}
 
 	var lmanagerList enterpriseApi.LicenseManagerList
-	//instanceID = SplunkLicenseManager
-	//telAppName = fmt.Sprintf(telAppNameTemplateStr, "lmanager")
 	err = client.List(ctx, &lmanagerList)
 	if err != nil {
 		scopedLog.Error(err, "Failed to list LicenseManager objects")
 	} else if len(lmanagerList.Items) > 0 {
 		crList[lmanagerList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range lmanagerList.Items {
-			if !cr.Status.TelAppInstalled {
-				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
-				continue
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[lmanagerList.Items[0].Kind] = append(crWithTelAppList[lmanagerList.Items[0].Kind], &cr)
 			}
 			crList[lmanagerList.Items[0].Kind] = append(crList[lmanagerList.Items[0].Kind], &cr)
 		}
 	}
 
 	var lmasterList enterpriseApiV3.LicenseMasterList
-	//instanceID = SplunkLicenseMaster
-	//telAppName = fmt.Sprintf(telAppNameTemplateStr, "lmaster")
 	err = client.List(ctx, &lmasterList)
 	if err != nil {
 		scopedLog.Error(err, "Failed to list LicenseMaster objects")
 	} else if len(lmasterList.Items) > 0 {
 		crList[lmasterList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range lmasterList.Items {
-			if !cr.Status.TelAppInstalled {
-				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
-				continue
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[lmasterList.Items[0].Kind] = append(crWithTelAppList[lmasterList.Items[0].Kind], &cr)
 			}
 			crList[lmasterList.Items[0].Kind] = append(crList[lmasterList.Items[0].Kind], &cr)
 		}
 	}
 
 	var shcList enterpriseApi.SearchHeadClusterList
-	//instanceID = SplunkSearchHead
-	//telAppName = fmt.Sprintf(telAppNameTemplateStr, "shc")
 	err = client.List(ctx, &shcList)
 	if err != nil {
 		scopedLog.Error(err, "Failed to list SearchHeadCluster objects")
 	} else if len(shcList.Items) > 0 {
 		crList[shcList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range shcList.Items {
-			if !cr.Status.TelAppInstalled {
-				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
-				continue
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[shcList.Items[0].Kind] = append(crWithTelAppList[shcList.Items[0].Kind], &cr)
 			}
 			crList[shcList.Items[0].Kind] = append(crList[shcList.Items[0].Kind], &cr)
+		}
+	}
+
+	var idxList enterpriseApi.IndexerClusterList
+	err = client.List(ctx, &idxList)
+	if err != nil {
+		scopedLog.Error(err, "Failed to list IndexerCluster objects")
+	} else if len(idxList.Items) > 0 {
+		crList[idxList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		for _, cr := range idxList.Items {
+			// IndexerCluster does not have telemetry app installed
+			crList[idxList.Items[0].Kind] = append(crList[idxList.Items[0].Kind], &cr)
 		}
 	}
 
@@ -198,9 +202,8 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(cmanagerList.Items) > 0 {
 		crList[cmanagerList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range cmanagerList.Items {
-			if !cr.Status.TelAppInstalled {
-				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
-				continue
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[cmanagerList.Items[0].Kind] = append(crWithTelAppList[cmanagerList.Items[0].Kind], &cr)
 			}
 			crList[cmanagerList.Items[0].Kind] = append(crList[cmanagerList.Items[0].Kind], &cr)
 		}
@@ -213,15 +216,14 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	} else if len(cmasterList.Items) > 0 {
 		crList[cmasterList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
 		for _, cr := range cmasterList.Items {
-			if !cr.Status.TelAppInstalled {
-				scopedLog.Info("Skipping telemetry for this CR as tel app is not installed", "kind", cr.Kind, "name", cr.Name)
-				continue
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[cmasterList.Items[0].Kind] = append(crWithTelAppList[cmasterList.Items[0].Kind], &cr)
 			}
 			crList[cmasterList.Items[0].Kind] = append(crList[cmasterList.Items[0].Kind], &cr)
 		}
 	}
 
-	return crList
+	return crWithTelAppList, crList
 }
 
 func getOwnedStatefulSets(
@@ -286,7 +288,6 @@ func collectCRTelData(ctx context.Context, client splcommon.ControllerClient, cr
 	}
 }
 
-// CollectCMTelData is exported for testing
 func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string]interface{}) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("collectCMTelData")
@@ -334,7 +335,6 @@ func isTest(ctx context.Context, cm *corev1.ConfigMap) bool {
 	return defaultTestMode
 }
 
-// SendTelemetry is exported for testing
 func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, data map[string]interface{}, test bool) bool {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("sendTelemetry").WithValues(
