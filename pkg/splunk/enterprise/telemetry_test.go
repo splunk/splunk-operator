@@ -23,7 +23,10 @@ import (
 func TestTelemetryGetAllCustomResources_Empty(t *testing.T) {
 	mockClient := spltest.NewMockClient()
 	ctx := context.TODO()
-	crMap := getAllCustomResources(ctx, mockClient)
+	crWithTelAppList, crMap := getAllCustomResources(ctx, mockClient)
+	if len(crWithTelAppList) != 0 {
+		t.Errorf("expected no CRs with telemetry app, got %d", len(crWithTelAppList))
+	}
 	if len(crMap) != 0 {
 		t.Errorf("expected no CRs, got %d", len(crMap))
 	}
@@ -112,18 +115,20 @@ func TestTelemetryGetAllCustomResources_AllKinds(t *testing.T) {
 			"LicenseManager":    {&enterpriseApi.LicenseManager{TypeMeta: metav1.TypeMeta{Kind: "LicenseManager"}, ObjectMeta: metav1.ObjectMeta{Name: "test-licensemanager"}}},
 			"LicenseMaster":     {&enterpriseApiV3.LicenseMaster{TypeMeta: metav1.TypeMeta{Kind: "LicenseMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-licensemaster"}}},
 			"SearchHeadCluster": {&enterpriseApi.SearchHeadCluster{TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-shc"}}},
+			"IndexerCluster":    {&enterpriseApi.IndexerCluster{TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-idx"}}},
 			"ClusterManager":    {&enterpriseApi.ClusterManager{TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"}, ObjectMeta: metav1.ObjectMeta{Name: "test-cmanager"}}},
 			"ClusterMaster":     {&enterpriseApiV3.ClusterMaster{TypeMeta: metav1.TypeMeta{Kind: "ClusterMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-cmaster"}}},
 		},
 		sts: []apps.StatefulSet{}, // ensure all keys are present
 	}
-	crMap := getAllCustomResources(ctx, fakeClient)
-	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "ClusterManager", "ClusterMaster"}
+	_, crMap := getAllCustomResources(ctx, fakeClient)
+	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "IndexerCluster", "ClusterManager", "ClusterMaster"}
 	for _, kind := range kinds {
 		if _, ok := crMap[kind]; !ok {
 			t.Errorf("expected kind %s in CR map", kind)
 		}
 	}
+	// crWithTelAppList may be empty if TelAppInstalled is not set in the test CRs
 }
 
 func TestTelemetryCollectCRTelData_StandaloneData(t *testing.T) {
@@ -556,6 +561,11 @@ func (c *FakeListClient) List(_ context.Context, list client.ObjectList, _ ...cl
 		l.Items = nil
 		for _, obj := range c.crs["SearchHeadCluster"] {
 			l.Items = append(l.Items, *(obj.(*enterpriseApi.SearchHeadCluster)))
+		}
+	case *enterpriseApi.IndexerClusterList:
+		l.Items = nil
+		for _, obj := range c.crs["IndexerCluster"] {
+			l.Items = append(l.Items, *(obj.(*enterpriseApi.IndexerCluster)))
 		}
 	case *enterpriseApi.ClusterManagerList:
 		l.Items = nil

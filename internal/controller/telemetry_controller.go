@@ -40,11 +40,9 @@ const (
 	ConfigMapNamePrefix = "splunk-operator-"
 	ConfigMapLabelName  = "splunk-operator"
 
-	telemetryRetryDelay = time.Second * 60
+	telemetryRetryDelay = time.Second * 600
 )
 
-// TelemetryReconciler periodically reads all keys under the "telemetry" configmap
-// in the Splunk operator namespace and logs all key values.
 type TelemetryReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -72,7 +70,6 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err, "could not load telemetry configmap")
 	}
 
-	// Log all key/value pairs. No sorting per your request.
 	if len(cm.Data) == 0 {
 		reqLogger.Info("telemetry configmap has no data keys")
 		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil

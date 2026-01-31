@@ -82,6 +82,9 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
+			// Verify telemetry is sent successfully
+			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
+
 			// Deploy Monitoring Console CRD
 			mc, err := deployment.DeployMonitoringConsole(ctx, mcRef, "")
 			Expect(err).To(Succeed(), "Unable to deploy Monitoring Console One instance")
@@ -97,9 +100,6 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 				podName := fmt.Sprintf(testenv.MultiSiteIndexerPod, deployment.GetName(), i, 0)
 				testenv.VerifyCPULimits(deployment, testcaseEnvInst.GetName(), podName, defaultCPULimits)
 			}
-
-			// Verify telemetry is sent successfully
-			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Change CPU limits to trigger CR update
 			idxc := &enterpriseApi.IndexerCluster{}
