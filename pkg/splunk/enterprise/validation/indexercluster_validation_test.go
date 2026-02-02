@@ -39,13 +39,24 @@ func TestValidateIndexerClusterCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "valid indexer cluster - zero replicas",
+			name: "invalid indexer cluster - zero replicas",
 			obj: &enterpriseApi.IndexerCluster{
 				Spec: enterpriseApi.IndexerClusterSpec{
 					Replicas: 0,
 				},
 			},
-			wantErrCount: 0,
+			wantErrCount: 1,
+			wantErrField: "spec.replicas",
+		},
+		{
+			name: "invalid indexer cluster - less than 3 replicas",
+			obj: &enterpriseApi.IndexerCluster{
+				Spec: enterpriseApi.IndexerClusterSpec{
+					Replicas: 2,
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.replicas",
 		},
 		{
 			name: "invalid indexer cluster - negative replicas",
@@ -153,7 +164,7 @@ func TestValidateIndexerClusterUpdate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "valid update - scale down",
+			name: "invalid update - scale down below minimum",
 			obj: &enterpriseApi.IndexerCluster{
 				Spec: enterpriseApi.IndexerClusterSpec{
 					Replicas: 1,
@@ -164,7 +175,7 @@ func TestValidateIndexerClusterUpdate(t *testing.T) {
 					Replicas: 3,
 				},
 			},
-			wantErrCount: 0,
+			wantErrCount: 1,
 		},
 		{
 			name: "invalid update - negative replicas",

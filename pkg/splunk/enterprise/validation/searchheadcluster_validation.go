@@ -26,12 +26,12 @@ import (
 func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Validate replicas
-	if obj.Spec.Replicas < 0 {
+	// Validate replicas - SearchHeadCluster requires minimum 3 replicas
+	if obj.Spec.Replicas < 3 {
 		allErrs = append(allErrs, field.Invalid(
 			field.NewPath("spec").Child("replicas"),
 			obj.Spec.Replicas,
-			"replicas must be non-negative"))
+			"SearchHeadCluster requires at least 3 replicas"))
 	}
 
 	// Validate common spec

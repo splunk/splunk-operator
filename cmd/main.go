@@ -296,19 +296,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup centralized validation webhook server
-	webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
-		Port:       9443,
-		CertDir:    "/tmp/k8s-webhook-server/serving-certs",
-		Validators: validation.DefaultValidators,
-	})
+	// Setup centralized validation webhook server (opt-in via ENABLE_WEBHOOKS env var, defaults to false)
+	enableWebhooks := os.Getenv("ENABLE_WEBHOOKS")
+	if enableWebhooks == "true" {
+		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
+			Port:       9443,
+			CertDir:    "/tmp/k8s-webhook-server/serving-certs",
+			Validators: validation.DefaultValidators,
+		})
 
-	// Add webhook server as a runnable to the manager
-	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		return webhookServer.Start(ctx)
-	})); err != nil {
-		setupLog.Error(err, "unable to add webhook server to manager")
-		os.Exit(1)
+		// Add webhook server as a runnable to the manager
+		if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			return webhookServer.Start(ctx)
+		})); err != nil {
+			setupLog.Error(err, "unable to add webhook server to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("Validation webhook enabled via ENABLE_WEBHOOKS=true")
+	} else {
+		setupLog.Info("Validation webhook disabled (set ENABLE_WEBHOOKS=true to enable)")
 	}
 	//+kubebuilder:scaffold:builder
 

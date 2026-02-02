@@ -39,13 +39,24 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "valid search head cluster - zero replicas",
+			name: "invalid search head cluster - zero replicas",
 			obj: &enterpriseApi.SearchHeadCluster{
 				Spec: enterpriseApi.SearchHeadClusterSpec{
 					Replicas: 0,
 				},
 			},
-			wantErrCount: 0,
+			wantErrCount: 1,
+			wantErrField: "spec.replicas",
+		},
+		{
+			name: "invalid search head cluster - less than 3 replicas",
+			obj: &enterpriseApi.SearchHeadCluster{
+				Spec: enterpriseApi.SearchHeadClusterSpec{
+					Replicas: 2,
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.replicas",
 		},
 		{
 			name: "invalid search head cluster - negative replicas",
