@@ -1,0 +1,116 @@
+version: "2"
+run:
+  allow-parallel-runners: true
+  timeout: 10m
+linters:
+  default: none
+  enable:
+    - copyloopvar
+    - ginkgolinter
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    gocyclo:
+      min-complexity: 50
+    goconst:
+      min-len: 3
+      min-occurrences: 10
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - goconst
+        path: _test\.go$
+      - linters:
+          - gocyclo
+        path: _test\.go$
+      - linters:
+          - unparam
+        path: _test\.go$
+      - linters:
+          - prealloc
+        path: _test\.go$
+      - linters:
+          - ineffassign
+        path: _test\.go$
+      - linters:
+          - ginkgolinter
+        path: _test\.go$
+      - linters:
+          - misspell
+        path: _test\.go$
+      - linters:
+          - unconvert
+        path: _test\.go$
+      - linters:
+          - goconst
+          - gocyclo
+          - unparam
+          - prealloc
+          - ineffassign
+          - unused
+          - ginkgolinter
+          - staticcheck
+          - misspell
+          - unconvert
+        path: test/
+      # Exclude ST1019 (duplicate imports) - project uses aliased imports intentionally
+      - linters:
+          - staticcheck
+        text: "ST1019"
+      # Exclude SA4022 (address of variable cannot be nil) - false positive for spec checks
+      - linters:
+          - staticcheck
+        text: "SA4022"
+      # Exclude ST1023 (should omit type from declaration) - style preference
+      - linters:
+          - staticcheck
+        text: "ST1023"
+      # Exclude QF1001/QF1003/QF1008/QF1011 - quickfix suggestions, not errors
+      - linters:
+          - staticcheck
+        text: "QF100"
+      - linters:
+          - staticcheck
+        text: "QF1011"
+      # Exclude S1021 (should merge variable declaration) - style preference
+      - linters:
+          - staticcheck
+        text: "S1021"
+      # Exclude ST1005 (error strings should not be capitalized) - existing codebase style
+      - linters:
+          - staticcheck
+        text: "ST1005"
+      # Exclude SA1019 (deprecated) - will be addressed separately
+      - linters:
+          - staticcheck
+        text: "SA1019"
+      # Exclude SA4006 (value never used) in test files
+      - linters:
+          - staticcheck
+        text: "SA4006"
+        path: _test\.go$
+      # Exclude SA1029 (context key type) in test files
+      - linters:
+          - staticcheck
+        text: "SA1029"
+        path: _test\.go$
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
