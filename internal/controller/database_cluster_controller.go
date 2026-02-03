@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -44,7 +43,7 @@ type DatabaseReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databases/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databases/finalizers,verbs=update
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databaseclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=clusterclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=databases,verbs=get;list;watch;create;update;patch;delete
@@ -69,10 +68,10 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Step 2: Fetch the DatabaseClass
-	dbClass := &enterprisev4.DatabaseClass{}
+	// Step 2: Fetch the ClusterClass
+	dbClass := &enterprisev4.ClusterClass{}
 	if err := r.Get(ctx, client.ObjectKey{Name: db.Spec.Class}, dbClass); err != nil {
-		logger.Error(err, "Failed to get DatabaseClass", "class", db.Spec.Class)
+		logger.Error(err, "Failed to get ClusterClass", "class", db.Spec.Class)
 		return ctrl.Result{}, err
 	}
 
@@ -122,41 +121,6 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Step 5: CNPG Cluster exists - reconcile CNPG Database CRs
-	logger.Info("CNPG Cluster exists, reconciling databases", "phase", cnpgCluster.Status.Phase)
-
-	// Build desired CNPG Database resources from config
-	cnpgDatabases, err := r.buildCNPGDatabases(db, cnpgCluster, merged)
-	if err != nil {
-		logger.Error(err, "Failed to build CNPG Databases")
-		return ctrl.Result{}, err
-	}
-
-	// Reconcile each CNPG Database CR
-	for i := range cnpgDatabases {
-		cnpgDB := &cnpgDatabases[i]
-		existingDB := &cnpgv1.Database{}
-		err := r.Get(ctx, types.NamespacedName{
-			Name:      cnpgDB.Name,
-			Namespace: cnpgDB.Namespace,
-		}, existingDB)
-
-		if err != nil && errors.IsNotFound(err) {
-			// Database doesn't exist, create it
-			logger.Info("Creating CNPG Database", "database", cnpgDB.Name)
-			if err := r.Create(ctx, cnpgDB); err != nil {
-				logger.Error(err, "Failed to create CNPG Database", "database", cnpgDB.Name)
-				return ctrl.Result{}, err
-			}
-		} else if err != nil {
-			logger.Error(err, "Failed to get CNPG Database", "database", cnpgDB.Name)
-			return ctrl.Result{}, err
-		} else {
-			// Database exists - CNPG will reconcile it if spec changed
-			logger.Info("CNPG Database already exists", "database", cnpgDB.Name)
-		}
-	}
-
 	// Step 6: Update Database status based on CNPG Cluster status
 	logger.Info("Updating Database status", "cnpgPhase", cnpgCluster.Status.Phase)
 	if err := r.updateDatabaseStatus(ctx, db, cnpgCluster); err != nil {
@@ -186,22 +150,12 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *DatabaseReconciler) mergeConfig(class *enterprisev4.DatabaseClass, db *enterprisev4.Database) *enterprisev4.DatabaseConfig {
-	databases := class.Spec.Config.Databases
-	extensions := class.Spec.Config.Extensions
-	instances := class.Spec.Config.Instances
-	engineConfig := class.Spec.Config.PostgreSQL
-	postgresVersion := class.Spec.Config.PostgresVersion
-	storage := class.Spec.Config.Storage
-	resources := class.Spec.Config.Resources
-
-	if db.Spec.Databases != nil {
-		databases = db.Spec.Databases
-	}
-
-	if db.Spec.Extensions != nil {
-		extensions = db.Spec.Extensions
-	}
+func (r *DatabaseReconciler) mergeConfig(class *enterprisev4.ClusterClass, db *enterprisev4.Database) *enterprisev4.ClusterConfig {
+	instances := class.Spec.ClusterConfig.Instances
+	engineConfig := class.Spec.ClusterConfig.PostgreSQLConfig
+	postgresVersion := class.Spec.ClusterConfig.PostgresVersion
+	storage := class.Spec.ClusterConfig.Storage
+	resources := class.Spec.ClusterConfig.Resources
 
 	if db.Spec.Instances != nil {
 		instances = db.Spec.Instances
@@ -223,16 +177,15 @@ func (r *DatabaseReconciler) mergeConfig(class *enterprisev4.DatabaseClass, db *
 		storage = db.Spec.Storage
 	}
 
-	return &enterprisev4.DatabaseConfig{Instances: instances,
-		Storage:         storage,
-		PostgresVersion: postgresVersion,
-		Resources:       resources,
-		PostgreSQL:      engineConfig,
-		Extensions:      extensions,
-		Databases:       databases}
+	return &enterprisev4.ClusterConfig{Instances: instances,
+		Storage:          storage,
+		PostgresVersion:  postgresVersion,
+		Resources:        resources,
+		PostgreSQLConfig: engineConfig,
+	}
 }
 
-func (r *DatabaseReconciler) buildCNPGCluster(db *enterprisev4.Database, config *enterprisev4.DatabaseConfig) (*cnpgv1.Cluster, error) {
+func (r *DatabaseReconciler) buildCNPGCluster(db *enterprisev4.Database, config *enterprisev4.ClusterConfig) (*cnpgv1.Cluster, error) {
 	cnpgCluster := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      db.Name,
@@ -241,7 +194,7 @@ func (r *DatabaseReconciler) buildCNPGCluster(db *enterprisev4.Database, config 
 		Spec: cnpgv1.ClusterSpec{
 			ImageName:             fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", *config.PostgresVersion),
 			Instances:             int(*config.Instances),
-			PostgresConfiguration: cnpgv1.PostgresConfiguration{Parameters: config.PostgreSQL},
+			PostgresConfiguration: cnpgv1.PostgresConfiguration{Parameters: config.PostgreSQLConfig},
 			Resources:             *config.Resources,
 			StorageConfiguration:  cnpgv1.StorageConfiguration{Size: config.Storage.String()},
 		},
@@ -253,38 +206,6 @@ func (r *DatabaseReconciler) buildCNPGCluster(db *enterprisev4.Database, config 
 	}
 
 	return cnpgCluster, nil
-}
-
-func (r *DatabaseReconciler) buildCNPGDatabases(db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.DatabaseConfig) ([]cnpgv1.Database, error) {
-	databases := []cnpgv1.Database{}
-	extensions := []cnpgv1.ExtensionSpec{}
-	for _, extension := range config.Extensions {
-		extensions = append(extensions, cnpgv1.ExtensionSpec{
-			DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{
-				Name:   extension,
-				Ensure: "present",
-			},
-		})
-	}
-
-	for _, database := range config.Databases {
-		// Sanitize database name for Kubernetes (replace underscores with hyphens)
-		sanitizedName := strings.ReplaceAll(database, "_", "-")
-
-		cnpgDB := cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: cnpgCluster.Name}, Owner: "app",
-			Ensure:     "present",
-			Name:       database, // PostgreSQL database name (can have underscores)
-			Extensions: extensions},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-%s", cnpgCluster.Name, sanitizedName), // Kubernetes resource name (no underscores)
-				Namespace: cnpgCluster.Namespace},
-		}
-		if err := ctrl.SetControllerReference(db, &cnpgDB, r.Scheme); err != nil {
-			return nil, err
-		}
-		databases = append(databases, cnpgDB)
-	}
-	return databases, nil
 }
 
 func (r *DatabaseReconciler) updateDatabaseStatus(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster) error {
@@ -331,7 +252,7 @@ func (r *DatabaseReconciler) updateDatabaseStatus(ctx context.Context, db *enter
 	return nil
 }
 
-func (r *DatabaseReconciler) generateConfigMap(db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.DatabaseConfig) *corev1.ConfigMap {
+func (r *DatabaseReconciler) generateConfigMap(db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.ClusterConfig) *corev1.ConfigMap {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-connection", db.Name),
@@ -344,7 +265,6 @@ func (r *DatabaseReconciler) generateConfigMap(db *enterprisev4.Database, cnpgCl
 			"DB_SERVICE_RW": cnpgCluster.Status.WriteService,
 			"DB_SERVICE_RO": cnpgCluster.Status.ReadService,
 			"DB_PORT":       "5432",
-			"DB_NAMES":      strings.Join(config.Databases, ","),
 			"DB_USERS":      "app", // CNPG default user
 		},
 	}
@@ -352,7 +272,7 @@ func (r *DatabaseReconciler) generateConfigMap(db *enterprisev4.Database, cnpgCl
 	return configMap
 }
 
-func (r *DatabaseReconciler) generateSecret(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.DatabaseConfig) (*corev1.Secret, error) {
+func (r *DatabaseReconciler) generateSecret(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.ClusterConfig) (*corev1.Secret, error) {
 	// Fetch CNPG app secret (contains the "app" user credentials)
 	appSecret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{
@@ -368,12 +288,6 @@ func (r *DatabaseReconciler) generateSecret(ctx context.Context, db *enterprisev
 	secretData := map[string][]byte{
 		"username": appSecret.Data["username"], // "app" user
 		"password": appSecret.Data["password"], // app user password
-	}
-
-	// Add per-database passwords (all use the same app password from CNPG)
-	for _, dbName := range config.Databases {
-		key := fmt.Sprintf("%s_password", dbName)
-		secretData[key] = appSecret.Data["password"]
 	}
 
 	// Create Secret object
@@ -397,7 +311,7 @@ func (r *DatabaseReconciler) generateSecret(ctx context.Context, db *enterprisev
 	return secret, nil
 }
 
-func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.DatabaseConfig) error {
+func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.ClusterConfig) error {
 	logger := log.FromContext(ctx)
 
 	configMap := r.generateConfigMap(db, cnpgCluster, config)
@@ -431,7 +345,7 @@ func (r *DatabaseReconciler) reconcileConfigMap(ctx context.Context, db *enterpr
 	return nil
 }
 
-func (r *DatabaseReconciler) reconcileSecret(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.DatabaseConfig) error {
+func (r *DatabaseReconciler) reconcileSecret(ctx context.Context, db *enterprisev4.Database, cnpgCluster *cnpgv1.Cluster, config *enterprisev4.ClusterConfig) error {
 	logger := log.FromContext(ctx)
 
 	// Generate the desired Secret
