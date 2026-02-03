@@ -625,6 +625,166 @@ func TestUpgradePathValidation(t *testing.T) {
 
 }
 
+func TestUpgradeWaitingForDependencyEvents(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{}).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+
+	client := builder.Build()
+	ctx := context.TODO()
+
+	// Create a mock event recorder to capture events
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+
+	// Create LicenseManager that is NOT ready (to trigger waiting event)
+	lm := enterpriseApi.LicenseManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-lm",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.LicenseManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:old",
+				},
+			},
+		},
+		Status: enterpriseApi.LicenseManagerStatus{
+			Phase: enterpriseApi.PhaseScalingUp, // Not ready
+		},
+	}
+
+	// Create ClusterManager that references LicenseManager
+	cm := enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cm",
+			Namespace: "test",
+		},
+		Spec: enterpriseApi.ClusterManagerSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           "splunk/splunk:new",
+				},
+				LicenseManagerRef: corev1.ObjectReference{
+					Name: "test-lm",
+				},
+			},
+		},
+	}
+	cm.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("ClusterManager"))
+
+	err := client.Create(ctx, &lm)
+	if err != nil {
+		t.Fatalf("Failed to create LicenseManager: %v", err)
+	}
+	err = client.Status().Update(ctx, &lm)
+	if err != nil {
+		t.Fatalf("Failed to update LicenseManager status: %v", err)
+	}
+
+	err = client.Create(ctx, &cm)
+	if err != nil {
+		t.Fatalf("Failed to create ClusterManager: %v", err)
+	}
+
+	// Create LM statefulset so getCurrentImage works
+	lmStatefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-test-lm-license-manager",
+			Namespace: "test",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "test"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "splunk",
+							Image: "splunk/splunk:old",
+						},
+					},
+				},
+			},
+		},
+	}
+	err = client.Create(ctx, lmStatefulSet)
+	if err != nil {
+		t.Fatalf("Failed to create LM StatefulSet: %v", err)
+	}
+
+	// Add event publisher to context
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	// Call UpgradePathValidation - should return false and emit event
+	mgr := &indexerClusterPodManager{}
+	continueReconcile, err := UpgradePathValidation(ctx, client, &cm, cm.Spec.CommonSplunkSpec, mgr)
+
+	// Should return false because LM is not ready
+	if continueReconcile {
+		t.Errorf("Expected continueReconcile to be false when LM is not ready")
+	}
+	if err == nil {
+		t.Errorf("Expected error when LM is not ready")
+	}
+
+	// Check that UpgradeWaitingForDependency event was published
+	foundEvent := false
+	for _, event := range recorder.events {
+		if event.reason == "UpgradeWaitingForDependency" {
+			foundEvent = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type, got %s", event.eventType)
+			}
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("Expected UpgradeWaitingForDependency event to be published")
+	}
+}
+
+// mockEvent stores event details for testing
+type mockEvent struct {
+	eventType string
+	reason    string
+	message   string
+}
+
+// mockEventRecorder implements record.EventRecorder for testing
+type mockEventRecorder struct {
+	events []mockEvent
+}
+
+func (m *mockEventRecorder) Event(object pkgruntime.Object, eventType, reason, message string) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: message})
+}
+
+func (m *mockEventRecorder) Eventf(object pkgruntime.Object, eventType, reason, messageFmt string, args ...interface{}) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
+
+func (m *mockEventRecorder) AnnotatedEventf(object pkgruntime.Object, annotations map[string]string, eventType, reason, messageFmt string, args ...interface{}) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
+
 func createPods(t *testing.T, ctx context.Context, client common.ControllerClient, crtype, name, namespace, image string) {
 	stpod := &corev1.Pod{}
 	namespacesName := types.NamespacedName{

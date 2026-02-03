@@ -89,6 +89,10 @@ LicenseManager:
 		// if license manager status is ready and CR spec and current license manager image are not same
 		// then return with error
 		if licenseManager.Status.Phase != enterpriseApi.PhaseReady || lmImage != spec.Image {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+					fmt.Sprintf("Waiting for LicenseManager '%s' to complete upgrade before proceeding", licenseManager.Name))
+			}
 			return false, fmt.Errorf("license manager is not ready or license manager current image is different than CR image")
 		}
 		goto ClusterManager
@@ -145,9 +149,17 @@ ClusterManager:
 		// check if an image upgrade is happening and whether CM has finished updating yet, return false to stop
 		// further reconcile operations on custom resource until CM is ready
 		if clusterManager.Status.Phase != enterpriseApi.PhaseReady {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+					fmt.Sprintf("Waiting for ClusterManager '%s' to be ready before proceeding", clusterManager.Name))
+			}
 			return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
 		}
 		if cmImage != spec.Image {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+					fmt.Sprintf("Waiting for ClusterManager '%s' to complete upgrade before proceeding", clusterManager.Name))
+			}
 			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
 		}
 		goto IndexerCluster
@@ -193,6 +205,10 @@ IndexerCluster:
 				// check if previous indexer have completed before starting next one
 				image, _ := getCurrentImage(ctx, c, &preIdx, SplunkIndexer)
 				if preIdx.Status.Phase != enterpriseApi.PhaseReady || image != spec.Image {
+					if eventPublisher != nil {
+						eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+							fmt.Sprintf("Waiting for IndexerCluster '%s' (previous site) to complete upgrade before proceeding", preIdx.Name))
+					}
 					return false, nil
 				}
 			}
@@ -262,6 +278,10 @@ SearchHeadCluster:
 		// check if an image upgrade is happening and whether SHC has finished updating yet, return false to stop
 		// further reconcile operations on IDX until SHC is ready
 		if searchHeadClusterInstance.Status.Phase != enterpriseApi.PhaseReady || shcImage != spec.Image {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+					fmt.Sprintf("Waiting for SearchHeadCluster '%s' to complete upgrade before proceeding", searchHeadClusterInstance.Name))
+			}
 			return false, nil
 		}
 		goto MonitoringConsole
@@ -286,6 +306,10 @@ MonitoringConsole:
 		for _, cm := range clusterManagerList.Items {
 			if cm.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if cm.Status.Phase != enterpriseApi.PhaseReady {
+					if eventPublisher != nil {
+						eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+							fmt.Sprintf("Waiting for ClusterManager '%s' to be ready before proceeding", cm.Name))
+					}
 					return false, fmt.Errorf("cluster manager %s is not ready", cm.Name)
 				}
 			}
@@ -304,6 +328,10 @@ MonitoringConsole:
 		for _, shc := range searchHeadClusterList.Items {
 			if shc.Spec.MonitoringConsoleRef.Name == cr.GetName() {
 				if shc.Status.Phase != enterpriseApi.PhaseReady {
+					if eventPublisher != nil {
+						eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+							fmt.Sprintf("Waiting for SearchHeadCluster '%s' to be ready before proceeding", shc.Name))
+					}
 					return false, fmt.Errorf("search head %s is not ready", shc.Name)
 				}
 			}
@@ -322,6 +350,10 @@ MonitoringConsole:
 		for _, idx := range indexerClusterList.Items {
 			if idx.Name == cr.GetName() {
 				if idx.Status.Phase != enterpriseApi.PhaseReady {
+					if eventPublisher != nil {
+						eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+							fmt.Sprintf("Waiting for IndexerCluster '%s' to be ready before proceeding", idx.Name))
+					}
 					return false, fmt.Errorf("indexer %s is not ready", idx.Name)
 				}
 			}
@@ -340,6 +372,10 @@ MonitoringConsole:
 		for _, stdln := range standaloneList.Items {
 			if stdln.Name == cr.GetName() {
 				if stdln.Status.Phase != enterpriseApi.PhaseReady {
+					if eventPublisher != nil {
+						eventPublisher.Normal(ctx, "UpgradeWaitingForDependency",
+							fmt.Sprintf("Waiting for Standalone '%s' to be ready before proceeding", stdln.Name))
+					}
 					return false, fmt.Errorf("standalone %s is not ready", stdln.Name)
 				}
 			}
