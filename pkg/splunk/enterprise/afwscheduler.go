@@ -509,7 +509,7 @@ func (downloadWorker *PipelineWorker) download(ctx context.Context, pplnPhase *P
 		return
 	}
 
-	// download is successfull, update the state and reset the retry count
+	// download is successful, update the state and reset the retry count
 	updatePplnWorkerPhaseInfo(ctx, appDeployInfo, 0, enterpriseApi.AppPkgDownloadComplete)
 
 	scopedLog.Info("Finished downloading app")
@@ -1671,7 +1671,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		// remove the status file too, so that we dont have any stale status
 		removeErr := shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
 		if removeErr != nil {
-			errors.Wrap(err, removeErr.Error())
+			err = errors.Wrap(err, removeErr.Error())
 		}
 		return false, err
 	}
@@ -1693,7 +1693,7 @@ func (shcPlaybookContext *SHCPlaybookContext) isBundlePushComplete(ctx context.C
 		// remove the status file too, so that we dont have any stale status
 		removeErr := shcPlaybookContext.removeSHCBundlePushStatusFile(ctx)
 		if removeErr != nil {
-			errors.Wrap(err, removeErr.Error())
+			err = errors.Wrap(err, removeErr.Error())
 		}
 		return false, err
 	}
@@ -2174,8 +2174,8 @@ func afwSchedulerEntry(ctx context.Context, client splcommon.ControllerClient, c
 	scopedLog := reqLogger.WithName("afwSchedulerEntry").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// return error, if there is no storage defined for the Operator pod
-	if !isPersistantVolConfigured() {
-		return true, fmt.Errorf("persistant volume required for the App framework, but not provisioned")
+	if !isPersistentVolConfigured() {
+		return true, fmt.Errorf("persistent volume required for the App framework, but not provisioned")
 	}
 
 	// Operator pod storage is not fully under operator control
