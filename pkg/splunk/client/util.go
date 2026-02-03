@@ -130,7 +130,7 @@ func CheckIfVolumeExists(volumeList []enterpriseApi.VolumeSpec, volName string) 
 	return -1, fmt.Errorf("volume: %s, doesn't exist", volName)
 }
 
-// GetAppSrcVolume gets the volume defintion for an app source
+// GetAppSrcVolume gets the volume definition for an app source
 func GetAppSrcVolume(ctx context.Context, appSource enterpriseApi.AppSourceSpec, appFrameworkRef *enterpriseApi.AppFrameworkSpec) (enterpriseApi.VolumeSpec, error) {
 	var volName string
 	var index int

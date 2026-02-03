@@ -163,5 +163,6 @@ func (r *LicenseMasterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("license-master-controller").
 		Complete(r)
 }
