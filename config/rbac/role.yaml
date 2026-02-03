@@ -47,6 +47,14 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
+  - clusterclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
   - clustermanagers
   - clustermasters
   - databases
@@ -94,14 +102,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - databaseclasses
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups:
   - postgresql.cnpg.io
   resources:
