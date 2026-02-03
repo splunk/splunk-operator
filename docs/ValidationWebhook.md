@@ -14,7 +14,9 @@ The webhook validates the following Custom Resource Definitions:
 - IndexerCluster
 - SearchHeadCluster
 - ClusterManager
+- ClusterMaster
 - LicenseManager
+- LicenseMaster
 - MonitoringConsole
 
 ## Enabling the Validation Webhook
