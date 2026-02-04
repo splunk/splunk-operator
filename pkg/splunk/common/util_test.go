@@ -17,6 +17,7 @@ package common
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -114,6 +115,1833 @@ func TestAppendParentMeta(t *testing.T) {
 	parent.Annotations["abc"] = "def"
 	AppendParentMeta(child.GetObjectMeta(), parent.GetObjectMeta())
 
+}
+
+func TestHasExcludedPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		prefixes []string
+		expected bool
+	}{
+		{
+			name:     "sts-only prefix excluded from pod template",
+			key:      "sts-only.amadeus.com/priority",
+			prefixes: podTemplateExcludedPrefixes,
+			expected: true,
+		},
+		{
+			name:     "pod-only prefix not excluded from pod template",
+			key:      "pod-only.prometheus.io/scrape",
+			prefixes: podTemplateExcludedPrefixes,
+			expected: false,
+		},
+		{
+			name:     "regular label not excluded from pod template",
+			key:      "team",
+			prefixes: podTemplateExcludedPrefixes,
+			expected: false,
+		},
+		{
+			name:     "pod-only prefix excluded from statefulset",
+			key:      "pod-only.prometheus.io/scrape",
+			prefixes: statefulSetExcludedPrefixes,
+			expected: true,
+		},
+		{
+			name:     "sts-only prefix not excluded from statefulset",
+			key:      "sts-only.amadeus.com/priority",
+			prefixes: statefulSetExcludedPrefixes,
+			expected: false,
+		},
+		{
+			name:     "kubectl prefix excluded from both",
+			key:      "kubectl.kubernetes.io/last-applied",
+			prefixes: podTemplateExcludedPrefixes,
+			expected: true,
+		},
+		{
+			name:     "operator prefix excluded from both",
+			key:      "operator.splunk.com/internal",
+			prefixes: statefulSetExcludedPrefixes,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := hasExcludedPrefix(tt.key, tt.prefixes)
+			if got != tt.expected {
+				t.Errorf("hasExcludedPrefix(%q, %v) = %v; want %v", tt.key, tt.prefixes, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestManagedCRAnnotationConstants(t *testing.T) {
+	// Verify constants have expected values
+	if ManagedCRLabelKeysAnnotation != "operator.splunk.com/managed-cr-label-keys" {
+		t.Errorf("ManagedCRLabelKeysAnnotation = %q; want %q", ManagedCRLabelKeysAnnotation, "operator.splunk.com/managed-cr-label-keys")
+	}
+	if ManagedCRAnnotationKeysAnnotation != "operator.splunk.com/managed-cr-annotation-keys" {
+		t.Errorf("ManagedCRAnnotationKeysAnnotation = %q; want %q", ManagedCRAnnotationKeysAnnotation, "operator.splunk.com/managed-cr-annotation-keys")
+	}
+}
+
+func TestGetManagedLabelKeys(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		expected    []string
+	}{
+		{
+			name:        "nil annotations returns empty slice",
+			annotations: nil,
+			expected:    []string{},
+		},
+		{
+			name:        "empty annotations returns empty slice",
+			annotations: map[string]string{},
+			expected:    []string{},
+		},
+		{
+			name: "missing annotation returns empty slice",
+			annotations: map[string]string{
+				"other-annotation": "value",
+			},
+			expected: []string{},
+		},
+		{
+			name: "empty annotation value returns empty slice",
+			annotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: "",
+			},
+			expected: []string{},
+		},
+		{
+			name: "invalid JSON returns empty slice",
+			annotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: "not-valid-json",
+			},
+			expected: []string{},
+		},
+		{
+			name: "empty JSON array returns empty slice",
+			annotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: "[]",
+			},
+			expected: []string{},
+		},
+		{
+			name: "single key",
+			annotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["team"]`,
+			},
+			expected: []string{"team"},
+		},
+		{
+			name: "multiple keys",
+			annotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["environment","team","version"]`,
+			},
+			expected: []string{"environment", "team", "version"},
+		},
+		{
+			name: "keys with special characters",
+			annotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["mycompany.com/cost-center","app.kubernetes.io/name"]`,
+			},
+			expected: []string{"mycompany.com/cost-center", "app.kubernetes.io/name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetManagedLabelKeys(tt.annotations)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("GetManagedLabelKeys() = %v; want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetManagedAnnotationKeys(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		expected    []string
+	}{
+		{
+			name:        "nil annotations returns empty slice",
+			annotations: nil,
+			expected:    []string{},
+		},
+		{
+			name:        "empty annotations returns empty slice",
+			annotations: map[string]string{},
+			expected:    []string{},
+		},
+		{
+			name: "missing annotation returns empty slice",
+			annotations: map[string]string{
+				"other-annotation": "value",
+			},
+			expected: []string{},
+		},
+		{
+			name: "empty annotation value returns empty slice",
+			annotations: map[string]string{
+				ManagedCRAnnotationKeysAnnotation: "",
+			},
+			expected: []string{},
+		},
+		{
+			name: "invalid JSON returns empty slice",
+			annotations: map[string]string{
+				ManagedCRAnnotationKeysAnnotation: "{invalid}",
+			},
+			expected: []string{},
+		},
+		{
+			name: "empty JSON array returns empty slice",
+			annotations: map[string]string{
+				ManagedCRAnnotationKeysAnnotation: "[]",
+			},
+			expected: []string{},
+		},
+		{
+			name: "single key",
+			annotations: map[string]string{
+				ManagedCRAnnotationKeysAnnotation: `["description"]`,
+			},
+			expected: []string{"description"},
+		},
+		{
+			name: "multiple keys",
+			annotations: map[string]string{
+				ManagedCRAnnotationKeysAnnotation: `["contact","description","owner"]`,
+			},
+			expected: []string{"contact", "description", "owner"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetManagedAnnotationKeys(tt.annotations)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("GetManagedAnnotationKeys() = %v; want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSetManagedLabelKeys(t *testing.T) {
+	tests := []struct {
+		name               string
+		annotations        map[string]string
+		keys               []string
+		expectedAnnotation string
+		shouldExist        bool
+	}{
+		{
+			name:        "nil annotations is no-op",
+			annotations: nil,
+			keys:        []string{"team"},
+			shouldExist: false,
+		},
+		{
+			name:        "nil keys removes annotation",
+			annotations: map[string]string{ManagedCRLabelKeysAnnotation: `["old"]`},
+			keys:        nil,
+			shouldExist: false,
+		},
+		{
+			name:        "empty keys removes annotation",
+			annotations: map[string]string{ManagedCRLabelKeysAnnotation: `["old"]`},
+			keys:        []string{},
+			shouldExist: false,
+		},
+		{
+			name:               "single key",
+			annotations:        map[string]string{},
+			keys:               []string{"team"},
+			expectedAnnotation: `["team"]`,
+			shouldExist:        true,
+		},
+		{
+			name:               "multiple keys are sorted",
+			annotations:        map[string]string{},
+			keys:               []string{"zebra", "alpha", "middle"},
+			expectedAnnotation: `["alpha","middle","zebra"]`,
+			shouldExist:        true,
+		},
+		{
+			name:               "keys with special characters",
+			annotations:        map[string]string{},
+			keys:               []string{"mycompany.com/team", "app.kubernetes.io/name"},
+			expectedAnnotation: `["app.kubernetes.io/name","mycompany.com/team"]`,
+			shouldExist:        true,
+		},
+		{
+			name:               "overwrites existing annotation",
+			annotations:        map[string]string{ManagedCRLabelKeysAnnotation: `["old"]`},
+			keys:               []string{"new"},
+			expectedAnnotation: `["new"]`,
+			shouldExist:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetManagedLabelKeys(tt.annotations, tt.keys)
+			if tt.annotations == nil {
+				return // no-op case
+			}
+			got, exists := tt.annotations[ManagedCRLabelKeysAnnotation]
+			if exists != tt.shouldExist {
+				t.Errorf("SetManagedLabelKeys() annotation exists = %v; want %v", exists, tt.shouldExist)
+			}
+			if tt.shouldExist && got != tt.expectedAnnotation {
+				t.Errorf("SetManagedLabelKeys() annotation = %q; want %q", got, tt.expectedAnnotation)
+			}
+		})
+	}
+}
+
+func TestSetManagedAnnotationKeys(t *testing.T) {
+	tests := []struct {
+		name               string
+		annotations        map[string]string
+		keys               []string
+		expectedAnnotation string
+		shouldExist        bool
+	}{
+		{
+			name:        "nil annotations is no-op",
+			annotations: nil,
+			keys:        []string{"description"},
+			shouldExist: false,
+		},
+		{
+			name:        "nil keys removes annotation",
+			annotations: map[string]string{ManagedCRAnnotationKeysAnnotation: `["old"]`},
+			keys:        nil,
+			shouldExist: false,
+		},
+		{
+			name:        "empty keys removes annotation",
+			annotations: map[string]string{ManagedCRAnnotationKeysAnnotation: `["old"]`},
+			keys:        []string{},
+			shouldExist: false,
+		},
+		{
+			name:               "single key",
+			annotations:        map[string]string{},
+			keys:               []string{"description"},
+			expectedAnnotation: `["description"]`,
+			shouldExist:        true,
+		},
+		{
+			name:               "multiple keys are sorted",
+			annotations:        map[string]string{},
+			keys:               []string{"owner", "contact", "description"},
+			expectedAnnotation: `["contact","description","owner"]`,
+			shouldExist:        true,
+		},
+		{
+			name:               "overwrites existing annotation",
+			annotations:        map[string]string{ManagedCRAnnotationKeysAnnotation: `["old"]`},
+			keys:               []string{"new"},
+			expectedAnnotation: `["new"]`,
+			shouldExist:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetManagedAnnotationKeys(tt.annotations, tt.keys)
+			if tt.annotations == nil {
+				return // no-op case
+			}
+			got, exists := tt.annotations[ManagedCRAnnotationKeysAnnotation]
+			if exists != tt.shouldExist {
+				t.Errorf("SetManagedAnnotationKeys() annotation exists = %v; want %v", exists, tt.shouldExist)
+			}
+			if tt.shouldExist && got != tt.expectedAnnotation {
+				t.Errorf("SetManagedAnnotationKeys() annotation = %q; want %q", got, tt.expectedAnnotation)
+			}
+		})
+	}
+}
+
+func TestManagedKeysRoundTrip(t *testing.T) {
+	// Test that Set followed by Get returns the same keys (sorted)
+	tests := []struct {
+		name     string
+		keys     []string
+		expected []string
+	}{
+		{
+			name:     "empty keys",
+			keys:     []string{},
+			expected: []string{},
+		},
+		{
+			name:     "single key",
+			keys:     []string{"team"},
+			expected: []string{"team"},
+		},
+		{
+			name:     "multiple keys unsorted",
+			keys:     []string{"zebra", "alpha", "middle"},
+			expected: []string{"alpha", "middle", "zebra"},
+		},
+		{
+			name:     "keys with special characters",
+			keys:     []string{"mycompany.com/team", "app.kubernetes.io/name", "environment"},
+			expected: []string{"app.kubernetes.io/name", "environment", "mycompany.com/team"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run("labels: "+tt.name, func(t *testing.T) {
+			annotations := map[string]string{}
+			SetManagedLabelKeys(annotations, tt.keys)
+			got := GetManagedLabelKeys(annotations)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("Round trip labels: got %v; want %v", got, tt.expected)
+			}
+		})
+
+		t.Run("annotations: "+tt.name, func(t *testing.T) {
+			annotations := map[string]string{}
+			SetManagedAnnotationKeys(annotations, tt.keys)
+			got := GetManagedAnnotationKeys(annotations)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("Round trip annotations: got %v; want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsManagedKey(t *testing.T) {
+	tests := []struct {
+		name             string
+		key              string
+		excludedPrefixes []string
+		expected         bool
+	}{
+		{
+			name:             "user label is managed",
+			key:              "team",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "user label with domain is managed",
+			key:              "mycompany.com/team",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "kubectl prefix is not managed",
+			key:              "kubectl.kubernetes.io/last-applied-configuration",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "operator prefix is not managed",
+			key:              "operator.splunk.com/internal",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "sts-only prefix is not managed for pod template",
+			key:              "sts-only.amadeus.com/priority",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "pod-only prefix is managed for pod template",
+			key:              "pod-only.prometheus.io/scrape",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "pod-only prefix is not managed for statefulset",
+			key:              "pod-only.prometheus.io/scrape",
+			excludedPrefixes: statefulSetExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "sts-only prefix is managed for statefulset",
+			key:              "sts-only.amadeus.com/priority",
+			excludedPrefixes: statefulSetExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "app.kubernetes.io labels are managed",
+			key:              "app.kubernetes.io/name",
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "empty prefixes means all keys are managed",
+			key:              "operator.splunk.com/internal",
+			excludedPrefixes: []string{},
+			expected:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsManagedKey(tt.key, tt.excludedPrefixes)
+			if got != tt.expected {
+				t.Errorf("IsManagedKey(%q, %v) = %v; want %v", tt.key, tt.excludedPrefixes, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsProtectedKey(t *testing.T) {
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":       "indexer",
+		"app.kubernetes.io/instance":   "splunk-test-indexer",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/part-of":    "splunk-test-indexer",
+	}
+
+	tests := []struct {
+		name             string
+		key              string
+		selectorLabels   map[string]string
+		excludedPrefixes []string
+		expected         bool
+	}{
+		{
+			name:             "selector label is protected",
+			key:              "app.kubernetes.io/name",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "selector label instance is protected",
+			key:              "app.kubernetes.io/instance",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "operator prefix is protected",
+			key:              "operator.splunk.com/internal",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "kubectl prefix is protected",
+			key:              "kubectl.kubernetes.io/last-applied-configuration",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "user label is not protected",
+			key:              "team",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "user label with domain is not protected",
+			key:              "mycompany.com/cost-center",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "empty selector labels - excluded prefix still protected",
+			key:              "operator.splunk.com/internal",
+			selectorLabels:   map[string]string{},
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "empty selector labels - user key not protected",
+			key:              "team",
+			selectorLabels:   map[string]string{},
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "nil selector labels - excluded prefix still protected",
+			key:              "kubectl.kubernetes.io/last-applied",
+			selectorLabels:   nil,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "nil selector labels - user key not protected",
+			key:              "environment",
+			selectorLabels:   nil,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+		{
+			name:             "sts-only prefix protected for pod template",
+			key:              "sts-only.amadeus.com/priority",
+			selectorLabels:   selectorLabels,
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         true,
+		},
+		{
+			name:             "pod-only prefix not protected for pod template",
+			key:              "pod-only.prometheus.io/scrape",
+			selectorLabels:   map[string]string{},
+			excludedPrefixes: podTemplateExcludedPrefixes,
+			expected:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsProtectedKey(tt.key, tt.selectorLabels, tt.excludedPrefixes)
+			if got != tt.expected {
+				t.Errorf("IsProtectedKey(%q, %v, %v) = %v; want %v", tt.key, tt.selectorLabels, tt.excludedPrefixes, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStripTargetPrefix(t *testing.T) {
+	tests := []struct {
+		name            string
+		key             string
+		prefix          string
+		wantKey         string
+		wantTransformed bool
+	}{
+		{
+			name:            "strips pod-only prefix with prometheus.io domain",
+			key:             "pod-only.prometheus.io/scrape",
+			prefix:          "pod-only.",
+			wantKey:         "prometheus.io/scrape",
+			wantTransformed: true,
+		},
+		{
+			name:            "strips pod-only prefix with istio.io domain",
+			key:             "pod-only.istio.io/inject",
+			prefix:          "pod-only.",
+			wantKey:         "istio.io/inject",
+			wantTransformed: true,
+		},
+		{
+			name:            "strips sts-only prefix with amadeus.com domain",
+			key:             "sts-only.amadeus.com/priority",
+			prefix:          "sts-only.",
+			wantKey:         "amadeus.com/priority",
+			wantTransformed: true,
+		},
+		{
+			name:            "strips sts-only prefix with custom domain",
+			key:             "sts-only.custom.example.org/metric",
+			prefix:          "sts-only.",
+			wantKey:         "custom.example.org/metric",
+			wantTransformed: true,
+		},
+		{
+			name:            "no-op for non-matching prefix",
+			key:             "team",
+			prefix:          "pod-only.",
+			wantKey:         "team",
+			wantTransformed: false,
+		},
+		{
+			name:            "no-op for different prefix",
+			key:             "sts-only.amadeus.com/priority",
+			prefix:          "pod-only.",
+			wantKey:         "sts-only.amadeus.com/priority",
+			wantTransformed: false,
+		},
+		{
+			name:            "strips prefix leaving empty remainder",
+			key:             "pod-only.",
+			prefix:          "pod-only.",
+			wantKey:         "",
+			wantTransformed: true,
+		},
+		{
+			name:            "empty key",
+			key:             "",
+			prefix:          "pod-only.",
+			wantKey:         "",
+			wantTransformed: false,
+		},
+		{
+			name:            "partial prefix match should not transform",
+			key:             "pod-only",
+			prefix:          "pod-only.",
+			wantKey:         "pod-only",
+			wantTransformed: false,
+		},
+		{
+			name:            "preserves multiple slashes in key",
+			key:             "pod-only.company.com/category/subcategory",
+			prefix:          "pod-only.",
+			wantKey:         "company.com/category/subcategory",
+			wantTransformed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotKey, gotTransformed := stripTargetPrefix(tt.key, tt.prefix)
+			if gotKey != tt.wantKey {
+				t.Errorf("stripTargetPrefix() key = %q; want %q", gotKey, tt.wantKey)
+			}
+			if gotTransformed != tt.wantTransformed {
+				t.Errorf("stripTargetPrefix() transformed = %v; want %v", gotTransformed, tt.wantTransformed)
+			}
+		})
+	}
+}
+
+func TestAppendParentMeta_PrefixFiltering(t *testing.T) {
+	parent := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"team":                          "platform",
+				"sts-only.amadeus.com/priority": "high", // Should be filtered (StatefulSet-only)
+				"pod-only.prometheus.io/scrape": "true", // Should be TRANSFORMED to prometheus.io/scrape
+			},
+			Annotations: map[string]string{
+				"description":                "test",
+				"sts-only.example.com/owner": "ops-team", // Should be filtered
+				"pod-only.istio.io/inject":   "true",     // Should be TRANSFORMED to istio.io/inject
+			},
+		},
+	}
+	child := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      map[string]string{},
+			Annotations: map[string]string{},
+		},
+	}
+
+	AppendParentMeta(child.GetObjectMeta(), parent.GetObjectMeta())
+
+	// Verify labels
+	if child.Labels["team"] != "platform" {
+		t.Errorf("Expected label 'team' to be 'platform', got %q", child.Labels["team"])
+	}
+	// pod-only.prometheus.io/scrape should be TRANSFORMED to prometheus.io/scrape
+	if child.Labels["prometheus.io/scrape"] != "true" {
+		t.Errorf("Expected label 'prometheus.io/scrape' to be 'true', got %q", child.Labels["prometheus.io/scrape"])
+	}
+	// Original key should NOT exist
+	if _, exists := child.Labels["pod-only.prometheus.io/scrape"]; exists {
+		t.Errorf("Label 'pod-only.prometheus.io/scrape' should have been transformed, not copied as-is")
+	}
+	if _, exists := child.Labels["sts-only.amadeus.com/priority"]; exists {
+		t.Errorf("Label 'sts-only.amadeus.com/priority' should have been filtered out")
+	}
+
+	// Verify annotations
+	if child.Annotations["description"] != "test" {
+		t.Errorf("Expected annotation 'description' to be 'test', got %q", child.Annotations["description"])
+	}
+	// pod-only.istio.io/inject should be TRANSFORMED to istio.io/inject
+	if child.Annotations["istio.io/inject"] != "true" {
+		t.Errorf("Expected annotation 'istio.io/inject' to be 'true', got %q", child.Annotations["istio.io/inject"])
+	}
+	// Original key should NOT exist
+	if _, exists := child.Annotations["pod-only.istio.io/inject"]; exists {
+		t.Errorf("Annotation 'pod-only.istio.io/inject' should have been transformed, not copied as-is")
+	}
+	if _, exists := child.Annotations["sts-only.example.com/owner"]; exists {
+		t.Errorf("Annotation 'sts-only.example.com/owner' should have been filtered out")
+	}
+}
+
+func TestComputeDesiredPodTemplateKeys(t *testing.T) {
+	tests := []struct {
+		name                string
+		parentLabels        map[string]string
+		parentAnnotations   map[string]string
+		expectedLabels      map[string]string
+		expectedAnnotations map[string]string
+	}{
+		{
+			name:                "nil parent metadata",
+			parentLabels:        nil,
+			parentAnnotations:   nil,
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name:                "empty parent metadata",
+			parentLabels:        map[string]string{},
+			parentAnnotations:   map[string]string{},
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "regular user labels and annotations pass through",
+			parentLabels: map[string]string{
+				"team":        "platform",
+				"environment": "production",
+			},
+			parentAnnotations: map[string]string{
+				"description": "test service",
+				"owner":       "ops-team",
+			},
+			expectedLabels: map[string]string{
+				"team":        "platform",
+				"environment": "production",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test service",
+				"owner":       "ops-team",
+			},
+		},
+		{
+			name: "kubectl prefix is excluded",
+			parentLabels: map[string]string{
+				"team": "platform",
+				"kubectl.kubernetes.io/last-applied-configuration": "json-data",
+			},
+			parentAnnotations: map[string]string{
+				"description":                       "test",
+				"kubectl.kubernetes.io/restartedAt": "2024-01-01",
+			},
+			expectedLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test",
+			},
+		},
+		{
+			name: "operator prefix is excluded",
+			parentLabels: map[string]string{
+				"team":                       "platform",
+				"operator.splunk.com/status": "active",
+			},
+			parentAnnotations: map[string]string{
+				"description":                  "test",
+				"operator.splunk.com/internal": "data",
+			},
+			expectedLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test",
+			},
+		},
+		{
+			name: "sts-only prefix is excluded for pod template",
+			parentLabels: map[string]string{
+				"team":                          "platform",
+				"sts-only.amadeus.com/priority": "high",
+			},
+			parentAnnotations: map[string]string{
+				"description":                "test",
+				"sts-only.example.com/owner": "ops-team",
+			},
+			expectedLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test",
+			},
+		},
+		{
+			name: "pod-only prefix is transformed by stripping prefix",
+			parentLabels: map[string]string{
+				"team":                          "platform",
+				"pod-only.prometheus.io/scrape": "true",
+			},
+			parentAnnotations: map[string]string{
+				"description":              "test",
+				"pod-only.istio.io/inject": "true",
+			},
+			expectedLabels: map[string]string{
+				"team":                 "platform",
+				"prometheus.io/scrape": "true",
+			},
+			expectedAnnotations: map[string]string{
+				"description":     "test",
+				"istio.io/inject": "true",
+			},
+		},
+		{
+			name: "mixed scenario with all prefix types",
+			parentLabels: map[string]string{
+				"team":                               "platform",
+				"kubectl.kubernetes.io/last-applied": "config",
+				"operator.splunk.com/internal":       "data",
+				"sts-only.amadeus.com/priority":      "high",
+				"pod-only.prometheus.io/scrape":      "true",
+				"mycompany.com/cost-center":          "67890",
+			},
+			parentAnnotations: map[string]string{
+				"description":                       "test",
+				"kubectl.kubernetes.io/restartedAt": "2024-01-01",
+				"operator.splunk.com/managed":       "true",
+				"sts-only.example.com/owner":        "ops",
+				"pod-only.istio.io/inject":          "true",
+				"mycompany.com/owner":               "team-a",
+			},
+			expectedLabels: map[string]string{
+				"team":                      "platform",
+				"prometheus.io/scrape":      "true",
+				"mycompany.com/cost-center": "67890",
+			},
+			expectedAnnotations: map[string]string{
+				"description":         "test",
+				"istio.io/inject":     "true",
+				"mycompany.com/owner": "team-a",
+			},
+		},
+		{
+			name: "app.kubernetes.io labels pass through",
+			parentLabels: map[string]string{
+				"app.kubernetes.io/name":    "my-app",
+				"app.kubernetes.io/version": "1.0.0",
+			},
+			parentAnnotations: map[string]string{},
+			expectedLabels: map[string]string{
+				"app.kubernetes.io/name":    "my-app",
+				"app.kubernetes.io/version": "1.0.0",
+			},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "conflict resolution: prefixed key wins over explicit key (more specific)",
+			parentLabels: map[string]string{
+				"prometheus.io/scrape":          "false", // explicit
+				"pod-only.prometheus.io/scrape": "true",  // would transform to same key
+			},
+			parentAnnotations: map[string]string{
+				"istio.io/inject":          "false", // explicit
+				"pod-only.istio.io/inject": "true",  // would transform to same key
+			},
+			expectedLabels: map[string]string{
+				"prometheus.io/scrape": "true", // prefixed wins (more specific)
+			},
+			expectedAnnotations: map[string]string{
+				"istio.io/inject": "true", // prefixed wins (more specific)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parent := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      tt.parentLabels,
+					Annotations: tt.parentAnnotations,
+				},
+			}
+
+			gotLabels, gotAnnotations := ComputeDesiredPodTemplateKeys(parent.GetObjectMeta())
+
+			if !reflect.DeepEqual(gotLabels, tt.expectedLabels) {
+				t.Errorf("ComputeDesiredPodTemplateKeys() labels = %v; want %v", gotLabels, tt.expectedLabels)
+			}
+			if !reflect.DeepEqual(gotAnnotations, tt.expectedAnnotations) {
+				t.Errorf("ComputeDesiredPodTemplateKeys() annotations = %v; want %v", gotAnnotations, tt.expectedAnnotations)
+			}
+		})
+	}
+}
+
+func TestSyncParentMetaToPodTemplate(t *testing.T) {
+	tests := []struct {
+		name                       string
+		childLabels                map[string]string
+		childAnnotations           map[string]string
+		parentLabels               map[string]string
+		parentAnnotations          map[string]string
+		previousManagedLabels      []string
+		previousManagedAnnotations []string
+		expectedChildLabels        map[string]string
+		expectedChildAnnotations   map[string]string
+		expectedManagedLabels      []string
+		expectedManagedAnnotations []string
+	}{
+		{
+			name:                       "add new labels and annotations to empty child",
+			childLabels:                map[string]string{},
+			childAnnotations:           map[string]string{},
+			parentLabels:               map[string]string{"team": "platform", "environment": "prod"},
+			parentAnnotations:          map[string]string{"description": "test"},
+			previousManagedLabels:      []string{},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"team": "platform", "environment": "prod"},
+			expectedChildAnnotations:   map[string]string{"description": "test"},
+			expectedManagedLabels:      []string{"environment", "team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name:                       "add new labels to child with nil maps",
+			childLabels:                nil,
+			childAnnotations:           nil,
+			parentLabels:               map[string]string{"team": "platform"},
+			parentAnnotations:          map[string]string{"owner": "ops"},
+			previousManagedLabels:      []string{},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"team": "platform"},
+			expectedChildAnnotations:   map[string]string{"owner": "ops"},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"owner"},
+		},
+		{
+			name:                       "update existing managed labels",
+			childLabels:                map[string]string{"team": "old-team", "existing": "keep"},
+			childAnnotations:           map[string]string{"description": "old-desc"},
+			parentLabels:               map[string]string{"team": "new-team"},
+			parentAnnotations:          map[string]string{"description": "new-desc"},
+			previousManagedLabels:      []string{"team"},
+			previousManagedAnnotations: []string{"description"},
+			expectedChildLabels:        map[string]string{"team": "new-team", "existing": "keep"},
+			expectedChildAnnotations:   map[string]string{"description": "new-desc"},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name:                       "remove previously managed label no longer in parent",
+			childLabels:                map[string]string{"team": "platform", "old-key": "to-remove", "external": "keep"},
+			childAnnotations:           map[string]string{"description": "test", "old-annotation": "to-remove"},
+			parentLabels:               map[string]string{"team": "platform"},
+			parentAnnotations:          map[string]string{"description": "test"},
+			previousManagedLabels:      []string{"team", "old-key"},
+			previousManagedAnnotations: []string{"description", "old-annotation"},
+			expectedChildLabels:        map[string]string{"team": "platform", "external": "keep"},
+			expectedChildAnnotations:   map[string]string{"description": "test"},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name:                       "preserve external labels not in previousManaged",
+			childLabels:                map[string]string{"team": "platform", "external-label": "keep-me"},
+			childAnnotations:           map[string]string{"external-annotation": "also-keep"},
+			parentLabels:               map[string]string{"team": "new-team"},
+			parentAnnotations:          map[string]string{},
+			previousManagedLabels:      []string{"team"},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"team": "new-team", "external-label": "keep-me"},
+			expectedChildAnnotations:   map[string]string{"external-annotation": "also-keep"},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name:                       "pod-only prefix transformation during sync",
+			childLabels:                map[string]string{},
+			childAnnotations:           map[string]string{},
+			parentLabels:               map[string]string{"pod-only.prometheus.io/scrape": "true"},
+			parentAnnotations:          map[string]string{"pod-only.istio.io/inject": "true"},
+			previousManagedLabels:      []string{},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"prometheus.io/scrape": "true"},
+			expectedChildAnnotations:   map[string]string{"istio.io/inject": "true"},
+			expectedManagedLabels:      []string{"prometheus.io/scrape"},
+			expectedManagedAnnotations: []string{"istio.io/inject"},
+		},
+		{
+			name:             "excluded prefixes are not synced",
+			childLabels:      map[string]string{},
+			childAnnotations: map[string]string{},
+			parentLabels: map[string]string{
+				"team":                               "platform",
+				"kubectl.kubernetes.io/last-applied": "config",
+				"operator.splunk.com/internal":       "data",
+				"sts-only.amadeus.com/priority":      "high",
+			},
+			parentAnnotations: map[string]string{
+				"description":                       "test",
+				"kubectl.kubernetes.io/restartedAt": "2024-01-01",
+			},
+			previousManagedLabels:      []string{},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"team": "platform"},
+			expectedChildAnnotations:   map[string]string{"description": "test"},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name:                       "remove all managed keys when parent has none",
+			childLabels:                map[string]string{"team": "platform", "env": "prod", "external": "keep"},
+			childAnnotations:           map[string]string{"description": "test", "owner": "ops"},
+			parentLabels:               map[string]string{},
+			parentAnnotations:          map[string]string{},
+			previousManagedLabels:      []string{"team", "env"},
+			previousManagedAnnotations: []string{"description", "owner"},
+			expectedChildLabels:        map[string]string{"external": "keep"},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name:                       "add update and remove in single sync",
+			childLabels:                map[string]string{"keep": "v1", "update": "old", "remove": "gone"},
+			childAnnotations:           map[string]string{},
+			parentLabels:               map[string]string{"keep": "v1", "update": "new", "add": "fresh"},
+			parentAnnotations:          map[string]string{},
+			previousManagedLabels:      []string{"keep", "update", "remove"},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"keep": "v1", "update": "new", "add": "fresh"},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{"add", "keep", "update"},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name:                       "transformed key removal after parent removes pod-only prefix key",
+			childLabels:                map[string]string{"prometheus.io/scrape": "true"},
+			childAnnotations:           map[string]string{},
+			parentLabels:               map[string]string{},
+			parentAnnotations:          map[string]string{},
+			previousManagedLabels:      []string{"prometheus.io/scrape"},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name:                       "conflict resolution: prefixed key wins over explicit key (more specific)",
+			childLabels:                map[string]string{},
+			childAnnotations:           map[string]string{},
+			parentLabels:               map[string]string{"prometheus.io/scrape": "false", "pod-only.prometheus.io/scrape": "true"},
+			parentAnnotations:          map[string]string{},
+			previousManagedLabels:      []string{},
+			previousManagedAnnotations: []string{},
+			expectedChildLabels:        map[string]string{"prometheus.io/scrape": "true"},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{"prometheus.io/scrape"},
+			expectedManagedAnnotations: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			child := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      tt.childLabels,
+					Annotations: tt.childAnnotations,
+				},
+			}
+			parent := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      tt.parentLabels,
+					Annotations: tt.parentAnnotations,
+				},
+			}
+
+			gotManagedLabels, gotManagedAnnotations := SyncParentMetaToPodTemplate(
+				context.Background(),
+				child.GetObjectMeta(),
+				parent.GetObjectMeta(),
+				nil, // protectedLabels - tested separately
+				tt.previousManagedLabels,
+				tt.previousManagedAnnotations,
+			)
+
+			// Verify child labels
+			if !reflect.DeepEqual(child.Labels, tt.expectedChildLabels) {
+				t.Errorf("SyncParentMetaToPodTemplate() child labels = %v; want %v", child.Labels, tt.expectedChildLabels)
+			}
+
+			// Verify child annotations
+			if !reflect.DeepEqual(child.Annotations, tt.expectedChildAnnotations) {
+				t.Errorf("SyncParentMetaToPodTemplate() child annotations = %v; want %v", child.Annotations, tt.expectedChildAnnotations)
+			}
+
+			// Verify managed labels (sorted)
+			if !reflect.DeepEqual(gotManagedLabels, tt.expectedManagedLabels) {
+				t.Errorf("SyncParentMetaToPodTemplate() managed labels = %v; want %v", gotManagedLabels, tt.expectedManagedLabels)
+			}
+
+			// Verify managed annotations (sorted)
+			if !reflect.DeepEqual(gotManagedAnnotations, tt.expectedManagedAnnotations) {
+				t.Errorf("SyncParentMetaToPodTemplate() managed annotations = %v; want %v", gotManagedAnnotations, tt.expectedManagedAnnotations)
+			}
+		})
+	}
+}
+
+func TestSyncParentMetaToPodTemplate_ProtectedLabels(t *testing.T) {
+	tests := []struct {
+		name                  string
+		childLabels           map[string]string
+		parentLabels          map[string]string
+		protectedLabels       map[string]string
+		expectedChildLabels   map[string]string
+		expectedManagedLabels []string
+	}{
+		{
+			name:                  "protected labels are not overwritten",
+			childLabels:           map[string]string{"app.kubernetes.io/name": "protected-name"},
+			parentLabels:          map[string]string{"app.kubernetes.io/name": "overwritten-name", "other": "val"},
+			protectedLabels:       map[string]string{"app.kubernetes.io/name": "protected-name"},
+			expectedChildLabels:   map[string]string{"app.kubernetes.io/name": "protected-name", "other": "val"},
+			expectedManagedLabels: []string{"other"}, // protected label is NOT in managed list
+		},
+		{
+			name:                  "multiple protected labels are preserved",
+			childLabels:           map[string]string{"app.kubernetes.io/name": "splunk", "app.kubernetes.io/instance": "test-cr"},
+			parentLabels:          map[string]string{"app.kubernetes.io/name": "bad-name", "app.kubernetes.io/instance": "bad-instance", "team": "platform"},
+			protectedLabels:       map[string]string{"app.kubernetes.io/name": "splunk", "app.kubernetes.io/instance": "test-cr"},
+			expectedChildLabels:   map[string]string{"app.kubernetes.io/name": "splunk", "app.kubernetes.io/instance": "test-cr", "team": "platform"},
+			expectedManagedLabels: []string{"team"},
+		},
+		{
+			name:                  "nil protected labels allows all sync",
+			childLabels:           map[string]string{"app.kubernetes.io/name": "child-name"},
+			parentLabels:          map[string]string{"app.kubernetes.io/name": "parent-name"},
+			protectedLabels:       nil,
+			expectedChildLabels:   map[string]string{"app.kubernetes.io/name": "parent-name"},
+			expectedManagedLabels: []string{"app.kubernetes.io/name"},
+		},
+		{
+			name:                  "empty protected labels allows all sync",
+			childLabels:           map[string]string{"app.kubernetes.io/name": "child-name"},
+			parentLabels:          map[string]string{"app.kubernetes.io/name": "parent-name"},
+			protectedLabels:       map[string]string{},
+			expectedChildLabels:   map[string]string{"app.kubernetes.io/name": "parent-name"},
+			expectedManagedLabels: []string{"app.kubernetes.io/name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			child := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tt.childLabels,
+				},
+			}
+			parent := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tt.parentLabels,
+				},
+			}
+
+			gotManagedLabels, _ := SyncParentMetaToPodTemplate(
+				context.Background(),
+				child.GetObjectMeta(),
+				parent.GetObjectMeta(),
+				tt.protectedLabels,
+				nil, // previousManagedLabels
+				nil, // previousManagedAnnotations
+			)
+
+			// Verify child labels
+			if !reflect.DeepEqual(child.Labels, tt.expectedChildLabels) {
+				t.Errorf("SyncParentMetaToPodTemplate() child labels = %v; want %v", child.Labels, tt.expectedChildLabels)
+			}
+
+			// Verify managed labels (sorted)
+			if !reflect.DeepEqual(gotManagedLabels, tt.expectedManagedLabels) {
+				t.Errorf("SyncParentMetaToPodTemplate() managed labels = %v; want %v", gotManagedLabels, tt.expectedManagedLabels)
+			}
+		})
+	}
+}
+
+// TestSyncParentMetaToPodTemplate_ProtectedLabelsNotRemoved verifies that protected labels
+// in previousManagedLabels are not removed, even if they're no longer in parent labels.
+// This guards against future call sites that might inadvertently track selector labels as managed.
+func TestSyncParentMetaToPodTemplate_ProtectedLabelsNotRemoved(t *testing.T) {
+	// Scenario: A protected label (e.g., selector label) was somehow tracked in previousManagedLabels.
+	// When it's no longer in the CR, the sync should NOT remove it because it's protected.
+	child := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"app.kubernetes.io/name":     "splunk-indexer", // protected selector label
+				"app.kubernetes.io/instance": "test-cr",        // protected selector label
+				"team":                       "platform",       // previously managed, now removed from CR
+			},
+		},
+	}
+	parent := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				// Note: "team" is intentionally absent (removed from CR)
+				// Selector labels not present in parent either
+			},
+		},
+	}
+	protectedLabels := map[string]string{
+		"app.kubernetes.io/name":     "splunk-indexer",
+		"app.kubernetes.io/instance": "test-cr",
+	}
+	// Simulate a scenario where protected labels were mistakenly added to previousManagedLabels
+	previousManagedLabels := []string{"app.kubernetes.io/instance", "app.kubernetes.io/name", "team"}
+
+	gotManagedLabels, _ := SyncParentMetaToPodTemplate(
+		context.Background(),
+		child.GetObjectMeta(),
+		parent.GetObjectMeta(),
+		protectedLabels,
+		previousManagedLabels,
+		nil, // previousManagedAnnotations
+	)
+
+	// Expected: protected labels are preserved, "team" is removed (not protected, not in parent)
+	expectedChildLabels := map[string]string{
+		"app.kubernetes.io/name":     "splunk-indexer",
+		"app.kubernetes.io/instance": "test-cr",
+		// "team" should be removed
+	}
+	if !reflect.DeepEqual(child.Labels, expectedChildLabels) {
+		t.Errorf("SyncParentMetaToPodTemplate() child labels = %v; want %v", child.Labels, expectedChildLabels)
+	}
+
+	// Expected: no managed labels since parent has no eligible labels
+	expectedManagedLabels := []string{}
+	if !reflect.DeepEqual(gotManagedLabels, expectedManagedLabels) {
+		t.Errorf("SyncParentMetaToPodTemplate() managed labels = %v; want %v", gotManagedLabels, expectedManagedLabels)
+	}
+}
+
+func TestComputeDesiredStatefulSetKeys(t *testing.T) {
+	tests := []struct {
+		name                string
+		parentLabels        map[string]string
+		parentAnnotations   map[string]string
+		expectedLabels      map[string]string
+		expectedAnnotations map[string]string
+	}{
+		{
+			name:                "nil parent metadata",
+			parentLabels:        nil,
+			parentAnnotations:   nil,
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name:                "empty parent metadata",
+			parentLabels:        map[string]string{},
+			parentAnnotations:   map[string]string{},
+			expectedLabels:      map[string]string{},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "regular user labels and annotations pass through",
+			parentLabels: map[string]string{
+				"team":        "platform",
+				"environment": "production",
+			},
+			parentAnnotations: map[string]string{
+				"description": "test service",
+				"owner":       "ops-team",
+			},
+			expectedLabels: map[string]string{
+				"team":        "platform",
+				"environment": "production",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test service",
+				"owner":       "ops-team",
+			},
+		},
+		{
+			name: "kubectl prefix is excluded",
+			parentLabels: map[string]string{
+				"team": "platform",
+				"kubectl.kubernetes.io/last-applied-configuration": "json-data",
+			},
+			parentAnnotations: map[string]string{
+				"description":                       "test",
+				"kubectl.kubernetes.io/restartedAt": "2024-01-01",
+			},
+			expectedLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test",
+			},
+		},
+		{
+			name: "operator prefix is excluded",
+			parentLabels: map[string]string{
+				"team":                       "platform",
+				"operator.splunk.com/status": "active",
+			},
+			parentAnnotations: map[string]string{
+				"description":                  "test",
+				"operator.splunk.com/internal": "data",
+			},
+			expectedLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test",
+			},
+		},
+		{
+			name: "pod-only prefix is excluded for statefulset",
+			parentLabels: map[string]string{
+				"team":                          "platform",
+				"pod-only.prometheus.io/scrape": "true",
+			},
+			parentAnnotations: map[string]string{
+				"description":              "test",
+				"pod-only.istio.io/inject": "true",
+			},
+			expectedLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedAnnotations: map[string]string{
+				"description": "test",
+			},
+		},
+		{
+			name: "sts-only prefix is transformed by stripping prefix",
+			parentLabels: map[string]string{
+				"team":                          "platform",
+				"sts-only.amadeus.com/priority": "high",
+			},
+			parentAnnotations: map[string]string{
+				"description":                "test",
+				"sts-only.example.com/owner": "ops-team",
+			},
+			expectedLabels: map[string]string{
+				"team":                 "platform",
+				"amadeus.com/priority": "high",
+			},
+			expectedAnnotations: map[string]string{
+				"description":       "test",
+				"example.com/owner": "ops-team",
+			},
+		},
+		{
+			name: "mixed scenario with all prefix types",
+			parentLabels: map[string]string{
+				"team":                               "platform",
+				"kubectl.kubernetes.io/last-applied": "config",
+				"operator.splunk.com/internal":       "data",
+				"pod-only.prometheus.io/scrape":      "true",
+				"sts-only.amadeus.com/priority":      "high",
+				"mycompany.com/cost-center":          "67890",
+			},
+			parentAnnotations: map[string]string{
+				"description":                       "test",
+				"kubectl.kubernetes.io/restartedAt": "2024-01-01",
+				"operator.splunk.com/managed":       "true",
+				"pod-only.istio.io/inject":          "true",
+				"sts-only.example.com/owner":        "ops",
+				"mycompany.com/owner":               "team-a",
+			},
+			expectedLabels: map[string]string{
+				"team":                      "platform",
+				"amadeus.com/priority":      "high",
+				"mycompany.com/cost-center": "67890",
+			},
+			expectedAnnotations: map[string]string{
+				"description":         "test",
+				"example.com/owner":   "ops",
+				"mycompany.com/owner": "team-a",
+			},
+		},
+		{
+			name: "app.kubernetes.io labels pass through",
+			parentLabels: map[string]string{
+				"app.kubernetes.io/name":    "my-app",
+				"app.kubernetes.io/version": "1.0.0",
+			},
+			parentAnnotations: map[string]string{},
+			expectedLabels: map[string]string{
+				"app.kubernetes.io/name":    "my-app",
+				"app.kubernetes.io/version": "1.0.0",
+			},
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name: "conflict resolution: prefixed key wins over explicit key (more specific)",
+			parentLabels: map[string]string{
+				"amadeus.com/priority":          "low",  // explicit
+				"sts-only.amadeus.com/priority": "high", // would transform to same key
+			},
+			parentAnnotations: map[string]string{
+				"example.com/owner":          "team-a", // explicit
+				"sts-only.example.com/owner": "team-b", // would transform to same key
+			},
+			expectedLabels: map[string]string{
+				"amadeus.com/priority": "high", // prefixed wins (more specific)
+			},
+			expectedAnnotations: map[string]string{
+				"example.com/owner": "team-b", // prefixed wins (more specific)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parent := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      tt.parentLabels,
+					Annotations: tt.parentAnnotations,
+				},
+			}
+
+			gotLabels, gotAnnotations := ComputeDesiredStatefulSetKeys(parent.GetObjectMeta())
+
+			if !reflect.DeepEqual(gotLabels, tt.expectedLabels) {
+				t.Errorf("ComputeDesiredStatefulSetKeys() labels = %v; want %v", gotLabels, tt.expectedLabels)
+			}
+			if !reflect.DeepEqual(gotAnnotations, tt.expectedAnnotations) {
+				t.Errorf("ComputeDesiredStatefulSetKeys() annotations = %v; want %v", gotAnnotations, tt.expectedAnnotations)
+			}
+		})
+	}
+}
+
+func TestSyncParentMetaToStatefulSet(t *testing.T) {
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":       "indexer",
+		"app.kubernetes.io/instance":   "splunk-test-indexer",
+		"app.kubernetes.io/managed-by": "splunk-operator",
+		"app.kubernetes.io/component":  "indexer",
+		"app.kubernetes.io/part-of":    "splunk-test-indexer",
+	}
+
+	tests := []struct {
+		name                       string
+		childLabels                map[string]string
+		childAnnotations           map[string]string
+		parentLabels               map[string]string
+		parentAnnotations          map[string]string
+		selectorLabels             map[string]string
+		expectedChildLabels        map[string]string
+		expectedChildAnnotations   map[string]string
+		expectedManagedLabels      []string
+		expectedManagedAnnotations []string
+	}{
+		{
+			name:              "add new labels and annotations to empty child",
+			childLabels:       map[string]string{},
+			childAnnotations:  map[string]string{},
+			parentLabels:      map[string]string{"team": "platform", "environment": "prod"},
+			parentAnnotations: map[string]string{"description": "test"},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"team":        "platform",
+				"environment": "prod",
+			},
+			expectedChildAnnotations: map[string]string{
+				"description":                     "test",
+				ManagedCRLabelKeysAnnotation:      `["environment","team"]`,
+				ManagedCRAnnotationKeysAnnotation: `["description"]`,
+			},
+			expectedManagedLabels:      []string{"environment", "team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name:              "add new labels to child with nil maps",
+			childLabels:       nil,
+			childAnnotations:  nil,
+			parentLabels:      map[string]string{"team": "platform"},
+			parentAnnotations: map[string]string{"owner": "ops"},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedChildAnnotations: map[string]string{
+				"owner":                           "ops",
+				ManagedCRLabelKeysAnnotation:      `["team"]`,
+				ManagedCRAnnotationKeysAnnotation: `["owner"]`,
+			},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"owner"},
+		},
+		{
+			name: "update existing managed labels",
+			childLabels: map[string]string{
+				"team":     "old-team",
+				"existing": "keep",
+			},
+			childAnnotations: map[string]string{
+				"description":                ManagedCRLabelKeysAnnotation,
+				ManagedCRLabelKeysAnnotation: `["team"]`,
+			},
+			parentLabels:      map[string]string{"team": "new-team"},
+			parentAnnotations: map[string]string{},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"team":     "new-team",
+				"existing": "keep",
+			},
+			expectedChildAnnotations: map[string]string{
+				"description":                ManagedCRLabelKeysAnnotation,
+				ManagedCRLabelKeysAnnotation: `["team"]`,
+			},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name: "remove previously managed label no longer in parent",
+			childLabels: map[string]string{
+				"team":     "platform",
+				"old-key":  "to-remove",
+				"external": "keep",
+			},
+			childAnnotations: map[string]string{
+				"description":                     "test",
+				"old-annotation":                  "to-remove",
+				ManagedCRLabelKeysAnnotation:      `["old-key","team"]`,
+				ManagedCRAnnotationKeysAnnotation: `["description","old-annotation"]`,
+			},
+			parentLabels:      map[string]string{"team": "platform"},
+			parentAnnotations: map[string]string{"description": "test"},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"team":     "platform",
+				"external": "keep",
+			},
+			expectedChildAnnotations: map[string]string{
+				"description":                     "test",
+				ManagedCRLabelKeysAnnotation:      `["team"]`,
+				ManagedCRAnnotationKeysAnnotation: `["description"]`,
+			},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name: "preserve external labels not in previousManaged",
+			childLabels: map[string]string{
+				"team":           "platform",
+				"external-label": "keep-me",
+			},
+			childAnnotations: map[string]string{
+				"external-annotation":        "also-keep",
+				ManagedCRLabelKeysAnnotation: `["team"]`,
+			},
+			parentLabels:      map[string]string{"team": "new-team"},
+			parentAnnotations: map[string]string{},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"team":           "new-team",
+				"external-label": "keep-me",
+			},
+			expectedChildAnnotations: map[string]string{
+				"external-annotation":        "also-keep",
+				ManagedCRLabelKeysAnnotation: `["team"]`,
+			},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name:             "sts-only prefix transformation during sync",
+			childLabels:      map[string]string{},
+			childAnnotations: map[string]string{},
+			parentLabels: map[string]string{
+				"sts-only.amadeus.com/priority": "high",
+			},
+			parentAnnotations: map[string]string{
+				"sts-only.example.com/owner": "ops",
+			},
+			selectorLabels: selectorLabels,
+			expectedChildLabels: map[string]string{
+				"amadeus.com/priority": "high",
+			},
+			expectedChildAnnotations: map[string]string{
+				"example.com/owner":               "ops",
+				ManagedCRLabelKeysAnnotation:      `["amadeus.com/priority"]`,
+				ManagedCRAnnotationKeysAnnotation: `["example.com/owner"]`,
+			},
+			expectedManagedLabels:      []string{"amadeus.com/priority"},
+			expectedManagedAnnotations: []string{"example.com/owner"},
+		},
+		{
+			name:             "excluded prefixes are not synced",
+			childLabels:      map[string]string{},
+			childAnnotations: map[string]string{},
+			parentLabels: map[string]string{
+				"team":                               "platform",
+				"kubectl.kubernetes.io/last-applied": "config",
+				"operator.splunk.com/internal":       "data",
+				"pod-only.prometheus.io/scrape":      "true",
+			},
+			parentAnnotations: map[string]string{
+				"description":                       "test",
+				"kubectl.kubernetes.io/restartedAt": "2024-01-01",
+			},
+			selectorLabels: selectorLabels,
+			expectedChildLabels: map[string]string{
+				"team": "platform",
+			},
+			expectedChildAnnotations: map[string]string{
+				"description":                     "test",
+				ManagedCRLabelKeysAnnotation:      `["team"]`,
+				ManagedCRAnnotationKeysAnnotation: `["description"]`,
+			},
+			expectedManagedLabels:      []string{"team"},
+			expectedManagedAnnotations: []string{"description"},
+		},
+		{
+			name: "selector labels are never removed even if previously managed",
+			childLabels: map[string]string{
+				"app.kubernetes.io/name":     "indexer",
+				"app.kubernetes.io/instance": "splunk-test-indexer",
+				"team":                       "old-team",
+			},
+			childAnnotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["app.kubernetes.io/name","app.kubernetes.io/instance","team"]`,
+			},
+			parentLabels:      map[string]string{}, // Remove all - but selector labels must stay
+			parentAnnotations: map[string]string{},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"app.kubernetes.io/name":     "indexer",
+				"app.kubernetes.io/instance": "splunk-test-indexer",
+				// "team" is removed because it's not a selector label
+			},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name: "remove all managed keys when parent has none",
+			childLabels: map[string]string{
+				"team":     "platform",
+				"env":      "prod",
+				"external": "keep",
+			},
+			childAnnotations: map[string]string{
+				"description":                     "test",
+				"owner":                           "ops",
+				ManagedCRLabelKeysAnnotation:      `["env","team"]`,
+				ManagedCRAnnotationKeysAnnotation: `["description","owner"]`,
+			},
+			parentLabels:      map[string]string{},
+			parentAnnotations: map[string]string{},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"external": "keep",
+			},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name: "add update and remove in single sync",
+			childLabels: map[string]string{
+				"keep":   "v1",
+				"update": "old",
+				"remove": "gone",
+			},
+			childAnnotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["keep","remove","update"]`,
+			},
+			parentLabels: map[string]string{
+				"keep":   "v1",
+				"update": "new",
+				"add":    "fresh",
+			},
+			parentAnnotations: map[string]string{},
+			selectorLabels:    selectorLabels,
+			expectedChildLabels: map[string]string{
+				"keep":   "v1",
+				"update": "new",
+				"add":    "fresh",
+			},
+			expectedChildAnnotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["add","keep","update"]`,
+			},
+			expectedManagedLabels:      []string{"add", "keep", "update"},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name: "transformed key removal after parent removes sts-only prefix key",
+			childLabels: map[string]string{
+				"amadeus.com/priority": "high",
+			},
+			childAnnotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["amadeus.com/priority"]`,
+			},
+			parentLabels:               map[string]string{},
+			parentAnnotations:          map[string]string{},
+			selectorLabels:             selectorLabels,
+			expectedChildLabels:        map[string]string{},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name: "nil selector labels - still works",
+			childLabels: map[string]string{
+				"team": "platform",
+			},
+			childAnnotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["team"]`,
+			},
+			parentLabels:               map[string]string{},
+			parentAnnotations:          map[string]string{},
+			selectorLabels:             nil,
+			expectedChildLabels:        map[string]string{},
+			expectedChildAnnotations:   map[string]string{},
+			expectedManagedLabels:      []string{},
+			expectedManagedAnnotations: []string{},
+		},
+		{
+			name:             "conflict resolution: prefixed key wins over explicit key (more specific)",
+			childLabels:      map[string]string{},
+			childAnnotations: map[string]string{},
+			parentLabels: map[string]string{
+				"amadeus.com/priority":          "low",
+				"sts-only.amadeus.com/priority": "high",
+			},
+			parentAnnotations:   map[string]string{},
+			selectorLabels:      selectorLabels,
+			expectedChildLabels: map[string]string{"amadeus.com/priority": "high"},
+			expectedChildAnnotations: map[string]string{
+				ManagedCRLabelKeysAnnotation: `["amadeus.com/priority"]`,
+			},
+			expectedManagedLabels:      []string{"amadeus.com/priority"},
+			expectedManagedAnnotations: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			child := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      tt.childLabels,
+					Annotations: tt.childAnnotations,
+				},
+			}
+			parent := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      tt.parentLabels,
+					Annotations: tt.parentAnnotations,
+				},
+			}
+
+			SyncParentMetaToStatefulSet(context.Background(), child.GetObjectMeta(), parent.GetObjectMeta(), tt.selectorLabels)
+
+			// Verify child labels
+			if !reflect.DeepEqual(child.Labels, tt.expectedChildLabels) {
+				t.Errorf("SyncParentMetaToStatefulSet() child labels = %v; want %v", child.Labels, tt.expectedChildLabels)
+			}
+
+			// Verify managed labels (sorted)
+			gotManagedLabels := GetManagedLabelKeys(child.Annotations)
+			gotManagedAnnotations := GetManagedAnnotationKeys(child.Annotations)
+
+			// Verify managed labels (sorted)
+			if !reflect.DeepEqual(gotManagedLabels, tt.expectedManagedLabels) {
+				t.Errorf("SyncParentMetaToStatefulSet() managed labels = %v; want %v", gotManagedLabels, tt.expectedManagedLabels)
+			}
+
+			// Verify managed annotations (sorted)
+			if !reflect.DeepEqual(gotManagedAnnotations, tt.expectedManagedAnnotations) {
+				t.Errorf("SyncParentMetaToStatefulSet() managed annotations = %v; want %v", gotManagedAnnotations, tt.expectedManagedAnnotations)
+			}
+		})
+	}
 }
 
 func TestParseResourceQuantity(t *testing.T) {

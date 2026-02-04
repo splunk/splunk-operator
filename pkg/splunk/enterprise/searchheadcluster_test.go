@@ -394,10 +394,10 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-0"},
 		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},
-		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"},
-		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"},
+		{MetaName: "*v1.StatefulSet-test-splunk-stack1"},                     // Re-fetch StatefulSet
+		{MetaName: "*v1.Pod-test-splunk-stack1-search-head-1"},               // PrepareScaleDown might fetch the pod
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-etc-splunk-stack1-1"}, // handleScaleDown Gets PVC before deleting
+		{MetaName: "*v1.PersistentVolumeClaim-test-pvc-var-splunk-stack1-1"}, // handleScaleDown Gets PVC before deleting
 	}
 
 	wantCalls = map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Delete": pvcCalls, "Update": {funcCalls[0]}, "Create": {funcCalls[1]}}
@@ -406,12 +406,28 @@ func TestSearchHeadClusterPodManager(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "pvc-var-splunk-stack1-1", Namespace: "test"}},
 	}
 	pod.ObjectMeta.Name = "splunk-stack1-0"
+	// Create pod-1 for pod existence check in handleScaleDown
+	pod1 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-1",
+			Namespace: "test",
+			Labels: map[string]string{
+				"controller-revision-hash": "v1",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Ready: true},
+			},
+		},
+	}
 	replicas = 2
 	statefulSet.Status.Replicas = 2
 	statefulSet.Status.ReadyReplicas = 2
 	statefulSet.Status.UpdatedReplicas = 2
 	method = "searchHeadClusterPodManager.Update(Remove Member)"
-	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pvcList[0], pvcList[1])
+	searchHeadClusterPodManagerTester(t, method, mockHandlers, 1, enterpriseApi.PhaseScalingDown, statefulSet, wantCalls, nil, statefulSet, pod, pod1, pvcList[0], pvcList[1])
 
 }
 
