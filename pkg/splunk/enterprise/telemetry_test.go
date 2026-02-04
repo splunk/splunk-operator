@@ -462,8 +462,9 @@ func TestTelemetryUpdateLastTransmissionTime_SetsTimestamp(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
 		Data:       map[string]string{},
 	}
+	status := &TelemetryStatus{Test: "false"}
 
-	err := updateLastTransmissionTime(ctx, mockClient, cm, false)
+	err := updateLastTransmissionTime(ctx, mockClient, cm, status)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -471,18 +472,18 @@ func TestTelemetryUpdateLastTransmissionTime_SetsTimestamp(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected telStatusKey in configmap data")
 	}
-	var status TelemetryStatus
-	if err := json.Unmarshal([]byte(statusStr), &status); err != nil {
+	var statusObj TelemetryStatus
+	if err := json.Unmarshal([]byte(statusStr), &statusObj); err != nil {
 		t.Fatalf("failed to unmarshal status: %v", err)
 	}
-	if status.LastTransmission == "" {
+	if statusObj.LastTransmission == "" {
 		t.Errorf("expected LastTransmission to be set")
 	}
-	if _, err := time.Parse(time.RFC3339, status.LastTransmission); err != nil {
-		t.Errorf("LastTransmission is not RFC3339: %v", status.LastTransmission)
+	if _, err := time.Parse(time.RFC3339, statusObj.LastTransmission); err != nil {
+		t.Errorf("LastTransmission is not RFC3339: %v", statusObj.LastTransmission)
 	}
-	if status.Test != "false" {
-		t.Errorf("expected Test to be 'false', got %v", status.Test)
+	if statusObj.Test != "false" {
+		t.Errorf("expected Test to be 'false', got %v", statusObj.Test)
 	}
 }
 
@@ -493,7 +494,8 @@ func TestTelemetryUpdateLastTransmissionTime_UpdateError(t *testing.T) {
 		Data:       map[string]string{},
 	}
 	badClient := &errorUpdateClient{}
-	err := updateLastTransmissionTime(ctx, badClient, cm, false)
+	status := &TelemetryStatus{Test: "false"}
+	err := updateLastTransmissionTime(ctx, badClient, cm, status)
 	if err == nil {
 		t.Errorf("expected error from client.Update, got nil")
 	}
@@ -506,13 +508,14 @@ func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
 		Data:       map[string]string{},
 	}
-	err := updateLastTransmissionTime(ctx, mockClient, cm, false)
+	status := &TelemetryStatus{Test: "false"}
+	err := updateLastTransmissionTime(ctx, mockClient, cm, status)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 	firstStatus := cm.Data[telStatusKey]
 	time.Sleep(1 * time.Second)
-	err = updateLastTransmissionTime(ctx, mockClient, cm, false)
+	err = updateLastTransmissionTime(ctx, mockClient, cm, status)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}

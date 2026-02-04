@@ -206,6 +206,7 @@ deploy: manifests kustomize uninstall ## Deploy controller to the K8s cluster sp
 	$(SED) "s/value: WATCH_NAMESPACE_VALUE/value: \"${WATCH_NAMESPACE}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s|SPLUNK_ENTERPRISE_IMAGE|${SPLUNK_ENTERPRISE_IMAGE}|g"  config/${ENVIRONMENT}/kustomization.yaml
 	$(SED) "s/value: SPLUNK_GENERAL_TERMS_VALUE/value: \"${SPLUNK_GENERAL_TERMS}\"/g"  config/${ENVIRONMENT}/kustomization.yaml
+	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	RELATED_IMAGE_SPLUNK_ENTERPRISE=${SPLUNK_ENTERPRISE_IMAGE} WATCH_NAMESPACE=${WATCH_NAMESPACE} SPLUNK_GENERAL_TERMS=${SPLUNK_GENERAL_TERMS} $(KUSTOMIZE) build config/${ENVIRONMENT} | kubectl apply --server-side --force-conflicts -f -
 	$(SED) "s/namespace: ${NAMESPACE}/namespace: splunk-operator/g"  config/${ENVIRONMENT}/kustomization.yaml
@@ -428,4 +429,4 @@ setup/ginkgo:
 build-installer: manifests generate kustomize
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default > dist/install.yaml
+
