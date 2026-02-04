@@ -123,8 +123,6 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 
 	var err error
 	var standaloneList enterpriseApi.StandaloneList
-	//instanceID = SplunkStandalone
-	//telAppName = fmt.Sprintf(telAppNameTemplateStr, "stdaln")
 	err = client.List(ctx, &standaloneList)
 	if err != nil {
 		scopedLog.Error(err, "Failed to list standalone objects")
