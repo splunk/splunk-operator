@@ -21,9 +21,8 @@ import (
 
 const (
 	requeAfterInSeconds = 86400 // Send telemetry once a day
-	defaultTestMode     = true
-	// TODO: Ideally the version string should be set from the release tag
-	SOK_VERSION = "3.0.0"
+	defaultTestMode     = "false"
+	defaultTestVersion  = "unknown"
 
 	telStatusKey = "status"
 )
@@ -41,6 +40,7 @@ type Telemetry struct {
 type TelemetryStatus struct {
 	LastTransmission string `json:"lastTransmission,omitempty"`
 	Test             string `json:"test,omitempty"`
+	SokVersion       string `json:"sokVersion,omitempty"`
 }
 
 func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap) (reconcile.Result, error) {
@@ -61,8 +61,9 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	var data map[string]interface{}
 	data = make(map[string]interface{})
 
+	currentStatus := getCurrentStatus(ctx, cm)
 	// Add SOK version
-	data[telSOKVersionKey] = SOK_VERSION
+	data[telSOKVersionKey] = currentStatus.SokVersion
 	// Add SOK telemetry
 	crWithTelAppList, crList := getAllCustomResources(ctx, client)
 	collectCRTelData(ctx, client, crList, data)
@@ -75,10 +76,13 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	// Now send the telemetry
 	for _, crs := range crWithTelAppList {
 		for _, cr := range crs {
-			test := isTest(ctx, cm)
+			test := false
+			if currentStatus.Test == "true" {
+				test = true
+			}
 			success := SendTelemetry(ctx, client, cr, data, test)
 			if success {
-				updateLastTransmissionTime(ctx, client, cm, test)
+				updateLastTransmissionTime(ctx, client, cm, currentStatus)
 				return result, nil
 			}
 		}
@@ -87,18 +91,11 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	return result, errors.New("Failed to send telemetry data")
 }
 
-func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap, test bool) error {
+func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap, status *TelemetryStatus) error {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateLastTransmissionTime")
 
-	var status TelemetryStatus
 	status.LastTransmission = time.Now().UTC().Format(time.RFC3339)
-	if test {
-		status.Test = "true"
-	} else {
-		status.Test = "false"
-	}
-
 	updated, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
 		scopedLog.Error(err, "Failed to marshal telemetry status")
@@ -309,30 +306,32 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 	}
 }
 
-func isTest(ctx context.Context, cm *corev1.ConfigMap) bool {
+func getCurrentStatus(ctx context.Context, cm *corev1.ConfigMap) *TelemetryStatus {
 	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("checkTestMode")
+	scopedLog := reqLogger.WithName("getCurrentStatus")
 
+	defaultStatus := &TelemetryStatus{
+		LastTransmission: "",
+		Test:             defaultTestMode,
+		SokVersion:       defaultTestVersion,
+	}
+	defaultStatus.LastTransmission = ""
+	defaultStatus.Test = "true"
 	if cm.Data != nil {
 		if val, ok := cm.Data[telStatusKey]; ok {
 			var status TelemetryStatus
 			err := json.Unmarshal([]byte(val), &status)
 			if err != nil {
 				scopedLog.Error(err, "Failed to unmarshal telemetry status")
-				return defaultTestMode
+				return defaultStatus
 			} else {
-				if status.Test == "true" {
-					scopedLog.Info("Test is true")
-					return true
-				}
-				scopedLog.Info("Test is false")
-				return false
+				return defaultStatus
 			}
 		}
 	}
 
-	scopedLog.Info("Failed to retrieve test mode")
-	return defaultTestMode
+	scopedLog.Info("Failed")
+	return defaultStatus
 }
 
 func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, data map[string]interface{}, test bool) bool {
