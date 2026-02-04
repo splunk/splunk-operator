@@ -107,6 +107,8 @@ func (r *StandaloneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{Requeue: true, RequeueAfter: pauseRetryDelay}, nil
 		}
 	}
+	// call Cluster CR, call database CR. wait for success
+	// take the secret/config map and configure POD with it
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
 

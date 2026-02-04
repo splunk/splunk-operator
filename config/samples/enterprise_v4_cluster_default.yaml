@@ -1,0 +1,9 @@
+apiVersion: enterprise.splunk.com/v4
+kind: Cluster
+metadata:
+  name: all-defaults-cluster
+  namespace: test
+spec:
+  class: all-defaults-1
+  instances: 2
+  storage: 1Gi

@@ -1,0 +1,6 @@
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterClass
+metadata:
+  name: all-defaults-1
+spec:
+  provisioner: postgresql.cnpg.io

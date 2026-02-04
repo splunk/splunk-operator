@@ -1,0 +1,6 @@
+resources:
+- issuer.yaml
+- certificate-metrics.yaml
+
+configurations:
+- kustomizeconfig.yaml

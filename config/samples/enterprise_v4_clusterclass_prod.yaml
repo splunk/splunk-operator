@@ -1,0 +1,64 @@
+---
+# Production ClusterClass
+# Full configuration with HA, security, and tuned PostgreSQL settings
+apiVersion: enterprise.splunk.com/v4
+kind: ClusterClass
+metadata:
+  name: postgresql-prod
+spec:
+  provisioner: postgresql.cnpg.io
+
+  clusterConfig:
+    # High availability - 1 primary + 2 replicas
+    instances: 3
+
+    # Production storage
+    storage: 100Gi
+
+    # PostgreSQL 18.1 (specific minor version)
+    postgresVersion: "18.1"
+
+    # Production-grade resources
+    resources:
+      requests:
+        cpu: "2"
+        memory: "8Gi"
+      limits:
+        cpu: "4"
+        memory: "16Gi"
+
+    # Tuned PostgreSQL configuration for OLTP workload
+    postgresqlConfig:
+      # Connection settings
+      max_connections: "200"
+
+      # Memory settings (based on 8GB RAM)
+      shared_buffers: "2GB"
+      effective_cache_size: "6GB"
+      maintenance_work_mem: "512MB"
+      work_mem: "20MB"
+
+      # WAL settings
+      wal_buffers: "16MB"
+      min_wal_size: "1GB"
+      max_wal_size: "4GB"
+
+      # Query tuning
+      random_page_cost: "1.1"  # SSD optimization
+      effective_io_concurrency: "200"
+
+      # Logging
+      log_destination: "stderr"
+      logging_collector: "on"
+      log_min_duration_statement: "1000"  # Log queries > 1s
+
+    # Secure pg_hba configuration
+    pgHBA:
+      # Reject all non-SSL connections
+      - "hostnossl all all 0.0.0.0/0 reject"
+      # Require SSL + password authentication
+      - "hostssl all all 0.0.0.0/0 scram-sha-256"
+
+  cnpg:
+    # Switchover method - minimal downtime via automated failover
+    primaryUpdateMethod: switchover

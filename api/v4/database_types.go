@@ -24,38 +24,38 @@ import (
 
 // DatabaseSpec defines the desired state of Database.
 type DatabaseSpec struct {
-	// Class references a DatabaseClass (cluster-scoped) by name.
+	// Class references a ClusterClass (cluster-scoped) by name.
 	// This field is IMMUTABLE after creation.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	Class string `json:"class"`
 
-	// Storage overrides the storage size from DatabaseClass.
+	// Storage overrides the storage size from ClusterClass.
 	// Example: "500Gi"
 	// +optional
 	Storage *resource.Quantity `json:"storage,omitempty"`
 
-	// Instances overrides the number of PostgreSQL instances from DatabaseClass.
+	// Instances overrides the number of PostgreSQL instances from ClusterClass.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10
 	Instances *int32 `json:"instances,omitempty"`
 
-	// PostgresVersion overrides the PostgreSQL version from DatabaseClass.
+	// PostgresVersion overrides the PostgreSQL version from ClusterClass.
 	// Example: "16"
 	// +optional
 	PostgresVersion *string `json:"postgresVersion,omitempty"`
 
-	// Resources overrides CPU/memory resources from DatabaseClass.
+	// Resources overrides CPU/memory resources from ClusterClass.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// PostgreSQL overrides PostgreSQL engine parameters from DatabaseClass.
+	// PostgreSQL overrides PostgreSQL engine parameters from ClusterClass.
 	// Maps to postgresql.conf settings.
 	// +optional
-	PostgreSQL map[string]string `json:"postgresql,omitempty"`
+	PostgreSQLConfig map[string]string `json:"postgresqlConfig,omitempty"`
 
-	// Extensions overrides PostgreSQL extensions from DatabaseClass.
+	// Extensions overrides PostgreSQL extensions from ClusterClass.
 	// +optional
 	Extensions []string `json:"extensions,omitempty"`
 

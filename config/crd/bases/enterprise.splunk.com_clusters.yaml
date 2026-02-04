@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: databases.enterprise.splunk.com
+  name: clusters.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: Database
-    listKind: DatabaseList
-    plural: databases
-    singular: database
+    kind: Cluster
+    listKind: ClusterList
+    plural: clusters
+    singular: cluster
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -27,7 +27,7 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: Database is the Schema for the databases API.
+        description: Cluster is the Schema for the clusters API.
         properties:
           apiVersion:
             description: |-
@@ -47,48 +47,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: DatabaseSpec defines the desired state of Database.
+            description: ClusterSpec defines the desired state of Cluster.
             properties:
               class:
                 description: |-
-                  Class references a ClusterClass (cluster-scoped) by name.
+                  Reference to ClusterClass for default configuration by name.
                   This field is IMMUTABLE after creation.
                 minLength: 1
                 type: string
-              clusterDeletionPolicy:
-                default: Delete
-                description: |-
-                  ClusterDeletionPolicy controls what happens when Database CR is deleted.
-                  "Delete" (default) - PostgreSQL cluster is deleted
-                  "Retain" - PostgreSQL cluster is preserved (orphaned)
-                enum:
-                - Delete
-                - Retain
-                type: string
-              databaseDeletionPolicy:
-                default: Retain
-                description: |-
-                  DatabaseDeletionPolicy controls what happens when a database is removed from Databases list.
-                  "Retain" (default) - Database not dropped, credentials remain
-                  "Delete" - Database dropped, credentials removed
-                enum:
-                - Delete
-                - Retain
-                type: string
-              databases:
-                description: |-
-                  Databases is a list of logical database names to create within the cluster.
-                  Each gets its own user and password.
-                  If empty, one default database is created.
-                  Example: ["shc_kvstore", "shc_dmx", "shc_spl2"]
-                items:
-                  type: string
-                type: array
-              extensions:
-                description: Extensions overrides PostgreSQL extensions from ClusterClass.
-                items:
-                  type: string
-                type: array
+                x-kubernetes-validations:
+                - message: spec.class is immutable
+                  rule: self == oldSelf
               instances:
                 description: Instances overrides the number of PostgreSQL instances
                   from ClusterClass.
@@ -96,6 +65,14 @@ spec:
                 maximum: 10
                 minimum: 1
                 type: integer
+              pgHBA:
+                description: |-
+                  PgHBA contains pg_hba.conf host-based authentication rules.
+                  Defines client authentication and connection security (cluster-wide).
+                  Example: ["hostssl all all 0.0.0.0/0 scram-sha-256"]
+                items:
+                  type: string
+                type: array
               postgresVersion:
                 description: |-
                   PostgresVersion overrides the PostgreSQL version from ClusterClass.
@@ -173,18 +150,22 @@ spec:
                 - type: string
                 description: |-
                   Storage overrides the storage size from ClusterClass.
-                  Example: "500Gi"
+                  Example: "5Gi"
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
+                x-kubernetes-validations:
+                - message: spec.storage can only be increased
+                  rule: self == null || oldSelf == null || quantity(self).compareTo(quantity(oldSelf))
+                    >= 0
             required:
             - class
             type: object
           status:
-            description: DatabaseStatus defines the observed state of Database.
+            description: ClusterStatus defines the observed state of Cluster.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the Database state.
+                  of the Cluster's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -242,12 +223,13 @@ spec:
                 type: array
               phase:
                 description: |-
-                  Phase represents the current phase of the Database.
-                  Valid phases: "Pending", "Provisioning", "Ready", "Failed"
+                  Phase represents the current phase of the Cluster.
+                  Values: "Pending", "Provisioning", "Failed", "Ready", "Deleting"
                 type: string
               provisionerRef:
-                description: ProvisionerRef references the underlying provisioner
-                  resource (e.g., CNPG Cluster).
+                description: |-
+                  ProvisionerRef contains reference to the provisioner resource managing this cluster.
+                  Right now, only CNPG is supported.
                 properties:
                   apiVersion:
                     description: API version of the referent.
@@ -289,43 +271,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              resources:
-                description: Resources contains references to generated ConfigMap
-                  and Secret.
-                properties:
-                  configMapRef:
-                    description: |-
-                      ConfigMapRef references the ConfigMap with connection endpoints.
-                      Contains: DB_SERVICE_RW, DB_SERVICE_RO, DB_PORT, database list, usernames
-                    properties:
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                  secretRef:
-                    description: |-
-                      SecretRef references the Secret with database credentials.
-                      Contains: passwords for each database user
-                    properties:
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                type: object
             type: object
         type: object
     served: true

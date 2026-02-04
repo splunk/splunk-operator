@@ -11,19 +11,19 @@ metadata:
   labels:
     app.kubernetes.io/name: splunk-operator
     app.kubernetes.io/managed-by: kustomize
-  name: databaseclass-viewer-role
+  name: clusterclass-viewer-role
 rules:
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - databaseclasses
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - databaseclasses/status
-  verbs:
-  - get
+  - apiGroups:
+      - enterprise.splunk.com
+    resources:
+      - clusterclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - enterprise.splunk.com
+    resources:
+      - clusterclasses/status
+    verbs:
+      - get

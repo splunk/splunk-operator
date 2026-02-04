@@ -11,17 +11,17 @@ metadata:
   labels:
     app.kubernetes.io/name: splunk-operator
     app.kubernetes.io/managed-by: kustomize
-  name: databaseclass-admin-role
+  name: clusterclass-admin-role
 rules:
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - databaseclasses
-  verbs:
-  - '*'
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
-  - databaseclasses/status
-  verbs:
-  - get
+  - apiGroups:
+      - enterprise.splunk.com
+    resources:
+      - clusterclasses
+    verbs:
+      - "*"
+  - apiGroups:
+      - enterprise.splunk.com
+    resources:
+      - clusterclasses/status
+    verbs:
+      - get

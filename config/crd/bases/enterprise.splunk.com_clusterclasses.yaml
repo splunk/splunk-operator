@@ -4,19 +4,28 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: databaseclasses.enterprise.splunk.com
+  name: clusterclasses.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: DatabaseClass
-    listKind: DatabaseClassList
-    plural: databaseclasses
-    singular: databaseclass
+    kind: ClusterClass
+    listKind: ClusterClassList
+    plural: clusterclasses
+    singular: clusterclass
   scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.provisioner
       name: Provisioner
+      type: string
+    - jsonPath: .spec.clusterConfig.instances
+      name: Instances
+      type: integer
+    - jsonPath: .spec.clusterConfig.storage
+      name: Storage
+      type: string
+    - jsonPath: .spec.clusterConfig.postgresVersion
+      name: Version
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -27,7 +36,9 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: DatabaseClass is the Schema for the databaseclasses API.
+        description: |-
+          ClusterClass is the Schema for the clusterclasses API.
+          ClusterClass defines a reusable template and policy for database cluster provisioning.
         properties:
           apiVersion:
             description: |-
@@ -48,73 +59,53 @@ spec:
             type: object
           spec:
             description: |-
-              DatabaseClassSpec defines the desired state of DatabaseClass.
-              DatabaseClass is immutable after creation - it's a template/policy for database provisioning.
+              ClusterClassSpec defines the desired state of ClusterClass.
+              ClusterClass is immutable after creation - it serves as a template for Cluster CRs.
             properties:
-              cnpg:
-                description: |-
-                  CNPG contains CloudNativePG-specific configuration.
-                  Only used when Provisioner is "postgresql.cnpg.io"
-                properties:
-                  primaryUpdateMethod:
-                    description: |-
-                      PrimaryUpdateMethod determines how the primary instance is updated.
-                      "restart" - tolerate brief downtime (good for dev)
-                      "switchover" - minimal downtime via failover (good for prod)
-                    enum:
-                    - restart
-                    - switchover
-                    type: string
-                type: object
-              config:
+              clusterConfig:
                 default: {}
                 description: |-
-                  Config contains the generic database configuration (provider-agnostic).
-                  These settings work across all provisioners.
+                  ClusterConfig contains cluster-level configuration.
+                  These settings apply to database cluster infrastructure.
+                  Can be overridden in Cluster CR.
                 properties:
-                  databases:
-                    default: []
-                    description: |-
-                      Databases is a list of PostgreSQL databases to create within cluster.
-                      Default: []
-                    items:
-                      type: string
-                    type: array
-                  extensions:
-                    default: []
-                    description: |-
-                      Extensions is a list of PostgreSQL extensions to enable.
-                      Default: []
-                      Example: ["pg_stat_statements", "pgcrypto"]
-                    items:
-                      type: string
-                    type: array
                   instances:
-                    default: 3
-                    description: Instances is the number of PostgreSQL instances (1
-                      primary + N replicas).
+                    default: 1
+                    description: |-
+                      Instances is the number of database instances (1 primary + N replicas).
+                      Single instance (1) is suitable for development.
+                      High availability requires at least 3 instances (1 primary + 2 replicas).
                     format: int32
                     maximum: 10
                     minimum: 1
                     type: integer
-                  postgresVersion:
-                    default: "18"
+                  pgHBA:
                     description: |-
-                      PostgresVersion is the PostgreSQL major version.
-                      Example: "17", "18"
+                      PgHBA contains pg_hba.conf host-based authentication rules.
+                      Defines client authentication and connection security (cluster-wide).
+                      Example: ["hostssl all all 0.0.0.0/0 scram-sha-256"]
+                    items:
+                      type: string
+                    type: array
+                  postgresVersion:
+                    default: "15"
+                    description: |-
+                      PostgresVersion is the PostgreSQL version (major or major.minor).
+                      Examples: "18" (latest 18.x), "18.1" (specific minor), "17", "16"
+                    pattern: ^[0-9]+(\.[0-9]+)?$
                     type: string
-                  postgresql:
+                  postgresqlConfig:
                     additionalProperties:
                       type: string
-                    default: {}
                     description: |-
-                      PostgreSQL contains PostgreSQL engine configuration parameters.
-                      Maps to postgresql.conf settings.
+                      PostgreSQLConfig contains PostgreSQL engine configuration parameters.
+                      Maps to postgresql.conf settings (cluster-wide).
                       Example: {"max_connections": "200", "shared_buffers": "2GB"}
                     type: object
                   resources:
-                    description: Resources defines CPU and memory requests/limits
-                      per instance.
+                    description: |-
+                      Resources defines CPU and memory requests/limits per instance.
+                      All instances in the cluster have the same resources.
                     properties:
                       claims:
                         description: |-
@@ -176,18 +167,39 @@ spec:
                     anyOf:
                     - type: integer
                     - type: string
-                    default: 10Gi
+                    default: 1Gi
                     description: |-
                       Storage is the size of persistent volume for each instance.
-                      Example: "100Gi", "1Ti"
+                      Cannot be decreased after cluster creation (PostgreSQL limitation).
+                      Recommended minimum: 10Gi for production viability.
+                      Example: "50Gi", "100Gi", "1Ti"
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
+                type: object
+              cnpg:
+                description: |-
+                  CNPG contains CloudNativePG-specific configuration and policies.
+                  Only used when Provisioner is "postgresql.cnpg.io"
+                  These settings CANNOT be overridden in Cluster CR (platform policy).
+                properties:
+                  primaryUpdateMethod:
+                    default: switchover
+                    description: |-
+                      PrimaryUpdateMethod determines how the primary instance is updated.
+                      "restart" - tolerate brief downtime (suitable for development)
+                      "switchover" - minimal downtime via automated failover (production-grade)
+
+                      NOTE: When using "switchover", ensure clusterConfig.instances > 1.
+                      Switchover requires at least one replica to fail over to.
+                    enum:
+                    - restart
+                    - switchover
+                    type: string
                 type: object
               provisioner:
                 description: |-
                   Provisioner identifies which database provisioner to use.
                   Currently supported: "postgresql.cnpg.io" (CloudNativePG)
-                  Future: "aws.rds.io", "gcp.cloudsql.io"
                 enum:
                 - postgresql.cnpg.io
                 type: string
@@ -195,11 +207,11 @@ spec:
             - provisioner
             type: object
           status:
-            description: DatabaseClassStatus defines the observed state of DatabaseClass.
+            description: ClusterClassStatus defines the observed state of ClusterClass.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the DatabaseClass state.
+                  of the ClusterClass state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -257,7 +269,7 @@ spec:
                 type: array
               phase:
                 description: |-
-                  Phase represents the current phase of the DatabaseClass.
+                  Phase represents the current phase of the ClusterClass.
                   Valid phases: "Ready", "Invalid"
                 type: string
             type: object

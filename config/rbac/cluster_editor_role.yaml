@@ -11,12 +11,12 @@ metadata:
   labels:
     app.kubernetes.io/name: splunk-operator
     app.kubernetes.io/managed-by: kustomize
-  name: databaseclass-editor-role
+  name: cluster-editor-role
 rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - databaseclasses
+  - clusters
   verbs:
   - create
   - delete
@@ -28,6 +28,6 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - databaseclasses/status
+  - clusters/status
   verbs:
   - get

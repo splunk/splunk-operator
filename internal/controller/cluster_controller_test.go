@@ -30,7 +30,7 @@ import (
 	enterprisev4 "github.com/splunk/splunk-operator/api/v4"
 )
 
-var _ = Describe("DatabaseClass Controller", func() {
+var _ = Describe("Cluster Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("DatabaseClass Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		databaseclass := &enterprisev4.DatabaseClass{}
+		cluster := &enterprisev4.Cluster{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind DatabaseClass")
-			err := k8sClient.Get(ctx, typeNamespacedName, databaseclass)
+			By("creating the custom resource for the Kind Cluster")
+			err := k8sClient.Get(ctx, typeNamespacedName, cluster)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &enterprisev4.DatabaseClass{
+				resource := &enterprisev4.Cluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("DatabaseClass Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &enterprisev4.DatabaseClass{}
+			resource := &enterprisev4.Cluster{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance DatabaseClass")
+			By("Cleanup the specific resource instance Cluster")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &DatabaseClassReconciler{
+			controllerReconciler := &ClusterReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
