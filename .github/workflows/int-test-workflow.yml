@@ -10,6 +10,7 @@ on:
       - develop
       - main
       - feature**
+      - CSPL_4510_ubi8upgrade
 jobs:
   build-operator-image:
     runs-on: ubuntu-latest
