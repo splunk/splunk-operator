@@ -45,8 +45,14 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 		mgr.c = c
 	}
 
+	// Get eventPublisher from context
+	var eventPublisher splcommon.K8EventPublisher
+	if ep := ctx.Value(splcommon.EventPublisherKey); ep != nil {
+		eventPublisher = ep.(splcommon.K8EventPublisher)
+	}
+
 	// update statefulset, if necessary
-	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet)
+	_, err := splctrl.ApplyStatefulSet(ctx, mgr.c, statefulSet, eventPublisher)
 	if err != nil {
 		return enterpriseApi.PhaseError, err
 	}
