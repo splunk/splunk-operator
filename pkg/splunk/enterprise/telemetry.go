@@ -10,8 +10,7 @@ import (
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	appsv1 "k8s.io/api/apps/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"time"
@@ -24,7 +23,12 @@ const (
 	defaultTestMode     = "false"
 	defaultTestVersion  = "unknown"
 
-	telStatusKey = "status"
+	telStatusKey     = "status"
+	telDeploymentKey = "deployment"
+	cpuRequestKey    = "cpu_request"
+	memoryRequestKey = "memory_request"
+	cpuLimitKey      = "cpu_limit"
+	memoryLimitKey   = "memory_limit"
 )
 
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
@@ -64,9 +68,11 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	currentStatus := getCurrentStatus(ctx, cm)
 	// Add SOK version
 	data[telSOKVersionKey] = currentStatus.SokVersion
+	var telDeployment map[string]interface{}
+	telDeployment = make(map[string]interface{})
+	data[telDeploymentKey] = telDeployment
 	// Add SOK telemetry
-	crWithTelAppList, crList := getAllCustomResources(ctx, client)
-	collectCRTelData(ctx, client, crList, data)
+	crWithTelAppList := collectDeploymentTelData(ctx, client, telDeployment)
 	/*
 	 * Add other component's telemetry set in splunk-operator-manager-telemetry configmap.
 	 * i.e splunk POD's telemetry
@@ -91,7 +97,7 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	return result, errors.New("Failed to send telemetry data")
 }
 
-func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap, status *TelemetryStatus) error {
+func updateLastTransmissionTime(ctx context.Context, client splcommon.ControllerClient, cm *corev1.ConfigMap, status *TelemetryStatus) {
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("updateLastTransmissionTime")
 
@@ -99,24 +105,72 @@ func updateLastTransmissionTime(ctx context.Context, client splcommon.Controller
 	updated, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
 		scopedLog.Error(err, "Failed to marshal telemetry status")
-		return err
+		return
 	}
 	cm.Data[telStatusKey] = string(updated)
 	if err = client.Update(ctx, cm); err != nil {
 		scopedLog.Error(err, "Failed to update telemetry status in configmap")
-		return err
+		return
 	}
 	scopedLog.Info("Updated last transmission time in configmap", "newStatus", cm.Data[telStatusKey])
-
-	return nil
 }
 
-func getAllCustomResources(ctx context.Context, client splcommon.ControllerClient) (map[string][]splcommon.MetaObject, map[string][]splcommon.MetaObject) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("collectCRTelData")
+func collectResourceTelData(resources corev1.ResourceRequirements, data map[string]string) {
+	defaultResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(defaultRequestsCPU),
+			corev1.ResourceMemory: resource.MustParse(defaultRequestsMemory),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(defaultLimitsCPU),
+			corev1.ResourceMemory: resource.MustParse(defaultLimitsMemory),
+		},
+	}
 
-	var crList map[string][]splcommon.MetaObject
-	crList = make(map[string][]splcommon.MetaObject)
+	if resources.Requests == nil {
+		cpu := defaultResources.Requests[corev1.ResourceCPU]
+		mem := defaultResources.Requests[corev1.ResourceMemory]
+		data[cpuRequestKey] = (&cpu).String()
+		data[memoryRequestKey] = (&mem).String()
+	} else {
+		if cpuReq, ok := resources.Requests[corev1.ResourceCPU]; ok {
+			data[cpuRequestKey] = cpuReq.String()
+		} else {
+			cpu := defaultResources.Requests[corev1.ResourceCPU]
+			data[cpuRequestKey] = (&cpu).String()
+		}
+		if memReq, ok := resources.Requests[corev1.ResourceMemory]; ok {
+			data[memoryRequestKey] = memReq.String()
+		} else {
+			mem := defaultResources.Requests[corev1.ResourceMemory]
+			data[memoryRequestKey] = (&mem).String()
+		}
+	}
+
+	if resources.Limits == nil {
+		cpu := defaultResources.Limits[corev1.ResourceCPU]
+		mem := defaultResources.Limits[corev1.ResourceMemory]
+		data[cpuLimitKey] = (&cpu).String()
+		data[memoryLimitKey] = (&mem).String()
+	} else {
+		if cpuLim, ok := resources.Limits[corev1.ResourceCPU]; ok {
+			data[cpuLimitKey] = cpuLim.String()
+		} else {
+			cpu := defaultResources.Limits[corev1.ResourceCPU]
+			data[cpuLimitKey] = (&cpu).String()
+		}
+		if memLim, ok := resources.Limits[corev1.ResourceMemory]; ok {
+			data[memoryLimitKey] = memLim.String()
+		} else {
+			mem := defaultResources.Limits[corev1.ResourceMemory]
+			data[memoryLimitKey] = (&mem).String()
+		}
+	}
+}
+
+func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerClient, deploymentData map[string]interface{}) map[string][]splcommon.MetaObject {
+	reqLogger := log.FromContext(ctx)
+	scopedLog := reqLogger.WithName("collectDeploymentTelData")
 
 	var crWithTelAppList map[string][]splcommon.MetaObject
 	crWithTelAppList = make(map[string][]splcommon.MetaObject)
@@ -127,12 +181,17 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list standalone objects")
 	} else if len(standaloneList.Items) > 0 {
-		crList[standaloneList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[standaloneList.Items[0].Kind] = perKindData
 		for _, cr := range standaloneList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[standaloneList.Items[0].Kind] = append(crWithTelAppList[standaloneList.Items[0].Kind], &cr)
 			}
-			crList[standaloneList.Items[0].Kind] = append(crList[standaloneList.Items[0].Kind], &cr)
 		}
 	}
 
@@ -141,12 +200,17 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list LicenseManager objects")
 	} else if len(lmanagerList.Items) > 0 {
-		crList[lmanagerList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[lmanagerList.Items[0].Kind] = perKindData
 		for _, cr := range lmanagerList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[lmanagerList.Items[0].Kind] = append(crWithTelAppList[lmanagerList.Items[0].Kind], &cr)
 			}
-			crList[lmanagerList.Items[0].Kind] = append(crList[lmanagerList.Items[0].Kind], &cr)
 		}
 	}
 
@@ -155,12 +219,17 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list LicenseMaster objects")
 	} else if len(lmasterList.Items) > 0 {
-		crList[lmasterList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[lmasterList.Items[0].Kind] = perKindData
 		for _, cr := range lmasterList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[lmasterList.Items[0].Kind] = append(crWithTelAppList[lmasterList.Items[0].Kind], &cr)
 			}
-			crList[lmasterList.Items[0].Kind] = append(crList[lmasterList.Items[0].Kind], &cr)
 		}
 	}
 
@@ -169,12 +238,17 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list SearchHeadCluster objects")
 	} else if len(shcList.Items) > 0 {
-		crList[shcList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[shcList.Items[0].Kind] = perKindData
 		for _, cr := range shcList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[shcList.Items[0].Kind] = append(crWithTelAppList[shcList.Items[0].Kind], &cr)
 			}
-			crList[shcList.Items[0].Kind] = append(crList[shcList.Items[0].Kind], &cr)
 		}
 	}
 
@@ -183,10 +257,14 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list IndexerCluster objects")
 	} else if len(idxList.Items) > 0 {
-		crList[idxList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[idxList.Items[0].Kind] = perKindData
 		for _, cr := range idxList.Items {
-			// IndexerCluster does not have telemetry app installed
-			crList[idxList.Items[0].Kind] = append(crList[idxList.Items[0].Kind], &cr)
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 		}
 	}
 
@@ -195,12 +273,17 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list ClusterManager objects")
 	} else if len(cmanagerList.Items) > 0 {
-		crList[cmanagerList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[cmanagerList.Items[0].Kind] = perKindData
 		for _, cr := range cmanagerList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[cmanagerList.Items[0].Kind] = append(crWithTelAppList[cmanagerList.Items[0].Kind], &cr)
 			}
-			crList[cmanagerList.Items[0].Kind] = append(crList[cmanagerList.Items[0].Kind], &cr)
 		}
 	}
 
@@ -209,78 +292,75 @@ func getAllCustomResources(ctx context.Context, client splcommon.ControllerClien
 	if err != nil {
 		scopedLog.Error(err, "Failed to list ClusterMaster objects")
 	} else if len(cmasterList.Items) > 0 {
-		crList[cmasterList.Items[0].Kind] = make([]splcommon.MetaObject, 0)
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[cmasterList.Items[0].Kind] = perKindData
 		for _, cr := range cmasterList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[cmasterList.Items[0].Kind] = append(crWithTelAppList[cmasterList.Items[0].Kind], &cr)
 			}
-			crList[cmasterList.Items[0].Kind] = append(crList[cmasterList.Items[0].Kind], &cr)
 		}
 	}
 
-	return crWithTelAppList, crList
-}
-
-func getOwnedStatefulSets(
-	ctx context.Context,
-	c client.Client,
-	cr client.Object,
-) ([]appsv1.StatefulSet, error) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("getOwnedStatefulSets")
-
-	stsList := &appsv1.StatefulSetList{}
-	if err := c.List(ctx, stsList,
-		client.InNamespace(cr.GetNamespace()),
-	); err != nil {
-		scopedLog.Error(err, "Failed to list StatefulSets", "CR Name", cr.GetName())
-		return nil, err
-	}
-
-	var result []appsv1.StatefulSet
-	for _, sts := range stsList.Items {
-		for _, owner := range sts.OwnerReferences {
-			if owner.UID == cr.GetUID() {
-				result = append(result, sts)
-				break
-			}
-		}
-	}
-	return result, nil
-}
-
-func collectCRTelData(ctx context.Context, client splcommon.ControllerClient, crList map[string][]splcommon.MetaObject, data map[string]interface{}) {
-	reqLogger := log.FromContext(ctx)
-	scopedLog := reqLogger.WithName("collectCRTelData")
-	scopedLog.Info("Start")
-
-	for kind, crs := range crList {
+	var licenseMasterList enterpriseApiV3.LicenseMasterList
+	err = client.List(ctx, &licenseMasterList)
+	if err != nil {
+		scopedLog.Error(err, "Failed to list ClusterMaster objects")
+	} else if len(licenseMasterList.Items) > 0 {
 		var perKindData map[string]interface{}
 		perKindData = make(map[string]interface{})
-		for _, cr := range crs {
-			var perCRData []map[string]string
-			perCRData = make([]map[string]string, 0)
-			stsList, err := getOwnedStatefulSets(ctx, client, cr)
-			if err != nil {
-				scopedLog.Error(err, "Failed to get owned StatefulSets")
-			} else if len(stsList) > 0 {
-				for _, sts := range stsList {
-					for _, container := range sts.Spec.Template.Spec.Containers {
-						resPerContainer := map[string]string{
-							"container_name": container.Name,
-							"cpu_request":    container.Resources.Requests.Cpu().String(),
-							"memory_request": container.Resources.Requests.Memory().String(),
-							"cpu_limit":      container.Resources.Limits.Cpu().String(),
-							"memory_limit":   container.Resources.Limits.Memory().String(),
-						}
-						perCRData = append(perCRData, resPerContainer)
-					}
-				}
+		deploymentData[licenseMasterList.Items[0].Kind] = perKindData
+		for _, cr := range licenseMasterList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[licenseMasterList.Items[0].Kind] = append(crWithTelAppList[licenseMasterList.Items[0].Kind], &cr)
 			}
-			perKindData[cr.GetName()] = perCRData
 		}
-		data[kind] = perKindData
 	}
+
+	var licenseManagerList enterpriseApi.LicenseManagerList
+	err = client.List(ctx, &licenseManagerList)
+	if err != nil {
+		scopedLog.Error(err, "Failed to list ClusterMaster objects")
+	} else if len(licenseManagerList.Items) > 0 {
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[licenseManagerList.Items[0].Kind] = perKindData
+		for _, cr := range licenseManagerList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
+			if cr.Status.TelAppInstalled {
+				crWithTelAppList[licenseManagerList.Items[0].Kind] = append(crWithTelAppList[licenseManagerList.Items[0].Kind], &cr)
+			}
+		}
+	}
+
+	var mconsoleList enterpriseApi.MonitoringConsoleList
+	err = client.List(ctx, &mconsoleList)
+	if err != nil {
+		scopedLog.Error(err, "Failed to list ClusterMaster objects")
+	} else if len(mconsoleList.Items) > 0 {
+		var perKindData map[string]interface{}
+		perKindData = make(map[string]interface{})
+		deploymentData[mconsoleList.Items[0].Kind] = perKindData
+		for _, cr := range mconsoleList.Items {
+			var crResourceData map[string]string
+			crResourceData = make(map[string]string)
+			perKindData[cr.GetName()] = crResourceData
+			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
+		}
+	}
+
+	return crWithTelAppList
 }
 
 func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string]interface{}) {
