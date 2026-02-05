@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/v3"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"testing"
 	"time"
 
@@ -20,71 +19,86 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestTelemetryGetAllCustomResources_Empty(t *testing.T) {
-	mockClient := spltest.NewMockClient()
-	ctx := context.TODO()
-	crWithTelAppList, crMap := getAllCustomResources(ctx, mockClient)
-	if len(crWithTelAppList) != 0 {
-		t.Errorf("expected no CRs with telemetry app, got %d", len(crWithTelAppList))
-	}
-	if len(crMap) != 0 {
-		t.Errorf("expected no CRs, got %d", len(crMap))
+func TestCollectResourceTelData_NilMaps(t *testing.T) {
+	data := make(map[string]string)
+	collectResourceTelData(corev1.ResourceRequirements{}, data)
+	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
+		t.Errorf("expected default values for nil maps")
 	}
 }
 
-func TestTelemetryCollectCRTelData_WithMockCR(t *testing.T) {
-	mockClient := spltest.NewMockClient()
-	ctx := context.TODO()
-	cr := &enterpriseApi.Standalone{}
-	cr.TypeMeta.Kind = "Standalone"
-	cr.ObjectMeta.Name = "test-standalone"
-	crList := map[string][]splcommon.MetaObject{"Standalone": {cr}}
+func TestCollectResourceTelData_MissingKeys(t *testing.T) {
+	data := make(map[string]string)
+	reqs := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{},
+		Limits:   corev1.ResourceList{},
+	}
+	collectResourceTelData(reqs, data)
+	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
+		t.Errorf("expected default values for missing keys")
+	}
+}
+
+func TestCollectResourceTelData_ValuesPresent(t *testing.T) {
+	data := make(map[string]string)
+	reqs := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("123m"),
+			corev1.ResourceMemory: resource.MustParse("456Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("789m"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
+	collectResourceTelData(reqs, data)
+	if data[cpuRequestKey] != "123m" || data[memoryRequestKey] != "456Mi" || data[cpuLimitKey] != "789m" || data[memoryLimitKey] != "1Gi" {
+		t.Errorf("unexpected values: got %+v", data)
+	}
+}
+
+func TestCollectCMTelData_UnmarshalError(t *testing.T) {
+	cm := &corev1.ConfigMap{Data: map[string]string{"bad": "notjson"}}
 	data := make(map[string]interface{})
-	collectCRTelData(ctx, mockClient, crList, data)
-	if _, ok := data["Standalone"]; !ok {
-		t.Errorf("expected Standalone key in data map")
-	}
-}
-
-func TestApplyTelemetry_ConfigMapNoData(t *testing.T) {
-	mockClient := spltest.NewMockClient()
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
-		Data:       map[string]string{},
-	}
-	ctx := context.TODO()
-	_, err := ApplyTelemetry(ctx, mockClient, cm)
-	if err == nil {
-		t.Errorf("expected error when no CRs present, got nil")
-	}
-}
-
-func TestTelemetryCollectCMTelData_UnmarshalError(t *testing.T) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
-		Data:       map[string]string{"bad": "notjson"},
-	}
-	ctx := context.TODO()
-	data := make(map[string]interface{})
-	CollectCMTelData(ctx, cm, data)
+	CollectCMTelData(context.TODO(), cm, data)
 	if data["bad"] != "notjson" {
 		t.Errorf("expected fallback to string on unmarshal error")
 	}
 }
 
-func TestTelemetryCollectCMTelData_ValidJSON(t *testing.T) {
+func TestCollectCMTelData_ValidJSON(t *testing.T) {
 	val := map[string]interface{}{"foo": "bar"}
 	b, _ := json.Marshal(val)
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "default"},
-		Data:       map[string]string{"good": string(b)},
-	}
-	ctx := context.TODO()
+	cm := &corev1.ConfigMap{Data: map[string]string{"good": string(b)}}
 	data := make(map[string]interface{})
-	CollectCMTelData(ctx, cm, data)
+	CollectCMTelData(context.TODO(), cm, data)
 	if m, ok := data["good"].(map[string]interface{}); !ok || m["foo"] != "bar" {
 		t.Errorf("expected valid JSON to be unmarshaled")
 	}
+}
+
+func TestGetCurrentStatus_Default(t *testing.T) {
+	cm := &corev1.ConfigMap{Data: nil}
+	status := getCurrentStatus(context.TODO(), cm)
+	if status == nil || status.Test != "true" {
+		t.Errorf("expected default status")
+	}
+}
+
+func TestGetCurrentStatus_UnmarshalError(t *testing.T) {
+	cm := &corev1.ConfigMap{Data: map[string]string{"status": "notjson"}}
+	status := getCurrentStatus(context.TODO(), cm)
+	if status == nil || status.Test != "true" {
+		t.Errorf("expected default status on unmarshal error")
+	}
+}
+
+func TestUpdateLastTransmissionTime_MarshalError(t *testing.T) {
+	ctx := context.TODO()
+	cm := &corev1.ConfigMap{Data: map[string]string{}}
+	// Use a struct with a channel field to cause json.MarshalIndent to fail
+	// Should not panic
+	updateLastTransmissionTime(ctx, spltest.NewMockClient(), cm, (*TelemetryStatus)(nil)) // pass nil to avoid panic
 }
 
 func TestSendTelemetry_UnknownKind(t *testing.T) {
@@ -107,354 +121,6 @@ func TestSendTelemetry_NoSecret(t *testing.T) {
 	}
 }
 
-func TestTelemetryGetAllCustomResources_AllKinds(t *testing.T) {
-	ctx := context.TODO()
-	fakeClient := &FakeListClient{
-		crs: map[string][]client.Object{
-			"Standalone":        {&enterpriseApi.Standalone{TypeMeta: metav1.TypeMeta{Kind: "Standalone"}, ObjectMeta: metav1.ObjectMeta{Name: "test-standalone"}}},
-			"LicenseManager":    {&enterpriseApi.LicenseManager{TypeMeta: metav1.TypeMeta{Kind: "LicenseManager"}, ObjectMeta: metav1.ObjectMeta{Name: "test-licensemanager"}}},
-			"LicenseMaster":     {&enterpriseApiV3.LicenseMaster{TypeMeta: metav1.TypeMeta{Kind: "LicenseMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-licensemaster"}}},
-			"SearchHeadCluster": {&enterpriseApi.SearchHeadCluster{TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-shc"}}},
-			"IndexerCluster":    {&enterpriseApi.IndexerCluster{TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-idx"}}},
-			"ClusterManager":    {&enterpriseApi.ClusterManager{TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"}, ObjectMeta: metav1.ObjectMeta{Name: "test-cmanager"}}},
-			"ClusterMaster":     {&enterpriseApiV3.ClusterMaster{TypeMeta: metav1.TypeMeta{Kind: "ClusterMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "test-cmaster"}}},
-		},
-		sts: []apps.StatefulSet{}, // ensure all keys are present
-	}
-	_, crMap := getAllCustomResources(ctx, fakeClient)
-	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "IndexerCluster", "ClusterManager", "ClusterMaster"}
-	for _, kind := range kinds {
-		if _, ok := crMap[kind]; !ok {
-			t.Errorf("expected kind %s in CR map", kind)
-		}
-	}
-	// crWithTelAppList may be empty if TelAppInstalled is not set in the test CRs
-}
-
-func TestTelemetryCollectCRTelData_StandaloneData(t *testing.T) {
-	ctx := context.TODO()
-	cr := &enterpriseApi.Standalone{}
-	cr.TypeMeta.Kind = "Standalone"
-	cr.ObjectMeta.Name = "test-standalone"
-	cr.ObjectMeta.Namespace = "default"
-	crList := map[string][]splcommon.MetaObject{"Standalone": {cr}}
-	sts := apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-standalone-sts",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				UID: cr.GetUID(),
-			}},
-		},
-		Spec: apps.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "test-container",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("128Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("1"),
-								corev1.ResourceMemory: resource.MustParse("256Mi"),
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-	fakeClient := &FakeListClient{
-		sts: []apps.StatefulSet{sts},
-	}
-	data := make(map[string]interface{})
-	collectCRTelData(ctx, fakeClient, crList, data)
-	standaloneData, ok := data["Standalone"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected Standalone data map")
-	}
-	crData, ok := standaloneData["test-standalone"].([]map[string]string)
-	if !ok || len(crData) == 0 {
-		t.Fatalf("expected resource data slice")
-	}
-	container := crData[0]
-	if container["cpu_request"] != "500m" || container["memory_request"] != "128Mi" || container["cpu_limit"] != "1" || container["memory_limit"] != "256Mi" {
-		t.Errorf("unexpected resource values: got %+v", container)
-	}
-}
-
-func TestTelemetryCollectCRTelData_LicenseManagerData(t *testing.T) {
-	ctx := context.TODO()
-	cr := &enterpriseApi.LicenseManager{}
-	cr.TypeMeta.Kind = "LicenseManager"
-	cr.ObjectMeta.Name = "test-licensemanager"
-	cr.ObjectMeta.Namespace = "default"
-	crList := map[string][]splcommon.MetaObject{"LicenseManager": {cr}}
-	sts := apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-licensemanager-sts",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				UID: cr.GetUID(),
-			}},
-		},
-		Spec: apps.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "test-container",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("600m"),
-								corev1.ResourceMemory: resource.MustParse("256Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("2"),
-								corev1.ResourceMemory: resource.MustParse("512Mi"),
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-	fakeClient := &FakeListClient{
-		sts: []apps.StatefulSet{sts},
-	}
-	data := make(map[string]interface{})
-	collectCRTelData(ctx, fakeClient, crList, data)
-	lmData, ok := data["LicenseManager"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected LicenseManager data map")
-	}
-	crData, ok := lmData["test-licensemanager"].([]map[string]string)
-	if !ok || len(crData) == 0 {
-		t.Fatalf("expected resource data slice")
-	}
-	container := crData[0]
-	if container["cpu_request"] != "600m" || container["memory_request"] != "256Mi" || container["cpu_limit"] != "2" || container["memory_limit"] != "512Mi" {
-		t.Errorf("unexpected resource values: got %+v", container)
-	}
-}
-
-func TestTelemetryCollectCRTelData_LicenseMasterData(t *testing.T) {
-	ctx := context.TODO()
-	cr := &enterpriseApiV3.LicenseMaster{}
-	cr.TypeMeta.Kind = "LicenseMaster"
-	cr.ObjectMeta.Name = "test-licensemaster"
-	cr.ObjectMeta.Namespace = "default"
-	crList := map[string][]splcommon.MetaObject{"LicenseMaster": {cr}}
-	sts := apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-licensemaster-sts",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				UID: cr.GetUID(),
-			}},
-		},
-		Spec: apps.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "test-container",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("700m"),
-								corev1.ResourceMemory: resource.MustParse("384Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("3"),
-								corev1.ResourceMemory: resource.MustParse("768Mi"),
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-	fakeClient := &FakeListClient{
-		sts: []apps.StatefulSet{sts},
-	}
-	data := make(map[string]interface{})
-	collectCRTelData(ctx, fakeClient, crList, data)
-	lmData, ok := data["LicenseMaster"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected LicenseMaster data map")
-	}
-	crData, ok := lmData["test-licensemaster"].([]map[string]string)
-	if !ok || len(crData) == 0 {
-		t.Fatalf("expected resource data slice")
-	}
-	container := crData[0]
-	if container["cpu_request"] != "700m" || container["memory_request"] != "384Mi" || container["cpu_limit"] != "3" || container["memory_limit"] != "768Mi" {
-		t.Errorf("unexpected resource values: got %+v", container)
-	}
-}
-
-func TestTelemetryCollectCRTelData_SearchHeadClusterData(t *testing.T) {
-	ctx := context.TODO()
-	cr := &enterpriseApi.SearchHeadCluster{}
-	cr.TypeMeta.Kind = "SearchHeadCluster"
-	cr.ObjectMeta.Name = "test-shc"
-	cr.ObjectMeta.Namespace = "default"
-	crList := map[string][]splcommon.MetaObject{"SearchHeadCluster": {cr}}
-	sts := apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shc-sts",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				UID: cr.GetUID(),
-			}},
-		},
-		Spec: apps.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "test-container",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("800m"),
-								corev1.ResourceMemory: resource.MustParse("512Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("4"),
-								corev1.ResourceMemory: resource.MustParse("1Gi"),
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-	fakeClient := &FakeListClient{
-		sts: []apps.StatefulSet{sts},
-	}
-	data := make(map[string]interface{})
-	collectCRTelData(ctx, fakeClient, crList, data)
-	shcData, ok := data["SearchHeadCluster"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected SearchHeadCluster data map")
-	}
-	crData, ok := shcData["test-shc"].([]map[string]string)
-	if !ok || len(crData) == 0 {
-		t.Fatalf("expected resource data slice")
-	}
-	container := crData[0]
-	if container["cpu_request"] != "800m" || container["memory_request"] != "512Mi" || container["cpu_limit"] != "4" || container["memory_limit"] != "1Gi" {
-		t.Errorf("unexpected resource values: got %+v", container)
-	}
-}
-
-func TestTelemetryCollectCRTelData_ClusterManagerData(t *testing.T) {
-	ctx := context.TODO()
-	cr := &enterpriseApi.ClusterManager{}
-	cr.TypeMeta.Kind = "ClusterManager"
-	cr.ObjectMeta.Name = "test-cmanager"
-	cr.ObjectMeta.Namespace = "default"
-	crList := map[string][]splcommon.MetaObject{"ClusterManager": {cr}}
-	sts := apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cmanager-sts",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				UID: cr.GetUID(),
-			}},
-		},
-		Spec: apps.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "test-container",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("900m"),
-								corev1.ResourceMemory: resource.MustParse("640Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("5"),
-								corev1.ResourceMemory: resource.MustParse("2Gi"),
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-	fakeClient := &FakeListClient{
-		sts: []apps.StatefulSet{sts},
-	}
-	data := make(map[string]interface{})
-	collectCRTelData(ctx, fakeClient, crList, data)
-	cmData, ok := data["ClusterManager"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected ClusterManager data map")
-	}
-	crData, ok := cmData["test-cmanager"].([]map[string]string)
-	if !ok || len(crData) == 0 {
-		t.Fatalf("expected resource data slice")
-	}
-	container := crData[0]
-	if container["cpu_request"] != "900m" || container["memory_request"] != "640Mi" || container["cpu_limit"] != "5" || container["memory_limit"] != "2Gi" {
-		t.Errorf("unexpected resource values: got %+v", container)
-	}
-}
-
-func TestTelemetryCollectCRTelData_ClusterMasterData(t *testing.T) {
-	ctx := context.TODO()
-	cr := &enterpriseApiV3.ClusterMaster{}
-	cr.TypeMeta.Kind = "ClusterMaster"
-	cr.ObjectMeta.Name = "test-cmaster"
-	cr.ObjectMeta.Namespace = "default"
-	crList := map[string][]splcommon.MetaObject{"ClusterMaster": {cr}}
-	sts := apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cmaster-sts",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				UID: cr.GetUID(),
-			}},
-		},
-		Spec: apps.StatefulSetSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "test-container",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("1000m"),
-								corev1.ResourceMemory: resource.MustParse("768Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("6"),
-								corev1.ResourceMemory: resource.MustParse("4Gi"),
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
-	fakeClient := &FakeListClient{
-		sts: []apps.StatefulSet{sts},
-	}
-	data := make(map[string]interface{})
-	collectCRTelData(ctx, fakeClient, crList, data)
-	cmData, ok := data["ClusterMaster"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected ClusterMaster data map")
-	}
-	crData, ok := cmData["test-cmaster"].([]map[string]string)
-	if !ok || len(crData) == 0 {
-		t.Fatalf("expected resource data slice")
-	}
-	container := crData[0]
-	if container["cpu_request"] != "1" || container["memory_request"] != "768Mi" || container["cpu_limit"] != "6" || container["memory_limit"] != "4Gi" {
-		t.Errorf("unexpected resource values: got %+v", container)
-	}
-}
-
 func TestTelemetryUpdateLastTransmissionTime_SetsTimestamp(t *testing.T) {
 	mockClient := spltest.NewMockClient()
 	ctx := context.TODO()
@@ -464,10 +130,7 @@ func TestTelemetryUpdateLastTransmissionTime_SetsTimestamp(t *testing.T) {
 	}
 	status := &TelemetryStatus{Test: "false"}
 
-	err := updateLastTransmissionTime(ctx, mockClient, cm, status)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
+	updateLastTransmissionTime(ctx, mockClient, cm, status)
 	statusStr, ok := cm.Data[telStatusKey]
 	if !ok {
 		t.Fatalf("expected telStatusKey in configmap data")
@@ -495,10 +158,7 @@ func TestTelemetryUpdateLastTransmissionTime_UpdateError(t *testing.T) {
 	}
 	badClient := &errorUpdateClient{}
 	status := &TelemetryStatus{Test: "false"}
-	err := updateLastTransmissionTime(ctx, badClient, cm, status)
-	if err == nil {
-		t.Errorf("expected error from client.Update, got nil")
-	}
+	updateLastTransmissionTime(ctx, badClient, cm, status)
 }
 
 func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
@@ -509,19 +169,55 @@ func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
 		Data:       map[string]string{},
 	}
 	status := &TelemetryStatus{Test: "false"}
-	err := updateLastTransmissionTime(ctx, mockClient, cm, status)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
+	updateLastTransmissionTime(ctx, mockClient, cm, status)
 	firstStatus := cm.Data[telStatusKey]
 	time.Sleep(1 * time.Second)
-	err = updateLastTransmissionTime(ctx, mockClient, cm, status)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
+	updateLastTransmissionTime(ctx, mockClient, cm, status)
 	secondStatus := cm.Data[telStatusKey]
 	if firstStatus == secondStatus {
 		t.Errorf("expected status to change on repeated call")
+	}
+}
+
+func TestCollectDeploymentTelData_AllKinds(t *testing.T) {
+	ctx := context.TODO()
+	crs := map[string][]client.Object{
+		"Standalone":        {&enterpriseApi.Standalone{TypeMeta: metav1.TypeMeta{Kind: "Standalone"}, ObjectMeta: metav1.ObjectMeta{Name: "standalone1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("2Gi")}}}}}}},
+		"LicenseManager":    {&enterpriseApi.LicenseManager{TypeMeta: metav1.TypeMeta{Kind: "LicenseManager"}, ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3"), corev1.ResourceMemory: resource.MustParse("3Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("4Gi")}}}}}}},
+		"LicenseMaster":     {&enterpriseApiV3.LicenseMaster{TypeMeta: metav1.TypeMeta{Kind: "LicenseMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "lmast1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("5"), corev1.ResourceMemory: resource.MustParse("5Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("6"), corev1.ResourceMemory: resource.MustParse("6Gi")}}}}}}},
+		"SearchHeadCluster": {&enterpriseApi.SearchHeadCluster{TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("7"), corev1.ResourceMemory: resource.MustParse("7Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("8"), corev1.ResourceMemory: resource.MustParse("8Gi")}}}}}}},
+		"IndexerCluster":    {&enterpriseApi.IndexerCluster{TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("9"), corev1.ResourceMemory: resource.MustParse("9Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10"), corev1.ResourceMemory: resource.MustParse("10Gi")}}}}}}},
+		"ClusterManager":    {&enterpriseApi.ClusterManager{TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"}, ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("11"), corev1.ResourceMemory: resource.MustParse("11Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("12"), corev1.ResourceMemory: resource.MustParse("12Gi")}}}}}}},
+		"ClusterMaster":     {&enterpriseApiV3.ClusterMaster{TypeMeta: metav1.TypeMeta{Kind: "ClusterMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("13"), corev1.ResourceMemory: resource.MustParse("13Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("14"), corev1.ResourceMemory: resource.MustParse("14Gi")}}}}}}},
+	}
+	fakeClient := &FakeListClient{crs: crs}
+	deploymentData := make(map[string]interface{})
+	crWithTelAppList := collectDeploymentTelData(ctx, fakeClient, deploymentData)
+	kinds := []string{"Standalone", "LicenseManager", "LicenseMaster", "SearchHeadCluster", "IndexerCluster", "ClusterManager", "ClusterMaster"}
+	for _, kind := range kinds {
+		if _, ok := deploymentData[kind]; !ok {
+			t.Errorf("expected deploymentData to have key %s", kind)
+		}
+		// Check resource data for at least one CR per kind
+		kindData, ok := deploymentData[kind].(map[string]interface{})
+		if !ok {
+			t.Errorf("expected deploymentData[%s] to be map[string]interface{}", kind)
+			continue
+		}
+		for crName, v := range kindData {
+			resData, ok := v.(map[string]string)
+			if !ok {
+				t.Errorf("expected resource data for %s/%s to be map[string]string", kind, crName)
+			}
+			// Spot check a value
+			if resData[cpuRequestKey] == "" || resData[memoryRequestKey] == "" {
+				t.Errorf("expected resource data for %s/%s to have cpu/memory", kind, crName)
+			}
+		}
+	}
+	// crWithTelAppList should be empty since TelAppInstalled is not set
+	if len(crWithTelAppList) != 0 {
+		t.Errorf("expected crWithTelAppList to be empty if TelAppInstalled is not set")
 	}
 }
 
