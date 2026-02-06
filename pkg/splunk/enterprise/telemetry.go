@@ -306,44 +306,6 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		}
 	}
 
-	var licenseMasterList enterpriseApiV3.LicenseMasterList
-	err = client.List(ctx, &licenseMasterList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list ClusterMaster objects")
-	} else if len(licenseMasterList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[licenseMasterList.Items[0].Kind] = perKindData
-		for _, cr := range licenseMasterList.Items {
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[licenseMasterList.Items[0].Kind] = append(crWithTelAppList[licenseMasterList.Items[0].Kind], &cr)
-			}
-		}
-	}
-
-	var licenseManagerList enterpriseApi.LicenseManagerList
-	err = client.List(ctx, &licenseManagerList)
-	if err != nil {
-		scopedLog.Error(err, "Failed to list ClusterMaster objects")
-	} else if len(licenseManagerList.Items) > 0 {
-		var perKindData map[string]interface{}
-		perKindData = make(map[string]interface{})
-		deploymentData[licenseManagerList.Items[0].Kind] = perKindData
-		for _, cr := range licenseManagerList.Items {
-			var crResourceData map[string]string
-			crResourceData = make(map[string]string)
-			perKindData[cr.GetName()] = crResourceData
-			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
-			if cr.Status.TelAppInstalled {
-				crWithTelAppList[licenseManagerList.Items[0].Kind] = append(crWithTelAppList[licenseManagerList.Items[0].Kind], &cr)
-			}
-		}
-	}
-
 	var mconsoleList enterpriseApi.MonitoringConsoleList
 	err = client.List(ctx, &mconsoleList)
 	if err != nil {
@@ -393,22 +355,18 @@ func getCurrentStatus(ctx context.Context, cm *corev1.ConfigMap) *TelemetryStatu
 		Test:             defaultTestMode,
 		SokVersion:       defaultTestVersion,
 	}
-	defaultStatus.LastTransmission = ""
-	defaultStatus.Test = "true"
-	if cm.Data != nil {
-		if val, ok := cm.Data[telStatusKey]; ok {
-			var status TelemetryStatus
-			err := json.Unmarshal([]byte(val), &status)
-			if err != nil {
-				scopedLog.Error(err, "Failed to unmarshal telemetry status")
-				return defaultStatus
-			} else {
-				return defaultStatus
-			}
+	if val, ok := cm.Data[telStatusKey]; ok {
+		var status TelemetryStatus
+		err := json.Unmarshal([]byte(val), &status)
+		if err != nil {
+			scopedLog.Error(err, "Failed to unmarshal telemetry status")
+			return defaultStatus
+		} else {
+			return &status
 		}
 	}
 
-	scopedLog.Info("Failed")
+	scopedLog.Info("No status set in configmap")
 	return defaultStatus
 }
 
