@@ -627,6 +627,15 @@ func SetClusterMaintenanceMode(ctx context.Context, c splcommon.ControllerClient
 // ApplyIdxcSecret checks if any of the indexer's have a different idxc_secret from namespace scoped secret and changes it
 func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	var indIdxcSecret string
+
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
+
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
 	if err != nil {
@@ -653,6 +662,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	nsIdxcSecret := string(namespaceSecret.Data[splcommon.IdxcSecret])
 
 	// Loop over all indexer pods and get individual pod's idxc password
+	howManyPodsHaveSecretChanged := 0
 	for i := int32(0); i <= replicas-1; i++ {
 		// Get Indexer's name
 		indexerPodName := GetSplunkStatefulsetPodName(SplunkIndexer, mgr.cr.GetName(), i)
@@ -718,13 +728,25 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 			// Change idxc secret key
 			err = idxcClient.SetIdxcSecret(nsIdxcSecret)
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Changed idxc secret")
 
+			howManyPodsHaveSecretChanged += 1
+
 			// Restart splunk instance on pod
 			err = idxcClient.RestartSplunk()
 			if err != nil {
+				// Emit event for password sync failure
+				if eventPublisher != nil {
+					eventPublisher.Warning(ctx, "PasswordSyncFailed",
+						fmt.Sprintf("Password sync failed for pod '%s': %s. Check pod logs and secret format.", indexerPodName, err.Error()))
+				}
 				return err
 			}
 			scopedLog.Info("Restarted splunk")
@@ -776,6 +798,12 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 				mgr.cr.Status.IdxcPasswordChangedSecrets[podSecretName] = false
 			}
 		}
+	}
+
+	// Emit event for password sync completed
+	if eventPublisher != nil {
+		eventPublisher.Normal(ctx, "PasswordSyncCompleted",
+			fmt.Sprintf("Password synchronized for %d pods", howManyPodsHaveSecretChanged))
 	}
 
 	return nil

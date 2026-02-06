@@ -422,7 +422,10 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		eventPublisher.Warning(ctx, "PushManagerAppsBundle", "could not find admin password while trying to push the manager apps bundle")
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "SecretInvalid",
+				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", defaultSecret.GetName(), "password"))
+		}
 		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 
