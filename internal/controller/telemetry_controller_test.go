@@ -48,7 +48,7 @@ var _ = Describe("Telemetry Controller", func() {
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
 		Expect(result.Requeue).To(BeTrue())
-		Expect(result.RequeueAfter).To(Equal(time.Second * 60))
+		Expect(result.RequeueAfter).To(Equal(time.Second * 600))
 	})
 
 	It("Reconcile returns requeue when ConfigMap has no data", func() {
@@ -63,16 +63,7 @@ var _ = Describe("Telemetry Controller", func() {
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).To(BeNil())
 		Expect(result.Requeue).To(BeTrue())
-		Expect(result.RequeueAfter).To(Equal(time.Second * 60))
+		Expect(result.RequeueAfter).To(Equal(time.Second * 600))
 	})
 
-	// Additional tests for error and success cases can be added here
 })
-
-/*
-func TestTelemetryController(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Telemetry Controller Suite")
-}
-
-*/

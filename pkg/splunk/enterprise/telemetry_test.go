@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestCollectResourceTelData_NilMaps(t *testing.T) {
+func TestTelemetryCollectResourceTelData_NilMaps(t *testing.T) {
 	data := make(map[string]string)
 	collectResourceTelData(corev1.ResourceRequirements{}, data)
 	if data[cpuRequestKey] == "" || data[memoryRequestKey] == "" || data[cpuLimitKey] == "" || data[memoryLimitKey] == "" {
@@ -27,7 +27,7 @@ func TestCollectResourceTelData_NilMaps(t *testing.T) {
 	}
 }
 
-func TestCollectResourceTelData_MissingKeys(t *testing.T) {
+func TestTelemetryCollectResourceTelData_MissingKeys(t *testing.T) {
 	data := make(map[string]string)
 	reqs := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
@@ -39,7 +39,7 @@ func TestCollectResourceTelData_MissingKeys(t *testing.T) {
 	}
 }
 
-func TestCollectResourceTelData_ValuesPresent(t *testing.T) {
+func TestTelemetryCollectResourceTelData_ValuesPresent(t *testing.T) {
 	data := make(map[string]string)
 	reqs := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -57,7 +57,7 @@ func TestCollectResourceTelData_ValuesPresent(t *testing.T) {
 	}
 }
 
-func TestCollectCMTelData_UnmarshalError(t *testing.T) {
+func TestTelemetryCollectCMTelData_UnmarshalError(t *testing.T) {
 	cm := &corev1.ConfigMap{Data: map[string]string{"bad": "notjson"}}
 	data := make(map[string]interface{})
 	CollectCMTelData(context.TODO(), cm, data)
@@ -66,7 +66,7 @@ func TestCollectCMTelData_UnmarshalError(t *testing.T) {
 	}
 }
 
-func TestCollectCMTelData_ValidJSON(t *testing.T) {
+func TestTelemetryCollectCMTelData_ValidJSON(t *testing.T) {
 	val := map[string]interface{}{"foo": "bar"}
 	b, _ := json.Marshal(val)
 	cm := &corev1.ConfigMap{Data: map[string]string{"good": string(b)}}
@@ -77,28 +77,27 @@ func TestCollectCMTelData_ValidJSON(t *testing.T) {
 	}
 }
 
-func TestGetCurrentStatus_Default(t *testing.T) {
+func TestTelemetryGetCurrentStatus_Default(t *testing.T) {
 	cm := &corev1.ConfigMap{Data: nil}
 	status := getCurrentStatus(context.TODO(), cm)
-	if status == nil || status.Test != "true" {
+	if status == nil || status.Test != defaultTestMode {
 		t.Errorf("expected default status")
 	}
 }
 
-func TestGetCurrentStatus_UnmarshalError(t *testing.T) {
+func TestTelemetryGetCurrentStatus_UnmarshalError(t *testing.T) {
 	cm := &corev1.ConfigMap{Data: map[string]string{"status": "notjson"}}
 	status := getCurrentStatus(context.TODO(), cm)
-	if status == nil || status.Test != "true" {
+	if status == nil || status.Test != defaultTestMode {
 		t.Errorf("expected default status on unmarshal error")
 	}
 }
 
-func TestUpdateLastTransmissionTime_MarshalError(t *testing.T) {
+func TestTelemetryUpdateLastTransmissionTime_MarshalError(t *testing.T) {
 	ctx := context.TODO()
 	cm := &corev1.ConfigMap{Data: map[string]string{}}
-	// Use a struct with a channel field to cause json.MarshalIndent to fail
-	// Should not panic
-	updateLastTransmissionTime(ctx, spltest.NewMockClient(), cm, (*TelemetryStatus)(nil)) // pass nil to avoid panic
+	status := &TelemetryStatus{Test: "false"}
+	updateLastTransmissionTime(ctx, spltest.NewMockClient(), cm, status) // pass nil to avoid panic
 }
 
 func TestSendTelemetry_UnknownKind(t *testing.T) {
@@ -179,7 +178,7 @@ func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
 	}
 }
 
-func TestCollectDeploymentTelData_AllKinds(t *testing.T) {
+func TestTelemetryCollectDeploymentTelData_AllKinds(t *testing.T) {
 	ctx := context.TODO()
 	crs := map[string][]client.Object{
 		"Standalone":        {&enterpriseApi.Standalone{TypeMeta: metav1.TypeMeta{Kind: "Standalone"}, ObjectMeta: metav1.ObjectMeta{Name: "standalone1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("2Gi")}}}}}}},
