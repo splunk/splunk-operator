@@ -662,6 +662,87 @@ func TestApplyShcSecret(t *testing.T) {
 	}
 }
 
+func TestShcPasswordSyncCompleted(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{})
+
+	client := builder.Build()
+	ctx := context.TODO()
+
+	// Create a mock event recorder to capture events
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+
+	shc := enterpriseApi.SearchHeadCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "SearchHeadCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shc",
+			Namespace: "test",
+		},
+	}
+	shc.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("SearchHeadCluster"))
+
+	err := client.Create(ctx, &shc)
+	if err != nil {
+		t.Fatalf("Failed to create SearchHeadCluster: %v", err)
+	}
+
+	// Create namespace scoped secret so ApplyShcSecret has something to work with
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, shc.GetNamespace())
+	if err != nil {
+		t.Fatalf("Failed to apply namespace scoped secret: %v", err)
+	}
+
+	// Set CR status resource version to a stale value so ApplyShcSecret does not early-return
+	shc.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion + "-old"
+	shc.Status.AdminPasswordChangedSecrets = make(map[string]bool)
+
+	// Initialize a minimal pod manager for ApplyShcSecret
+	mgr := &searchHeadClusterPodManager{
+		c:   client,
+		log: logt.WithName("TestShcPasswordSyncCompleted"),
+		cr:  &shc,
+	}
+
+	// Use a mock PodExec client; replicas will be 0 so it won't be exercised
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	// Add event publisher to context so ApplyShcSecret can emit events
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	// Call ApplyShcSecret; with 0 replicas it will complete without touching pods,
+	// but still emit the PasswordSyncCompleted event
+	err = ApplyShcSecret(ctx, mgr, 0, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Couldn't apply shc secret %s", err.Error())
+	}
+
+	// Check that PasswordSyncCompleted event was published
+	foundEvent := false
+	for _, event := range recorder.events {
+		if event.reason == "PasswordSyncCompleted" {
+			foundEvent = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type, got %s", event.eventType)
+			}
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("Expected PasswordSyncCompleted event to be published")
+	}
+}
+
 func TestGetSearchHeadStatefulSet(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()

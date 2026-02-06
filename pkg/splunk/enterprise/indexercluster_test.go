@@ -2020,3 +2020,253 @@ func TestImageUpdatedTo9(t *testing.T) {
 		t.Errorf("Should not have detected an upgrade from 8 to 9, there is no version")
 	}
 }
+
+func TestPasswordSyncCompleted(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
+
+	client := builder.Build()
+	ctx := context.TODO()
+
+	// Create a mock event recorder to capture events
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+
+	cm := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cm",
+			Namespace: "test",
+		},
+	}
+	cm.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("ClusterManager"))
+
+	err := client.Create(ctx, &cm)
+	if err != nil {
+		t.Fatalf("Failed to create ClusterManager: %v", err)
+	}
+
+	idxc := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc",
+			Namespace: cm.GetNamespace(),
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: cm.GetName(),
+				},
+			},
+		},
+	}
+	idxc.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("IndexerCluster"))
+
+	err = client.Create(ctx, &idxc)
+	if err != nil {
+		t.Fatalf("Failed to create IndexerCluster: %v", err)
+	}
+
+	// Create namespace scoped secret so ApplyIdxcSecret has something to work with
+	nsSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cm.GetNamespace())
+	if err != nil {
+		t.Fatalf("Failed to apply namespace scoped secret: %v", err)
+	}
+
+	// Set CR status resource version to a stale value so ApplyIdxcSecret does not early-return
+	idxc.Status.NamespaceSecretResourceVersion = nsSecret.ResourceVersion + "-old"
+
+	// Initialize a minimal pod manager for ApplyIdxcSecret
+	mgr := &indexerClusterPodManager{
+		c:   client,
+		log: logt.WithName("TestPasswordSyncCompleted"),
+		cr:  &idxc,
+	}
+
+	// Use a mock PodExec client; replicas will be 0 so it won't be exercised
+	var mockPodExecClient *spltest.MockPodExecClient = &spltest.MockPodExecClient{}
+
+	// Add event publisher to context so ApplyIdxcSecret can emit events
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	// Call ApplyIdxcSecret; with 0 replicas it will complete without touching pods,
+	// but still emit the PasswordSyncCompleted event
+	err = ApplyIdxcSecret(ctx, mgr, 0, mockPodExecClient)
+	if err != nil {
+		t.Errorf("Couldn't apply idxc secret %s", err.Error())
+	}
+
+	// Check that PasswordSyncCompleted event was published
+	foundEvent := false
+	for _, event := range recorder.events {
+		if event.reason == "PasswordSyncCompleted" {
+			foundEvent = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type, got %s", event.eventType)
+			}
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("Expected PasswordSyncCompleted event to be published")
+	}
+}
+
+func TestClusterQuorumRestored(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	builder := fake.NewClientBuilder().
+		WithScheme(sch).
+		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
+		WithStatusSubresource(&enterpriseApi.IndexerCluster{})
+
+	client := builder.Build()
+	ctx := context.TODO()
+
+	// Create a mock event recorder to capture events
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+
+	cm := enterpriseApi.ClusterManager{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ClusterManager",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "manager1",
+			Namespace: "test",
+		},
+	}
+	cm.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("ClusterManager"))
+
+	err := client.Create(ctx, &cm)
+	if err != nil {
+		t.Fatalf("Failed to create ClusterManager: %v", err)
+	}
+
+	idxc := enterpriseApi.IndexerCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "IndexerCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "idxc",
+			Namespace: cm.GetNamespace(),
+		},
+		Spec: enterpriseApi.IndexerClusterSpec{
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				ClusterManagerRef: corev1.ObjectReference{
+					Name: cm.GetName(),
+				},
+			},
+		},
+	}
+	idxc.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("IndexerCluster"))
+
+	err = client.Create(ctx, &idxc)
+	if err != nil {
+		t.Fatalf("Failed to create IndexerCluster: %v", err)
+	}
+
+	// Build mock HTTP handlers for a healthy cluster manager info/peers response
+	mockHandlers := []spltest.MockHTTPHandler{
+		{
+			Method: "GET",
+			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/info?count=0&output_mode=json",
+			Status: 200,
+			Err:    nil,
+			Body:   splcommon.TestIndexerClusterPodManagerInfo,
+		},
+		{
+			Method: "GET",
+			URL:    "https://splunk-manager1-cluster-manager-service.test.svc.cluster.local:8089/services/cluster/manager/peers?count=0&output_mode=json",
+			Status: 200,
+			Err:    nil,
+			Body:   splcommon.TestIndexerClusterPodManagerPeer,
+		},
+	}
+
+	// Create mock Splunk client and indexerClusterPodManager using existing helper
+	mockSplunkClient := &spltest.MockHTTPClient{}
+	mockSplunkClient.AddHandlers(mockHandlers...)
+
+	mgr := getIndexerClusterPodManager("TestClusterQuorumRestored", mockHandlers, mockSplunkClient, 3)
+	replicas := int32(3)
+	ss := &appsv1.StatefulSet{
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      replicas,
+			ReadyReplicas: replicas,
+		},
+	}
+
+	// Wire a mock k8s client and event publisher into context
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	// Use a mock k8s client as in other updateStatus tests
+	c := spltest.NewMockClient()
+	mgr.c = c
+
+	// Ensure initial status is not indexing ready so we see a transition
+	mgr.cr.Status.IndexingReady = false
+
+	// Call updateStatus, which should transition to indexing ready and emit the event
+	err = mgr.updateStatus(ctx, ss)
+	if err != nil {
+		t.Fatalf("updateStatus returned unexpected error: %v", err)
+	}
+
+	// Check that ClusterQuorumRestored event was published
+	foundEvent := false
+	for _, event := range recorder.events {
+		if event.reason == "ClusterQuorumRestored" {
+			foundEvent = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type, got %s", event.eventType)
+			}
+			break
+		}
+	}
+	if !foundEvent {
+		t.Errorf("Expected ClusterQuorumRestored event to be published")
+	}
+}
+
+// mockEvent stores event details for testing
+type mockEvent struct {
+	eventType string
+	reason    string
+	message   string
+}
+
+// mockEventRecorder implements record.EventRecorder for testing
+type mockEventRecorder struct {
+	events []mockEvent
+}
+
+func (m *mockEventRecorder) Event(object pkgruntime.Object, eventType, reason, message string) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: message})
+}
+
+func (m *mockEventRecorder) Eventf(object pkgruntime.Object, eventType, reason, messageFmt string, args ...interface{}) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
+
+func (m *mockEventRecorder) AnnotatedEventf(object pkgruntime.Object, annotations map[string]string, eventType, reason, messageFmt string, args ...interface{}) {
+	m.events = append(m.events, mockEvent{eventType: eventType, reason: reason, message: fmt.Sprintf(messageFmt, args...)})
+}
