@@ -17,11 +17,11 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"time"
 
-	"github.com/pkg/errors"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +58,12 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	reqLogger.Info("Reconciling telemetry")
 
+	defer func() {
+		if rec := recover(); rec != nil {
+			reqLogger.Error(fmt.Errorf("panic: %v", rec), "Recovered from panic in TelemetryReconciler.Reconcile")
+		}
+	}()
+
 	// Fetch the ConfigMap
 	cm := &corev1.ConfigMap{}
 	err := r.Get(ctx, req.NamespacedName, cm)
@@ -66,7 +72,8 @@ func (r *TelemetryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			reqLogger.Info("telemetry configmap not found; requeueing", "period(seconds)", int(telemetryRetryDelay/time.Second))
 			return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 		}
-		return ctrl.Result{}, errors.Wrap(err, "could not load telemetry configmap")
+		reqLogger.Error(err, "could not load telemetry configmap; requeueing", "period(seconds)", int(telemetryRetryDelay/time.Second))
+		return ctrl.Result{Requeue: true, RequeueAfter: telemetryRetryDelay}, nil
 	}
 
 	if len(cm.Data) == 0 {
