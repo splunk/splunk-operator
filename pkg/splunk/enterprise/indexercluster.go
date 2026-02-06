@@ -1123,7 +1123,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 				available++
 			}
 		}
-		
+
 		// Cluster just finished initializing when quorum becomes ready
 		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
 			if !oldInitialized && mgr.cr.Status.Initialized {

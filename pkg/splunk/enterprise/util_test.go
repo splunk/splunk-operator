@@ -2612,6 +2612,8 @@ func TestUpdateReconcileRequeueTime(t *testing.T) {
 }
 
 func TestUpdateCRStatus(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
 	sch := pkgruntime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
@@ -3229,6 +3231,7 @@ func TestGetLicenseMasterURL(t *testing.T) {
 	}
 }
 func TestGetCurrentImage(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	ctx := context.TODO()
 	current := enterpriseApi.ClusterManager{
