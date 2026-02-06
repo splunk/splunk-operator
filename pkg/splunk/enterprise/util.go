@@ -221,6 +221,11 @@ func GetRemoteStorageClient(ctx context.Context, client splcommon.ControllerClie
 
 	if err != nil {
 		scopedLog.Error(err, "Failed to get the S3 client")
+		// Emit event when operator cannot connect to the remote app repository
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "AppRepositoryConnectionFailed",
+				fmt.Sprintf("Failed to connect to app repository '%s': %s. Check credentials and network.", vol.Name, err.Error()))
+		}
 		return remoteDataClient, err
 	}
 

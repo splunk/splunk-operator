@@ -814,6 +814,17 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 
 	var err error
 
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
+
+	// Track last successful replica count to emit scale events after completion
+	previousReplicas := mgr.cr.Status.Replicas
+
 	// Assign client
 	if mgr.c == nil {
 		mgr.c = c
@@ -846,7 +857,27 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	}
 
 	// manage scaling and updates
-	return splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	phase, err := splctrl.UpdateStatefulSetPods(ctx, c, statefulSet, mgr, desiredReplicas)
+	if err != nil {
+		return phase, err
+	}
+
+	// Emit ScaledUp event only after a successful scale-up has completed
+	if phase == enterpriseApi.PhaseReady {
+		if desiredReplicas > previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		} else if desiredReplicas < previousReplicas && mgr.cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", mgr.cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		}
+	}
+
+	return phase, nil
 }
 
 // PrepareScaleDown for indexerClusterPodManager prepares indexer pod to be removed via scale down event; it returns true when ready
@@ -992,6 +1023,14 @@ func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 // verifyRFPeers verifies the number of peers specified in the replicas section
 // of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcommon.ControllerClient) error {
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
+
 	if mgr.c == nil {
 		mgr.c = c
 	}
@@ -1008,8 +1047,14 @@ func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcom
 		replicationFactor = clusterInfo.ReplicationFactor
 	}
 
-	if mgr.cr.Spec.Replicas < replicationFactor {
-		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", mgr.cr.Spec.Replicas)
+	requestedReplicas := mgr.cr.Spec.Replicas
+	if requestedReplicas < replicationFactor {
+		mgr.log.Info("Changing number of replicas as it is less than RF number of peers", "replicas", requestedReplicas)
+		// Emit event indicating scaling below RF is blocked/adjusted
+		if eventPublisher != nil {
+			eventPublisher.Warning(ctx, "ScalingBlockedRF",
+				fmt.Sprintf("Cannot scale below replication factor: %d replicas required, %d requested. Adjust replicationFactor or replicas.", replicationFactor, requestedReplicas))
+		}
 		mgr.cr.Spec.Replicas = replicationFactor
 	}
 	return nil
@@ -1036,6 +1081,9 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 		mgr.cr.Status.MaintenanceMode = false
 		return fmt.Errorf("waiting for cluster manager to become ready")
 	}
+
+	oldInitialized := mgr.cr.Status.Initialized
+	oldIndexingReady := mgr.cr.Status.IndexingReady
 
 	// get indexer cluster info from cluster manager if it's ready
 	clusterInfo, err := GetClusterManagerInfoCall(ctx, mgr)
@@ -1075,6 +1123,44 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	// truncate any extra peers that we didn't check (leftover from scale down)
 	if statefulSet.Status.Replicas < int32(len(mgr.cr.Status.Peers)) {
 		mgr.cr.Status.Peers = mgr.cr.Status.Peers[:statefulSet.Status.Replicas]
+	}
+
+	// Get event publisher from context
+	var eventPublisher *K8EventPublisher
+	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
+		if p, ok := pub.(*K8EventPublisher); ok {
+			eventPublisher = p
+		}
+	}
+
+	// Compute current available peers for quorum-related events
+	var available int32
+	totalPeers := len(mgr.cr.Status.Peers)
+	for _, p := range mgr.cr.Status.Peers {
+		if p.Status == "Up" && p.Searchable {
+			available++
+		}
+	}
+
+	// Emit events only on state transitions
+	if eventPublisher != nil {
+		// Cluster just finished initializing when quorum becomes ready
+		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
+			if !oldInitialized && mgr.cr.Status.Initialized {
+				eventPublisher.Normal(ctx, "ClusterInitialized",
+					fmt.Sprintf("Cluster '%s' initialized with %d peers", mgr.cr.GetName(), totalPeers))
+			}
+
+			// Cluster quorum just restored
+			eventPublisher.Normal(ctx, "ClusterQuorumRestored",
+				fmt.Sprintf("Cluster quorum restored: %d/%d peers available", available, totalPeers))
+		}
+
+		// Cluster quorum lost (transition out of indexing ready)
+		if oldIndexingReady && !mgr.cr.Status.IndexingReady {
+			eventPublisher.Warning(ctx, "ClusterQuorumLost",
+				fmt.Sprintf("Cluster quorum lost: %d/%d peers available. Investigate peer failures immediately.", available, totalPeers))
+		}
 	}
 
 	return nil

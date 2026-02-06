@@ -148,6 +148,11 @@ ClusterManager:
 			return false, fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", clusterManager.Name, clusterManager.Status.Phase)
 		}
 		if cmImage != spec.Image {
+			// Emit event when upgrade is blocked due to ClusterManager / IndexerCluster version mismatch
+			if eventPublisher != nil {
+				eventPublisher.Warning(ctx, "UpgradeBlockedVersionMismatch",
+					fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", cmImage, spec.Image))
+			}
 			return false, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", clusterManager.Name, cmImage, spec.Image)
 		}
 		goto IndexerCluster

@@ -215,6 +215,9 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 
+	// Track last successful replica count to emit scale events after completion
+	previousReplicas := cr.Status.Replicas
+
 	mgr := splctrl.DefaultStatefulSetPodManager{}
 	phase, err := mgr.Update(ctx, client, statefulSet, cr.Spec.Replicas)
 	cr.Status.ReadyReplicas = statefulSet.Status.ReadyReplicas
@@ -224,6 +227,22 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		return result, err
 	}
 	cr.Status.Phase = phase
+
+	// Emit scale events only after a successful scale operation has completed
+	if phase == enterpriseApi.PhaseReady {
+		desiredReplicas := cr.Spec.Replicas
+		if desiredReplicas > previousReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledUp",
+					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		} else if desiredReplicas < previousReplicas && cr.Status.Replicas == desiredReplicas {
+			if eventPublisher != nil {
+				eventPublisher.Normal(ctx, "ScaledDown",
+					fmt.Sprintf("Successfully scaled %s down from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))
+			}
+		}
+	}
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
 		_, err = ApplyMonitoringConsoleEnvConfigMap(ctx, client, cr.GetNamespace(), cr.GetName(), cr.Spec.MonitoringConsoleRef.Name, getStandaloneExtraEnv(cr, cr.Spec.Replicas), true)
