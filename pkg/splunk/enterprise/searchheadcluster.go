@@ -261,12 +261,7 @@ func ApplySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 // ApplyShcSecret checks if any of the search heads have a different shc_secret from namespace scoped secret and changes it
 func ApplyShcSecret(ctx context.Context, mgr *searchHeadClusterPodManager, replicas int32, podExecClient splutil.PodExecClientImpl) error {
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())

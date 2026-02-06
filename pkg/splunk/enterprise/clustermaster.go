@@ -306,12 +306,7 @@ func CheckIfMastersmartstoreConfigMapUpdatedToPod(ctx context.Context, c splcomm
 	scopedLog := reqLogger.WithName("CheckIfMastersmartstoreConfigMapUpdatedToPod").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	command := fmt.Sprintf("cat /mnt/splunk-operator/local/%s", configToken)
 	streamOptions := splutil.NewStreamOptionsObject(command)
@@ -392,12 +387,7 @@ func PushMasterAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr 
 	scopedLog := reqLogger.WithName("PushMasterApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)

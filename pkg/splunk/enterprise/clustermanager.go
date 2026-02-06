@@ -405,12 +405,7 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	scopedLog := reqLogger.WithName("PushManagerApps").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, c, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
@@ -422,10 +417,6 @@ func PushManagerAppsBundle(ctx context.Context, c splcommon.ControllerClient, cr
 	//Get the admin password from the secret object
 	adminPwd, foundSecret := defaultSecret.Data["password"]
 	if !foundSecret {
-		if eventPublisher != nil {
-			eventPublisher.Warning(ctx, "SecretInvalid",
-				fmt.Sprintf("Secret '%s' missing required fields: %s. Update secret with required data.", defaultSecret.GetName(), "password"))
-		}
 		return fmt.Errorf("could not find admin password while trying to push the manager apps bundle")
 	}
 
@@ -491,12 +482,7 @@ func changeClusterManagerAnnotations(ctx context.Context, c splcommon.Controller
 	scopedLog := reqLogger.WithName("changeClusterManagerAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	clusterManagerInstance := &enterpriseApi.ClusterManager{}
 	if len(cr.Spec.ClusterManagerRef.Name) > 0 {

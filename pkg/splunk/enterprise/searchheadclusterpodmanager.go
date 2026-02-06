@@ -46,12 +46,7 @@ func (mgr *searchHeadClusterPodManager) Update(ctx context.Context, c splcommon.
 	}
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	// Track last successful replica count to emit scale events after completion
 	previousReplicas := mgr.cr.Status.Replicas

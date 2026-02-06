@@ -118,18 +118,6 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
-	// Try to get a generic event publisher from context (if present).
-	// We intentionally assert only on the Warning method to avoid
-	// depending on the concrete publisher type and keep packages decoupled.
-	var eventPublisher interface{
-		Warning(context.Context, string, string)
-	}
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(interface{ Warning(context.Context, string, string) }); ok {
-			eventPublisher = p
-		}
-	}
-
 	// Re-fetch the StatefulSet to ensure we have the latest status, especially UpdateRevision.
 	// This addresses a race condition where the StatefulSet controller may not have updated
 	// Status.UpdateRevision yet after a spec change was applied. Without this re-fetch,

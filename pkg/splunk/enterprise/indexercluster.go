@@ -629,12 +629,7 @@ func ApplyIdxcSecret(ctx context.Context, mgr *indexerClusterPodManager, replica
 	var indIdxcSecret string
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	// Get namespace scoped secret
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, mgr.c, mgr.cr.GetNamespace())
@@ -815,12 +810,7 @@ func (mgr *indexerClusterPodManager) Update(ctx context.Context, c splcommon.Con
 	var err error
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	// Track last successful replica count to emit scale events after completion
 	previousReplicas := mgr.cr.Status.Replicas
@@ -1024,12 +1014,7 @@ func getSiteRepFactorOriginCount(siteRepFactor string) int32 {
 // of IndexerClsuster CR. If it is less than RF, than we set it to RF.
 func (mgr *indexerClusterPodManager) verifyRFPeers(ctx context.Context, c splcommon.ControllerClient) error {
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	if mgr.c == nil {
 		mgr.c = c
@@ -1126,24 +1111,19 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	}
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
-
-	// Compute current available peers for quorum-related events
-	var available int32
-	totalPeers := len(mgr.cr.Status.Peers)
-	for _, p := range mgr.cr.Status.Peers {
-		if p.Status == "Up" && p.Searchable {
-			available++
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
 
 	// Emit events only on state transitions
 	if eventPublisher != nil {
+		// Compute current available peers for quorum-related events
+		var available int32
+		totalPeers := len(mgr.cr.Status.Peers)
+		for _, p := range mgr.cr.Status.Peers {
+			if p.Status == "Up" && p.Searchable {
+				available++
+			}
+		}
+		
 		// Cluster just finished initializing when quorum becomes ready
 		if !oldIndexingReady && mgr.cr.Status.IndexingReady {
 			if !oldInitialized && mgr.cr.Status.Initialized {

@@ -231,7 +231,7 @@ func ApplyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	// Emit scale events only after a successful scale operation has completed
 	if phase == enterpriseApi.PhaseReady {
 		desiredReplicas := cr.Spec.Replicas
-		if desiredReplicas > previousReplicas {
+		if desiredReplicas > previousReplicas && cr.Status.Replicas == desiredReplicas {
 			if eventPublisher != nil {
 				eventPublisher.Normal(ctx, "ScaledUp",
 					fmt.Sprintf("Successfully scaled %s up from %d to %d replicas", cr.GetName(), previousReplicas, desiredReplicas))

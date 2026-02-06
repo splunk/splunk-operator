@@ -38,12 +38,8 @@ func UpgradePathValidation(ctx context.Context, c splcommon.ControllerClient, cr
 	scopedLog := reqLogger.WithName("isClusterManagerReadyForUpgrade").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, mgr.cr)
+	
 	kind := cr.GroupVersionKind().Kind
 	scopedLog.Info("kind is set to ", "kind", kind)
 	// start from standalone first
