@@ -429,4 +429,5 @@ setup/ginkgo:
 build-installer: manifests generate kustomize
 	mkdir -p dist
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/install.yaml
 
