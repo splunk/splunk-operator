@@ -58,8 +58,8 @@ func ApplyTelemetry(ctx context.Context, client splcommon.ControllerClient, cm *
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("ApplyTelemetry")
 
-	for k, v := range cm.Data {
-		scopedLog.Info("Retrieved telemetry keys", "key", k, "value", v)
+	for k, _ := range cm.Data {
+		scopedLog.Info("Retrieved telemetry keys", "key", k)
 	}
 
 	var data map[string]interface{}
@@ -175,6 +175,7 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 	var crWithTelAppList map[string][]splcommon.MetaObject
 	crWithTelAppList = make(map[string][]splcommon.MetaObject)
 
+	scopedLog.Info("Start collecting deployment telemetry data")
 	var err error
 	var standaloneList enterpriseApi.StandaloneList
 	err = client.List(ctx, &standaloneList)
@@ -185,12 +186,15 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[standaloneList.Items[0].Kind] = perKindData
 		for _, cr := range standaloneList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
 			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[standaloneList.Items[0].Kind] = append(crWithTelAppList[standaloneList.Items[0].Kind], &cr)
+			} else {
+				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			}
 		}
 	}
@@ -204,12 +208,15 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[lmanagerList.Items[0].Kind] = perKindData
 		for _, cr := range lmanagerList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
 			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[lmanagerList.Items[0].Kind] = append(crWithTelAppList[lmanagerList.Items[0].Kind], &cr)
+			} else {
+				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			}
 		}
 	}
@@ -223,12 +230,16 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[lmasterList.Items[0].Kind] = perKindData
 		for _, cr := range lmasterList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
 			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[lmasterList.Items[0].Kind] = append(crWithTelAppList[lmasterList.Items[0].Kind], &cr)
+			} else {
+				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			}
 		}
 	}
@@ -242,12 +253,16 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[shcList.Items[0].Kind] = perKindData
 		for _, cr := range shcList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
 			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[shcList.Items[0].Kind] = append(crWithTelAppList[shcList.Items[0].Kind], &cr)
+			} else {
+				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			}
 		}
 	}
@@ -261,6 +276,8 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[idxList.Items[0].Kind] = perKindData
 		for _, cr := range idxList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
@@ -277,12 +294,16 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[cmanagerList.Items[0].Kind] = perKindData
 		for _, cr := range cmanagerList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
 			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[cmanagerList.Items[0].Kind] = append(crWithTelAppList[cmanagerList.Items[0].Kind], &cr)
+			} else {
+				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			}
 		}
 	}
@@ -296,12 +317,16 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[cmasterList.Items[0].Kind] = perKindData
 		for _, cr := range cmasterList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
 			collectResourceTelData(cr.Spec.CommonSplunkSpec.Resources, crResourceData)
 			if cr.Status.TelAppInstalled {
 				crWithTelAppList[cmasterList.Items[0].Kind] = append(crWithTelAppList[cmasterList.Items[0].Kind], &cr)
+			} else {
+				scopedLog.Info("Telemetry app is not installed for this CR.", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
 			}
 		}
 	}
@@ -315,6 +340,8 @@ func collectDeploymentTelData(ctx context.Context, client splcommon.ControllerCl
 		perKindData = make(map[string]interface{})
 		deploymentData[mconsoleList.Items[0].Kind] = perKindData
 		for _, cr := range mconsoleList.Items {
+			scopedLog.Info("Collecting data", "kind", cr.Kind, "name", cr.GetName(), "namespace", cr.GetNamespace())
+
 			var crResourceData map[string]string
 			crResourceData = make(map[string]string)
 			perKindData[cr.GetName()] = crResourceData
@@ -335,7 +362,7 @@ func CollectCMTelData(ctx context.Context, cm *corev1.ConfigMap, data map[string
 			continue
 		}
 		var compData interface{}
-		scopedLog.Info("Processing telemetry input from other components", "key", key, "value", val)
+		scopedLog.Info("Processing telemetry input from other components", "key", key)
 		err := json.Unmarshal([]byte(val), &compData)
 		if err != nil {
 			scopedLog.Info("Not able to unmarshal. Will include the input as string", "key", key, "value", val)
@@ -359,9 +386,10 @@ func getCurrentStatus(ctx context.Context, cm *corev1.ConfigMap) *TelemetryStatu
 		var status TelemetryStatus
 		err := json.Unmarshal([]byte(val), &status)
 		if err != nil {
-			scopedLog.Error(err, "Failed to unmarshal telemetry status")
+			scopedLog.Error(err, "Failed to unmarshal telemetry status", "value", val)
 			return defaultStatus
 		} else {
+			scopedLog.Info("Got current telemetry status from configmap", "status", status)
 			return &status
 		}
 	}
@@ -393,6 +421,7 @@ func SendTelemetry(ctx context.Context, client splcommon.ControllerClient, cr sp
 	case "ClusterManager":
 		instanceID = SplunkClusterManager
 	default:
+		scopedLog.Error(fmt.Errorf("unknown CR kind"), "Failed to determine instance type for telemetry")
 		return false
 	}
 
