@@ -82,7 +82,8 @@ var _ = Describe("Crcrud test for SVA C3", func() {
 			// Ensure Indexers go to Ready phase
 			testenv.SingleSiteIndexersReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify telemetry is sent successfully
+			// Verify telemetry
+			testenv.TriggerTelemetrySubmission(ctx, deployment)
 			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD

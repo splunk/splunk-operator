@@ -82,7 +82,8 @@ var _ = Describe("Crcrud test for SVA M4", func() {
 			// Ensure search head cluster go to Ready phase
 			testenv.SearchHeadClusterReady(ctx, deployment, testcaseEnvInst)
 
-			// Verify telemetry is sent successfully
+			// Verify telemetry
+			testenv.TriggerTelemetrySubmission(ctx, deployment)
 			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD
