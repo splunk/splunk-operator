@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
 
@@ -1222,11 +1223,14 @@ func GetTelemetryLastSubmissionTime(ctx context.Context, deployment *Deployment)
 	type telemetryStatus struct {
 		LastTransmission string `json:"lastTransmission"`
 	}
-	cm, err := deployment.GetConfigMap(ctx, configMapName)
+
+	cm := &corev1.ConfigMap{}
+	err := deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
 	if err != nil {
 		logf.Log.Error(err, "GetTelemetryLastSubmissionTime: failed to retrieve configmap")
 		return ""
 	}
+
 	statusVal, ok := cm.Data[statusKey]
 	if !ok || statusVal == "" {
 		logf.Log.Info("GetTelemetryLastSubmissionTime: failed to retrieve status")
