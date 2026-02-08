@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
@@ -1257,4 +1258,41 @@ func VerifyTelemetry(ctx context.Context, deployment *Deployment, prevVal string
 		}
 		return false
 	}, deployment.GetTimeout(), PollInterval).Should(gomega.Equal(true))
+}
+
+// TriggerTelemetrySubmission updates or adds the 'test_submission' key in the telemetry ConfigMap with a JSON value containing a random number.
+func TriggerTelemetrySubmission(ctx context.Context, deployment *Deployment) {
+	const (
+		configMapName = "splunk-operator-manager-telemetry"
+		testKey       = "test_submission"
+	)
+
+	// Generate a random number
+	rand.Seed(time.Now().UnixNano())
+	randomNumber := rand.Intn(1000)
+
+	// Create the JSON value
+	jsonValue, err := json.Marshal(map[string]int{"value": randomNumber})
+	if err != nil {
+		logf.Log.Error(err, "Failed to marshal JSON value")
+		return
+	}
+
+	// Update the ConfigMap
+	cm := &corev1.ConfigMap{}
+	err = deployment.testenv.GetKubeClient().Get(ctx, client.ObjectKey{Name: configMapName, Namespace: "splunk-operator"}, cm)
+	if err != nil {
+		logf.Log.Error(err, "Failed to get ConfigMap")
+		return
+	}
+
+	// Update the test_submission key
+	cm.Data[testKey] = string(jsonValue)
+	err = deployment.testenv.GetKubeClient().Update(ctx, cm)
+	if err != nil {
+		logf.Log.Error(err, "Failed to update ConfigMap")
+		return
+	}
+
+	logf.Log.Info("Successfully updated telemetry ConfigMap", "key", testKey, "value", jsonValue)
 }

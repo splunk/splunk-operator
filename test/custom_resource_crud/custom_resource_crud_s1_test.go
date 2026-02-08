@@ -72,7 +72,8 @@ var _ = Describe("Crcrud test for SVA S1", func() {
 			// Verify Standalone goes to ready state
 			testenv.StandaloneReady(ctx, deployment, deployment.GetName(), standalone, testcaseEnvInst)
 
-			// Verify telemetry is sent successfully
+			// Verify telemetry
+			testenv.TriggerTelemetrySubmission(ctx, deployment)
 			testenv.VerifyTelemetry(ctx, deployment, prevTelemetrySubmissionTime)
 
 			// Deploy Monitoring Console CRD
