@@ -367,7 +367,7 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 
 	// Define additional service port in CR and verify the statefulset has the new port
 	cr.Spec.ServiceTemplate.Spec.Ports = []corev1.ServicePort{{Name: "user-defined", Port: 32000, Protocol: "UDP"}}
-	test(loadFixture(t, "statefulset_stack1_ingestor_base_1.json"))
+	test(loadFixture(t, "statefulset_ingestor.json"))
 
 	// Create a service account
 	current := corev1.ServiceAccount{
@@ -378,7 +378,7 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 	}
 	_ = splutil.CreateResource(ctx, c, &current)
 	cr.Spec.ServiceAccount = "defaults"
-	test(loadFixture(t, "statefulset_stack1_ingestor_base_2.json"))
+	test(loadFixture(t, "statefulset_ingestor_with_serviceaccount.json"))
 
 	// Add extraEnv
 	cr.Spec.CommonSplunkSpec.ExtraEnv = []corev1.EnvVar{
@@ -387,12 +387,12 @@ func TestGetIngestorStatefulSet(t *testing.T) {
 			Value: "test_value",
 		},
 	}
-	test(loadFixture(t, "statefulset_stack1_ingestor_base_3.json"))
+	test(loadFixture(t, "statefulset_ingestor_with_extraenv.json"))
 
 	// Add additional label to cr metadata to transfer to the statefulset
 	cr.ObjectMeta.Labels = make(map[string]string)
 	cr.ObjectMeta.Labels["app.kubernetes.io/test-extra-label"] = "test-extra-label-value"
-	test(loadFixture(t, "statefulset_stack1_ingestor_base_4.json"))
+	test(loadFixture(t, "statefulset_ingestor_with_labels.json"))
 }
 
 func TestGetChangedBusFieldsForIngestor(t *testing.T) {
