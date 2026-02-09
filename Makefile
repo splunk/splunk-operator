@@ -355,6 +355,7 @@ run_clair_scan:
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
 generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	mkdir -p release-${VERSION}
 	cp config/default/kustomization-namespace.yaml config/default/kustomization.yaml
 	cp config/rbac/kustomization-namespace.yaml config/rbac/kustomization.yaml
@@ -370,6 +371,7 @@ generate-artifacts-namespace: manifests kustomize ## Deploy controller to the K8
 
 # generate artifacts needed to deploy operator, this is current way of doing it, need to fix this
 generate-artifacts-cluster: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	$(SED) 's/\("sokVersion": \)"[^"]*"/\1"$(VERSION)"/' config/manager/controller_manager_telemetry.yaml
 	mkdir -p release-${VERSION}
 	cp config/default/kustomization-cluster.yaml config/default/kustomization.yaml
 	cp config/rbac/kustomization-cluster.yaml config/rbac/kustomization.yaml
