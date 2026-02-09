@@ -3281,3 +3281,252 @@ func TestGetCurrentImage(t *testing.T) {
 	}
 
 }
+
+func TestSecretMissingEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	volume := enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		SecretRef: "nonexistent-secret",
+	}
+
+	_, _, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volume, client, cr, &enterpriseApi.SmartStoreSpec{})
+	if err == nil {
+		t.Errorf("Expected error when secret does not exist")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "SecretMissing" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for SecretMissing, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "nonexistent-secret") {
+				t.Errorf("Expected event message to contain secret name 'nonexistent-secret', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "test") {
+				t.Errorf("Expected event message to contain namespace 'test', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected SecretMissing event to be published")
+	}
+}
+
+func TestSecretInvalidEmptyAccessKeyEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": {},
+			"s3_secret_key": []byte("some-secret-key"),
+		},
+	}
+	if err := client.Create(ctx, secret); err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	volume := enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		SecretRef: "test-secret",
+	}
+
+	_, _, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volume, client, cr, &enterpriseApi.SmartStoreSpec{})
+	if err == nil {
+		t.Errorf("Expected error when access key is empty")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "SecretInvalid" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for SecretInvalid, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "test-secret") {
+				t.Errorf("Expected event message to contain secret name 'test-secret', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "accessKey") {
+				t.Errorf("Expected event message to mention missing field 'accessKey', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected SecretInvalid event to be published for empty access key")
+	}
+}
+
+func TestSecretInvalidEmptySecretKeyEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret-sk", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("some-access-key"),
+			"s3_secret_key": {},
+		},
+	}
+	if err := client.Create(ctx, secret); err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	volume := enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		SecretRef: "test-secret-sk",
+	}
+
+	_, _, _, err := GetSmartstoreRemoteVolumeSecrets(ctx, volume, client, cr, &enterpriseApi.SmartStoreSpec{})
+	if err == nil {
+		t.Errorf("Expected error when secret key is empty")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "SecretInvalid" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for SecretInvalid, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "test-secret-sk") {
+				t.Errorf("Expected event message to contain secret name 'test-secret-sk', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "s3SecretKey") {
+				t.Errorf("Expected event message to mention missing field 's3SecretKey', got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected SecretInvalid event to be published for empty secret key")
+	}
+}
+
+func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(corev1.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+
+	client := fake.NewClientBuilder().WithScheme(sch).Build()
+	ctx := context.TODO()
+
+	recorder := &mockEventRecorder{events: []mockEvent{}}
+	eventPublisher := &K8EventPublisher{recorder: recorder}
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	cr := &enterpriseApi.ClusterManager{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: "test"},
+	}
+
+	// Create a secret with valid credentials so GetRemoteStorageClient reaches the getClient call
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-s3-secret", Namespace: "test"},
+		Data: map[string][]byte{
+			"s3_access_key": []byte("AKIAIOSFODNN7EXAMPLE"),
+			"s3_secret_key": []byte("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+		},
+	}
+	if err := client.Create(ctx, secret); err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	// Register a mock provider that always returns an error from getClient
+	mockProvider := "mock-failing-provider"
+	splclient.RemoteDataClientsMap[mockProvider] = splclient.GetRemoteDataClientWrapper{
+		GetRemoteDataClient: func(ctx context.Context, bucket, accessKeyID, secretAccessKey, prefix, startAfter, region, endpoint string, fn splclient.GetInitFunc) (splclient.RemoteDataClient, error) {
+			return nil, fmt.Errorf("mock connection timeout")
+		},
+		GetInitFunc: func(ctx context.Context, region, accessKeyID, secretAccessKey string) interface{} {
+			return nil
+		},
+	}
+	defer delete(splclient.RemoteDataClientsMap, mockProvider)
+
+	vol := &enterpriseApi.VolumeSpec{
+		Name:      "test-vol",
+		Provider:  mockProvider,
+		Path:      "test-bucket/apps",
+		SecretRef: "test-s3-secret",
+	}
+
+	// Call GetRemoteStorageClient — should fail at getClient and emit AppRepositoryConnectionFailed
+	_, err := GetRemoteStorageClient(ctx, client, cr, &enterpriseApi.AppFrameworkSpec{}, vol, "apps", nil)
+	if err == nil {
+		t.Errorf("Expected error from GetRemoteStorageClient when getClient fails")
+	}
+
+	found := false
+	for _, event := range recorder.events {
+		if event.reason == "AppRepositoryConnectionFailed" {
+			found = true
+			if event.eventType != corev1.EventTypeWarning {
+				t.Errorf("Expected Warning event type for AppRepositoryConnectionFailed, got %s", event.eventType)
+			}
+			if !strings.Contains(event.message, "test-vol") {
+				t.Errorf("Expected event message to contain volume name 'test-vol', got: %s", event.message)
+			}
+			if !strings.Contains(event.message, "mock connection timeout") {
+				t.Errorf("Expected event message to contain error details, got: %s", event.message)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected AppRepositoryConnectionFailed event to be published")
+	}
+}
