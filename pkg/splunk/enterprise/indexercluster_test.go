@@ -2125,7 +2125,7 @@ func TestPasswordSyncCompleted(t *testing.T) {
 	}
 }
 
-func TestClusterQuorumRestored(t *testing.T) {
+func TestClusterQuorumRestoredClusterInitialized(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 
 	sch := pkgruntime.NewScheme()
@@ -2206,7 +2206,7 @@ func TestClusterQuorumRestored(t *testing.T) {
 	mockSplunkClient := &spltest.MockHTTPClient{}
 	mockSplunkClient.AddHandlers(mockHandlers...)
 
-	mgr := getIndexerClusterPodManager("TestClusterQuorumRestored", mockHandlers, mockSplunkClient, 3)
+	mgr := getIndexerClusterPodManager("TestClusterQuorumRestoredClusterInitialized", mockHandlers, mockSplunkClient, 3)
 	replicas := int32(3)
 	ss := &appsv1.StatefulSet{
 		Status: appsv1.StatefulSetStatus{
@@ -2231,18 +2231,33 @@ func TestClusterQuorumRestored(t *testing.T) {
 		t.Fatalf("updateStatus returned unexpected error: %v", err)
 	}
 
-	// Check that ClusterQuorumRestored event was published
-	foundEvent := false
+	// Check that both ClusterInitialized and ClusterQuorumRestored events were published
+	clusterInitialized := false
+	quorumRestored := false
 	for _, event := range recorder.events {
-		if event.reason == "ClusterQuorumRestored" {
-			foundEvent = true
+		if event.reason == "ClusterInitialized" {
+			clusterInitialized = true
 			if event.eventType != corev1.EventTypeNormal {
-				t.Errorf("Expected Normal event type, got %s", event.eventType)
+				t.Errorf("Expected Normal event type for ClusterInitialized, got %s", event.eventType)
 			}
-			break
+			if quorumRestored {
+				break
+			}
+		}
+		if event.reason == "ClusterQuorumRestored" {
+			quorumRestored = true
+			if event.eventType != corev1.EventTypeNormal {
+				t.Errorf("Expected Normal event type for ClusterQuorumRestored, got %s", event.eventType)
+			}
+			if clusterInitialized {
+				break
+			}
 		}
 	}
-	if !foundEvent {
+	if !clusterInitialized {
+		t.Errorf("Expected ClusterInitialized event to be published")
+	}
+	if !quorumRestored {
 		t.Errorf("Expected ClusterQuorumRestored event to be published")
 	}
 }
