@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,107 +18,54 @@ package v4
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // DatabaseSpec defines the desired state of Database.
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.clusterRef) || self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
 type DatabaseSpec struct {
-	// Class references a DatabaseClass (cluster-scoped) by name.
-	// This field is IMMUTABLE after creation.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Class string `json:"class"`
+	ClusterRef corev1.LocalObjectReference `json:"clusterRef"`
 
-	// Storage overrides the storage size from DatabaseClass.
-	// Example: "500Gi"
-	// +optional
-	Storage *resource.Quantity `json:"storage,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="self.all(x, self.filter(y, y.name == x.name).size() == 1)",message="database names must be unique"
+	Databases []DatabaseDefinition `json:"databases"`
+}
 
-	// Instances overrides the number of PostgreSQL instances from DatabaseClass.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=10
-	Instances *int32 `json:"instances,omitempty"`
-
-	// PostgresVersion overrides the PostgreSQL version from DatabaseClass.
-	// Example: "16"
-	// +optional
-	PostgresVersion *string `json:"postgresVersion,omitempty"`
-
-	// Resources overrides CPU/memory resources from DatabaseClass.
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// PostgreSQL overrides PostgreSQL engine parameters from DatabaseClass.
-	// Maps to postgresql.conf settings.
-	// +optional
-	PostgreSQL map[string]string `json:"postgresql,omitempty"`
-
-	// Extensions overrides PostgreSQL extensions from DatabaseClass.
-	// +optional
+type DatabaseDefinition struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=30
+	Name       string   `json:"name"`
 	Extensions []string `json:"extensions,omitempty"`
-
-	// Databases is a list of logical database names to create within the cluster.
-	// Each gets its own user and password.
-	// If empty, one default database is created.
-	// Example: ["shc_kvstore", "shc_dmx", "shc_spl2"]
-	// +optional
-	Databases []string `json:"databases,omitempty"`
-
-	// ClusterDeletionPolicy controls what happens when Database CR is deleted.
-	// "Delete" (default) - PostgreSQL cluster is deleted
-	// "Retain" - PostgreSQL cluster is preserved (orphaned)
-	// +optional
 	// +kubebuilder:validation:Enum=Delete;Retain
 	// +kubebuilder:default=Delete
-	ClusterDeletionPolicy string `json:"clusterDeletionPolicy,omitempty"`
+	DeletionPolicy string `json:"deletionPolicy,omitempty"`
+}
 
-	// DatabaseDeletionPolicy controls what happens when a database is removed from Databases list.
-	// "Retain" (default) - Database not dropped, credentials remain
-	// "Delete" - Database dropped, credentials removed
-	// +optional
-	// +kubebuilder:validation:Enum=Delete;Retain
-	// +kubebuilder:default=Retain
-	DatabaseDeletionPolicy string `json:"databaseDeletionPolicy,omitempty"`
+type DatabaseInfo struct {
+	Name               string                       `json:"name"`
+	Ready              bool                         `json:"ready"`
+	DatabaseRef        *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
+	AdminUserSecretRef *corev1.LocalObjectReference `json:"adminUserSecretRef,omitempty"`
+	RWSecretRef        *corev1.LocalObjectReference `json:"rwSecretRef,omitempty"`
+	ConfigMapRef       *corev1.LocalObjectReference `json:"configMap,omitempty"`
 }
 
 // DatabaseStatus defines the observed state of Database.
 type DatabaseStatus struct {
-	// Phase represents the current phase of the Database.
-	// Valid phases: "Pending", "Provisioning", "Ready", "Failed"
 	// +optional
 	Phase string `json:"phase,omitempty"`
-
-	// Conditions represent the latest available observations of the Database state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Resources contains references to generated ConfigMap and Secret.
 	// +optional
-	Resources *DatabaseResources `json:"resources,omitempty"`
-
-	// ProvisionerRef references the underlying provisioner resource (e.g., CNPG Cluster).
-	// +optional
-	ProvisionerRef *corev1.ObjectReference `json:"provisionerRef,omitempty"`
-}
-
-// DatabaseResources contains references to connection resources.
-type DatabaseResources struct {
-	// ConfigMapRef references the ConfigMap with connection endpoints.
-	// Contains: DB_SERVICE_RW, DB_SERVICE_RO, DB_PORT, database list, usernames
-	// +optional
-	ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"`
-
-	// SecretRef references the Secret with database credentials.
-	// Contains: passwords for each database user
-	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	Databases []DatabaseInfo `json:"databases,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Class",type=string,JSONPath=`.spec.class`
+// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

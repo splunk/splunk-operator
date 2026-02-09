@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v4
 kind: Database
 metadata:
-  name: test-database
+  name: test-duplicate-names
   namespace: default
 spec:
   clusterRef:
@@ -10,11 +10,5 @@ spec:
     - name: kvstore
       extensions:
         - pg_stat_statements
-        - pgcrypto
-      deletionPolicy: Retain
     - name: analytics
-      extensions:
-        - pg_trgm
-      deletionPolicy: Delete
-    - name: metrics
-      # No extensions, default deletion policy (Delete)
+    - name: kvstore  # DUPLICATE! Should fail with: "database names must be unique"

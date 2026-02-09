@@ -1,11 +1,11 @@
 apiVersion: enterprise.splunk.com/v4
 kind: Database
 metadata:
-  name: test-database
+  name: test-database  # Same name as 01-valid-database.yaml
   namespace: default
 spec:
   clusterRef:
-    name: postgres-cluster
+    name: different-cluster  # CHANGED! Should fail with: "clusterRef is immutable"
   databases:
     - name: kvstore
       extensions:
@@ -17,4 +17,3 @@ spec:
         - pg_trgm
       deletionPolicy: Delete
     - name: metrics
-      # No extensions, default deletion policy (Delete)

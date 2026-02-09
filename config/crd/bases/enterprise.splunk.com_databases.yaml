@@ -15,8 +15,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.class
-      name: Class
+    - jsonPath: .spec.clusterRef.name
+      name: Cluster
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -49,142 +49,58 @@ spec:
           spec:
             description: DatabaseSpec defines the desired state of Database.
             properties:
-              class:
+              clusterRef:
                 description: |-
-                  Class references a DatabaseClass (cluster-scoped) by name.
-                  This field is IMMUTABLE after creation.
-                minLength: 1
-                type: string
-              clusterDeletionPolicy:
-                default: Delete
-                description: |-
-                  ClusterDeletionPolicy controls what happens when Database CR is deleted.
-                  "Delete" (default) - PostgreSQL cluster is deleted
-                  "Retain" - PostgreSQL cluster is preserved (orphaned)
-                enum:
-                - Delete
-                - Retain
-                type: string
-              databaseDeletionPolicy:
-                default: Retain
-                description: |-
-                  DatabaseDeletionPolicy controls what happens when a database is removed from Databases list.
-                  "Retain" (default) - Database not dropped, credentials remain
-                  "Delete" - Database dropped, credentials removed
-                enum:
-                - Delete
-                - Retain
-                type: string
-              databases:
-                description: |-
-                  Databases is a list of logical database names to create within the cluster.
-                  Each gets its own user and password.
-                  If empty, one default database is created.
-                  Example: ["shc_kvstore", "shc_dmx", "shc_spl2"]
-                items:
-                  type: string
-                type: array
-              extensions:
-                description: Extensions overrides PostgreSQL extensions from DatabaseClass.
-                items:
-                  type: string
-                type: array
-              instances:
-                description: Instances overrides the number of PostgreSQL instances
-                  from DatabaseClass.
-                format: int32
-                maximum: 10
-                minimum: 1
-                type: integer
-              postgresVersion:
-                description: |-
-                  PostgresVersion overrides the PostgreSQL version from DatabaseClass.
-                  Example: "16"
-                type: string
-              postgresql:
-                additionalProperties:
-                  type: string
-                description: |-
-                  PostgreSQL overrides PostgreSQL engine parameters from DatabaseClass.
-                  Maps to postgresql.conf settings.
-                type: object
-              resources:
-                description: Resources overrides CPU/memory resources from DatabaseClass.
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
                 properties:
-                  claims:
+                  name:
+                    default: ""
                     description: |-
-                      Claims lists the names of resources, defined in spec.resourceClaims,
-                      that are used by this container.
-
-                      This field depends on the
-                      DynamicResourceAllocation feature gate.
-
-                      This field is immutable. It can only be set for containers.
-                    items:
-                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                      properties:
-                        name:
-                          description: |-
-                            Name must match the name of one entry in pod.spec.resourceClaims of
-                            the Pod where this field is used. It makes that resource available
-                            inside a container.
-                          type: string
-                        request:
-                          description: |-
-                            Request is the name chosen for a request in the referenced claim.
-                            If empty, everything from the claim is made available, otherwise
-                            only the result of this request.
-                          type: string
-                      required:
-                      - name
-                      type: object
-                    type: array
-                    x-kubernetes-list-map-keys:
-                    - name
-                    x-kubernetes-list-type: map
-                  limits:
-                    additionalProperties:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                    description: |-
-                      Limits describes the maximum amount of compute resources allowed.
-                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                    type: object
-                  requests:
-                    additionalProperties:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                    description: |-
-                      Requests describes the minimum amount of compute resources required.
-                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                    type: object
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
                 type: object
-              storage:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  Storage overrides the storage size from DatabaseClass.
-                  Example: "500Gi"
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
+                x-kubernetes-map-type: atomic
+              databases:
+                items:
+                  properties:
+                    deletionPolicy:
+                      default: Delete
+                      enum:
+                      - Delete
+                      - Retain
+                      type: string
+                    extensions:
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      maxLength: 30
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 10
+                minItems: 1
+                type: array
+                x-kubernetes-validations:
+                - message: database names must be unique
+                  rule: self.all(x, self.filter(y, y.name == x.name).size() == 1)
             required:
-            - class
+            - clusterRef
+            - databases
             type: object
+            x-kubernetes-validations:
+            - message: clusterRef is immutable
+              rule: '!has(oldSelf.clusterRef) || self.clusterRef == oldSelf.clusterRef'
           status:
             description: DatabaseStatus defines the observed state of Database.
             properties:
               conditions:
-                description: Conditions represent the latest available observations
-                  of the Database state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -240,92 +156,81 @@ spec:
                   - type
                   type: object
                 type: array
+              databases:
+                items:
+                  properties:
+                    adminUserSecretRef:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    configMap:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    databaseRef:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                    rwSecretRef:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  type: object
+                type: array
               phase:
-                description: |-
-                  Phase represents the current phase of the Database.
-                  Valid phases: "Pending", "Provisioning", "Ready", "Failed"
                 type: string
-              provisionerRef:
-                description: ProvisionerRef references the underlying provisioner
-                  resource (e.g., CNPG Cluster).
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              resources:
-                description: Resources contains references to generated ConfigMap
-                  and Secret.
-                properties:
-                  configMapRef:
-                    description: |-
-                      ConfigMapRef references the ConfigMap with connection endpoints.
-                      Contains: DB_SERVICE_RW, DB_SERVICE_RO, DB_PORT, database list, usernames
-                    properties:
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                  secretRef:
-                    description: |-
-                      SecretRef references the Secret with database credentials.
-                      Contains: passwords for each database user
-                    properties:
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                type: object
             type: object
         type: object
     served: true
