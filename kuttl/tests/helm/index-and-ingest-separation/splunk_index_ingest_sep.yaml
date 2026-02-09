@@ -10,10 +10,13 @@ queue:
   name: queue
   provider: sqs
   sqs:
-    name: sqs-test
-    region: us-west-2
+    name: index-ingest-separation-test-q
+    authRegion: us-west-2
     endpoint: https://sqs.us-west-2.amazonaws.com
-    dlq: sqs-dlq-test
+    dlq: index-ingest-separation-test-dlq
+    volumes:
+      - name: helm-bus-secret-ref-test
+        secretRef: index-ing-sep-secret
 
 objectStorage:
   enabled: true
@@ -21,7 +24,7 @@ objectStorage:
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
-    path: s3://ingestion/smartbus-test
+    path: s3://index-ingest-separation-test-bucket/smartbus-test
 
 ingestorCluster:
   enabled: true

@@ -1,4 +1,4 @@
-{{- if .Values.objectStorage.enabled }}
+{{- if .Values.objectStorage }}
 {{- if .Values.objectStorage.enabled }}
 apiVersion: enterprise.splunk.com/v4
 kind: ObjectStorage

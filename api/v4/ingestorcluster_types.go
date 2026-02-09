@@ -28,6 +28,8 @@ const (
 	IngestorClusterPausedAnnotation = "ingestorcluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IngestorClusterSpec defines the spec of Ingestor Cluster
 type IngestorClusterSpec struct {
 	// Common Splunk spec
@@ -74,11 +76,11 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Queue
-	Queue *QueueSpec `json:"queue,omitempty"`
+	// Queue and bucket access secret version
+	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
 
-	// Object Storage
-	ObjectStorage *ObjectStorageSpec `json:"objectStorage,omitempty"`
+	// Queue and bucket access service account
+	QueueBucketAccessServiceAccount string `json:"queueBucketAccessServiceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true

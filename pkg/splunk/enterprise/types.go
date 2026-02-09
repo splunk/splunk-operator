@@ -66,7 +66,7 @@ const (
 	// SplunkQueue is the queue instance
 	SplunkQueue InstanceType = "queue"
 
-	// SplunkObjectStorage is the large message store instance
+	// SplunkObjectStorage is the object storage instance
 	SplunkObjectStorage InstanceType = "object-storage"
 
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members

@@ -17,7 +17,6 @@ limitations under the License.
 package v4
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -28,6 +27,11 @@ const (
 	QueuePausedAnnotation = "queue.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.provider == oldSelf.provider",message="provider is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.sqs.name == oldSelf.sqs.name",message="sqs.name is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.sqs.authRegion == oldSelf.sqs.authRegion",message="sqs.authRegion is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.sqs.dlq == oldSelf.sqs.dlq",message="sqs.dlq is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.sqs.endpoint == oldSelf.sqs.endpoint",message="sqs.endpoint is immutable once created"
 // +kubebuilder:validation:XValidation:rule="self.provider != 'sqs' || has(self.sqs)",message="sqs must be provided when provider is sqs"
 // QueueSpec defines the desired state of Queue
 type QueueSpec struct {
@@ -61,6 +65,10 @@ type SQSSpec struct {
 	// +kubebuilder:validation:Pattern=`^https?://[^\s/$.?#].[^\s]*$`
 	// Amazon SQS Service endpoint
 	Endpoint string `json:"endpoint"`
+
+	// +optional
+	// List of remote storage volumes
+	VolList []VolumeSpec `json:"volumes,omitempty"`
 }
 
 // QueueStatus defines the observed state of Queue
@@ -116,33 +124,4 @@ type QueueList struct {
 
 func init() {
 	SchemeBuilder.Register(&Queue{}, &QueueList{})
-}
-
-// NewEvent creates a new event associated with the object and ready
-// to be published to Kubernetes API
-func (os *Queue) NewEvent(eventType, reason, message string) corev1.Event {
-	t := metav1.Now()
-	return corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: reason + "-",
-			Namespace:    os.ObjectMeta.Namespace,
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       "Queue",
-			Namespace:  os.Namespace,
-			Name:       os.Name,
-			UID:        os.UID,
-			APIVersion: GroupVersion.String(),
-		},
-		Reason:  reason,
-		Message: message,
-		Source: corev1.EventSource{
-			Component: "splunk-queue-controller",
-		},
-		FirstTimestamp:      t,
-		LastTimestamp:       t,
-		Count:               1,
-		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/queue-controller",
-	}
 }

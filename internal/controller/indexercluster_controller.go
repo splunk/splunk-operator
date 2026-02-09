@@ -148,6 +148,57 @@ func (r *IndexerClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.IndexerCluster{},
 			)).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				secret, ok := obj.(*corev1.Secret)
+				if !ok {
+					return nil
+				}
+
+				// Only consider indexer clusters in the same namespace as the Secret
+				var list enterpriseApi.IndexerClusterList
+				if err := r.Client.List(ctx, &list, client.InNamespace(secret.Namespace)); err != nil {
+					return nil
+				}
+
+				var reqs []reconcile.Request
+				for _, ic := range list.Items {
+					if ic.Spec.QueueRef.Name == "" {
+						continue
+					}
+
+					queueNS := ic.Spec.QueueRef.Namespace
+					if queueNS == "" {
+						queueNS = ic.Namespace
+					}
+
+					queue := &enterpriseApi.Queue{}
+					if err := r.Client.Get(ctx, types.NamespacedName{
+						Name:      ic.Spec.QueueRef.Name,
+						Namespace: queueNS,
+					}, queue); err != nil {
+						continue
+					}
+
+					if queue.Spec.Provider != "sqs" {
+						continue
+					}
+
+					for _, vol := range queue.Spec.SQS.VolList {
+						if vol.SecretRef == secret.Name {
+							reqs = append(reqs, reconcile.Request{
+								NamespacedName: types.NamespacedName{
+									Name:      ic.Name,
+									Namespace: ic.Namespace,
+								},
+							})
+							break
+						}
+					}
+				}
+				return reqs
+			}),
+		).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

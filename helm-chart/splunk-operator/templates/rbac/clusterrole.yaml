@@ -223,6 +223,32 @@ rules:
   - patch
   - update
 - apiGroups:
+    - enterprise.splunk.com
+  resources:
+  - ingestorclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - ingestorclusters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - ingestorclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - enterprise.splunk.com
   resources:
   - licensemasters
@@ -296,6 +322,58 @@ rules:
   - enterprise.splunk.com
   resources:
   - monitoringconsoles/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+  - objectstorages
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - objectstorages/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - objectstorages/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+    - enterprise.splunk.com
+  resources:
+  - queues
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - queues/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - enterprise.splunk.com
+  resources:
+  - queues/status
   verbs:
   - get
   - patch
