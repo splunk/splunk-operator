@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -72,8 +73,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.QueueBucketAccessSecretVersion = "0"
-		cr.Status.QueueBucketAccessServiceAccount = ""
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 
@@ -266,8 +267,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 			}
 		}
 
-		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
-		serviceAccountChanged := cr.Status.QueueBucketAccessServiceAccount != cr.Spec.ServiceAccount
+		secretChanged := cr.Status.CredentialSecretVersion != version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
 		// If queue is updated
 		if secretChanged || serviceAccountChanged {
@@ -288,8 +289,8 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 				scopedLog.Info("Restarted splunk", "ingestor", i)
 			}
 
-			cr.Status.QueueBucketAccessSecretVersion = version
-			cr.Status.QueueBucketAccessServiceAccount = cr.Spec.ServiceAccount
+			cr.Status.CredentialSecretVersion = version
+			cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 		}
 
 		// Upgrade fron automated MC to MC CRD
@@ -469,20 +470,35 @@ func getPipelineInputsForConfFile(isIndexer bool) (config [][]string) {
 // getQueueAndObjectStorageInputsForConfFiles returns a list of queue and object storage inputs for conf files
 func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (config [][]string) {
 	queueProvider := ""
+	authRegion := ""
+	endpoint := ""
+	dlq := ""
 	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
+		authRegion = queue.SQS.AuthRegion
+		endpoint = queue.SQS.Endpoint
+		dlq = queue.SQS.DLQ
 	}
+
+	path := ""
+	osEndpoint := ""
 	osProvider := ""
 	if os.Provider == "s3" {
 		osProvider = "sqs_smartbus"
+		osEndpoint = os.S3.Endpoint
+		path = os.S3.Path
+		if !strings.HasPrefix(path, "s3://") {
+			path = "s3://" + path
+		}
 	}
+
 	config = append(config,
 		[]string{"remote_queue.type", queueProvider},
-		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), queue.SQS.AuthRegion},
-		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), queue.SQS.Endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), os.S3.Endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), os.S3.Path},
-		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), queue.SQS.DLQ},
+		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), authRegion},
+		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), osEndpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), path},
+		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), dlq},
 		[]string{fmt.Sprintf("remote_queue.%s.encoding_format", queueProvider), "s2s"},
 		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
 		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},

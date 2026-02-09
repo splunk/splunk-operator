@@ -96,7 +96,7 @@ metadata:
 spec:
   provider: s3
   s3:
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
     endpoint: https://s3.us-west-2.amazonaws.com
 ```
 
@@ -228,7 +228,7 @@ objectStorage:
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
 ```
 
 ```
@@ -642,7 +642,7 @@ spec:
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
 ```
 
 ```
@@ -673,7 +673,7 @@ Metadata:
 Spec:
   S3:
     Endpoint:  https://s3.us-west-2.amazonaws.com
-    Path:      s3://ingestion/smartbus-test
+    Path:      ingestion/smartbus-test
   Provider:    s3
 Status:
   Message:  
@@ -749,7 +749,7 @@ Status:
     Is Deployment In Progress:  false
     Last App Info Check Time:   0
     Version:                    0
-  Queue Bucket Access Secret Version:  33744270
+  Credential Secret Version:  33744270
   Message:                      
   Phase:                        Ready
   Ready Replicas:               3

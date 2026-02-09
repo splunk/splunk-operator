@@ -400,7 +400,7 @@ metadata:
 spec:
   provider: s3
   s3:
-    path: s3://ingestion/smartbus-test
+    path: ingestion/smartbus-test
     endpoint: https://s3.us-west-2.amazonaws.com
 ```
 

@@ -49,7 +49,7 @@ type S3Spec struct {
 	Endpoint string `json:"endpoint"`
 
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$`
+	// +kubebuilder:validation:Pattern=`^(?:s3://)?[a-z0-9.-]{3,63}(?:/[^\s]+)?$`
 	// S3 bucket path
 	Path string `json:"path"`
 }

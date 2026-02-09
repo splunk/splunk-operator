@@ -68,7 +68,7 @@ spec:
                     type: string
                   path:
                     description: S3 bucket path
-                    pattern: ^s3://[a-z0-9.-]{3,63}(?:/[^\s]+)?$
+                    pattern: ^(?:s3://)?[a-z0-9.-]{3,63}(?:/[^\s]+)?$
                     type: string
                 required:
                 - path

@@ -2083,7 +2083,7 @@ func TestGetQueueAndPipelineInputsForIndexerConfFiles(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}
@@ -2098,7 +2098,7 @@ func TestGetQueueAndPipelineInputsForIndexerConfFiles(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
@@ -2112,7 +2112,7 @@ func TestGetQueueAndPipelineInputsForIndexerConfFiles(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
 		{fmt.Sprintf("remote_queue.%s.retry_policy", provider), "max_count"},
@@ -2176,7 +2176,7 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}
@@ -2200,8 +2200,8 @@ func TestUpdateIndexerConfFiles(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
-			ReadyReplicas:                  3,
-			QueueBucketAccessSecretVersion: "123",
+			ReadyReplicas:           3,
+			CredentialSecretVersion: "123",
 		},
 	}
 	c.Create(ctx, cr)
@@ -2431,7 +2431,7 @@ func TestApplyIndexerClusterManager_Queue_Success(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}

@@ -123,11 +123,11 @@ type IndexerClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Queue and bucket access secret version
-	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
 
-	// Queue and bucket access service account
-	QueueBucketAccessServiceAccount string `json:"queueBucketAccessServiceAccount,omitempty"`
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

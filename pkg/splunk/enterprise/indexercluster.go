@@ -76,8 +76,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	// updates status after function completes
 	cr.Status.ClusterManagerPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.QueueBucketAccessSecretVersion = "0"
-		cr.Status.QueueBucketAccessServiceAccount = ""
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -300,12 +300,12 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 			}
 		}
 
-		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
-		serviceAccountChanged := cr.Status.QueueBucketAccessServiceAccount != cr.Spec.ServiceAccount
+		secretChanged := cr.Status.CredentialSecretVersion != version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
 		// If queue is updated
 		if cr.Spec.QueueRef.Name != "" {
-			if 	secretChanged || serviceAccountChanged {
+			if secretChanged || serviceAccountChanged {
 				mgr := newIndexerClusterPodManager(scopedLog, cr, namespaceScopedSecret, splclient.NewSplunkClient, client)
 				err = mgr.updateIndexerConfFiles(ctx, cr, &queue.Spec, &os.Spec, accessKey, secretKey, client)
 				if err != nil {
@@ -323,8 +323,8 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
 
-				cr.Status.QueueBucketAccessSecretVersion = version
-				cr.Status.QueueBucketAccessServiceAccount = cr.Spec.ServiceAccount
+				cr.Status.CredentialSecretVersion = version
+				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -417,8 +417,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	cr.Status.Phase = enterpriseApi.PhaseError
 	cr.Status.ClusterMasterPhase = enterpriseApi.PhaseError
 	if cr.Status.Replicas < cr.Spec.Replicas {
-		cr.Status.QueueBucketAccessSecretVersion = "0"
-		cr.Status.QueueBucketAccessServiceAccount = ""
+		cr.Status.CredentialSecretVersion = "0"
+		cr.Status.ServiceAccount = ""
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-indexer", cr.GetName())
@@ -644,8 +644,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 			}
 		}
 
-		secretChanged := cr.Status.QueueBucketAccessSecretVersion != version
-		serviceAccountChanged := cr.Status.QueueBucketAccessServiceAccount != cr.Spec.ServiceAccount
+		secretChanged := cr.Status.CredentialSecretVersion != version
+		serviceAccountChanged := cr.Status.ServiceAccount != cr.Spec.ServiceAccount
 
 		if cr.Spec.QueueRef.Name != "" {
 			if secretChanged || serviceAccountChanged {
@@ -666,8 +666,8 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 					scopedLog.Info("Restarted splunk", "indexer", i)
 				}
 
-				cr.Status.QueueBucketAccessSecretVersion = version
-				cr.Status.QueueBucketAccessServiceAccount = cr.Spec.ServiceAccount
+				cr.Status.CredentialSecretVersion = version
+				cr.Status.ServiceAccount = cr.Spec.ServiceAccount
 			}
 		}
 
@@ -1405,21 +1405,35 @@ func imageUpdatedTo9(previousImage string, currentImage string) bool {
 // getQueueAndObjectStorageInputsForIndexerConfFiles returns a list of queue and object storage inputs for conf files
 func getQueueAndObjectStorageInputsForIndexerConfFiles(queue *enterpriseApi.QueueSpec, os *enterpriseApi.ObjectStorageSpec, accessKey, secretKey string) (inputs, outputs [][]string) {
 	queueProvider := ""
+	authRegion := ""
+	endpoint := ""
+	dlq := ""
 	if queue.Provider == "sqs" {
 		queueProvider = "sqs_smartbus"
+		authRegion = queue.SQS.AuthRegion
+		endpoint = queue.SQS.Endpoint
+		dlq = queue.SQS.DLQ
 	}
+
+	path := ""
+	osEndpoint := ""
 	osProvider := ""
 	if os.Provider == "s3" {
 		osProvider = "sqs_smartbus"
+		osEndpoint = os.S3.Endpoint
+		path = os.S3.Path
+		if !strings.HasPrefix(path, "s3://") {
+			path = "s3://" + path
+		}
 	}
 
 	inputs = append(inputs,
 		[]string{"remote_queue.type", queueProvider},
-		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), queue.SQS.AuthRegion},
-		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), queue.SQS.Endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), os.S3.Endpoint},
-		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), os.S3.Path},
-		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), queue.SQS.DLQ},
+		[]string{fmt.Sprintf("remote_queue.%s.auth_region", queueProvider), authRegion},
+		[]string{fmt.Sprintf("remote_queue.%s.endpoint", queueProvider), endpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", osProvider), osEndpoint},
+		[]string{fmt.Sprintf("remote_queue.%s.large_message_store.path", osProvider), path},
+		[]string{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", queueProvider), dlq},
 		[]string{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", queueProvider), "4"},
 		[]string{fmt.Sprintf("remote_queue.%s.retry_policy", queueProvider), "max_count"},
 	)

@@ -8366,6 +8366,11 @@ spec:
                 - Terminating
                 - Error
                 type: string
+              credentialSecretVersion:
+                description: Credential secret version to track changes to the secret
+                  and trigger rolling restart of indexer cluster peers when the secret
+                  is updated
+                type: string
               indexer_secret_changed_flag:
                 description: Indicates when the idxc_secret has been changed for a
                   peer
@@ -8428,12 +8433,6 @@ spec:
                 - Terminating
                 - Error
                 type: string
-              queueBucketAccessSecretVersion:
-                description: Queue and bucket access secret version
-                type: string
-              queueBucketAccessServiceAccount:
-                description: Queue and bucket access service account
-                type: string
               readyReplicas:
                 description: current number of ready indexer peers
                 format: int32
@@ -8449,6 +8448,11 @@ spec:
                 description: Indicates whether the manager is ready to begin servicing,
                   based on whether it is initialized.
                 type: boolean
+              serviceAccount:
+                description: Service account to track changes to the service account
+                  and trigger rolling restart of indexer cluster peers when the service
+                  account is updated
+                type: string
             type: object
         type: object
     served: true

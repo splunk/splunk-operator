@@ -99,7 +99,7 @@ func TestApplyIngestorCluster(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}
@@ -440,7 +440,7 @@ func TestGetQueueAndPipelineInputsForIngestorConfFiles(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}
@@ -456,7 +456,7 @@ func TestGetQueueAndPipelineInputsForIngestorConfFiles(t *testing.T) {
 		{fmt.Sprintf("remote_queue.%s.auth_region", provider), queue.Spec.SQS.AuthRegion},
 		{fmt.Sprintf("remote_queue.%s.endpoint", provider), queue.Spec.SQS.Endpoint},
 		{fmt.Sprintf("remote_queue.%s.large_message_store.endpoint", provider), os.Spec.S3.Endpoint},
-		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), os.Spec.S3.Path},
+		{fmt.Sprintf("remote_queue.%s.large_message_store.path", provider), "s3://" + os.Spec.S3.Path},
 		{fmt.Sprintf("remote_queue.%s.dead_letter_queue.name", provider), queue.Spec.SQS.DLQ},
 		{fmt.Sprintf("remote_queue.%s.encoding_format", provider), "s2s"},
 		{fmt.Sprintf("remote_queue.%s.max_count.max_retries_per_part", provider), "4"},
@@ -518,7 +518,7 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}
@@ -540,9 +540,9 @@ func TestUpdateIngestorConfFiles(t *testing.T) {
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
-			Replicas:                       3,
-			ReadyReplicas:                  3,
-			QueueBucketAccessSecretVersion: "123",
+			Replicas:                3,
+			ReadyReplicas:           3,
+			CredentialSecretVersion: "123",
 		},
 	}
 

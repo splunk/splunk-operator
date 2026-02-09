@@ -95,7 +95,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					Provider: "s3",
 					S3: enterpriseApi.S3Spec{
 						Endpoint: "https://s3.us-west-2.amazonaws.com",
-						Path:     "s3://ingestion/smartbus-test",
+						Path:     "ingestion/smartbus-test",
 					},
 				},
 			}
@@ -143,7 +143,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					Provider: "s3",
 					S3: enterpriseApi.S3Spec{
 						Endpoint: "https://s3.us-west-2.amazonaws.com",
-						Path:     "s3://ingestion/smartbus-test",
+						Path:     "ingestion/smartbus-test",
 					},
 				},
 			}
@@ -185,7 +185,7 @@ var _ = Describe("IngestorCluster Controller", func() {
 					Provider: "s3",
 					S3: enterpriseApi.S3Spec{
 						Endpoint: "https://s3.us-west-2.amazonaws.com",
-						Path:     "s3://ingestion/smartbus-test",
+						Path:     "ingestion/smartbus-test",
 					},
 				},
 			}

@@ -68,7 +68,7 @@ func TestApplyObjectStorage(t *testing.T) {
 			Provider: "s3",
 			S3: enterpriseApi.S3Spec{
 				Endpoint: "https://s3.us-west-2.amazonaws.com",
-				Path:     "s3://bucket/key",
+				Path:     "bucket/key",
 			},
 		},
 	}

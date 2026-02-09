@@ -22,7 +22,7 @@ spec:
   provider: s3
   s3:
     endpoint: https://s3.us-west-2.amazonaws.com
-    path: s3://index-ingest-separation-test-bucket/smartbus-test
+    path: index-ingest-separation-test-bucket/smartbus-test
 
 ---
 # assert for cluster manager custom resource to be ready

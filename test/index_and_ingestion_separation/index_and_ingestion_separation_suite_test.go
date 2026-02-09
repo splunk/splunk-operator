@@ -52,7 +52,7 @@ var (
 		Provider: "s3",
 		S3: enterpriseApi.S3Spec{
 			Endpoint: "https://s3.us-west-2.amazonaws.com",
-			Path:     "s3://index-ingest-separation-test-bucket/smartbus-test",
+			Path:     "index-ingest-separation-test-bucket/smartbus-test",
 		},
 	}
 	serviceAccountName = "index-ingest-sa"

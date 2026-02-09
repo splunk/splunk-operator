@@ -317,8 +317,8 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Ingestor Cluster Status
 			testcaseEnvInst.Log.Info("Verify Ingestor Cluster Status")
-			Expect(ingest.Status.QueueBucketAccessSecretVersion).To(Not(Equal("")), "Ingestor queue status queue bucket access secret version is empty")
-			Expect(ingest.Status.QueueBucketAccessSecretVersion).To(Not(Equal("0")), "Ingestor queue status queue bucket access secret version is 0")
+			Expect(ingest.Status.CredentialSecretVersion).To(Not(Equal("")), "Ingestor queue status credential access secret version is empty")
+			Expect(ingest.Status.CredentialSecretVersion).To(Not(Equal("0")), "Ingestor queue status credential access secret version is 0")
 
 			// Get instance of current Indexer Cluster CR with latest config
 			testcaseEnvInst.Log.Info("Get instance of current Indexer Cluster CR with latest config")
@@ -328,8 +328,8 @@ var _ = Describe("indingsep test", func() {
 
 			// Verify Indexer Cluster Status
 			testcaseEnvInst.Log.Info("Verify Indexer Cluster Status")
-			Expect(index.Status.QueueBucketAccessSecretVersion).To(Not(Equal("")), "Indexer queue status queue bucket access secret version is empty")
-			Expect(index.Status.QueueBucketAccessSecretVersion).To(Not(Equal("0")), "Indexer queue status queue bucket access secret version is 0")
+			Expect(index.Status.CredentialSecretVersion).To(Not(Equal("")), "Indexer queue status credential access secret version is empty")
+			Expect(index.Status.CredentialSecretVersion).To(Not(Equal("0")), "Indexer queue status credential access secret version is 0")
 
 			// Verify conf files
 			testcaseEnvInst.Log.Info("Verify conf files")

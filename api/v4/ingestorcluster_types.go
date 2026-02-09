@@ -36,6 +36,8 @@ type IngestorClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of ingestor pods
+	// +kubebuilder:validation:Minimum=3
+	// +kubebuilder:default=3
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
@@ -76,11 +78,11 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Queue and bucket access secret version
-	QueueBucketAccessSecretVersion string `json:"queueBucketAccessSecretVersion,omitempty"`
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
 
-	// Queue and bucket access service account
-	QueueBucketAccessServiceAccount string `json:"queueBucketAccessServiceAccount,omitempty"`
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
