@@ -70,7 +70,7 @@ func NewIngestorCluster(name, ns, image string, os *enterpriseApi.ObjectStorage,
 func NewQueue(name, ns string, spec enterpriseApi.QueueSpec) *enterpriseApi.Queue {
 	return &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: spec,
+		Spec:       spec,
 	}
 }
 
@@ -78,7 +78,7 @@ func NewQueue(name, ns string, spec enterpriseApi.QueueSpec) *enterpriseApi.Queu
 func NewObjectStorage(name, ns string, spec enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
 	return &enterpriseApi.ObjectStorage{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: spec,
+		Spec:       spec,
 	}
 }
 
