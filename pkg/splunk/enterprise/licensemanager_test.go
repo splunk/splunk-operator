@@ -1449,7 +1449,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			}
 
 			c := spltest.NewMockClient()
-			eventPublisher := &K8EventPublisher{client: c, instance: &lm}
+			eventPublisher, _ := newK8EventPublisher(c, &lm)
 
 			statefulSet := &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
