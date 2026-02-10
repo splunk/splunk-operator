@@ -33,17 +33,14 @@ func ValidateMonitoringConsoleCreate(obj *enterpriseApi.MonitoringConsole) field
 }
 
 // ValidateMonitoringConsoleUpdate validates a MonitoringConsole on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateMonitoringConsoleUpdate(obj, oldObj *enterpriseApi.MonitoringConsole) field.ErrorList {
-	var allErrs field.ErrorList
-	allErrs = append(allErrs, ValidateMonitoringConsoleCreate(obj)...)
-	return allErrs
+	return ValidateMonitoringConsoleCreate(obj)
 }
 
 // GetMonitoringConsoleWarningsOnCreate returns warnings for MonitoringConsole CREATE
 func GetMonitoringConsoleWarningsOnCreate(obj *enterpriseApi.MonitoringConsole) []string {
-	var warnings []string
-	warnings = append(warnings, getCommonWarnings(&obj.Spec.CommonSplunkSpec)...)
-	return warnings
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
 }
 
 // GetMonitoringConsoleWarningsOnUpdate returns warnings for MonitoringConsole UPDATE

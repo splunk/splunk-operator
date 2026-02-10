@@ -43,17 +43,14 @@ func ValidateClusterManagerCreate(obj *enterpriseApi.ClusterManager) field.Error
 }
 
 // ValidateClusterManagerUpdate validates a ClusterManager on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateClusterManagerUpdate(obj, oldObj *enterpriseApi.ClusterManager) field.ErrorList {
-	var allErrs field.ErrorList
-	allErrs = append(allErrs, ValidateClusterManagerCreate(obj)...)
-	return allErrs
+	return ValidateClusterManagerCreate(obj)
 }
 
 // GetClusterManagerWarningsOnCreate returns warnings for ClusterManager CREATE
 func GetClusterManagerWarningsOnCreate(obj *enterpriseApi.ClusterManager) []string {
-	var warnings []string
-	warnings = append(warnings, getCommonWarnings(&obj.Spec.CommonSplunkSpec)...)
-	return warnings
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
 }
 
 // GetClusterManagerWarningsOnUpdate returns warnings for ClusterManager UPDATE

@@ -41,20 +41,14 @@ func ValidateIndexerClusterCreate(obj *enterpriseApi.IndexerCluster) field.Error
 }
 
 // ValidateIndexerClusterUpdate validates an IndexerCluster on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateIndexerClusterUpdate(obj, oldObj *enterpriseApi.IndexerCluster) field.ErrorList {
-	var allErrs field.ErrorList
-
-	// Run create validations first
-	allErrs = append(allErrs, ValidateIndexerClusterCreate(obj)...)
-
-	return allErrs
+	return ValidateIndexerClusterCreate(obj)
 }
 
 // GetIndexerClusterWarningsOnCreate returns warnings for IndexerCluster CREATE
 func GetIndexerClusterWarningsOnCreate(obj *enterpriseApi.IndexerCluster) []string {
-	var warnings []string
-	warnings = append(warnings, getCommonWarnings(&obj.Spec.CommonSplunkSpec)...)
-	return warnings
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
 }
 
 // GetIndexerClusterWarningsOnUpdate returns warnings for IndexerCluster UPDATE

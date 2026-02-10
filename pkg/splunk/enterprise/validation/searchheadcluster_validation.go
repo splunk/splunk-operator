@@ -46,17 +46,14 @@ func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field
 }
 
 // ValidateSearchHeadClusterUpdate validates a SearchHeadCluster on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateSearchHeadClusterUpdate(obj, oldObj *enterpriseApi.SearchHeadCluster) field.ErrorList {
-	var allErrs field.ErrorList
-	allErrs = append(allErrs, ValidateSearchHeadClusterCreate(obj)...)
-	return allErrs
+	return ValidateSearchHeadClusterCreate(obj)
 }
 
 // GetSearchHeadClusterWarningsOnCreate returns warnings for SearchHeadCluster CREATE
 func GetSearchHeadClusterWarningsOnCreate(obj *enterpriseApi.SearchHeadCluster) []string {
-	var warnings []string
-	warnings = append(warnings, getCommonWarnings(&obj.Spec.CommonSplunkSpec)...)
-	return warnings
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
 }
 
 // GetSearchHeadClusterWarningsOnUpdate returns warnings for SearchHeadCluster UPDATE

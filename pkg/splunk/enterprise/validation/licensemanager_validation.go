@@ -33,17 +33,14 @@ func ValidateLicenseManagerCreate(obj *enterpriseApi.LicenseManager) field.Error
 }
 
 // ValidateLicenseManagerUpdate validates a LicenseManager on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateLicenseManagerUpdate(obj, oldObj *enterpriseApi.LicenseManager) field.ErrorList {
-	var allErrs field.ErrorList
-	allErrs = append(allErrs, ValidateLicenseManagerCreate(obj)...)
-	return allErrs
+	return ValidateLicenseManagerCreate(obj)
 }
 
 // GetLicenseManagerWarningsOnCreate returns warnings for LicenseManager CREATE
 func GetLicenseManagerWarningsOnCreate(obj *enterpriseApi.LicenseManager) []string {
-	var warnings []string
-	warnings = append(warnings, getCommonWarnings(&obj.Spec.CommonSplunkSpec)...)
-	return warnings
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
 }
 
 // GetLicenseManagerWarningsOnUpdate returns warnings for LicenseManager UPDATE

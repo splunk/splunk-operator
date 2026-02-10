@@ -51,34 +51,17 @@ func ValidateStandaloneCreate(obj *enterpriseApi.Standalone) field.ErrorList {
 }
 
 // ValidateStandaloneUpdate validates a Standalone on UPDATE
+// TODO: Add immutable field validation here (e.g., compare obj vs oldObj for fields that cannot change after creation)
 func ValidateStandaloneUpdate(obj, oldObj *enterpriseApi.Standalone) field.ErrorList {
-	var allErrs field.ErrorList
-
-	// Run create validations first
-	allErrs = append(allErrs, ValidateStandaloneCreate(obj)...)
-
-	// Add update-specific validations here
-	// Example: prevent certain immutable field changes
-
-	return allErrs
+	return ValidateStandaloneCreate(obj)
 }
 
 // GetStandaloneWarningsOnCreate returns warnings for Standalone CREATE
 func GetStandaloneWarningsOnCreate(obj *enterpriseApi.Standalone) []string {
-	var warnings []string
-
-	// Add warnings for deprecated fields or configurations
-	warnings = append(warnings, getCommonWarnings(&obj.Spec.CommonSplunkSpec)...)
-
-	return warnings
+	return getCommonWarnings(&obj.Spec.CommonSplunkSpec)
 }
 
 // GetStandaloneWarningsOnUpdate returns warnings for Standalone UPDATE
 func GetStandaloneWarningsOnUpdate(obj, oldObj *enterpriseApi.Standalone) []string {
-	var warnings []string
-
-	// Include create warnings
-	warnings = append(warnings, GetStandaloneWarningsOnCreate(obj)...)
-
-	return warnings
+	return GetStandaloneWarningsOnCreate(obj)
 }
