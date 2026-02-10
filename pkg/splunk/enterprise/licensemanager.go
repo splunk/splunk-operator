@@ -234,6 +234,7 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 	reqLogger := log.FromContext(ctx)
 	scopedLog := reqLogger.WithName("checkLicenseRelatedPodFailures")
 
+	// Check if pod is ready before attempting API call
 	podName := fmt.Sprintf("%s-0", statefulSet.GetName())
 	namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
 	var pod corev1.Pod
@@ -243,11 +244,13 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		return
 	}
 
+	// Only check license if pod is running
 	if pod.Status.Phase != corev1.PodRunning {
 		scopedLog.Info("Pod not in running state, skipping license check", "podName", podName, "phase", pod.Status.Phase)
 		return
 	}
 
+	// Get admin password from namespace-scoped secret
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
 	if err != nil {
@@ -261,15 +264,18 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 		return
 	}
 
+	// Create Splunk client
 	fqdnName := GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkLicenseManager, cr.GetName(), 0, false)
 	splunkClient := newSplunkClientFunc(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPassword)
 
+	// Get license information from Splunk API
 	licenses, err := splunkClient.GetLicenseInfo()
 	if err != nil {
 		scopedLog.Error(err, "Failed to get license information from Splunk API")
 		return
 	}
 
+	// Check for expired licenses
 	for licenseName, licenseInfo := range licenses {
 		if licenseInfo.Status == "EXPIRED" {
 			eventPublisher.Warning(ctx, "LicenseExpired",

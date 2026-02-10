@@ -1335,6 +1335,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 		expectedReason string
 	}
 
+	// Build mock API response with an expired license
 	expiredLicenseResponse := splclient.LicenseResponse{
 		Entry: []struct {
 			Name    string                `json:"name"`
@@ -1352,6 +1353,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 	}
 	expiredBody, _ := json.Marshal(expiredLicenseResponse)
 
+	// Build mock API response with a valid license
 	validLicenseResponse := splclient.LicenseResponse{
 		Entry: []struct {
 			Name    string                `json:"name"`
@@ -1447,7 +1449,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			}
 
 			c := spltest.NewMockClient()
-			eventPublisher, _ := newK8EventPublisher(c, &lm)
+			eventPublisher := &K8EventPublisher{client: c, instance: &lm}
 
 			statefulSet := &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1482,6 +1484,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 				c.Create(ctx, secret)
 			}
 
+			// Override newSplunkClientFunc to inject mock HTTP client when API call is expected
 			if tc.password != "" && tc.createSecret {
 				mockHTTPClient := &spltest.MockHTTPClient{}
 				wantRequest, _ := http.NewRequest("GET",
@@ -1501,6 +1504,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 
 			checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
 
+			// Check for new Create calls that are Event objects
 			var eventCalls []spltest.MockFuncCall
 			for _, call := range c.Calls["Create"][createCallsBefore:] {
 				if _, ok := call.Obj.(*corev1.Event); ok {
