@@ -1215,11 +1215,11 @@ func TestGetAvailableDiskSpaceShouldFail(t *testing.T) {
 }
 
 func TestIsAppExtentionValid(t *testing.T) {
-	if !isAppExtentionValid("testapp.spl") || !isAppExtentionValid("testapp.tgz") || !isAppExtentionValid("testapp.tar.gz") {
+	if !isAppExtensionValid("testapp.spl") || !isAppExtensionValid("testapp.tgz") || !isAppExtensionValid("testapp.tar.gz") {
 		t.Errorf("failed to detect valid app extension")
 	}
 
-	if isAppExtentionValid("testapp.aspl") || isAppExtentionValid("testapp.ttgz") {
+	if isAppExtensionValid("testapp.aspl") || isAppExtensionValid("testapp.ttgz") {
 		t.Errorf("failed to detect invalid app extension")
 	}
 }
@@ -2130,19 +2130,19 @@ func TestUpdateStorageTracker(t *testing.T) {
 func TestIsPersistantVolConfigured(t *testing.T) {
 	// when the resource tracker not initialized, should return false
 	operatorResourceTracker = nil
-	if isPersistantVolConfigured() {
+	if isPersistentVolConfigured() {
 		t.Errorf("When the resource tracker is not initialized, should resturn false")
 	}
 
 	// when the storage tracker not initialized, should return false
 	operatorResourceTracker = &globalResourceTracker{}
-	if isPersistantVolConfigured() {
+	if isPersistentVolConfigured() {
 		t.Errorf("When the storage tracker is not initialized, should return false")
 	}
 
 	// Should return true, when the trackers are initialized
 	operatorResourceTracker.storage = &storageTracker{}
-	if !isPersistantVolConfigured() {
+	if !isPersistentVolConfigured() {
 		t.Errorf("When the storage tracker is initialized, should return true")
 	}
 }

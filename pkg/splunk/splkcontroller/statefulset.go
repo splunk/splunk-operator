@@ -118,6 +118,17 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 		"name", statefulSet.GetObjectMeta().GetName(),
 		"namespace", statefulSet.GetObjectMeta().GetNamespace())
 
+	// Re-fetch the StatefulSet to ensure we have the latest status, especially UpdateRevision.
+	// This addresses a race condition where the StatefulSet controller may not have updated
+	// Status.UpdateRevision yet after a spec change was applied. Without this re-fetch,
+	// we might incorrectly report PhaseReady when pods actually need to be recycled.
+	namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: statefulSet.GetName()}
+	err := c.Get(ctx, namespacedName, statefulSet)
+	if err != nil {
+		scopedLog.Error(err, "Unable to re-fetch StatefulSet for latest status")
+		return enterpriseApi.PhaseError, err
+	}
+
 	// wait for all replicas ready
 	replicas := *statefulSet.Spec.Replicas
 	readyReplicas := statefulSet.Status.ReadyReplicas
@@ -249,7 +260,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	}
 
 	// Remove unwanted owner references
-	err := splutil.RemoveUnwantedSecrets(ctx, c, statefulSet.GetName(), statefulSet.GetNamespace())
+	err = splutil.RemoveUnwantedSecrets(ctx, c, statefulSet.GetName(), statefulSet.GetNamespace())
 	if err != nil {
 		return enterpriseApi.PhaseReady, err
 	}
