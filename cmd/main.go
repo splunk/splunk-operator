@@ -299,10 +299,26 @@ func main() {
 	// Setup centralized validation webhook server (opt-in via ENABLE_WEBHOOKS env var, defaults to false)
 	enableWebhooks := os.Getenv("ENABLE_WEBHOOKS")
 	if enableWebhooks == "true" {
+		// Parse optional timeout configurations from environment
+		readTimeout := 10 * time.Second
+		if val := os.Getenv("WEBHOOK_READ_TIMEOUT"); val != "" {
+			if d, err := time.ParseDuration(val); err == nil {
+				readTimeout = d
+			}
+		}
+		writeTimeout := 10 * time.Second
+		if val := os.Getenv("WEBHOOK_WRITE_TIMEOUT"); val != "" {
+			if d, err := time.ParseDuration(val); err == nil {
+				writeTimeout = d
+			}
+		}
+
 		webhookServer := validation.NewWebhookServer(validation.WebhookServerOptions{
-			Port:       9443,
-			CertDir:    "/tmp/k8s-webhook-server/serving-certs",
-			Validators: validation.DefaultValidators,
+			Port:         9443,
+			CertDir:      "/tmp/k8s-webhook-server/serving-certs",
+			Validators:   validation.DefaultValidators,
+			ReadTimeout:  readTimeout,
+			WriteTimeout: writeTimeout,
 		})
 
 		// Add webhook server as a runnable to the manager

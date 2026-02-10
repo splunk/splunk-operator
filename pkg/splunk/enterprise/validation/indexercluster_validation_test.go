@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateIndexerClusterCreate(t *testing.T) {
@@ -116,13 +117,9 @@ func TestValidateIndexerClusterCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateIndexerClusterCreate(tt.obj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateIndexerClusterCreate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
-				if errs[0].Field != tt.wantErrField {
-					t.Errorf("ValidateIndexerClusterCreate() error field = %s, want %s", errs[0].Field, tt.wantErrField)
-				}
+				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
 			}
 		})
 	}
@@ -196,9 +193,7 @@ func TestValidateIndexerClusterUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateIndexerClusterUpdate(tt.obj, tt.oldObj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateIndexerClusterUpdate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
 }
@@ -209,11 +204,8 @@ func TestGetIndexerClusterWarningsOnCreate(t *testing.T) {
 			Replicas: 3,
 		},
 	}
-
 	warnings := GetIndexerClusterWarningsOnCreate(obj)
-	if len(warnings) != 0 {
-		t.Errorf("GetIndexerClusterWarningsOnCreate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
 
 func TestGetIndexerClusterWarningsOnUpdate(t *testing.T) {
@@ -227,9 +219,6 @@ func TestGetIndexerClusterWarningsOnUpdate(t *testing.T) {
 			Replicas: 3,
 		},
 	}
-
 	warnings := GetIndexerClusterWarningsOnUpdate(obj, oldObj)
-	if len(warnings) != 0 {
-		t.Errorf("GetIndexerClusterWarningsOnUpdate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }

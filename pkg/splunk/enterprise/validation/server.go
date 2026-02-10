@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var serverLog = ctrl.Log.WithName("webhook-server")
@@ -49,6 +50,12 @@ type WebhookServerOptions struct {
 
 	// CertDir is the directory containing tls.crt and tls.key
 	CertDir string
+
+	// ReadTimeout is the maximum duration for reading the entire request (default: 10s)
+	ReadTimeout time.Duration
+
+	// WriteTimeout is the maximum duration before timing out writes of the response (default: 10s)
+	WriteTimeout time.Duration
 }
 
 // WebhookServer is the HTTP server for validation webhooks
@@ -87,12 +94,22 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 		MinVersion: tls.VersionTLS12,
 	}
 
+	// Use configured timeouts or defaults
+	readTimeout := s.options.ReadTimeout
+	if readTimeout == 0 {
+		readTimeout = 10 * time.Second
+	}
+	writeTimeout := s.options.WriteTimeout
+	if writeTimeout == 0 {
+		writeTimeout = 10 * time.Second
+	}
+
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.options.Port),
 		Handler:      mux,
 		TLSConfig:    tlsConfig,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
 	}
 
 	serverLog.Info("Starting webhook server", "port", s.options.Port)
@@ -121,7 +138,8 @@ func (s *WebhookServer) Start(ctx context.Context) error {
 
 // handleValidate handles validation requests
 func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
-	serverLog.V(1).Info("Received validation request", "method", r.Method, "path", r.URL.Path)
+	reqLog := log.FromContext(r.Context()).WithName("webhook-server")
+	reqLog.V(1).Info("Received validation request", "method", r.Method, "path", r.URL.Path)
 
 	// Only accept POST requests
 	if r.Method != http.MethodPost {
@@ -132,7 +150,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		serverLog.Error(err, "Failed to read request body")
+		reqLog.Error(err, "Failed to read request body")
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
@@ -141,14 +159,14 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	// Decode AdmissionReview
 	var admissionReview admissionv1.AdmissionReview
 	if err := json.Unmarshal(body, &admissionReview); err != nil {
-		serverLog.Error(err, "Failed to decode admission review")
+		reqLog.Error(err, "Failed to decode admission review")
 		http.Error(w, "Failed to decode admission review", http.StatusBadRequest)
 		return
 	}
 
 	// Log the request details
 	if admissionReview.Request != nil {
-		serverLog.Info("Processing admission request",
+		reqLog.Info("Processing admission request",
 			"kind", admissionReview.Request.Kind.Kind,
 			"name", admissionReview.Request.Name,
 			"namespace", admissionReview.Request.Namespace,
@@ -165,7 +183,7 @@ func (s *WebhookServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if validationErr != nil {
-		serverLog.Info("Validation failed",
+		reqLog.Info("Validation failed",
 			"kind", admissionReview.Request.Kind.Kind,
 			"name", admissionReview.Request.Name,
 			"error", validationErr.Error())

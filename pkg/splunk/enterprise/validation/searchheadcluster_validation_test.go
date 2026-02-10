@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateSearchHeadClusterCreate(t *testing.T) {
@@ -134,13 +135,9 @@ func TestValidateSearchHeadClusterCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateSearchHeadClusterCreate(tt.obj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateSearchHeadClusterCreate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
-				if errs[0].Field != tt.wantErrField {
-					t.Errorf("ValidateSearchHeadClusterCreate() error field = %s, want %s", errs[0].Field, tt.wantErrField)
-				}
+				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
 			}
 		})
 	}
@@ -200,9 +197,7 @@ func TestValidateSearchHeadClusterUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateSearchHeadClusterUpdate(tt.obj, tt.oldObj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateSearchHeadClusterUpdate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
 }
@@ -213,11 +208,8 @@ func TestGetSearchHeadClusterWarningsOnCreate(t *testing.T) {
 			Replicas: 3,
 		},
 	}
-
 	warnings := GetSearchHeadClusterWarningsOnCreate(obj)
-	if len(warnings) != 0 {
-		t.Errorf("GetSearchHeadClusterWarningsOnCreate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
 
 func TestGetSearchHeadClusterWarningsOnUpdate(t *testing.T) {
@@ -231,9 +223,6 @@ func TestGetSearchHeadClusterWarningsOnUpdate(t *testing.T) {
 			Replicas: 3,
 		},
 	}
-
 	warnings := GetSearchHeadClusterWarningsOnUpdate(obj, oldObj)
-	if len(warnings) != 0 {
-		t.Errorf("GetSearchHeadClusterWarningsOnUpdate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }

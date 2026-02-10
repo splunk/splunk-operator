@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateMonitoringConsoleCreate(t *testing.T) {
@@ -110,13 +111,9 @@ func TestValidateMonitoringConsoleCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateMonitoringConsoleCreate(tt.obj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateMonitoringConsoleCreate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
-				if errs[0].Field != tt.wantErrField {
-					t.Errorf("ValidateMonitoringConsoleCreate() error field = %s, want %s", errs[0].Field, tt.wantErrField)
-				}
+				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
 			}
 		})
 	}
@@ -162,28 +159,20 @@ func TestValidateMonitoringConsoleUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateMonitoringConsoleUpdate(tt.obj, tt.oldObj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateMonitoringConsoleUpdate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
 }
 
 func TestGetMonitoringConsoleWarningsOnCreate(t *testing.T) {
 	obj := &enterpriseApi.MonitoringConsole{}
-
 	warnings := GetMonitoringConsoleWarningsOnCreate(obj)
-	if len(warnings) != 0 {
-		t.Errorf("GetMonitoringConsoleWarningsOnCreate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
 
 func TestGetMonitoringConsoleWarningsOnUpdate(t *testing.T) {
 	obj := &enterpriseApi.MonitoringConsole{}
 	oldObj := &enterpriseApi.MonitoringConsole{}
-
 	warnings := GetMonitoringConsoleWarningsOnUpdate(obj, oldObj)
-	if len(warnings) != 0 {
-		t.Errorf("GetMonitoringConsoleWarningsOnUpdate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }

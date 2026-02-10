@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateLicenseManagerCreate(t *testing.T) {
@@ -95,13 +96,9 @@ func TestValidateLicenseManagerCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateLicenseManagerCreate(tt.obj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateLicenseManagerCreate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
-				if errs[0].Field != tt.wantErrField {
-					t.Errorf("ValidateLicenseManagerCreate() error field = %s, want %s", errs[0].Field, tt.wantErrField)
-				}
+				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
 			}
 		})
 	}
@@ -147,28 +144,20 @@ func TestValidateLicenseManagerUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateLicenseManagerUpdate(tt.obj, tt.oldObj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateLicenseManagerUpdate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
 }
 
 func TestGetLicenseManagerWarningsOnCreate(t *testing.T) {
 	obj := &enterpriseApi.LicenseManager{}
-
 	warnings := GetLicenseManagerWarningsOnCreate(obj)
-	if len(warnings) != 0 {
-		t.Errorf("GetLicenseManagerWarningsOnCreate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
 
 func TestGetLicenseManagerWarningsOnUpdate(t *testing.T) {
 	obj := &enterpriseApi.LicenseManager{}
 	oldObj := &enterpriseApi.LicenseManager{}
-
 	warnings := GetLicenseManagerWarningsOnUpdate(obj, oldObj)
-	if len(warnings) != 0 {
-		t.Errorf("GetLicenseManagerWarningsOnUpdate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }

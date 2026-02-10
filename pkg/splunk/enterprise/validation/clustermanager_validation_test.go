@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateClusterManagerCreate(t *testing.T) {
@@ -158,13 +159,9 @@ func TestValidateClusterManagerCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateClusterManagerCreate(tt.obj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateClusterManagerCreate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
-				if errs[0].Field != tt.wantErrField {
-					t.Errorf("ValidateClusterManagerCreate() error field = %s, want %s", errs[0].Field, tt.wantErrField)
-				}
+				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
 			}
 		})
 	}
@@ -216,28 +213,20 @@ func TestValidateClusterManagerUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateClusterManagerUpdate(tt.obj, tt.oldObj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateClusterManagerUpdate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
 }
 
 func TestGetClusterManagerWarningsOnCreate(t *testing.T) {
 	obj := &enterpriseApi.ClusterManager{}
-
 	warnings := GetClusterManagerWarningsOnCreate(obj)
-	if len(warnings) != 0 {
-		t.Errorf("GetClusterManagerWarningsOnCreate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
 
 func TestGetClusterManagerWarningsOnUpdate(t *testing.T) {
 	obj := &enterpriseApi.ClusterManager{}
 	oldObj := &enterpriseApi.ClusterManager{}
-
 	warnings := GetClusterManagerWarningsOnUpdate(obj, oldObj)
-	if len(warnings) != 0 {
-		t.Errorf("GetClusterManagerWarningsOnUpdate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }

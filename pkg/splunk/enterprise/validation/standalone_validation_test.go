@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateStandaloneCreate(t *testing.T) {
@@ -140,13 +141,9 @@ func TestValidateStandaloneCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateStandaloneCreate(tt.obj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateStandaloneCreate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
-				if errs[0].Field != tt.wantErrField {
-					t.Errorf("ValidateStandaloneCreate() error field = %s, want %s", errs[0].Field, tt.wantErrField)
-				}
+				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
 			}
 		})
 	}
@@ -206,9 +203,7 @@ func TestValidateStandaloneUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateStandaloneUpdate(tt.obj, tt.oldObj)
-			if len(errs) != tt.wantErrCount {
-				t.Errorf("ValidateStandaloneUpdate() got %d errors, want %d. Errors: %v", len(errs), tt.wantErrCount, errs)
-			}
+			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
 }
@@ -219,12 +214,8 @@ func TestGetStandaloneWarningsOnCreate(t *testing.T) {
 			Replicas: 1,
 		},
 	}
-
 	warnings := GetStandaloneWarningsOnCreate(obj)
-	// Currently no warnings are implemented, nil or empty slice is valid
-	if len(warnings) != 0 {
-		t.Errorf("GetStandaloneWarningsOnCreate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
 
 func TestGetStandaloneWarningsOnUpdate(t *testing.T) {
@@ -238,10 +229,6 @@ func TestGetStandaloneWarningsOnUpdate(t *testing.T) {
 			Replicas: 1,
 		},
 	}
-
 	warnings := GetStandaloneWarningsOnUpdate(obj, oldObj)
-	// Currently no warnings are implemented, nil or empty slice is valid
-	if len(warnings) != 0 {
-		t.Errorf("GetStandaloneWarningsOnUpdate() returned %d warnings, expected 0", len(warnings))
-	}
+	assert.Empty(t, warnings, "expected no warnings")
 }
