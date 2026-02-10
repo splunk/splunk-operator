@@ -1141,49 +1141,6 @@ spec:
                       type: object
                     type: array
                 type: object
-              busConfigurationRef:
-                description: Bus configuration reference
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               clusterManagerRef:
                 description: ClusterManagerRef refers to a Splunk Enterprise indexer
                   cluster managed by the operator within Kubernetes
@@ -1623,6 +1580,92 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              objectStorageRef:
+                description: Object Storage reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              queueRef:
+                description: Queue reference
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: |-
+                      If referring to a piece of an object instead of an entire object, this string
+                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within a pod, this would take on a value like:
+                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]" (container with
+                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                      referencing a part of an object.
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the referent.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                    type: string
+                  resourceVersion:
+                    description: |-
+                      Specific resourceVersion to which this reference is made, if any.
+                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                    type: string
+                  uid:
+                    description: |-
+                      UID of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -1656,8 +1699,10 @@ spec:
                     type: integer
                 type: object
               replicas:
+                default: 3
                 description: Number of ingestor pods
                 format: int32
+                minimum: 3
                 type: integer
               resources:
                 description: resource requirements for the pod containers
@@ -4259,7 +4304,15 @@ spec:
                   - name
                   type: object
                 type: array
+            required:
+            - objectStorageRef
+            - queueRef
             type: object
+            x-kubernetes-validations:
+            - message: queueRef is immutable once created
+              rule: self.queueRef == oldSelf.queueRef
+            - message: objectStorageRef is immutable once created
+              rule: self.objectStorageRef == oldSelf.objectStorageRef
           status:
             description: IngestorClusterStatus defines the observed state of Ingestor
               Cluster
@@ -4545,27 +4598,11 @@ spec:
                     description: App Framework version info for future use
                     type: integer
                 type: object
-              busConfiguration:
-                description: Bus configuration
-                properties:
-                  sqs:
-                    properties:
-                      authRegion:
-                        type: string
-                      deadLetterQueueName:
-                        type: string
-                      endpoint:
-                        type: string
-                      largeMessageStoreEndpoint:
-                        type: string
-                      largeMessageStorePath:
-                        type: string
-                      queueName:
-                        type: string
-                    type: object
-                  type:
-                    type: string
-                type: object
+              credentialSecretVersion:
+                description: Credential secret version to track changes to the secret
+                  and trigger rolling restart of indexer cluster peers when the secret
+                  is updated
+                type: string
               message:
                 description: Auxillary message describing CR status
                 type: string
@@ -4595,6 +4632,11 @@ spec:
                 type: object
               selector:
                 description: Selector for pods used by HorizontalPodAutoscaler
+                type: string
+              serviceAccount:
+                description: Service account to track changes to the service account
+                  and trigger rolling restart of indexer cluster peers when the service
+                  account is updated
                 type: string
               telAppInstalled:
                 description: Telemetry App installation flag

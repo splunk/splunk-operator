@@ -160,24 +160,25 @@ type cleanupFunc func() error
 
 // TestEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run tests against
 type TestEnv struct {
-	kubeAPIServer      string
-	name               string
-	namespace          string
-	serviceAccountName string
-	roleName           string
-	roleBindingName    string
-	operatorName       string
-	operatorImage      string
-	splunkImage        string
-	initialized        bool
-	SkipTeardown       bool
-	licenseFilePath    string
-	licenseCMName      string
-	s3IndexSecret      string
-	kubeClient         client.Client
-	Log                logr.Logger
-	cleanupFuncs       []cleanupFunc
-	debug              string
+	kubeAPIServer        string
+	name                 string
+	namespace            string
+	serviceAccountName   string
+	roleName             string
+	roleBindingName      string
+	operatorName         string
+	operatorImage        string
+	splunkImage          string
+	initialized          bool
+	SkipTeardown         bool
+	licenseFilePath      string
+	licenseCMName        string
+	s3IndexSecret        string
+	indexIngestSepSecret string
+	kubeClient           client.Client
+	Log                  logr.Logger
+	cleanupFuncs         []cleanupFunc
+	debug                string
 }
 
 func init() {
@@ -231,19 +232,20 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	}
 
 	testenv := &TestEnv{
-		name:               envName,
-		namespace:          envName,
-		serviceAccountName: envName,
-		roleName:           envName,
-		roleBindingName:    envName,
-		operatorName:       "splunk-op-" + envName,
-		operatorImage:      operatorImage,
-		splunkImage:        splunkImage,
-		SkipTeardown:       specifiedSkipTeardown,
-		licenseCMName:      envName,
-		licenseFilePath:    licenseFilePath,
-		s3IndexSecret:      "splunk-s3-index-" + envName,
-		debug:              os.Getenv("DEBUG"),
+		name:                 envName,
+		namespace:            envName,
+		serviceAccountName:   envName,
+		roleName:             envName,
+		roleBindingName:      envName,
+		operatorName:         "splunk-op-" + envName,
+		operatorImage:        operatorImage,
+		splunkImage:          splunkImage,
+		SkipTeardown:         specifiedSkipTeardown,
+		licenseCMName:        envName,
+		licenseFilePath:      licenseFilePath,
+		s3IndexSecret:        "splunk-s3-index-" + envName,
+		indexIngestSepSecret: "splunk--index-ingest-sep-" + name,
+		debug:                os.Getenv("DEBUG"),
 	}
 
 	testenv.Log = logf.Log.WithValues("testenv", testenv.name)

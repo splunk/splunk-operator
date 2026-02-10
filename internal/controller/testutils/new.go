@@ -46,7 +46,7 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 }
 
 // NewIngestorCluster returns new IngestorCluster instance with its config hash
-func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
+func NewIngestorCluster(name, ns, image string, os *enterpriseApi.ObjectStorage, queue *enterpriseApi.Queue) *enterpriseApi.IngestorCluster {
 	return &enterpriseApi.IngestorCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: enterpriseApi.IngestorClusterSpec{
@@ -54,28 +54,31 @@ func NewIngestorCluster(name, ns, image string) *enterpriseApi.IngestorCluster {
 				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
 			},
 			Replicas: 3,
-			BusConfigurationRef: corev1.ObjectReference{
-				Name: "busConfig",
+			QueueRef: corev1.ObjectReference{
+				Name:      queue.Name,
+				Namespace: queue.Namespace,
+			},
+			ObjectStorageRef: corev1.ObjectReference{
+				Name:      os.Name,
+				Namespace: os.Namespace,
 			},
 		},
 	}
 }
 
-// NewBusConfiguration returns new BusConfiguration instance with its config hash
-func NewBusConfiguration(name, ns, image string) *enterpriseApi.BusConfiguration {
-	return &enterpriseApi.BusConfiguration{
+// NewQueue returns new Queue instance with its config hash
+func NewQueue(name, ns string, spec enterpriseApi.QueueSpec) *enterpriseApi.Queue {
+	return &enterpriseApi.Queue{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: enterpriseApi.BusConfigurationSpec{
-			Type: "sqs_smartbus",
-			SQS: enterpriseApi.SQSSpec{
-				QueueName:                 "test-queue",
-				AuthRegion:                "us-west-2",
-				Endpoint:                  "https://sqs.us-west-2.amazonaws.com",
-				LargeMessageStorePath:     "s3://ingestion/smartbus-test",
-				LargeMessageStoreEndpoint: "https://s3.us-west-2.amazonaws.com",
-				DeadLetterQueueName:       "sqs-dlq-test",
-			},
-		},
+		Spec: spec,
+	}
+}
+
+// NewObjectStorage returns new ObjectStorage instance with its config hash
+func NewObjectStorage(name, ns string, spec enterpriseApi.ObjectStorageSpec) *enterpriseApi.ObjectStorage {
+	return &enterpriseApi.ObjectStorage{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: spec,
 	}
 }
 
@@ -313,9 +316,6 @@ func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 
 	ad.Spec = enterpriseApi.IndexerClusterSpec{
 		CommonSplunkSpec: *cs,
-		BusConfigurationRef: corev1.ObjectReference{
-			Name: "busConfig",
-		},
 	}
 	return ad
 }

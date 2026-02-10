@@ -35,24 +35,25 @@ import (
 
 // TestCaseEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run test cases against
 type TestCaseEnv struct {
-	kubeClient          client.Client
-	name                string
-	namespace           string
-	serviceAccountName  string
-	roleName            string
-	roleBindingName     string
-	operatorName        string
-	operatorImage       string
-	splunkImage         string
-	initialized         bool
-	SkipTeardown        bool
-	licenseFilePath     string
-	licenseCMName       string
-	s3IndexSecret       string
-	Log                 logr.Logger
-	cleanupFuncs        []cleanupFunc
-	debug               string
-	clusterWideOperator string
+	kubeClient           client.Client
+	name                 string
+	namespace            string
+	serviceAccountName   string
+	roleName             string
+	roleBindingName      string
+	operatorName         string
+	operatorImage        string
+	splunkImage          string
+	initialized          bool
+	SkipTeardown         bool
+	licenseFilePath      string
+	licenseCMName        string
+	s3IndexSecret        string
+	indexIngestSepSecret string
+	Log                  logr.Logger
+	cleanupFuncs         []cleanupFunc
+	debug                string
+	clusterWideOperator  string
 }
 
 // GetKubeClient returns the kube client to talk to kube-apiserver
@@ -79,21 +80,22 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 	}
 
 	testenv := &TestCaseEnv{
-		kubeClient:          kubeClient,
-		name:                name,
-		namespace:           name,
-		serviceAccountName:  name,
-		roleName:            name,
-		roleBindingName:     name,
-		operatorName:        "splunk-op-" + name,
-		operatorImage:       operatorImage,
-		splunkImage:         splunkImage,
-		SkipTeardown:        specifiedSkipTeardown,
-		licenseCMName:       name,
-		licenseFilePath:     licenseFilePath,
-		s3IndexSecret:       "splunk-s3-index-" + name,
-		debug:               os.Getenv("DEBUG"),
-		clusterWideOperator: installOperatorClusterWide,
+		kubeClient:           kubeClient,
+		name:                 name,
+		namespace:            name,
+		serviceAccountName:   name,
+		roleName:             name,
+		roleBindingName:      name,
+		operatorName:         "splunk-op-" + name,
+		operatorImage:        operatorImage,
+		splunkImage:          splunkImage,
+		SkipTeardown:         specifiedSkipTeardown,
+		licenseCMName:        name,
+		licenseFilePath:      licenseFilePath,
+		s3IndexSecret:        "splunk-s3-index-" + name,
+		indexIngestSepSecret: "splunk--index-ingest-sep-" + name,
+		debug:                os.Getenv("DEBUG"),
+		clusterWideOperator:  installOperatorClusterWide,
 	}
 
 	testenv.Log = logf.Log.WithValues("testcaseenv", testenv.name)
@@ -156,6 +158,7 @@ func (testenv *TestCaseEnv) setup() error {
 	switch ClusterProvider {
 	case "eks":
 		testenv.createIndexSecret()
+		testenv.createIndexIngestSepSecret()
 	case "azure":
 		testenv.createIndexSecretAzure()
 	case "gcp":
@@ -588,9 +591,39 @@ func (testenv *TestCaseEnv) createIndexSecretAzure() error {
 	return nil
 }
 
+// CreateIndexIngestSepSecret creates secret object
+func (testenv *TestCaseEnv) createIndexIngestSepSecret() error {
+	secretName := testenv.indexIngestSepSecret
+	ns := testenv.namespace
+
+	data := map[string][]byte{"s3_access_key": []byte(os.Getenv("AWS_INDEX_INGEST_SEP_ACCESS_KEY_ID")),
+		"s3_secret_key": []byte(os.Getenv("AWS_INDEX_INGEST_SEP_SECRET_ACCESS_KEY"))}
+	secret := newSecretSpec(ns, secretName, data)
+
+	if err := testenv.GetKubeClient().Create(context.TODO(), secret); err != nil {
+		testenv.Log.Error(err, "Unable to create index and ingestion sep secret object")
+		return err
+	}
+
+	testenv.pushCleanupFunc(func() error {
+		err := testenv.GetKubeClient().Delete(context.TODO(), secret)
+		if err != nil {
+			testenv.Log.Error(err, "Unable to delete index and ingestion sep secret object")
+			return err
+		}
+		return nil
+	})
+	return nil
+}
+
 // GetIndexSecretName return index secret object name
 func (testenv *TestCaseEnv) GetIndexSecretName() string {
 	return testenv.s3IndexSecret
+}
+
+// GetIndexSecretName return index and ingestion separation secret object name
+func (testenv *TestCaseEnv) GetIndexIngestSepSecretName() string {
+	return testenv.indexIngestSepSecret
 }
 
 // GetLMConfigMap Return name of license config map

@@ -417,6 +417,27 @@ func GetSmartstoreRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.
 	return accessKey, secretKey, namespaceScopedSecret.ResourceVersion, nil
 }
 
+// GetQueueRemoteVolumeSecrets is used to retrieve access key and secrete key for Index & Ingestion separation
+func GetQueueRemoteVolumeSecrets(ctx context.Context, volume enterpriseApi.VolumeSpec, client splcommon.ControllerClient, cr splcommon.MetaObject) (string, string, string, error) {
+	namespaceScopedSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), volume.SecretRef)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	accessKey := string(namespaceScopedSecret.Data[s3AccessKey])
+	secretKey := string(namespaceScopedSecret.Data[s3SecretKey])
+
+	version := namespaceScopedSecret.ResourceVersion
+
+	if accessKey == "" {
+		return "", "", "", errors.New("access Key is missing")
+	} else if secretKey == "" {
+		return "", "", "", errors.New("secret Key is missing")
+	}
+
+	return accessKey, secretKey, version, nil
+}
+
 // getLocalAppFileName generates the local app file name
 // For e.g., if the app package name is sample_app.tgz
 // and etag is "abcd1234", then it will be downloaded locally as sample_app.tgz_abcd1234
@@ -2291,19 +2312,33 @@ func fetchCurrentCRWithStatusUpdate(ctx context.Context, client splcommon.Contro
 		origCR.(*enterpriseApi.IngestorCluster).Status.DeepCopyInto(&latestIngCR.Status)
 		return latestIngCR, nil
 
-	case "BusConfiguration":
-		latestBusCR := &enterpriseApi.BusConfiguration{}
-		err = client.Get(ctx, namespacedName, latestBusCR)
+	case "Queue":
+		latestQueueCR := &enterpriseApi.Queue{}
+		err = client.Get(ctx, namespacedName, latestQueueCR)
 		if err != nil {
 			return nil, err
 		}
 
-		origCR.(*enterpriseApi.BusConfiguration).Status.Message = ""
+		origCR.(*enterpriseApi.Queue).Status.Message = ""
 		if (crError != nil) && ((*crError) != nil) {
-			origCR.(*enterpriseApi.BusConfiguration).Status.Message = (*crError).Error()
+			origCR.(*enterpriseApi.Queue).Status.Message = (*crError).Error()
 		}
-		origCR.(*enterpriseApi.BusConfiguration).Status.DeepCopyInto(&latestBusCR.Status)
-		return latestBusCR, nil
+		origCR.(*enterpriseApi.Queue).Status.DeepCopyInto(&latestQueueCR.Status)
+		return latestQueueCR, nil
+
+	case "ObjectStorage":
+		latestOsCR := &enterpriseApi.ObjectStorage{}
+		err = client.Get(ctx, namespacedName, latestOsCR)
+		if err != nil {
+			return nil, err
+		}
+
+		origCR.(*enterpriseApi.ObjectStorage).Status.Message = ""
+		if (crError != nil) && ((*crError) != nil) {
+			origCR.(*enterpriseApi.ObjectStorage).Status.Message = (*crError).Error()
+		}
+		origCR.(*enterpriseApi.ObjectStorage).Status.DeepCopyInto(&latestOsCR.Status)
+		return latestOsCR, nil
 
 	case "LicenseMaster":
 		latestLmCR := &enterpriseApiV3.LicenseMaster{}
@@ -2533,7 +2568,7 @@ func loadFixture(t *testing.T, filename string) string {
 	if err != nil {
 		t.Fatalf("Failed to load fixture %s: %v", filename, err)
 	}
-	
+
 	// Compact the JSON to match the output from json.Marshal
 	var compactJSON bytes.Buffer
 	if err := json.Compact(&compactJSON, data); err != nil {

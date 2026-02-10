@@ -28,19 +28,28 @@ const (
 	IngestorClusterPausedAnnotation = "ingestorcluster.enterprise.splunk.com/paused"
 )
 
+// +kubebuilder:validation:XValidation:rule="self.queueRef == oldSelf.queueRef",message="queueRef is immutable once created"
+// +kubebuilder:validation:XValidation:rule="self.objectStorageRef == oldSelf.objectStorageRef",message="objectStorageRef is immutable once created"
 // IngestorClusterSpec defines the spec of Ingestor Cluster
 type IngestorClusterSpec struct {
 	// Common Splunk spec
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of ingestor pods
+	// +kubebuilder:validation:Minimum=3
+	// +kubebuilder:default=3
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
 
-	// Bus configuration reference
-	BusConfigurationRef corev1.ObjectReference `json:"busConfigurationRef"`
+	// +kubebuilder:validation:Required
+	// Queue reference
+	QueueRef corev1.ObjectReference `json:"queueRef"`
+
+	// +kubebuilder:validation:Required
+	// Object Storage reference
+	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster
@@ -69,8 +78,11 @@ type IngestorClusterStatus struct {
 	// Auxillary message describing CR status
 	Message string `json:"message"`
 
-	// Bus configuration
-	BusConfiguration BusConfigurationSpec `json:"busConfiguration,omitempty"`
+	// Credential secret version to track changes to the secret and trigger rolling restart of indexer cluster peers when the secret is updated
+	CredentialSecretVersion string `json:"credentialSecretVersion,omitempty"`
+
+	// Service account to track changes to the service account and trigger rolling restart of indexer cluster peers when the service account is updated
+	ServiceAccount string `json:"serviceAccount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
