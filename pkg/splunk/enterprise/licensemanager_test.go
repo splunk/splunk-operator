@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -1449,7 +1450,8 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			}
 
 			c := spltest.NewMockClient()
-			eventPublisher, _ := newK8EventPublisher(c, &lm)
+			fakeRecorder := record.NewFakeRecorder(10)
+			eventPublisher, _ := newK8EventPublisher(fakeRecorder, &lm)
 
 			statefulSet := &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1500,26 +1502,24 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 				defer func() { newSplunkClientFunc = origFunc }()
 			}
 
-			createCallsBefore := len(c.Calls["Create"])
-
 			checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
 
-			// Check for new Create calls that are Event objects
-			var eventCalls []spltest.MockFuncCall
-			for _, call := range c.Calls["Create"][createCallsBefore:] {
-				if _, ok := call.Obj.(*corev1.Event); ok {
-					eventCalls = append(eventCalls, call)
-				}
-			}
-
+			// Check events from the fake recorder
 			if tc.expectEvent {
-				if assert.NotEmpty(t, eventCalls, "Expected %s event to be published", tc.expectedReason) {
-					ev := eventCalls[0].Obj.(*corev1.Event)
-					assert.Equal(t, tc.expectedReason, ev.Reason, "Event reason mismatch")
-					assert.Equal(t, corev1.EventTypeWarning, ev.Type, "Event type mismatch")
+				select {
+				case event := <-fakeRecorder.Events:
+					assert.Contains(t, event, tc.expectedReason, "Event reason mismatch")
+					assert.Contains(t, event, "Warning", "Event type mismatch")
+				default:
+					t.Errorf("Expected %s event to be published, but none were", tc.expectedReason)
 				}
 			} else {
-				assert.Empty(t, eventCalls, "Expected no events to be published")
+				select {
+				case event := <-fakeRecorder.Events:
+					t.Errorf("Expected no events, but got: %s", event)
+				default:
+					// No events, as expected
+				}
 			}
 		})
 	}
