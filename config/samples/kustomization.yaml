@@ -15,4 +15,5 @@ resources:
 - enterprise_v4_licensemanager.yaml
 - enterprise_v4_database.yaml
 - enterprise_v4_databaseclass.yaml
+- enterprise_v4_postgrescluster.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

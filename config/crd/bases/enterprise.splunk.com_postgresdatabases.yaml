@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: databases.enterprise.splunk.com
+  name: postgresdatabases.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
   names:
-    kind: Database
-    listKind: DatabaseList
-    plural: databases
-    singular: database
+    kind: PostgresDatabase
+    listKind: PostgresDatabaseList
+    plural: postgresdatabases
+    singular: postgresdatabase
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -27,7 +27,7 @@ spec:
     name: v4
     schema:
       openAPIV3Schema:
-        description: Database is the Schema for the databases API.
+        description: PostgresDatabase is the Schema for the postgresdatabases API.
         properties:
           apiVersion:
             description: |-
@@ -47,7 +47,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DatabaseSpec defines the desired state of Database.
+            description: PostgresDatabaseSpec defines the desired state of PostgresDatabase.
             properties:
               clusterRef:
                 description: |-
@@ -98,7 +98,7 @@ spec:
             - message: clusterRef is immutable
               rule: self.clusterRef == oldSelf.clusterRef
           status:
-            description: DatabaseStatus defines the observed state of Database.
+            description: PostgresDatabaseStatus defines the observed state of PostgresDatabase.
             properties:
               conditions:
                 items:

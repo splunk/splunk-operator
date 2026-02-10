@@ -236,11 +236,18 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Standalone")
 		os.Exit(1)
 	}
-	if err := (&controller.DatabaseReconciler{
+	if err := (&controller.PostgresDatabaseReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Database")
+		setupLog.Error(err, "unable to create controller", "controller", "PostgresDatabase")
+		os.Exit(1)
+	}
+	if err := (&controller.PostgresClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PostgresCluster")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
