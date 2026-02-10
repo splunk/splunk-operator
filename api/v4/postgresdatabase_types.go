@@ -21,9 +21,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DatabaseSpec defines the desired state of Database.
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.clusterRef) || self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
-type DatabaseSpec struct {
+// PostgresDatabaseSpec defines the desired state of PostgresDatabase.
+// +kubebuilder:validation:XValidation:rule="self.clusterRef == oldSelf.clusterRef",message="clusterRef is immutable"
+type PostgresDatabaseSpec struct {
 	// +kubebuilder:validation:Required
 	ClusterRef corev1.LocalObjectReference `json:"clusterRef"`
 
@@ -53,8 +53,8 @@ type DatabaseInfo struct {
 	ConfigMapRef       *corev1.LocalObjectReference `json:"configMap,omitempty"`
 }
 
-// DatabaseStatus defines the observed state of Database.
-type DatabaseStatus struct {
+// PostgresDatabaseStatus defines the observed state of PostgresDatabase.
+type PostgresDatabaseStatus struct {
 	// +optional
 	Phase string `json:"phase,omitempty"`
 	// +optional
@@ -69,24 +69,24 @@ type DatabaseStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// Database is the Schema for the databases API.
-type Database struct {
+// PostgresDatabase is the Schema for the postgresdatabases API.
+type PostgresDatabase struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DatabaseSpec   `json:"spec,omitempty"`
-	Status DatabaseStatus `json:"status,omitempty"`
+	Spec   PostgresDatabaseSpec   `json:"spec,omitempty"`
+	Status PostgresDatabaseStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// DatabaseList contains a list of Database.
-type DatabaseList struct {
+// PostgresDatabaseList contains a list of PostgresDatabase.
+type PostgresDatabaseList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Database `json:"items"`
+	Items           []PostgresDatabase `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Database{}, &DatabaseList{})
+	SchemeBuilder.Register(&PostgresDatabase{}, &PostgresDatabaseList{})
 }

@@ -40,13 +40,13 @@ var _ = Describe("Database Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		database := &enterprisev4.Database{}
+		database := &enterprisev4.PostgresDatabase{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Database")
 			err := k8sClient.Get(ctx, typeNamespacedName, database)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &enterprisev4.Database{
+				resource := &enterprisev4.PostgresDatabase{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,7 +59,7 @@ var _ = Describe("Database Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &enterprisev4.Database{}
+			resource := &enterprisev4.PostgresDatabase{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -68,7 +68,7 @@ var _ = Describe("Database Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &DatabaseReconciler{
+			controllerReconciler := &PostgresDatabaseReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

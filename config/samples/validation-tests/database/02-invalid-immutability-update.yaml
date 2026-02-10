@@ -1,7 +1,7 @@
 apiVersion: enterprise.splunk.com/v4
-kind: Database
+kind: PostgresDatabase
 metadata:
-  name: test-database  # Same name as 01-valid-database.yaml
+  name: test-postgresdatabase 
   namespace: default
 spec:
   clusterRef:

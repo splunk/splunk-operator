@@ -47,21 +47,14 @@ rules:
 - apiGroups:
   - enterprise.splunk.com
   resources:
-  - clusterclasses
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - enterprise.splunk.com
-  resources:
   - clustermanagers
   - clustermasters
-  - databases
   - indexerclusters
   - licensemanagers
   - licensemasters
   - monitoringconsoles
+  - postgresclusters
+  - postgresdatabases
   - searchheadclusters
   - standalones
   verbs:
@@ -77,11 +70,12 @@ rules:
   resources:
   - clustermanagers/finalizers
   - clustermasters/finalizers
-  - databases/finalizers
   - indexerclusters/finalizers
   - licensemanagers/finalizers
   - licensemasters/finalizers
   - monitoringconsoles/finalizers
+  - postgresclusters/finalizers
+  - postgresdatabases/finalizers
   - searchheadclusters/finalizers
   - standalones/finalizers
   verbs:
@@ -91,34 +85,15 @@ rules:
   resources:
   - clustermanagers/status
   - clustermasters/status
-  - databases/status
   - indexerclusters/status
   - licensemanagers/status
   - licensemasters/status
   - monitoringconsoles/status
+  - postgresclusters/status
+  - postgresdatabases/status
   - searchheadclusters/status
   - standalones/status
   verbs:
   - get
   - patch
   - update
-- apiGroups:
-  - postgresql.cnpg.io
-  resources:
-  - clusters
-  - databases
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - postgresql.cnpg.io
-  resources:
-  - clusters/status
-  - databases/status
-  verbs:
-  - get

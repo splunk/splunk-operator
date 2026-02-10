@@ -1,5 +1,5 @@
 apiVersion: enterprise.splunk.com/v4
-kind: Database
+kind: PostgresDatabase
 metadata:
   name: test-missing-fields
   namespace: default

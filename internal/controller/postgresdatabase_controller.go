@@ -37,33 +37,34 @@ const (
 	retryDelay = time.Second * 15
 )
 
-// DatabaseReconciler reconciles a Database object
-type DatabaseReconciler struct {
+// PostgresDatabaseReconciler reconciles a PostgresDatabase object
+type PostgresDatabaseReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databases,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databases/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=databases/finalizers,verbs=update
-// +kubebuilder:rbac:groups=enterprise.splunk.com,resources=clusters,verbs=get;list;watch
-func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("Reconciling Database", "name", req.Name, "namespace", req.Namespace)
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresdatabases/finalizers,verbs=update
+//+kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch
 
-	// Fetch the Database CR details
-	db := &enterprisev4.Database{}
+func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling PostgresDatabase", "name", req.Name, "namespace", req.Namespace)
+
+	// Fetch the PostgresDatabase CR details
+	db := &enterprisev4.PostgresDatabase{}
 	if err := r.Get(ctx, req.NamespacedName, db); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Database resource not found, ignoring")
+			logger.Info("PostgresDatabase resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get a Database ", db.Name)
+		logger.Error(err, "Failed to get a PostgresDatabase ", db.Name)
 		return ctrl.Result{}, err
 	}
 
-	// Fetch the Cluster CR details - change to Cluster once merged in another PR
-	cluster := &enterprisev4.ClusterClass{}
+	// Fetch the PostgresCluster CR details
+	cluster := &enterprisev4.PostgresCluster{}
 	if err := r.Get(ctx, types.NamespacedName{Name: db.Spec.ClusterRef.Name, Namespace: req.Namespace}, cluster); err != nil {
 		if errors.IsNotFound(err) {
 			meta.SetStatusCondition(&db.Status.Conditions, metav1.Condition{
@@ -126,9 +127,9 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&enterprisev4.Database{}).
-		Named("database").
+		For(&enterprisev4.PostgresDatabase{}).
+		Named("postgresdatabase").
 		Complete(r)
 }
