@@ -1451,7 +1451,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 
 			c := spltest.NewMockClient()
 			fakeRecorder := record.NewFakeRecorder(10)
-			eventPublisher, _ := newK8EventPublisher(fakeRecorder, &lm)
+			eventPublisher := &K8EventPublisher{recorder: fakeRecorder, instance: &lm}
 
 			statefulSet := &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1502,16 +1502,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 				defer func() { newSplunkClientFunc = origFunc }()
 			}
 
-			// Diagnostic: log MockClient state before calling function
-			t.Logf("[DEBUG] MockClient Calls before: %v", c.Calls)
-			t.Logf("[DEBUG] eventPublisher: %+v", eventPublisher)
-			t.Logf("[DEBUG] fakeRecorder: %+v", fakeRecorder)
-
 			checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
-
-			// Diagnostic: log MockClient calls after
-			t.Logf("[DEBUG] MockClient Calls after: %v", c.Calls)
-			t.Logf("[DEBUG] fakeRecorder.Events channel len: %d", len(fakeRecorder.Events))
 
 			// Check events from the fake recorder
 			if tc.expectEvent {

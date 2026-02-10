@@ -239,14 +239,12 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 	namespacedName := types.NamespacedName{Namespace: statefulSet.GetNamespace(), Name: podName}
 	var pod corev1.Pod
 	err := client.Get(ctx, namespacedName, &pod)
-	fmt.Printf("[DEBUG-LICMGR] Get pod %s err=%v\n", podName, err)
 	if err != nil {
 		scopedLog.Info("Pod not found, skipping license check", "podName", podName)
 		return
 	}
 
 	// Only check license if pod is running
-	fmt.Printf("[DEBUG-LICMGR] Pod phase=%s\n", pod.Status.Phase)
 	if pod.Status.Phase != corev1.PodRunning {
 		scopedLog.Info("Pod not in running state, skipping license check", "podName", podName, "phase", pod.Status.Phase)
 		return
@@ -255,14 +253,12 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 	// Get admin password from namespace-scoped secret
 	defaultSecretObjName := splcommon.GetNamespaceScopedSecretName(cr.GetNamespace())
 	defaultSecret, err := splutil.GetSecretByName(ctx, client, cr.GetNamespace(), cr.GetName(), defaultSecretObjName)
-	fmt.Printf("[DEBUG-LICMGR] GetSecretByName(%s) err=%v\n", defaultSecretObjName, err)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get namespace secret for license check")
 		return
 	}
 
 	adminPassword := string(defaultSecret.Data["password"])
-	fmt.Printf("[DEBUG-LICMGR] adminPassword len=%d\n", len(adminPassword))
 	if adminPassword == "" {
 		scopedLog.Info("Admin password not found in secret, skipping license check")
 		return
@@ -270,23 +266,18 @@ func checkLicenseRelatedPodFailures(ctx context.Context, client splcommon.Contro
 
 	// Create Splunk client
 	fqdnName := GetSplunkStatefulsetURL(cr.GetNamespace(), SplunkLicenseManager, cr.GetName(), 0, false)
-	fmt.Printf("[DEBUG-LICMGR] fqdnName=%s\n", fqdnName)
 	splunkClient := newSplunkClientFunc(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPassword)
 
 	// Get license information from Splunk API
 	licenses, err := splunkClient.GetLicenseInfo()
-	fmt.Printf("[DEBUG-LICMGR] GetLicenseInfo err=%v licenses=%+v\n", err, licenses)
 	if err != nil {
 		scopedLog.Error(err, "Failed to get license information from Splunk API")
 		return
 	}
 
 	// Check for expired licenses
-	fmt.Printf("[DEBUG-LICMGR] Checking %d licenses\n", len(licenses))
 	for licenseName, licenseInfo := range licenses {
-		fmt.Printf("[DEBUG-LICMGR] License %s status=%s\n", licenseName, licenseInfo.Status)
 		if licenseInfo.Status == "EXPIRED" {
-			fmt.Printf("[DEBUG-LICMGR] Publishing Warning event for expired license %s\n", licenseName)
 			eventPublisher.Warning(ctx, "LicenseExpired",
 				fmt.Sprintf("License '%s' has expired", licenseName))
 			scopedLog.Error(nil, "Detected expired license", "licenseName", licenseName, "title", licenseInfo.Title)
