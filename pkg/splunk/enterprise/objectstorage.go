@@ -41,7 +41,7 @@ func ApplyObjectStorage(ctx context.Context, client client.Client, cr *enterpris
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 
-	eventPublisher, _ := newK8EventPublisher(client, cr)
+	eventPublisher := GetEventPublisher(ctx, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	cr.Kind = "ObjectStorage"

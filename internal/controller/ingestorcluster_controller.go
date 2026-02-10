@@ -25,6 +25,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -37,13 +38,15 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	enterprise "github.com/splunk/splunk-operator/pkg/splunk/enterprise"
 )
 
 // IngestorClusterReconciler reconciles a IngestorCluster object
 type IngestorClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=ingestorclusters,verbs=get;list;watch;create;update;patch;delete
@@ -94,6 +97,9 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	reqLogger.Info("start", "CR version", instance.GetResourceVersion())
+
+	// Pass event recorder through context
+	ctx = context.WithValue(ctx, splcommon.EventRecorderKey, r.Recorder)
 
 	result, err := ApplyIngestorCluster(ctx, r.Client, instance)
 	if result.Requeue && result.RequeueAfter != 0 {
@@ -255,5 +261,6 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		}).
+		Named("ingestor-cluster-controller").
 		Complete(r)
 }

@@ -149,12 +149,12 @@ func (ic *IngestorCluster) NewEvent(eventType, reason, message string) corev1.Ev
 		Reason:  reason,
 		Message: message,
 		Source: corev1.EventSource{
-			Component: "splunk-ingestorcluster-controller",
+			Component: "splunk-ingestor-cluster-controller",
 		},
 		FirstTimestamp:      t,
 		LastTimestamp:       t,
 		Count:               1,
 		Type:                eventType,
-		ReportingController: "enterprise.splunk.com/ingestorcluster-controller",
+		ReportingController: "enterprise.splunk.com/ingestor-cluster-controller",
 	}
 }
