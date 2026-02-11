@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 )
@@ -75,23 +76,17 @@ func Validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersio
 		}
 	}
 
-	var errList []error
+	var fieldErrs field.ErrorList
 	var warnings []string
 
 	// Perform validation based on operation
 	switch req.Operation {
 	case admissionv1.Create:
-		fieldErrs := validator.ValidateCreate(obj)
-		for _, e := range fieldErrs {
-			errList = append(errList, e)
-		}
+		fieldErrs = validator.ValidateCreate(obj)
 		warnings = validator.GetWarningsOnCreate(obj)
 
 	case admissionv1.Update:
-		fieldErrs := validator.ValidateUpdate(obj, oldObj)
-		for _, e := range fieldErrs {
-			errList = append(errList, e)
-		}
+		fieldErrs = validator.ValidateUpdate(obj, oldObj)
 		warnings = validator.GetWarningsOnUpdate(obj, oldObj)
 
 	default:
@@ -100,17 +95,10 @@ func Validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersio
 	}
 
 	// If there are validation errors, return an aggregate error
-	if len(errList) > 0 {
+	if len(fieldErrs) > 0 {
 		groupKind := validator.GetGroupKind(obj)
 		name := validator.GetName(obj)
-
-		// Convert to field.ErrorList for NewInvalid
-		var fieldErrList = make([]error, 0, len(errList))
-		for _, e := range errList {
-			fieldErrList = append(fieldErrList, e)
-		}
-
-		return warnings, apierrors.NewInvalid(groupKind, name, nil)
+		return warnings, apierrors.NewInvalid(groupKind, name, fieldErrs)
 	}
 
 	return warnings, nil
