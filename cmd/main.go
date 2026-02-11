@@ -296,8 +296,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup centralized validation webhook server (opt-in via ENABLE_WEBHOOKS env var, defaults to false)
-	enableWebhooks := os.Getenv("ENABLE_WEBHOOKS")
+	// Setup centralized validation webhook server (opt-in via ENABLE_VALIDATION_WEBHOOK env var, defaults to false)
+	enableWebhooks := os.Getenv("ENABLE_VALIDATION_WEBHOOK")
 	if enableWebhooks == "true" {
 		// Parse optional timeout configurations from environment
 		readTimeout := 10 * time.Second
@@ -328,9 +328,9 @@ func main() {
 			setupLog.Error(err, "unable to add webhook server to manager")
 			os.Exit(1)
 		}
-		setupLog.Info("Validation webhook enabled via ENABLE_WEBHOOKS=true")
+		setupLog.Info("Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true")
 	} else {
-		setupLog.Info("Validation webhook disabled (set ENABLE_WEBHOOKS=true to enable)")
+		setupLog.Info("Validation webhook disabled (set ENABLE_VALIDATION_WEBHOOK=true to enable)")
 	}
 	//+kubebuilder:scaffold:builder
 

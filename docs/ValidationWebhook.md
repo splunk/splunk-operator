@@ -46,11 +46,11 @@ kustomize build config/default-with-webhook | kubectl apply -f -
 
 #### Option 2: Enable Webhook on Existing Deployment
 
-If you already have the operator deployed, you can enable the webhook by setting the `ENABLE_WEBHOOKS` environment variable:
+If you already have the operator deployed, you can enable the webhook by setting the `ENABLE_VALIDATION_WEBHOOK` environment variable:
 
 ```bash
 kubectl set env deployment/splunk-operator-controller-manager \
-  ENABLE_WEBHOOKS=true -n splunk-operator
+  ENABLE_VALIDATION_WEBHOOK=true -n splunk-operator
 ```
 
 **Note:** This option also requires the webhook service, ValidatingWebhookConfiguration, and TLS certificates to be deployed. Use Option 1 for a complete deployment.
@@ -212,7 +212,7 @@ kubectl get validatingwebhookconfiguration splunk-operator-validating-webhook-co
 
 ```bash
 kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | grep -i webhook
-# Look for: "Validation webhook enabled via ENABLE_WEBHOOKS=true"
+# Look for: "Validation webhook enabled via ENABLE_VALIDATION_WEBHOOK=true"
 # Look for: "Starting webhook server" {"port": 9443}
 ```
 
@@ -259,7 +259,7 @@ kubectl logs -n splunk-operator deployment/splunk-operator-controller-manager | 
 
 If you see "Validation webhook disabled" in the logs, ensure:
 
-1. The `ENABLE_WEBHOOKS` environment variable is set to `true`
+1. The `ENABLE_VALIDATION_WEBHOOK` environment variable is set to `true`
 2. You're using the correct kustomize overlay (`config/default-with-webhook`)
 
 ## Architecture
@@ -289,7 +289,7 @@ To disable the webhook after it has been enabled:
 
 ```bash
 kubectl set env deployment/splunk-operator-controller-manager \
-  ENABLE_WEBHOOKS=false -n splunk-operator
+  ENABLE_VALIDATION_WEBHOOK=false -n splunk-operator
 ```
 
 Or redeploy using the default kustomization (without webhook):

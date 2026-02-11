@@ -124,7 +124,7 @@ patches:
         value: splunk-operator
       - name: SPLUNK_GENERAL_TERMS
         value: SPLUNK_GENERAL_TERMS_VALUE
-      - name: ENABLE_WEBHOOKS
+      - name: ENABLE_VALIDATION_WEBHOOK
         value: "true"
       - name: POD_NAME
         valueFrom:
