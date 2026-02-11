@@ -23,6 +23,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/go-logr/logr"
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
 	splclient "github.com/splunk/splunk-operator/pkg/splunk/client"
@@ -228,7 +231,11 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 		if queue.Spec.Provider == "sqs" {
 			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				queue.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				queue.Spec.SQS.Endpoint = ep
 			}
 		}
 
@@ -249,7 +256,11 @@ func ApplyIngestorCluster(ctx context.Context, client client.Client, cr *enterpr
 		}
 		if os.Spec.Provider == "s3" {
 			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				os.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				os.Spec.S3.Endpoint = ep
 			}
 		}
 
@@ -357,8 +368,8 @@ func (mgr *ingestorClusterPodManager) getClient(ctx context.Context, n int32) *s
 // validateIngestorClusterSpec checks validity and makes default updates to a IngestorClusterSpec and returns error if something is wrong
 func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) error {
 	// We cannot have 0 replicas in IngestorCluster spec since this refers to number of ingestion pods in the ingestor cluster
-	if cr.Spec.Replicas < 3 {
-		cr.Spec.Replicas = 3
+	if cr.Spec.Replicas < 1 {
+		cr.Spec.Replicas = 1
 	}
 
 	if !reflect.DeepEqual(cr.Status.AppContext.AppFrameworkConfig, cr.Spec.AppFrameworkConfig) {
@@ -511,4 +522,37 @@ func getQueueAndObjectStorageInputsForIngestorConfFiles(queue *enterpriseApi.Que
 	}
 
 	return
+}
+
+func resolveS3Endpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := s3.NewFromConfig(cfg)
+	params := s3.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	// Full endpoint URL as string:
+	return ep.URI.String(), nil
+}
+
+func resolveSQSEndpoint(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+
+	client := sqs.NewFromConfig(cfg)
+	params := sqs.EndpointParameters{Region: &region}
+
+	ep, err := client.Options().EndpointResolverV2.ResolveEndpoint(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	return ep.URI.String(), nil
 }

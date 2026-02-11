@@ -72,7 +72,6 @@ type ObjectStorageStatus struct {
 // ObjectStorage is the Schema for a Splunk Enterprise object storage
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=objectstorages,scope=Namespaced,shortName=os
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of object storage"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of object storage resource"
