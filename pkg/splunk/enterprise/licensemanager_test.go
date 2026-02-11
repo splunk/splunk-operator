@@ -1334,6 +1334,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 		mockHTTPErr    error
 		expectEvent    bool
 		expectedReason string
+		expectError    bool
 	}
 
 	// Build mock API response with an expired license
@@ -1390,6 +1391,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			podPhase:     corev1.PodRunning,
 			createSecret: false,
 			expectEvent:  false,
+			expectError:  true,
 		},
 		{
 			name:         "Pod running with empty password",
@@ -1398,6 +1400,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			createSecret: true,
 			password:     "",
 			expectEvent:  false,
+			expectError:  true,
 		},
 		{
 			name:           "API call fails gracefully",
@@ -1409,6 +1412,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			mockHTTPBody:   `{"error": "internal server error"}`,
 			mockHTTPErr:    nil,
 			expectEvent:    false,
+			expectError:    false,
 		},
 		{
 			name:           "Expired license emits LicenseExpired event",
@@ -1435,8 +1439,6 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
-
 			lm := enterpriseApi.LicenseManager{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test",
@@ -1452,6 +1454,7 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 			c := spltest.NewMockClient()
 			fakeRecorder := record.NewFakeRecorder(10)
 			eventPublisher := &K8EventPublisher{recorder: fakeRecorder, instance: &lm}
+			ctx := context.WithValue(context.TODO(), splcommon.EventPublisherKey, eventPublisher)
 
 			statefulSet := &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1502,7 +1505,13 @@ func TestCheckLicenseRelatedPodFailures(t *testing.T) {
 				defer func() { newSplunkClientFunc = origFunc }()
 			}
 
-			checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet, eventPublisher)
+			err := checkLicenseRelatedPodFailures(ctx, c, &lm, statefulSet)
+
+			if tc.expectError {
+				assert.Error(t, err, "Expected an error but got none")
+			} else {
+				assert.NoError(t, err, "Expected no error but got one")
+			}
 
 			// Check events from the fake recorder
 			if tc.expectEvent {
