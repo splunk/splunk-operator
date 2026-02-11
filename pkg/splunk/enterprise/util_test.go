@@ -3318,11 +3318,9 @@ func TestSecretMissingEvent(t *testing.T) {
 			if event.eventType != corev1.EventTypeWarning {
 				t.Errorf("Expected Warning event type for SecretMissing, got %s", event.eventType)
 			}
-			if !strings.Contains(event.message, "nonexistent-secret") {
-				t.Errorf("Expected event message to contain secret name 'nonexistent-secret', got: %s", event.message)
-			}
-			if !strings.Contains(event.message, "test") {
-				t.Errorf("Expected event message to contain namespace 'test', got: %s", event.message)
+			expectedMessage := "Required secret 'nonexistent-secret' not found in namespace 'test'. Create secret to proceed."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
 			}
 			break
 		}
@@ -3379,11 +3377,9 @@ func TestSecretInvalidEmptyAccessKeyEvent(t *testing.T) {
 			if event.eventType != corev1.EventTypeWarning {
 				t.Errorf("Expected Warning event type for SecretInvalid, got %s", event.eventType)
 			}
-			if !strings.Contains(event.message, "test-secret") {
-				t.Errorf("Expected event message to contain secret name 'test-secret', got: %s", event.message)
-			}
-			if !strings.Contains(event.message, "accessKey") {
-				t.Errorf("Expected event message to mention missing field 'accessKey', got: %s", event.message)
+			expectedMessage := "Secret 'test-secret' missing required fields: accessKey. Update secret with required data."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
 			}
 			break
 		}
@@ -3440,11 +3436,9 @@ func TestSecretInvalidEmptySecretKeyEvent(t *testing.T) {
 			if event.eventType != corev1.EventTypeWarning {
 				t.Errorf("Expected Warning event type for SecretInvalid, got %s", event.eventType)
 			}
-			if !strings.Contains(event.message, "test-secret-sk") {
-				t.Errorf("Expected event message to contain secret name 'test-secret-sk', got: %s", event.message)
-			}
-			if !strings.Contains(event.message, "s3SecretKey") {
-				t.Errorf("Expected event message to mention missing field 's3SecretKey', got: %s", event.message)
+			expectedMessage := "Secret 'test-secret-sk' missing required fields: s3SecretKey. Update secret with required data."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
 			}
 			break
 		}
@@ -3517,11 +3511,9 @@ func TestAppRepositoryConnectionFailedEvent(t *testing.T) {
 			if event.eventType != corev1.EventTypeWarning {
 				t.Errorf("Expected Warning event type for AppRepositoryConnectionFailed, got %s", event.eventType)
 			}
-			if !strings.Contains(event.message, "test-vol") {
-				t.Errorf("Expected event message to contain volume name 'test-vol', got: %s", event.message)
-			}
-			if !strings.Contains(event.message, "mock connection timeout") {
-				t.Errorf("Expected event message to contain error details, got: %s", event.message)
+			expectedMessage := "Failed to connect to app repository 'test-vol': mock connection timeout. Check credentials and network."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
 			}
 			break
 		}

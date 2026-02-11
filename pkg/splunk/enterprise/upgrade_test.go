@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/v4"
@@ -709,8 +708,9 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 			if event.eventType != corev1.EventTypeWarning {
 				t.Errorf("Expected Warning event type for UpgradeBlockedVersionMismatch, got %s", event.eventType)
 			}
-			if !strings.Contains(event.message, "ClusterManager") {
-				t.Errorf("Expected event message to mention ClusterManager, got: %s", event.message)
+			expectedMessage := "Upgrade blocked: ClusterManager version splunk/splunk:old != IndexerCluster version splunk/splunk:new. Upgrade ClusterManager first."
+			if event.message != expectedMessage {
+				t.Errorf("Expected event message %q, got: %q", expectedMessage, event.message)
 			}
 			break
 		}
