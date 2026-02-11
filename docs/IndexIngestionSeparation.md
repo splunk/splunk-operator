@@ -67,7 +67,7 @@ spec:
 
 # ObjectStorage
 
-ObjectStorage is introduced to store large message (messages that exceed the size of messages that can be stored in SQS) store information to be shared among IngestorCluster and IndexerCluster.
+ObjectStorage is introduced to store large messages (messages that exceed the size of messages that can be stored in SQS) to be shared among IngestorCluster and IndexerCluster.
 
 ## Spec
 
@@ -269,7 +269,7 @@ To be able to configure ingestion and indexing resources correctly in a secure m
 
 ## Example
 
-The example presented below configures the ingestor-sa service account by using esctl utility. It sets up the service account for cluster-name cluster in region us-west-2 with AmazonS3FullAccess and AmazonSQSFullAccess access policies. 
+The example presented below configures the ingestor-sa service account by using eksctl utility. It sets up the service account for cluster-name cluster in region us-west-2 with AmazonS3FullAccess and AmazonSQSFullAccess access policies. 
 
 ```
 eksctl create iamserviceaccount \                                                                                                                                          
@@ -452,7 +452,7 @@ Application installation is supported for Ingestor Cluster instances. However, a
 
 Therefore, to be able to enforce Splunk restart for each of the Ingestor Cluster pods, it is recommended to add/update IngestorCluster CR annotations/labels and apply the new configuration which will trigger the rolling restart of Splunk pods for Ingestor Cluster. 
 
-We are under the investigation on how to make it fully automated. What is more, ideally, update of annotations and labels should not trigger pod restart at all and we are investigating on how to fix this behaviour eventually.
+Ideally, update of annotations and labels should not trigger pod restart at all and it is under the investigation on how to stop this from happening and handle restart automatically.
 
 # Example
 

@@ -262,7 +262,11 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 		if queue.Spec.Provider == "sqs" {
 			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				queue.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				queue.Spec.SQS.Endpoint = ep
 			}
 		}
 
@@ -283,7 +287,11 @@ func ApplyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		}
 		if os.Spec.Provider == "s3" {
 			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				os.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				os.Spec.S3.Endpoint = ep
 			}
 		}
 
@@ -607,7 +615,11 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 		if queue.Spec.Provider == "sqs" {
 			if queue.Spec.SQS.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				queue.Spec.SQS.Endpoint = fmt.Sprintf("https://sqs.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+				ep, err := resolveSQSEndpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				queue.Spec.SQS.Endpoint = ep
 			}
 		}
 
@@ -628,7 +640,11 @@ func ApplyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		}
 		if os.Spec.Provider == "s3" {
 			if os.Spec.S3.Endpoint == "" && queue.Spec.SQS.AuthRegion != "" {
-				os.Spec.S3.Endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", queue.Spec.SQS.AuthRegion)
+				ep, err := resolveS3Endpoint(ctx, queue.Spec.SQS.AuthRegion)
+				if err != nil {
+					return result, err
+				}
+				os.Spec.S3.Endpoint = ep
 			}
 		}
 

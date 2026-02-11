@@ -89,7 +89,6 @@ type QueueStatus struct {
 // Queue is the Schema for a Splunk Enterprise queue
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
 // +kubebuilder:resource:path=queues,scope=Namespaced,shortName=queue
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Status of queue"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age of queue resource"

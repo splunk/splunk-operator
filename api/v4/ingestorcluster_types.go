@@ -36,8 +36,8 @@ type IngestorClusterSpec struct {
 	CommonSplunkSpec `json:",inline"`
 
 	// Number of ingestor pods
-	// +kubebuilder:validation:Minimum=3
-	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
 	Replicas int32 `json:"replicas"`
 
 	// Splunk Enterprise app repository that specifies remote app location and scope for Splunk app management
