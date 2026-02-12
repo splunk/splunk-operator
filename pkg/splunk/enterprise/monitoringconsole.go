@@ -380,12 +380,7 @@ func changeMonitoringConsoleAnnotations(ctx context.Context, client splcommon.Co
 	scopedLog := reqLogger.WithName("changeMonitoringConsoleAnnotations").WithValues("name", cr.GetName(), "namespace", cr.GetNamespace())
 
 	// Get event publisher from context
-	var eventPublisher *K8EventPublisher
-	if pub := ctx.Value(splcommon.EventPublisherKey); pub != nil {
-		if p, ok := pub.(*K8EventPublisher); ok {
-			eventPublisher = p
-		}
-	}
+	eventPublisher := GetEventPublisher(ctx, cr)
 
 	monitoringConsoleInstance := &enterpriseApi.MonitoringConsole{}
 	if len(cr.Spec.MonitoringConsoleRef.Name) > 0 {
